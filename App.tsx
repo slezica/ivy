@@ -1,20 +1,21 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import PlayerScreen from './src/screens/PlayerScreen';
+import ClipsListScreen from './src/screens/ClipsListScreen';
+
+type Screen = 'player' | 'clips';
 
 export default function App() {
+  const [currentScreen, setCurrentScreen] = useState<Screen>('player');
+
   return (
-    <View style={styles.container}>
-      <Text>Audio Player</Text>
+    <>
+      {currentScreen === 'player' ? (
+        <PlayerScreen onNavigateToClips={() => setCurrentScreen('clips')} />
+      ) : (
+        <ClipsListScreen onNavigateBack={() => setCurrentScreen('player')} />
+      )}
       <StatusBar style="auto" />
-    </View>
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
