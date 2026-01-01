@@ -5,6 +5,33 @@
  * Handles file selection and metadata extraction.
  */
 
+import * as DocumentPicker from 'expo-document-picker';
+
+export interface AudioFile {
+  uri: string;
+  name: string;
+}
+
 export class FileService {
-  // TODO: Implement file service
+  async pickAudioFile(): Promise<AudioFile | null> {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'audio/*',
+        copyToCacheDirectory: false,
+      });
+
+      if (result.canceled) {
+        return null;
+      }
+
+      const asset = result.assets[0];
+      return {
+        uri: asset.uri,
+        name: asset.name,
+      };
+    } catch (error) {
+      console.error('Error picking audio file:', error);
+      throw error;
+    }
+  }
 }
