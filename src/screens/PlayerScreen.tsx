@@ -10,10 +10,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
-  TextInput,
   Alert,
 } from 'react-native'
-import { useState } from 'react'
 import { Link } from 'expo-router'
 import { useStore } from '../store'
 import PlaybackControls from '../components/PlaybackControls'
@@ -21,8 +19,6 @@ import ProgressBar from '../components/ProgressBar'
 
 export default function PlayerScreen() {
   const { file, pickAndLoadFile, addClip } = useStore()
-  const [showClipInput, setShowClipInput] = useState(false)
-  const [clipNote, setClipNote] = useState('')
 
   const handleLoadFile = async () => {
     try {
@@ -35,10 +31,8 @@ export default function PlayerScreen() {
 
   const handleAddClip = async () => {
     try {
-      await addClip(clipNote || '')
-      setClipNote('')
-      setShowClipInput(false)
-      Alert.alert('Success', 'Clip added')
+      await addClip('')
+      Alert.alert('Clip Added', 'Clip saved at current position')
     } catch (error) {
       console.error('Error adding clip:', error)
       Alert.alert('Error', 'Failed to add clip')
@@ -62,45 +56,14 @@ export default function PlayerScreen() {
             <PlaybackControls />
 
             <View style={styles.actions}>
-              {showClipInput ? (
-                <View style={styles.clipInputContainer}>
-                  <TextInput
-                    style={styles.clipInput}
-                    placeholder="Add note (optional)"
-                    value={clipNote}
-                    onChangeText={setClipNote}
-                    autoFocus
-                  />
-                  <View style={styles.clipInputButtons}>
-                    <TouchableOpacity
-                      style={[styles.button, styles.cancelButton]}
-                      onPress={() => {
-                        setShowClipInput(false)
-                        setClipNote('')
-                      }}
-                    >
-                      <Text style={styles.buttonText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.button, styles.addButton]}
-                      onPress={handleAddClip}
-                    >
-                      <Text style={[styles.buttonText, styles.addButtonText]}>
-                        Save Clip
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.button, styles.addButton]}
-                  onPress={() => setShowClipInput(true)}
-                >
-                  <Text style={[styles.buttonText, styles.addButtonText]}>
-                    + Add Clip
-                  </Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={[styles.button, styles.addButton]}
+                onPress={handleAddClip}
+              >
+                <Text style={[styles.buttonText, styles.addButtonText]}>
+                  + Add Clip
+                </Text>
+              </TouchableOpacity>
 
               <Link href="/clips" asChild>
                 <TouchableOpacity style={styles.button}>
@@ -182,24 +145,6 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     color: '#fff',
-  },
-  cancelButton: {
-    flex: 1,
-  },
-  clipInputContainer: {
-    gap: 12,
-  },
-  clipInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-  },
-  clipInputButtons: {
-    flexDirection: 'row',
-    gap: 12,
   },
   emptyState: {
     flex: 1,

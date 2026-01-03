@@ -102,7 +102,7 @@ export class DatabaseService {
     }
   }
 
-  updateClip(id: number, note: string | null): void {
+  updateClip(id: number, note: string): void {
     const now = Date.now()
     this.db.runSync(
       'UPDATE clips SET note = ?, updated_at = ? WHERE id = ?',

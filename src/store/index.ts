@@ -41,8 +41,8 @@ interface AppState {
   seek: (position: number) => Promise<void>
   skipForward: () => Promise<void>
   skipBackward: () => Promise<void>
-  addClip: (note: string | null) => Promise<void>
-  updateClip: (id: number, note: string | null) => void
+  addClip: (note: string) => Promise<void>
+  updateClip: (id: number, note: string) => void
   deleteClip: (id: number) => void
   jumpToClip: (clipId: number) => Promise<void>
 }
@@ -190,7 +190,7 @@ export const useStore = create<AppState>((set, get) => {
       }
     },
 
-    async addClip(note: string | null) {
+    async addClip(note: string) {
       const { file, playback } = get()
       if (!file) {
         throw new Error('No file loaded')
@@ -203,7 +203,7 @@ export const useStore = create<AppState>((set, get) => {
       }))
     },
 
-    updateClip(id: number, note: string | null) {
+    updateClip(id: number, note: string) {
       dbService.updateClip(id, note)
 
       set((state) => ({
