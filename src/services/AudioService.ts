@@ -1,10 +1,3 @@
-/**
- * AudioService
- *
- * Wraps expo-av to manage audio playback.
- * Handles Sound instance, playback state, and position tracking.
- */
-
 import { Audio, AVPlaybackStatus } from 'expo-av'
 
 export interface PlaybackStatus {

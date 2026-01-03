@@ -13,11 +13,8 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native'
+import { useRouter } from 'expo-router'
 import { useStore } from '../store'
-
-interface ClipsListScreenProps {
-  onNavigateBack?: () => void
-}
 
 function formatTime(milliseconds: number): string {
   const totalSeconds = Math.floor(milliseconds / 1000)
@@ -31,7 +28,8 @@ function formatTime(milliseconds: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
-export default function ClipsListScreen({ onNavigateBack }: ClipsListScreenProps) {
+export default function ClipsListScreen() {
+  const router = useRouter()
   const { clips, file, jumpToClip, deleteClip } = useStore()
 
   const clipsArray = Object.values(clips).sort((a, b) => a.start - b.start)
@@ -39,9 +37,7 @@ export default function ClipsListScreen({ onNavigateBack }: ClipsListScreenProps
   const handleJumpToClip = async (clipId: number) => {
     try {
       await jumpToClip(clipId)
-      if (onNavigateBack) {
-        onNavigateBack()
-      }
+      router.back()
     } catch (error) {
       console.error('Error jumping to clip:', error)
       Alert.alert('Error', 'Failed to jump to clip')
@@ -66,11 +62,9 @@ export default function ClipsListScreen({ onNavigateBack }: ClipsListScreenProps
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        {onNavigateBack && (
-          <TouchableOpacity onPress={onNavigateBack} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← Back</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Text style={styles.backButtonText}>← Back</Text>
+        </TouchableOpacity>
         <Text style={styles.title}>Clips</Text>
         {file && <Text style={styles.subtitle}>{file.name}</Text>}
       </View>

@@ -1,10 +1,3 @@
-/**
- * DatabaseService
- *
- * Wraps expo-sqlite to handle all database operations.
- * Manages clips, sessions, and files tables.
- */
-
 import * as SQLite from 'expo-sqlite'
 
 export interface Clip {
@@ -12,7 +5,7 @@ export interface Clip {
   file_uri: string
   start: number
   duration: number
-  note: string | null
+  note: string
   created_at: number
   updated_at: number
 }
@@ -20,9 +13,9 @@ export interface Clip {
 export interface AudioFile {
   uri: string
   name: string
-  duration: number | null
+  duration: number
   position: number
-  opened_at: number | null
+  opened_at: number
 }
 
 export interface Session {
@@ -49,7 +42,7 @@ export class DatabaseService {
         file_uri TEXT NOT NULL,
         start INTEGER NOT NULL,
         duration INTEGER NOT NULL,
-        note TEXT,
+        note TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -77,7 +70,9 @@ export class DatabaseService {
     `)
   }
 
-  // Clips operations
+  // -----------------------------------------------------------------------------------------------
+  // Clips
+
   getClipsForFile(fileUri: string): Clip[] {
     return this.db.getAllSync<Clip>(
       'SELECT * FROM clips WHERE file_uri = ? ORDER BY start ASC',
@@ -85,7 +80,7 @@ export class DatabaseService {
     )
   }
 
-  createClip(fileUri: string, start: number, duration: number, note: string | null): Clip {
+  createClip(fileUri: string, start: number, duration: number, note: string): Clip {
     const now = Date.now()
     const result = this.db.runSync(
       'INSERT INTO clips (file_uri, start, duration, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -115,7 +110,9 @@ export class DatabaseService {
     this.db.runSync('DELETE FROM clips WHERE id = ?', [id])
   }
 
-  // Files operations
+  // -----------------------------------------------------------------------------------------------
+  // Files
+
   getFile(uri: string): AudioFile | null {
     const result = this.db.getFirstSync<AudioFile>(
       'SELECT * FROM files WHERE uri = ?',
@@ -148,7 +145,9 @@ export class DatabaseService {
     )
   }
 
-  // Sessions operations (for future playback history)
+  // -----------------------------------------------------------------------------------------------
+  // Sessions
+
   createSession(fileUri: string, start: number, duration: number): Session {
     const now = Date.now()
     const result = this.db.runSync(

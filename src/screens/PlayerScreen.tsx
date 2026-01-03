@@ -14,15 +14,12 @@ import {
   Alert,
 } from 'react-native'
 import { useState } from 'react'
+import { Link } from 'expo-router'
 import { useStore } from '../store'
 import PlaybackControls from '../components/PlaybackControls'
 import ProgressBar from '../components/ProgressBar'
 
-interface PlayerScreenProps {
-  onNavigateToClips?: () => void
-}
-
-export default function PlayerScreen({ onNavigateToClips }: PlayerScreenProps) {
+export default function PlayerScreen() {
   const { file, pickAndLoadFile, addClip } = useStore()
   const [showClipInput, setShowClipInput] = useState(false)
   const [clipNote, setClipNote] = useState('')
@@ -105,14 +102,11 @@ export default function PlayerScreen({ onNavigateToClips }: PlayerScreenProps) {
                 </TouchableOpacity>
               )}
 
-              {onNavigateToClips && (
-                <TouchableOpacity
-                  style={styles.button}
-                  onPress={onNavigateToClips}
-                >
+              <Link href="/clips" asChild>
+                <TouchableOpacity style={styles.button}>
                   <Text style={styles.buttonText}>View Clips</Text>
                 </TouchableOpacity>
-              )}
+              </Link>
             </View>
           </View>
         ) : (
