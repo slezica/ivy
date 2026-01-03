@@ -35,7 +35,7 @@ export default function PlayerScreen() {
 
   const handleAddClip = async () => {
     try {
-      await addClip(clipNote || null)
+      await addClip(clipNote || '')
       setClipNote('')
       setShowClipInput(false)
       Alert.alert('Success', 'Clip added')
