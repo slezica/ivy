@@ -17,7 +17,7 @@ export interface Clip {
   updated_at: number;
 }
 
-export interface FileRecord {
+export interface AudioFile {
   uri: string;
   name: string;
   duration: number | null;
@@ -116,8 +116,8 @@ export class DatabaseService {
   }
 
   // Files operations
-  getFile(uri: string): FileRecord | null {
-    const result = this.db.getFirstSync<FileRecord>(
+  getFile(uri: string): AudioFile | null {
+    const result = this.db.getFirstSync<AudioFile>(
       'SELECT * FROM files WHERE uri = ?',
       [uri]
     );

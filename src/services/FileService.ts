@@ -7,13 +7,13 @@
 
 import * as DocumentPicker from 'expo-document-picker';
 
-export interface AudioFile {
+export interface PickedFile {
   uri: string;
   name: string;
 }
 
 export class FileService {
-  async pickAudioFile(): Promise<AudioFile | null> {
+  async pickAudioFile(): Promise<PickedFile | null> {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: 'audio/*',

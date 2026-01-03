@@ -10,8 +10,8 @@
 import { create } from 'zustand';
 import { AudioService } from '../services/AudioService';
 import { DatabaseService } from '../services/DatabaseService';
-import { FileService, AudioFile } from '../services/FileService';
-import type { Clip, FileRecord } from '../services/DatabaseService';
+import { FileService, PickedFile } from '../services/FileService';
+import type { Clip, AudioFile } from '../services/DatabaseService';
 
 const SKIP_FORWARD_MS = 25 * 1000; // 25 seconds
 const SKIP_BACKWARD_MS = 30 * 1000; // 30 seconds
@@ -25,7 +25,7 @@ interface PlaybackState {
 interface AppState {
   // State
   playback: PlaybackState;
-  file: FileRecord | null;
+  file: AudioFile | null;
   clips: Record<number, Clip>;
 
   // Services (private, not for UI consumption)
@@ -34,7 +34,7 @@ interface AppState {
   fileService: FileService;
 
   // Actions
-  loadFile: (audioFile: AudioFile) => Promise<void>;
+  loadFile: (pickedFile: PickedFile) => Promise<void>;
   pickAndLoadFile: () => Promise<void>;
   play: () => Promise<void>;
   pause: () => Promise<void>;
@@ -80,30 +80,30 @@ export const useStore = create<AppState>((set, get) => {
 
     // Actions
     async pickAndLoadFile() {
-      const audioFile = await fileService.pickAudioFile();
-      if (audioFile) {
-        await get().loadFile(audioFile);
+      const pickedFile = await fileService.pickAudioFile();
+      if (pickedFile) {
+        await get().loadFile(pickedFile);
       }
     },
 
-    async loadFile(audioFile: AudioFile) {
+    async loadFile(pickedFile: PickedFile) {
       try {
         // Load audio and get duration
-        const duration = await audioService.load(audioFile.uri);
+        const duration = await audioService.load(pickedFile.uri);
 
         // Get or create file record from database
-        let fileRecord = dbService.getFile(audioFile.uri);
-        if (!fileRecord) {
-          dbService.upsertFile(audioFile.uri, audioFile.name, duration, 0);
-          fileRecord = dbService.getFile(audioFile.uri);
+        let audioFile = dbService.getFile(pickedFile.uri);
+        if (!audioFile) {
+          dbService.upsertFile(pickedFile.uri, pickedFile.name, duration, 0);
+          audioFile = dbService.getFile(pickedFile.uri);
         }
 
-        if (!fileRecord) {
+        if (!audioFile) {
           throw new Error('Failed to create file record');
         }
 
         // Load clips for this file
-        const clips = dbService.getClipsForFile(audioFile.uri);
+        const clips = dbService.getClipsForFile(pickedFile.uri);
         const clipsMap = clips.reduce((acc, clip) => {
           acc[clip.id] = clip;
           return acc;
@@ -111,18 +111,18 @@ export const useStore = create<AppState>((set, get) => {
 
         // Update state
         set({
-          file: fileRecord,
+          file: audioFile,
           clips: clipsMap,
           playback: {
             isPlaying: false,
-            position: fileRecord.position,
+            position: audioFile.position,
             duration,
           },
         });
 
         // Seek to saved position
-        if (fileRecord.position > 0) {
-          await audioService.seek(fileRecord.position);
+        if (audioFile.position > 0) {
+          await audioService.seek(audioFile.position);
         }
       } catch (error) {
         console.error('Error loading file:', error);
