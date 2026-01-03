@@ -45,10 +45,12 @@ export class DatabaseService {
         note TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
-      )
+      );
+    `)
 
-      CREATE INDEX IF NOT EXISTS idx_clips_file_uri ON clips(file_uri)
+    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_clips_file_uri ON clips(file_uri);`)
 
+    this.db.execSync(`
       CREATE TABLE IF NOT EXISTS sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         file_uri TEXT NOT NULL,
@@ -56,17 +58,19 @@ export class DatabaseService {
         duration INTEGER NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
-      )
+      );
+    `)
 
-      CREATE INDEX IF NOT EXISTS idx_sessions_file_uri ON sessions(file_uri)
+    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_sessions_file_uri ON sessions(file_uri);`)
 
+    this.db.execSync(`
       CREATE TABLE IF NOT EXISTS files (
         uri TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         duration INTEGER,
         position INTEGER NOT NULL DEFAULT 0,
         opened_at INTEGER
-      )
+      );
     `)
   }
 
