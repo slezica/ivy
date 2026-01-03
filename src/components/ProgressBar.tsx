@@ -4,55 +4,55 @@
  * Visual progress bar with seek capability and time display.
  */
 
-import { View, Text, StyleSheet, PanResponder } from 'react-native';
-import { useStore } from '../store';
-import { useRef } from 'react';
+import { View, Text, StyleSheet, PanResponder } from 'react-native'
+import { useStore } from '../store'
+import { useRef } from 'react'
 
 function formatTime(milliseconds: number): string {
-  const totalSeconds = Math.floor(milliseconds / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+  const totalSeconds = Math.floor(milliseconds / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
 
   if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
   }
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
 export default function ProgressBar() {
-  const { playback, seek } = useStore();
-  const barWidth = useRef(0);
+  const { playback, seek } = useStore()
+  const barWidth = useRef(0)
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
-        handleSeek(evt.nativeEvent.locationX);
+        handleSeek(evt.nativeEvent.locationX)
       },
       onPanResponderMove: (evt) => {
-        handleSeek(evt.nativeEvent.locationX);
+        handleSeek(evt.nativeEvent.locationX)
       },
     })
-  ).current;
+  ).current
 
   const handleSeek = async (x: number) => {
     if (playback.duration === 0 || barWidth.current === 0) {
-      return;
+      return
     }
 
-    const ratio = Math.max(0, Math.min(1, x / barWidth.current));
-    const position = ratio * playback.duration;
+    const ratio = Math.max(0, Math.min(1, x / barWidth.current))
+    const position = ratio * playback.duration
 
     try {
-      await seek(position);
+      await seek(position)
     } catch (error) {
-      console.error('Seek error:', error);
+      console.error('Seek error:', error)
     }
-  };
+  }
 
-  const progress = playback.duration > 0 ? playback.position / playback.duration : 0;
+  const progress = playback.duration > 0 ? playback.position / playback.duration : 0
 
   return (
     <View style={styles.container}>
@@ -61,7 +61,7 @@ export default function ProgressBar() {
       <View
         style={styles.barContainer}
         onLayout={(e) => {
-          barWidth.current = e.nativeEvent.layout.width;
+          barWidth.current = e.nativeEvent.layout.width
         }}
         {...panResponder.panHandlers}
       >
@@ -72,7 +72,7 @@ export default function ProgressBar() {
 
       <Text style={styles.time}>{formatTime(playback.duration)}</Text>
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -104,4 +104,4 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#007AFF',
   },
-});
+})

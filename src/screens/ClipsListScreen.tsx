@@ -12,41 +12,41 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
-} from 'react-native';
-import { useStore } from '../store';
+} from 'react-native'
+import { useStore } from '../store'
 
 interface ClipsListScreenProps {
-  onNavigateBack?: () => void;
+  onNavigateBack?: () => void
 }
 
 function formatTime(milliseconds: number): string {
-  const totalSeconds = Math.floor(milliseconds / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+  const totalSeconds = Math.floor(milliseconds / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
 
   if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
   }
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
 export default function ClipsListScreen({ onNavigateBack }: ClipsListScreenProps) {
-  const { clips, file, jumpToClip, deleteClip } = useStore();
+  const { clips, file, jumpToClip, deleteClip } = useStore()
 
-  const clipsArray = Object.values(clips).sort((a, b) => a.start - b.start);
+  const clipsArray = Object.values(clips).sort((a, b) => a.start - b.start)
 
   const handleJumpToClip = async (clipId: number) => {
     try {
-      await jumpToClip(clipId);
+      await jumpToClip(clipId)
       if (onNavigateBack) {
-        onNavigateBack();
+        onNavigateBack()
       }
     } catch (error) {
-      console.error('Error jumping to clip:', error);
-      Alert.alert('Error', 'Failed to jump to clip');
+      console.error('Error jumping to clip:', error)
+      Alert.alert('Error', 'Failed to jump to clip')
     }
-  };
+  }
 
   const handleDeleteClip = (clipId: number) => {
     Alert.alert(
@@ -60,8 +60,8 @@ export default function ClipsListScreen({ onNavigateBack }: ClipsListScreenProps
           onPress: () => deleteClip(clipId),
         },
       ]
-    );
-  };
+    )
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -115,7 +115,7 @@ export default function ClipsListScreen({ onNavigateBack }: ClipsListScreenProps
         </View>
       )}
     </SafeAreaView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -203,4 +203,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
   },
-});
+})

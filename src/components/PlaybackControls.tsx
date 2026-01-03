@@ -4,39 +4,39 @@
  * Play/pause and skip forward/backward buttons.
  */
 
-import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { useStore } from '../store';
+import { View, TouchableOpacity, Text, StyleSheet } from 'react-native'
+import { useStore } from '../store'
 
 export default function PlaybackControls() {
-  const { playback, play, pause, skipForward, skipBackward } = useStore();
+  const { playback, play, pause, skipForward, skipBackward } = useStore()
 
   const handlePlayPause = async () => {
     try {
       if (playback.isPlaying) {
-        await pause();
+        await pause()
       } else {
-        await play();
+        await play()
       }
     } catch (error) {
-      console.error('Playback error:', error);
+      console.error('Playback error:', error)
     }
-  };
+  }
 
   const handleSkipBackward = async () => {
     try {
-      await skipBackward();
+      await skipBackward()
     } catch (error) {
-      console.error('Skip backward error:', error);
+      console.error('Skip backward error:', error)
     }
-  };
+  }
 
   const handleSkipForward = async () => {
     try {
-      await skipForward();
+      await skipForward()
     } catch (error) {
-      console.error('Skip forward error:', error);
+      console.error('Skip forward error:', error)
     }
-  };
+  }
 
   return (
     <View style={styles.container}>
@@ -54,7 +54,7 @@ export default function PlaybackControls() {
         <Text style={styles.buttonText}>+25s</Text>
       </TouchableOpacity>
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -87,4 +87,4 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: '#fff',
   },
-});
+})

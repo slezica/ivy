@@ -12,41 +12,41 @@ import {
   SafeAreaView,
   TextInput,
   Alert,
-} from 'react-native';
-import { useState } from 'react';
-import { useStore } from '../store';
-import PlaybackControls from '../components/PlaybackControls';
-import ProgressBar from '../components/ProgressBar';
+} from 'react-native'
+import { useState } from 'react'
+import { useStore } from '../store'
+import PlaybackControls from '../components/PlaybackControls'
+import ProgressBar from '../components/ProgressBar'
 
 interface PlayerScreenProps {
-  onNavigateToClips?: () => void;
+  onNavigateToClips?: () => void
 }
 
 export default function PlayerScreen({ onNavigateToClips }: PlayerScreenProps) {
-  const { file, pickAndLoadFile, addClip } = useStore();
-  const [showClipInput, setShowClipInput] = useState(false);
-  const [clipNote, setClipNote] = useState('');
+  const { file, pickAndLoadFile, addClip } = useStore()
+  const [showClipInput, setShowClipInput] = useState(false)
+  const [clipNote, setClipNote] = useState('')
 
   const handleLoadFile = async () => {
     try {
-      await pickAndLoadFile();
+      await pickAndLoadFile()
     } catch (error) {
-      console.error('Error loading file:', error);
-      Alert.alert('Error', 'Failed to load audio file');
+      console.error('Error loading file:', error)
+      Alert.alert('Error', 'Failed to load audio file')
     }
-  };
+  }
 
   const handleAddClip = async () => {
     try {
-      await addClip(clipNote || null);
-      setClipNote('');
-      setShowClipInput(false);
-      Alert.alert('Success', 'Clip added');
+      await addClip(clipNote || null)
+      setClipNote('')
+      setShowClipInput(false)
+      Alert.alert('Success', 'Clip added')
     } catch (error) {
-      console.error('Error adding clip:', error);
-      Alert.alert('Error', 'Failed to add clip');
+      console.error('Error adding clip:', error)
+      Alert.alert('Error', 'Failed to add clip')
     }
-  };
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -78,8 +78,8 @@ export default function PlayerScreen({ onNavigateToClips }: PlayerScreenProps) {
                     <TouchableOpacity
                       style={[styles.button, styles.cancelButton]}
                       onPress={() => {
-                        setShowClipInput(false);
-                        setClipNote('');
+                        setShowClipInput(false)
+                        setClipNote('')
                       }}
                     >
                       <Text style={styles.buttonText}>Cancel</Text>
@@ -130,7 +130,7 @@ export default function PlayerScreen({ onNavigateToClips }: PlayerScreenProps) {
         )}
       </View>
     </SafeAreaView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -224,4 +224,4 @@ const styles = StyleSheet.create({
   loadButtonText: {
     color: '#fff',
   },
-});
+})
