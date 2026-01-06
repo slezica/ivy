@@ -1,4 +1,4 @@
-import { Audio, AVPlaybackStatus } from 'expo-av'
+import { AudioPlayer, useAudioPlayer, AudioSource, setAudioModeAsync } from 'expo-audio'
 
 export interface PlaybackStatus {
   isPlaying: boolean
@@ -11,99 +11,125 @@ export interface AudioServiceListeners {
 }
 
 export class AudioService {
-  private sound: Audio.Sound | null = null
+  private player: AudioPlayer | null = null
   private listeners: AudioServiceListeners
+  private statusInterval: NodeJS.Timeout | null = null
+  private currentDuration: number = 0
 
   constructor(listeners: AudioServiceListeners = {}) {
     this.listeners = listeners
+    this.initializeAudioMode()
+  }
+
+  private async initializeAudioMode(): Promise<void> {
+    try {
+      await setAudioModeAsync({
+        playsInSilentModeIOS: true,
+      })
+    } catch (error) {
+      console.error('Failed to set audio mode:', error)
+    }
   }
 
   async load(uri: string): Promise<number> {
     await this.unload()
 
-    const { sound } = await Audio.Sound.createAsync(
-      { uri },
-      { shouldPlay: false },
-      this.handlePlaybackStatusUpdate
-    )
+    this.player = new AudioPlayer({ uri })
 
-    this.sound = sound
+    // Start polling for status updates
+    this.startStatusPolling()
 
-    const status = await sound.getStatusAsync()
-    if (status.isLoaded) {
-      return status.durationMillis || 0
+    // Wait for player to be ready and get duration
+    return new Promise((resolve) => {
+      const checkDuration = () => {
+        if (this.player && this.player.duration > 0) {
+          this.currentDuration = this.player.duration * 1000 // Convert to milliseconds
+          resolve(this.currentDuration)
+        } else {
+          setTimeout(checkDuration, 100)
+        }
+      }
+      checkDuration()
+    })
+  }
+
+  private startStatusPolling(): void {
+    if (this.statusInterval) {
+      clearInterval(this.statusInterval)
     }
 
-    return 0
+    this.statusInterval = setInterval(() => {
+      if (this.player && this.listeners.onPlaybackStatusChange) {
+        this.listeners.onPlaybackStatusChange({
+          isPlaying: this.player.playing,
+          position: this.player.currentTime * 1000, // Convert to milliseconds
+          duration: this.currentDuration,
+        })
+      }
+    }, 100) // Update every 100ms
+  }
+
+  private stopStatusPolling(): void {
+    if (this.statusInterval) {
+      clearInterval(this.statusInterval)
+      this.statusInterval = null
+    }
   }
 
   async play(): Promise<void> {
-    if (!this.sound) {
+    if (!this.player) {
       throw new Error('No audio loaded')
     }
 
-    await this.sound.playAsync()
+    this.player.play()
   }
 
   async pause(): Promise<void> {
-    if (!this.sound) {
+    if (!this.player) {
       throw new Error('No audio loaded')
     }
 
-    await this.sound.pauseAsync()
+    this.player.pause()
   }
 
   async seek(positionMillis: number): Promise<void> {
-    if (!this.sound) {
+    if (!this.player) {
       throw new Error('No audio loaded')
     }
 
-    await this.sound.setPositionAsync(positionMillis)
+    this.player.seekTo(positionMillis / 1000) // Convert to seconds
   }
 
   async skip(offsetMillis: number): Promise<void> {
-    if (!this.sound) {
+    if (!this.player) {
       throw new Error('No audio loaded')
     }
 
-    const status = await this.sound.getStatusAsync()
-    if (status.isLoaded) {
-      const newPosition = Math.max(0, status.positionMillis + offsetMillis)
-      await this.sound.setPositionAsync(newPosition)
-    }
+    const currentPosition = this.player.currentTime * 1000
+    const newPosition = Math.max(0, currentPosition + offsetMillis)
+    this.player.seekTo(newPosition / 1000) // Convert to seconds
   }
 
   async getStatus(): Promise<PlaybackStatus | null> {
-    if (!this.sound) {
+    if (!this.player) {
       return null
     }
 
-    const status = await this.sound.getStatusAsync()
-    if (status.isLoaded) {
-      return {
-        isPlaying: status.isPlaying,
-        position: status.positionMillis,
-        duration: status.durationMillis || 0,
-      }
+    return {
+      isPlaying: this.player.playing,
+      position: this.player.currentTime * 1000,
+      duration: this.currentDuration,
     }
-
-    return null
   }
 
   async unload(): Promise<void> {
-    if (this.sound) {
-      await this.sound.unloadAsync()
-      this.sound = null
-    }
-  }
+    this.stopStatusPolling()
 
-  private handlePlaybackStatusUpdate = (status: AVPlaybackStatus): void => {
-    if (status.isLoaded && this.listeners.onPlaybackStatusChange) {
-      this.listeners.onPlaybackStatusChange({
-        isPlaying: status.isPlaying,
-        position: status.positionMillis,
-        duration: status.durationMillis || 0,
-      })
+    if (this.player) {
+      this.player.remove()
+      this.player = null
     }
+
+    this.currentDuration = 0
   }
 }

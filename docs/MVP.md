@@ -29,7 +29,7 @@ Mobile audio player application built with React Native and Expo, supporting bot
 ### Three-Tier Design
 
 **Services Layer** (`src/services/`)
-- `AudioService.ts` - Wraps expo-av, manages Sound instance, playback state, position tracking
+- `AudioService.ts` - Wraps expo-audio, manages AudioPlayer instance, playback state, position tracking
 - `DatabaseService.ts` - Wraps expo-sqlite, handles all SQL operations
 - `FileService.ts` - Wraps expo-document-picker & expo-file-system, manages file selection and metadata
 - Services receive listeners on creation to report their activity back to the upper layer
@@ -103,7 +103,7 @@ CREATE TABLE files (
 
 - **Framework:** React Native with Expo
 - **State Management:** Zustand
-- **Audio:** expo-av
+- **Audio:** expo-audio
 - **Database:** expo-sqlite
 - **File Picker:** expo-document-picker
 - **File System:** expo-file-system
