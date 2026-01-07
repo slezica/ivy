@@ -1,4 +1,5 @@
-import { AudioPlayer, useAudioPlayer, AudioSource, setAudioModeAsync } from 'expo-audio'
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio'
+import type { AudioPlayer } from 'expo-audio'
 
 export interface PlaybackStatus {
   isPlaying: boolean
@@ -34,7 +35,7 @@ export class AudioService {
   async load(uri: string): Promise<number> {
     await this.unload()
 
-    this.player = new AudioPlayer({ uri })
+    this.player = createAudioPlayer(uri)
 
     // Start polling for status updates
     this.startStatusPolling()

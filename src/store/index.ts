@@ -125,11 +125,7 @@ export const useStore = create<AppState>((set, get) => {
           await audioService.seek(audioFile.position)
         }
       } catch (error) {
-        console.error('Error loading file:', error)
-        if (error instanceof Error) {
-          console.error('Error message:', error.message)
-          console.error('Error stack:', error.stack)
-        }
+        console.error(error)
         throw error
       }
     },

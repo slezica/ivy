@@ -24,7 +24,7 @@ export default function PlayerScreen() {
     try {
       await pickAndLoadFile()
     } catch (error) {
-      console.error('Error loading file:', error)
+      console.error(error)
       Alert.alert('Error', 'Failed to load audio file')
     }
   }
