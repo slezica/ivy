@@ -126,6 +126,10 @@ export const useStore = create<AppState>((set, get) => {
         }
       } catch (error) {
         console.error('Error loading file:', error)
+        if (error instanceof Error) {
+          console.error('Error message:', error.message)
+          console.error('Error stack:', error.stack)
+        }
         throw error
       }
     },
