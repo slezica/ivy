@@ -13,8 +13,9 @@ import { DatabaseService } from '../services/DatabaseService'
 import { FileService, PickedFile } from '../services/FileService'
 import type { Clip, AudioFile } from '../services/DatabaseService'
 
-const SKIP_FORWARD_MS = 25 * 1000; // 25 seconds
-const SKIP_BACKWARD_MS = 30 * 1000; // 30 seconds
+const SKIP_FORWARD_MS = 25 * 1000 // 25 seconds
+const SKIP_BACKWARD_MS = 30 * 1000 // 30 seconds
+const DEFAULT_CLIP_DURATION_MS = 20 * 1000 // 20 seconds
 
 interface PlaybackState {
   isPlaying: boolean
@@ -196,7 +197,12 @@ export const useStore = create<AppState>((set, get) => {
         throw new Error('No file loaded')
       }
 
-      const clip = dbService.createClip(file.uri, playback.position, 0, note)
+      const clip = dbService.createClip(
+        file.uri,
+        playback.position,
+        DEFAULT_CLIP_DURATION_MS,
+        note
+      )
 
       set((state) => ({
         clips: { ...state.clips, [clip.id]: clip },
