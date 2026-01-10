@@ -15,7 +15,7 @@ import {
 import { Link } from 'expo-router'
 import { useStore } from '../store'
 import PlaybackControls from '../components/PlaybackControls'
-import ProgressBar from '../components/ProgressBar'
+import TimelineBar from '../components/TimelineBar'
 
 export default function PlayerScreen() {
   const { file, pickAndLoadFile, addClip } = useStore()
@@ -52,7 +52,7 @@ export default function PlayerScreen() {
               <Text style={styles.fileName}>{file.name}</Text>
             </View>
 
-            <ProgressBar />
+            <TimelineBar />
             <PlaybackControls />
 
             <View style={styles.actions}>
