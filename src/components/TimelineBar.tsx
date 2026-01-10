@@ -147,9 +147,9 @@ export default function TimelineBar() {
       {/* Hint icons overlay */}
       {showHint && (
         <Animated.View style={[styles.hintsContainer, { opacity: hintOpacity }]} pointerEvents="none">
-          <Ionicons name="play-skip-back" size={28} color="#666" style={{ opacity: 0.5 }} />
-          <Ionicons name={playback.isPlaying ? 'pause' : 'play'} size={28} color="#666" style={{ opacity: 0.5 }} />
-          <Ionicons name="play-skip-forward" size={28} color="#666" style={{ opacity: 0.5 }} />
+          <Ionicons name="play-skip-back" size={28} color="#fff" />
+          <Ionicons name={playback.isPlaying ? 'pause' : 'play'} size={28} color="#fff" />
+          <Ionicons name="play-skip-forward" size={28} color="#fff" />
         </Animated.View>
       )}
 
@@ -211,7 +211,7 @@ interface FlashIconProps {
 function FlashIcon({ opacity, position, iconName }: FlashIconProps) {
   return (
     <Animated.View style={[styles.flashIcon, position, { opacity }]} pointerEvents="none">
-      <Ionicons name={iconName} size={28} color="#666" style={{ opacity: 0.5 }} />
+      <Ionicons name={iconName} size={28} color="#fff" />
     </Animated.View>
   )
 }
