@@ -25,7 +25,7 @@ export class AudioService {
   private async initializeAudioMode(): Promise<void> {
     try {
       await setAudioModeAsync({
-        playsInSilentModeIOS: true,
+        playsInSilentMode: true,
       })
     } catch (error) {
       console.error('Failed to set audio mode:', error)
