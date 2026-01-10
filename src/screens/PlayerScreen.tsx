@@ -1,7 +1,7 @@
 /**
  * PlayerScreen
  *
- * Main playback screen with controls and progress bar.
+ * Main playback screen with timeline control.
  */
 
 import {
@@ -12,9 +12,7 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native'
-import { Link } from 'expo-router'
 import { useStore } from '../store'
-import PlaybackControls from '../components/PlaybackControls'
 import TimelineBar from '../components/TimelineBar'
 
 export default function PlayerScreen() {
@@ -53,24 +51,14 @@ export default function PlayerScreen() {
             </View>
 
             <TimelineBar />
-            <PlaybackControls />
 
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={[styles.button, styles.addButton]}
-                onPress={handleAddClip}
-              >
-                <Text style={[styles.buttonText, styles.addButtonText]}>
-                  + Add Clip
-                </Text>
-              </TouchableOpacity>
-
-              <Link href="/clips" asChild>
-                <TouchableOpacity style={styles.button}>
-                  <Text style={styles.buttonText}>View Clips</Text>
-                </TouchableOpacity>
-              </Link>
-            </View>
+            {/* Floating Action Button */}
+            <TouchableOpacity
+              style={styles.fab}
+              onPress={handleAddClip}
+            >
+              <Text style={styles.fabIcon}>+</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.emptyState}>
@@ -112,6 +100,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingBottom: 40,
+    position: 'relative',
   },
   fileInfo: {
     paddingHorizontal: 20,
@@ -123,10 +112,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  actions: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    gap: 12,
+  fab: {
+    position: 'absolute',
+    bottom: 30,
+    right: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  fabIcon: {
+    fontSize: 32,
+    fontWeight: '300',
+    color: '#fff',
   },
   button: {
     backgroundColor: '#f0f0f0',
@@ -139,12 +144,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
-  },
-  addButton: {
-    backgroundColor: '#007AFF',
-  },
-  addButtonText: {
-    color: '#fff',
   },
   emptyState: {
     flex: 1,
