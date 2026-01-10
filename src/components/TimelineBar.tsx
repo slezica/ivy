@@ -24,9 +24,10 @@ const SEGMENT_GAP = 2 // pixels - gap between segments
 const SEGMENT_DURATION = 5000 // milliseconds (5 seconds)
 const SEGMENT_HEIGHT = 40
 const END_SEGMENT_HEIGHT = 20 // smaller bars at the end
+const MARKER_SIZE = 16 // pixels - clip marker diameter
 
 export default function TimelineBar() {
-  const { playback, seek, play, pause, skipForward, skipBackward } = useStore()
+  const { playback, seek, play, pause, skipForward, skipBackward, clips } = useStore()
 
   const scrollViewRef = useRef<ScrollView>(null)
   const scrollX = useRef(0)
@@ -50,6 +51,9 @@ export default function TimelineBar() {
 
   // Number of end indicator segments - fill at least one screen width
   const endSegments = containerWidth > 0 ? Math.ceil(containerWidth / (SEGMENT_WIDTH + SEGMENT_GAP)) : 0
+
+  // Convert clips object to array
+  const clipsArray = Object.values(clips)
 
   // Fade in/out hints on mount
   useEffect(() => {
@@ -180,6 +184,11 @@ export default function TimelineBar() {
             {Array.from({ length: endSegments }).map((_, index) => (
               <SegmentBar key={`end-${index}`} isEndSegment={true} />
             ))}
+
+            {/* Clip markers */}
+            {clipsArray.map((clip) => (
+              <ClipMarker key={clip.id} position={clip.start} />
+            ))}
           </View>
         </ScrollView>
       </View>
@@ -237,6 +246,24 @@ function TimeIndicators({ current, total }: TimeIndicatorsProps) {
   )
 }
 
+interface ClipMarkerProps {
+  position: number // position in milliseconds
+}
+
+function ClipMarker({ position }: ClipMarkerProps) {
+  const leftPosition = timeToScroll(position)
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        styles.clipMarker,
+        { left: leftPosition - MARKER_SIZE / 2 }
+      ]}
+    />
+  )
+}
+
 // ============================================================================
 // Utilities
 // ============================================================================
@@ -289,6 +316,14 @@ const styles = StyleSheet.create({
     width: SEGMENT_WIDTH,
     backgroundColor: '#aaa',
     borderRadius: 2,
+  },
+  clipMarker: {
+    position: 'absolute',
+    width: MARKER_SIZE,
+    height: MARKER_SIZE,
+    backgroundColor: '#FF6B6B',
+    borderRadius: MARKER_SIZE / 2,
+    top: (SEGMENT_HEIGHT - MARKER_SIZE) / 2,
   },
   timeContainer: {
     flexDirection: 'row',
