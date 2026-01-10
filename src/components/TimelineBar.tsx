@@ -16,9 +16,10 @@ import {
   GestureResponderEvent,
   ViewStyle,
 } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store'
 
-const SEGMENT_WIDTH = 16 // pixels
+const SEGMENT_WIDTH = 8 // pixels
 const SEGMENT_GAP = 2 // pixels - gap between segments
 const SEGMENT_DURATION = 5000 // milliseconds (5 seconds)
 const SEGMENT_HEIGHT = 40
@@ -142,16 +143,16 @@ export default function TimelineBar() {
       {/* Hint icons overlay */}
       {showHint && (
         <Animated.View style={[styles.hintsContainer, { opacity: hintOpacity }]} pointerEvents="none">
-          <Text style={styles.hintIcon}>⏮</Text>
-          <Text style={styles.hintIcon}>{playback.isPlaying ? '⏸' : '▶'}</Text>
-          <Text style={styles.hintIcon}>⏭</Text>
+          <Ionicons name="play-skip-back" size={28} color="#666" style={{ opacity: 0.5 }} />
+          <Ionicons name={playback.isPlaying ? 'pause' : 'play'} size={28} color="#666" style={{ opacity: 0.5 }} />
+          <Ionicons name="play-skip-forward" size={28} color="#666" style={{ opacity: 0.5 }} />
         </Animated.View>
       )}
 
       {/* Flash icons */}
-      <FlashIcon opacity={leftIconFlash} position={styles.flashIconLeft} icon="⏮" />
-      <FlashIcon opacity={centerIconFlash} position={styles.flashIconCenter} icon={playback.isPlaying ? '⏸' : '▶'} />
-      <FlashIcon opacity={rightIconFlash} position={styles.flashIconRight} icon="⏭" />
+      <FlashIcon opacity={leftIconFlash} position={styles.flashIconLeft} iconName="play-skip-back" />
+      <FlashIcon opacity={centerIconFlash} position={styles.flashIconCenter} iconName={playback.isPlaying ? 'pause' : 'play'} />
+      <FlashIcon opacity={rightIconFlash} position={styles.flashIconRight} iconName="play-skip-forward" />
 
       {/* Scrollable segments */}
       <View
@@ -195,13 +196,13 @@ export default function TimelineBar() {
 interface FlashIconProps {
   opacity: Animated.Value
   position: ViewStyle
-  icon: string
+  iconName: keyof typeof Ionicons.glyphMap
 }
 
-function FlashIcon({ opacity, position, icon }: FlashIconProps) {
+function FlashIcon({ opacity, position, iconName }: FlashIconProps) {
   return (
     <Animated.View style={[styles.flashIcon, position, { opacity }]} pointerEvents="none">
-      <Text style={styles.hintIcon}>{icon}</Text>
+      <Ionicons name={iconName} size={28} color="#666" style={{ opacity: 0.5 }} />
     </Animated.View>
   )
 }
@@ -307,10 +308,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingHorizontal: 20,
     zIndex: 10,
-  },
-  hintIcon: {
-    fontSize: 24,
-    opacity: 0.5,
   },
   flashIcon: {
     position: 'absolute',
