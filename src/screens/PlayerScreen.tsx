@@ -32,7 +32,6 @@ export default function PlayerScreen() {
   const handleAddClip = async () => {
     try {
       await addClip('')
-      Alert.alert('Clip Added', 'Clip saved at current position')
     } catch (error) {
       console.error('Error adding clip:', error)
       Alert.alert('Error', 'Failed to add clip')

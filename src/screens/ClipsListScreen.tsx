@@ -79,7 +79,6 @@ export default function ClipsListScreen() {
       updateClip(editingClipId, editNote)
       setEditingClipId(null)
       setEditNote('')
-      Alert.alert('Success', 'Clip updated')
     }
   }
 
