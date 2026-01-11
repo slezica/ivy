@@ -55,10 +55,6 @@ export default function PlayerScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Audio Player</Text>
-        </View>
-
         {file ? (
           <View style={styles.playerContainer}>
             <View style={styles.fileInfo}>
@@ -70,18 +66,16 @@ export default function PlayerScreen() {
             {/* Play/Pause Button */}
             <View style={styles.playbackControls}>
               <IconButton
+                size={72}
                 iconName={playback.isPlaying ? 'pause' : 'play'}
                 onPress={handlePlayPause}
               />
+              <IconButton
+                iconName="bookmark"
+                onPress={handleAddClip}
+                size={48}
+              />
             </View>
-
-            {/* Floating Action Button */}
-            <TouchableOpacity
-              style={styles.fab}
-              onPress={handleAddClip}
-            >
-              <Text style={styles.fabIcon}>+</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.emptyState}>
@@ -109,20 +103,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Color.GRAY_LIGHT,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
   playerContainer: {
     flex: 1,
     justifyContent: 'center',
-    paddingBottom: 40,
+    paddingTop: 128,
     position: 'relative',
   },
   fileInfo: {
@@ -138,27 +122,7 @@ const styles = StyleSheet.create({
   playbackControls: {
     alignItems: 'center',
     paddingVertical: 20,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 30,
-    right: 30,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Color.PRIMARY,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: Color.BLACK,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  fabIcon: {
-    fontSize: 32,
-    fontWeight: '300',
-    color: Color.WHITE,
+    gap: 32,
   },
   button: {
     backgroundColor: Color.GRAY_LIGHTER,
