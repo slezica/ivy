@@ -91,9 +91,6 @@ export default function ClipsListScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← Back</Text>
-        </TouchableOpacity>
         <Text style={styles.title}>Clips</Text>
         {file && <Text style={styles.subtitle}>{file.name}</Text>}
       </View>
@@ -125,7 +122,7 @@ export default function ClipsListScreen() {
                   style={styles.editButton}
                   onPress={() => handleEditClip(item.id)}
                 >
-                  <Text style={styles.editButtonText}>Edit</Text>
+                  <Text style={styles.editButtonText}>{item.note ? "Edit note" : "Add note"}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.deleteButton}
@@ -204,13 +201,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Color.GRAY_LIGHT,
   },
-  backButton: {
-    marginBottom: 8,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: Color.PRIMARY,
-  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -226,7 +216,7 @@ const styles = StyleSheet.create({
   clipItem: {
     backgroundColor: Color.GRAY_LIGHTEST,
     borderRadius: 8,
-    marginBottom: 12,
+    marginBottom: 24,
     overflow: 'hidden',
   },
   clipContent: {
