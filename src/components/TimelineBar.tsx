@@ -30,6 +30,7 @@ export default function TimelineBar() {
   const scrollViewRef = useRef<ScrollView>(null)
   const scrollX = useRef(0)
   const isScrolling = useRef(false)
+  const isTapScrolling = useRef(false) // Track if scroll is from tap vs drag
 
   // Container width as state so component re-renders when measured
   const [containerWidth, setContainerWidth] = useState(0)
@@ -80,7 +81,25 @@ export default function TimelineBar() {
     const tappedTime = scrollToTime(adjustedTappedX)
     const finalSeekPosition = Math.max(0, Math.min(tappedTime, playback.duration))
 
+    // Mark this as a tap-initiated scroll (not user drag)
+    isScrolling.current = true
+    isTapScrolling.current = true
+
+    // Animate scroll to target position
+    const targetScrollPosition = placeholderOffset + timeToScroll(finalSeekPosition) - (containerWidth / 2)
+    scrollViewRef.current?.scrollTo({ x: Math.max(0, targetScrollPosition), animated: true })
+
+    // Update scroll position ref
+    scrollX.current = Math.max(0, targetScrollPosition)
+
+    // Seek audio immediately (no audio delay)
     await seek(finalSeekPosition)
+
+    // Clear scrolling flags after animation completes (typical animation is ~300ms)
+    setTimeout(() => {
+      isScrolling.current = false
+      isTapScrolling.current = false
+    }, 350)
   }
 
   const handleScrollBeginDrag = () => {
@@ -99,16 +118,20 @@ export default function TimelineBar() {
   }
 
   const handleMomentumScrollEnd = (event: any) => {
-    const finalScrollX = event.nativeEvent.contentOffset.x
-    // Center of screen determines current position
-    // Account for initial placeholder offset
-    const placeholderOffset = halfScreenSegments * (SEGMENT_WIDTH + SEGMENT_GAP)
-    const centerScrollX = finalScrollX + (containerWidth / 2)
-    const newPosition = scrollToTime(centerScrollX - placeholderOffset)
-    seek(Math.max(0, Math.min(newPosition, playback.duration)))
+    // Don't seek if this was a tap-initiated scroll (already seeked)
+    if (!isTapScrolling.current) {
+      const finalScrollX = event.nativeEvent.contentOffset.x
+      // Center of screen determines current position
+      // Account for initial placeholder offset
+      const placeholderOffset = halfScreenSegments * (SEGMENT_WIDTH + SEGMENT_GAP)
+      const centerScrollX = finalScrollX + (containerWidth / 2)
+      const newPosition = scrollToTime(centerScrollX - placeholderOffset)
+      seek(Math.max(0, Math.min(newPosition, playback.duration)))
+    }
 
     // Only clear scrolling flag after all momentum has stopped
     isScrolling.current = false
+    isTapScrolling.current = false
   }
 
   return (
