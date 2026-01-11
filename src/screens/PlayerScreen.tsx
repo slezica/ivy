@@ -118,6 +118,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
+    color: Color.BLACK,
   },
   playbackControls: {
     alignItems: 'center',
