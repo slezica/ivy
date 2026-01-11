@@ -25,6 +25,7 @@ const SEGMENT_DURATION = 5000 // milliseconds (5 seconds)
 const SEGMENT_HEIGHT = 40
 const END_SEGMENT_HEIGHT = 20 // smaller bars at the end
 const MARKER_SIZE = 16 // pixels - clip marker diameter
+const TIMELINE_HEIGHT = 60 // pixels - timeline container height
 
 export default function TimelineBar() {
   const { playback, seek, play, pause, skipForward, skipBackward, clips } = useStore()
@@ -178,7 +179,11 @@ export default function TimelineBar() {
           <View style={styles.segmentsContainer}>
             {/* Main segments */}
             {Array.from({ length: totalSegments }).map((_, index) => (
-              <SegmentBar key={`segment-${index}`} isEndSegment={false} />
+              <SegmentBar
+                key={`segment-${index}`}
+                isEndSegment={false}
+                height={getSegmentHeight(index)}
+              />
             ))}
             {/* End indicator segments */}
             {Array.from({ length: endSegments }).map((_, index) => (
@@ -218,15 +223,18 @@ function FlashIcon({ opacity, position, iconName }: FlashIconProps) {
 
 interface SegmentBarProps {
   isEndSegment: boolean
+  height?: number
 }
 
-function SegmentBar({ isEndSegment }: SegmentBarProps) {
+function SegmentBar({ isEndSegment, height }: SegmentBarProps) {
+  const segmentHeight = height || (isEndSegment ? END_SEGMENT_HEIGHT : SEGMENT_HEIGHT)
+
   return (
     <View
       pointerEvents="none"
       style={[
         isEndSegment ? styles.endSegment : styles.segment,
-        { height: isEndSegment ? END_SEGMENT_HEIGHT : SEGMENT_HEIGHT },
+        { height: segmentHeight },
       ]}
     />
   )
@@ -276,6 +284,25 @@ function timeToScroll(time: number): number {
   return (time / SEGMENT_DURATION) * (SEGMENT_WIDTH + SEGMENT_GAP)
 }
 
+function getSegmentHeight(index: number): number {
+  // Create waveform-like variation using sine waves and pseudo-random noise
+  const baseHeight = 30
+  const variation = 15
+
+  // Mix multiple sine waves for organic, smooth variation
+  const wave1 = Math.sin(index * 0.15) * variation
+  const wave2 = Math.sin(index * 0.4) * (variation * 0.5)
+  const wave3 = Math.sin(index * 0.08) * (variation * 0.3)
+
+  // Add some pseudo-random noise for texture
+  const noise = ((index * 7919) % 100) / 100 * 8
+
+  const height = baseHeight + wave1 + wave2 + wave3 + noise
+
+  // Clamp between min and max heights
+  return Math.max(12, Math.min(50, height))
+}
+
 function formatTime(milliseconds: number): string {
   const totalSeconds = Math.floor(milliseconds / 1000)
   const hours = Math.floor(totalSeconds / 3600)
@@ -298,7 +325,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   timelineContainer: {
-    height: 60,
+    height: TIMELINE_HEIGHT,
     justifyContent: 'center',
     marginBottom: 8,
   },
@@ -323,7 +350,7 @@ const styles = StyleSheet.create({
     height: MARKER_SIZE,
     backgroundColor: '#FF6B6B',
     borderRadius: MARKER_SIZE / 2,
-    top: (SEGMENT_HEIGHT - MARKER_SIZE) / 2,
+    top: (TIMELINE_HEIGHT - MARKER_SIZE) / 2,
   },
   timeContainer: {
     flexDirection: 'row',
