@@ -12,9 +12,9 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store'
 import TimelineBar from '../components/TimelineBar'
+import IconButton from '../components/shared/IconButton'
 import { Color } from '../theme'
 
 export default function PlayerScreen() {
@@ -69,16 +69,10 @@ export default function PlayerScreen() {
 
             {/* Play/Pause Button */}
             <View style={styles.playbackControls}>
-              <TouchableOpacity
-                style={styles.playPauseButton}
+              <IconButton
+                iconName={playback.isPlaying ? 'pause' : 'play'}
                 onPress={handlePlayPause}
-              >
-                <Ionicons
-                  name={playback.isPlaying ? 'pause' : 'play'}
-                  size={32}
-                  color={Color.WHITE}
-                />
-              </TouchableOpacity>
+              />
             </View>
 
             {/* Floating Action Button */}
@@ -144,19 +138,6 @@ const styles = StyleSheet.create({
   playbackControls: {
     alignItems: 'center',
     paddingVertical: 20,
-  },
-  playPauseButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: Color.PRIMARY,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: Color.BLACK,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 4,
   },
   fab: {
     position: 'absolute',
