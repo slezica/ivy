@@ -106,7 +106,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     position: 'relative',
-    gap: 8
+    gap: 8,
+    paddingTop: 96
   },
   fileInfo: {
     paddingHorizontal: 20,

@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   clipItem: {
-    backgroundColor: Color.GRAY_LIGHTEST,
+    backgroundColor: Color.GRAY_LIGHTER,
     borderRadius: 8,
     marginBottom: 24,
     overflow: 'hidden',

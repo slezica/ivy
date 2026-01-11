@@ -13,9 +13,8 @@ export const Color = {
   // Grayscale
   WHITE: '#fff',
   BLACK: '#000',
-  GRAY_LIGHTEST: '#f9f9f9',
-  GRAY_LIGHTER: '#f0f0f0',
-  GRAY_LIGHT: '#eee',
+  GRAY_LIGHTER: '#f9f9f9',
+  GRAY_LIGHT: '#f0f0f0',
   GRAY: '#aaa',
   GRAY_MEDIUM: '#999',
   GRAY_DARK: '#666',

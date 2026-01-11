@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
   },
   timeCurrent: {
     fontSize: 16,
-    color: Color.GRAY_DARK,
+    color: Color.BLACK,
     fontWeight: '600',
   },
   timeTotal: {

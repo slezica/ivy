@@ -26,6 +26,8 @@ export class AudioService {
     try {
       await setAudioModeAsync({
         playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        staysActiveInBackground: true,
       })
     } catch (error) {
       console.error('Failed to set audio mode:', error)
