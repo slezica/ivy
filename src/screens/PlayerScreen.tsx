@@ -12,11 +12,12 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store'
 import TimelineBar from '../components/TimelineBar'
 
 export default function PlayerScreen() {
-  const { file, pickAndLoadFile, addClip } = useStore()
+  const { file, pickAndLoadFile, addClip, playback, play, pause } = useStore()
 
   const handleLoadFile = async () => {
     try {
@@ -37,6 +38,19 @@ export default function PlayerScreen() {
     }
   }
 
+  const handlePlayPause = async () => {
+    try {
+      if (playback.isPlaying) {
+        await pause()
+      } else {
+        await play()
+      }
+    } catch (error) {
+      console.error('Error toggling playback:', error)
+      Alert.alert('Error', 'Failed to toggle playback')
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -51,6 +65,20 @@ export default function PlayerScreen() {
             </View>
 
             <TimelineBar />
+
+            {/* Play/Pause Button */}
+            <View style={styles.playbackControls}>
+              <TouchableOpacity
+                style={styles.playPauseButton}
+                onPress={handlePlayPause}
+              >
+                <Ionicons
+                  name={playback.isPlaying ? 'pause' : 'play'}
+                  size={32}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+            </View>
 
             {/* Floating Action Button */}
             <TouchableOpacity
@@ -111,6 +139,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  playbackControls: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  playPauseButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
   },
   fab: {
     position: 'absolute',

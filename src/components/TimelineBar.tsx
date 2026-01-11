@@ -2,8 +2,8 @@
  * TimelineBar
  *
  * Unified playback control with absolute-duration segments.
- * Each segment represents 5 seconds, displayed as a 16px vertical bar.
- * Current position is at the left edge of the visible area.
+ * Each segment represents 5 seconds, displayed as an 8px vertical bar.
+ * Current position is at the center of the screen with a playhead indicator.
  */
 
 import { useRef, useEffect, useState } from 'react'
@@ -12,34 +12,24 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Animated,
   GestureResponderEvent,
-  ViewStyle,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store'
 
-const SEGMENT_WIDTH = 8 // pixels
+const SEGMENT_WIDTH = 3 // pixels
 const SEGMENT_GAP = 2 // pixels - gap between segments
 const SEGMENT_DURATION = 5000 // milliseconds (5 seconds)
 const SEGMENT_HEIGHT = 40
-const END_SEGMENT_HEIGHT = 20 // smaller bars at the end
+const END_SEGMENT_HEIGHT = 8 // smaller bars at the end
 const MARKER_SIZE = 16 // pixels - clip marker diameter
 const TIMELINE_HEIGHT = 60 // pixels - timeline container height
 
 export default function TimelineBar() {
-  const { playback, seek, play, pause, skipForward, skipBackward, clips } = useStore()
+  const { playback, seek, clips } = useStore()
 
   const scrollViewRef = useRef<ScrollView>(null)
   const scrollX = useRef(0)
   const isScrolling = useRef(false)
-
-  // Hint animations
-  const hintOpacity = useRef(new Animated.Value(1)).current
-  const [showHint, setShowHint] = useState(true)
-  const leftIconFlash = useRef(new Animated.Value(0)).current
-  const centerIconFlash = useRef(new Animated.Value(0)).current
-  const rightIconFlash = useRef(new Animated.Value(0)).current
 
   // Container width as state so component re-renders when measured
   const [containerWidth, setContainerWidth] = useState(0)
@@ -50,76 +40,42 @@ export default function TimelineBar() {
   // Calculate number of segments
   const totalSegments = Math.ceil(playback.duration / SEGMENT_DURATION)
 
-  // Number of end indicator segments - fill at least one screen width
-  const endSegments = containerWidth > 0 ? Math.ceil(containerWidth / (SEGMENT_WIDTH + SEGMENT_GAP)) : 0
+  // Number of initial/end placeholder segments - fill half screen width each
+  const halfScreenSegments = containerWidth > 0 ? Math.ceil((containerWidth / 2) / (SEGMENT_WIDTH + SEGMENT_GAP)) : 0
 
   // Convert clips object to array
   const clipsArray = Object.values(clips)
 
-  // Fade in/out hints on mount
+  // Auto-scroll to keep current position at center during playback
   useEffect(() => {
-    Animated.sequence([
-      Animated.delay(500),
-      Animated.timing(hintOpacity, {
-        toValue: 0,
-        duration: 2000,
-        useNativeDriver: true,
-      }),
-    ]).start(() => setShowHint(false))
-  }, [])
-
-  // Flash icon animation
-  const flashIcon = (animatedValue: Animated.Value) => {
-    Animated.sequence([
-      Animated.timing(animatedValue, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(animatedValue, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start()
-  }
-
-  // Auto-scroll to keep current position at left edge during playback
-  useEffect(() => {
-    if (!isScrolling.current && scrollViewRef.current) {
-      const scrollToPosition = timeToScroll(playback.position)
-      scrollViewRef.current.scrollTo({ x: scrollToPosition, animated: false })
-      scrollX.current = scrollToPosition
+    if (!isScrolling.current && scrollViewRef.current && containerWidth > 0) {
+      // Position current time at center by offsetting by half container width
+      // Account for initial placeholder offset
+      const placeholderOffset = halfScreenSegments * (SEGMENT_WIDTH + SEGMENT_GAP)
+      const scrollToPosition = placeholderOffset + timeToScroll(playback.position) - (containerWidth / 2)
+      scrollViewRef.current.scrollTo({ x: Math.max(0, scrollToPosition), animated: false })
+      scrollX.current = Math.max(0, scrollToPosition)
     }
 
     // Update display position when not scrolling
     if (!isScrolling.current) {
       setDisplayPosition(playback.position)
     }
-  }, [playback.position])
+  }, [playback.position, containerWidth, halfScreenSegments])
 
   const handleTouchEnd = async (event: GestureResponderEvent) => {
     if (containerWidth === 0) return
 
-    // Calculate on-screen location based on current scroll offset
-    const x = event.nativeEvent.locationX - scrollX.current
+    // Calculate which position was tapped in the timeline content
+    const tappedX = event.nativeEvent.locationX + scrollX.current
 
-    if (x < 1/3 * containerWidth) {
-      flashIcon(leftIconFlash)
-      await skipBackward()
+    // Subtract the initial placeholder offset to get actual audio position
+    const placeholderOffset = halfScreenSegments * (SEGMENT_WIDTH + SEGMENT_GAP)
+    const adjustedTappedX = tappedX - placeholderOffset
 
-    } else if (x > 2/3 * containerWidth) {
-      flashIcon(rightIconFlash)
-      await skipForward()
-
-    } else {
-      flashIcon(centerIconFlash)
-      if (playback.isPlaying) {
-        await pause()
-      } else {
-        await play()
-      }
-    }
+    // Convert to timestamp and seek to that position
+    const tappedTime = scrollToTime(adjustedTappedX)
+    await seek(Math.max(0, Math.min(tappedTime, playback.duration)))
   }
 
   const handleScrollBeginDrag = () => {
@@ -129,15 +85,22 @@ export default function TimelineBar() {
   const handleScroll = (event: any) => {
     scrollX.current = event.nativeEvent.contentOffset.x
 
-    // Update display position based on scroll
-    const scrollPosition = scrollToTime(scrollX.current)
-    setDisplayPosition(Math.min(scrollPosition, playback.duration))
+    // Update display position based on scroll - center of screen is current position
+    // Account for initial placeholder offset
+    const placeholderOffset = halfScreenSegments * (SEGMENT_WIDTH + SEGMENT_GAP)
+    const centerScrollX = scrollX.current + (containerWidth / 2)
+    const scrollPosition = scrollToTime(centerScrollX - placeholderOffset)
+    setDisplayPosition(Math.max(0, Math.min(scrollPosition, playback.duration)))
   }
 
   const handleMomentumScrollEnd = (event: any) => {
     const finalScrollX = event.nativeEvent.contentOffset.x
-    const newPosition = scrollToTime(finalScrollX)
-    seek(Math.min(newPosition, playback.duration))
+    // Center of screen determines current position
+    // Account for initial placeholder offset
+    const placeholderOffset = halfScreenSegments * (SEGMENT_WIDTH + SEGMENT_GAP)
+    const centerScrollX = finalScrollX + (containerWidth / 2)
+    const newPosition = scrollToTime(centerScrollX - placeholderOffset)
+    seek(Math.max(0, Math.min(newPosition, playback.duration)))
 
     // Only clear scrolling flag after all momentum has stopped
     isScrolling.current = false
@@ -145,19 +108,10 @@ export default function TimelineBar() {
 
   return (
     <View style={styles.container}>
-      {/* Hint icons overlay */}
-      {showHint && (
-        <Animated.View style={[styles.hintsContainer, { opacity: hintOpacity }]} pointerEvents="none">
-          <Ionicons name="play-skip-back" size={28} color="#fff" />
-          <Ionicons name={playback.isPlaying ? 'pause' : 'play'} size={28} color="#fff" />
-          <Ionicons name="play-skip-forward" size={28} color="#fff" />
-        </Animated.View>
-      )}
-
-      {/* Flash icons */}
-      <FlashIcon opacity={leftIconFlash} position={styles.flashIconLeft} iconName="play-skip-back" />
-      <FlashIcon opacity={centerIconFlash} position={styles.flashIconCenter} iconName={playback.isPlaying ? 'pause' : 'play'} />
-      <FlashIcon opacity={rightIconFlash} position={styles.flashIconRight} iconName="play-skip-forward" />
+      {/* Playhead indicator at center */}
+      <View style={styles.playheadContainer} pointerEvents="none">
+        <View style={styles.playhead} />
+      </View>
 
       {/* Scrollable segments */}
       <View
@@ -177,6 +131,11 @@ export default function TimelineBar() {
           scrollEventThrottle={16}
         >
           <View style={styles.segmentsContainer}>
+            {/* Initial placeholder segments (left half) */}
+            {Array.from({ length: halfScreenSegments }).map((_, index) => (
+              <SegmentBar key={`start-${index}`} isEndSegment={true} />
+            ))}
+
             {/* Main segments */}
             {Array.from({ length: totalSegments }).map((_, index) => (
               <SegmentBar
@@ -185,14 +144,15 @@ export default function TimelineBar() {
                 height={getSegmentHeight(index)}
               />
             ))}
-            {/* End indicator segments */}
-            {Array.from({ length: endSegments }).map((_, index) => (
+
+            {/* End placeholder segments (right half) */}
+            {Array.from({ length: halfScreenSegments }).map((_, index) => (
               <SegmentBar key={`end-${index}`} isEndSegment={true} />
             ))}
 
             {/* Clip markers */}
             {clipsArray.map((clip) => (
-              <ClipMarker key={clip.id} position={clip.start} />
+              <ClipMarker key={clip.id} position={clip.start} initialOffset={halfScreenSegments} />
             ))}
           </View>
         </ScrollView>
@@ -206,20 +166,6 @@ export default function TimelineBar() {
 // ============================================================================
 // Subcomponents
 // ============================================================================
-
-interface FlashIconProps {
-  opacity: Animated.Value
-  position: ViewStyle
-  iconName: keyof typeof Ionicons.glyphMap
-}
-
-function FlashIcon({ opacity, position, iconName }: FlashIconProps) {
-  return (
-    <Animated.View style={[styles.flashIcon, position, { opacity }]} pointerEvents="none">
-      <Ionicons name={iconName} size={28} color="#fff" />
-    </Animated.View>
-  )
-}
 
 interface SegmentBarProps {
   isEndSegment: boolean
@@ -248,18 +194,22 @@ interface TimeIndicatorsProps {
 function TimeIndicators({ current, total }: TimeIndicatorsProps) {
   return (
     <View style={styles.timeContainer}>
-      <Text style={styles.time}>{formatTime(current)}</Text>
-      <Text style={styles.time}>{formatTime(total)}</Text>
+      <View style={styles.timeSpacer} />
+      <Text style={styles.timeCurrent}>{formatTime(current)}</Text>
+      <Text style={styles.timeTotal}>{formatTime(total)}</Text>
     </View>
   )
 }
 
 interface ClipMarkerProps {
   position: number // position in milliseconds
+  initialOffset: number // number of initial placeholder segments
 }
 
-function ClipMarker({ position }: ClipMarkerProps) {
-  const leftPosition = timeToScroll(position)
+function ClipMarker({ position, initialOffset }: ClipMarkerProps) {
+  const timePosition = timeToScroll(position)
+  const placeholderOffset = initialOffset * (SEGMENT_WIDTH + SEGMENT_GAP)
+  const leftPosition = placeholderOffset + timePosition
 
   return (
     <View
@@ -352,40 +302,42 @@ const styles = StyleSheet.create({
     borderRadius: MARKER_SIZE / 2,
     top: (TIMELINE_HEIGHT - MARKER_SIZE) / 2,
   },
-  timeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-  },
-  time: {
-    fontSize: 16,
-    color: '#666',
-  },
-  hintsContainer: {
+  playheadContainer: {
     position: 'absolute',
-    top: 28,
-    left: 20,
-    right: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 20,
+    top: 10,
+    left: 0,
+    right: 0,
+    height: TIMELINE_HEIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
     zIndex: 10,
   },
-  flashIcon: {
-    position: 'absolute',
-    zIndex: 5,
+  playhead: {
+    width: 2,
+    height: TIMELINE_HEIGHT,
+    backgroundColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
   },
-  flashIconLeft: {
-    left: 50,
-    top: 28,
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
   },
-  flashIconCenter: {
-    left: '50%',
-    marginLeft: -12,
-    top: 28,
+  timeSpacer: {
+    flex: 1,
   },
-  flashIconRight: {
-    right: 50,
-    top: 28,
+  timeCurrent: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
+  },
+  timeTotal: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'right',
+    flex: 1,
   },
 })
