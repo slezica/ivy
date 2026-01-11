@@ -31,6 +31,7 @@ export default function TimelineBar() {
   const scrollX = useRef(0)
   const isScrolling = useRef(false)
   const isTapScrolling = useRef(false) // Track if scroll is from tap vs drag
+  const tapAnimationTimeout = useRef<NodeJS.Timeout | null>(null) // Track timeout for clearing
 
   // Container width as state so component re-renders when measured
   const [containerWidth, setContainerWidth] = useState(0)
@@ -70,6 +71,11 @@ export default function TimelineBar() {
   const handleTouchEnd = async (event: GestureResponderEvent) => {
     if (containerWidth === 0) return
 
+    // Clear any pending animation timeout from previous taps
+    if (tapAnimationTimeout.current) {
+      clearTimeout(tapAnimationTimeout.current)
+    }
+
     // Calculate which position was tapped in the timeline content
     const tappedX = event.nativeEvent.locationX
 
@@ -96,9 +102,10 @@ export default function TimelineBar() {
     await seek(finalSeekPosition)
 
     // Clear scrolling flags after animation completes (typical animation is ~300ms)
-    setTimeout(() => {
+    tapAnimationTimeout.current = setTimeout(() => {
       isScrolling.current = false
       isTapScrolling.current = false
+      tapAnimationTimeout.current = null
     }, 350)
   }
 
