@@ -169,7 +169,7 @@ export default function TimelineBar() {
               <SegmentBar
                 key={`segment-${index}`}
                 isEndSegment={false}
-                isPlayed={index < currentSegmentIndex}
+                isPlayed={index <= currentSegmentIndex}
                 height={getSegmentHeight(index)}
               />
             ))}
