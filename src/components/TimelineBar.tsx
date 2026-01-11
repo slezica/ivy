@@ -43,6 +43,9 @@ export default function TimelineBar() {
   // Number of initial/end placeholder segments - fill half screen width each
   const halfScreenSegments = containerWidth > 0 ? Math.ceil((containerWidth / 2) / (SEGMENT_WIDTH + SEGMENT_GAP)) : 0
 
+  // Calculate which segment index corresponds to current playback position
+  const currentSegmentIndex = Math.floor(playback.position / SEGMENT_DURATION)
+
   // Convert clips object to array
   const clipsArray = Object.values(clips)
 
@@ -143,6 +146,7 @@ export default function TimelineBar() {
               <SegmentBar
                 key={`segment-${index}`}
                 isEndSegment={false}
+                isPlayed={index < currentSegmentIndex}
                 height={getSegmentHeight(index)}
               />
             ))}
@@ -171,17 +175,21 @@ export default function TimelineBar() {
 
 interface SegmentBarProps {
   isEndSegment: boolean
+  isPlayed?: boolean
   height?: number
 }
 
-function SegmentBar({ isEndSegment, height }: SegmentBarProps) {
+function SegmentBar({ isEndSegment, isPlayed = false, height }: SegmentBarProps) {
   const segmentHeight = height || (isEndSegment ? END_SEGMENT_HEIGHT : SEGMENT_HEIGHT)
+
+  // Use gray for end segments and played segments, blue for unplayed segments
+  const segmentStyle = isEndSegment || isPlayed ? styles.endSegment : styles.segment
 
   return (
     <View
       pointerEvents="none"
       style={[
-        isEndSegment ? styles.endSegment : styles.segment,
+        segmentStyle,
         { height: segmentHeight },
       ]}
     />
