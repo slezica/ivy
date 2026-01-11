@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store'
 import TimelineBar from '../components/TimelineBar'
+import { Color } from '../theme'
 
 export default function PlayerScreen() {
   const { file, pickAndLoadFile, addClip, playback, play, pause } = useStore()
@@ -75,7 +76,7 @@ export default function PlayerScreen() {
                 <Ionicons
                   name={playback.isPlaying ? 'pause' : 'play'}
                   size={32}
-                  color="#fff"
+                  color={Color.WHITE}
                 />
               </TouchableOpacity>
             </View>
@@ -109,7 +110,7 @@ export default function PlayerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: Color.WHITE,
   },
   content: {
     flex: 1,
@@ -118,7 +119,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: Color.GRAY_LIGHT,
   },
   title: {
     fontSize: 24,
@@ -148,10 +149,10 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#007AFF',
+    backgroundColor: Color.PRIMARY,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: Color.BLACK,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 3,
@@ -164,10 +165,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#007AFF',
+    backgroundColor: Color.PRIMARY,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: Color.BLACK,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -176,10 +177,10 @@ const styles = StyleSheet.create({
   fabIcon: {
     fontSize: 32,
     fontWeight: '300',
-    color: '#fff',
+    color: Color.WHITE,
   },
   button: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: Color.GRAY_LIGHTER,
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 8,
@@ -188,7 +189,7 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: Color.GRAY_DARKER,
   },
   emptyState: {
     flex: 1,
@@ -198,13 +199,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
+    color: Color.GRAY_DARK,
   },
   loadButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: Color.PRIMARY,
     paddingHorizontal: 30,
   },
   loadButtonText: {
-    color: '#fff',
+    color: Color.WHITE,
   },
 })

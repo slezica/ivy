@@ -18,6 +18,7 @@ import {
 import { useState } from 'react'
 import { useRouter } from 'expo-router'
 import { useStore } from '../store'
+import { Color } from '../theme'
 
 function formatTime(milliseconds: number): string {
   const totalSeconds = Math.floor(milliseconds / 1000)
@@ -195,20 +196,20 @@ export default function ClipsListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: Color.WHITE,
   },
   header: {
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: Color.GRAY_LIGHT,
   },
   backButton: {
     marginBottom: 8,
   },
   backButtonText: {
     fontSize: 16,
-    color: '#007AFF',
+    color: Color.PRIMARY,
   },
   title: {
     fontSize: 24,
@@ -217,13 +218,13 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
+    color: Color.GRAY_DARK,
   },
   listContent: {
     padding: 16,
   },
   clipItem: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: Color.GRAY_LIGHTEST,
     borderRadius: 8,
     marginBottom: 12,
     overflow: 'hidden',
@@ -240,41 +241,41 @@ const styles = StyleSheet.create({
   clipTime: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#007AFF',
+    color: Color.PRIMARY,
   },
   clipDuration: {
     fontSize: 14,
-    color: '#666',
+    color: Color.GRAY_DARK,
   },
   clipNote: {
     fontSize: 14,
-    color: '#333',
+    color: Color.GRAY_DARKER,
     marginTop: 4,
   },
   clipActions: {
     flexDirection: 'row',
   },
   editButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: Color.PRIMARY,
     paddingVertical: 10,
     paddingHorizontal: 16,
     alignItems: 'center',
     flex: 1,
   },
   editButtonText: {
-    color: '#fff',
+    color: Color.WHITE,
     fontSize: 14,
     fontWeight: '600',
   },
   deleteButton: {
-    backgroundColor: '#ff3b30',
+    backgroundColor: Color.DESTRUCTIVE,
     paddingVertical: 10,
     paddingHorizontal: 16,
     alignItems: 'center',
     flex: 1,
   },
   deleteButtonText: {
-    color: '#fff',
+    color: Color.WHITE,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -287,21 +288,21 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#666',
+    color: Color.GRAY_DARK,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
+    color: Color.GRAY_MEDIUM,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: Color.MODAL_OVERLAY,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: Color.WHITE,
     borderRadius: 12,
     padding: 20,
     width: '100%',
@@ -314,12 +315,12 @@ const styles = StyleSheet.create({
   },
   modalSubtitle: {
     fontSize: 14,
-    color: '#666',
+    color: Color.GRAY_DARK,
     marginBottom: 16,
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: Color.GRAY_BORDER,
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -339,17 +340,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalCancelButton: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: Color.GRAY_LIGHTER,
   },
   modalSaveButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: Color.PRIMARY,
   },
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: Color.GRAY_DARKER,
   },
   modalSaveButtonText: {
-    color: '#fff',
+    color: Color.WHITE,
   },
 })

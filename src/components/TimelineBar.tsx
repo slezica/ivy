@@ -15,6 +15,7 @@ import {
   GestureResponderEvent,
 } from 'react-native'
 import { useStore } from '../store'
+import { Color } from '../theme'
 
 const SEGMENT_WIDTH = 4 // pixels
 const SEGMENT_GAP = 2 // pixels - gap between segments
@@ -326,19 +327,19 @@ const styles = StyleSheet.create({
   },
   segment: {
     width: SEGMENT_WIDTH,
-    backgroundColor: '#007AFF',
+    backgroundColor: Color.PRIMARY,
     borderRadius: 2,
   },
   endSegment: {
     width: SEGMENT_WIDTH,
-    backgroundColor: '#aaa',
+    backgroundColor: Color.GRAY,
     borderRadius: 2,
   },
   clipMarker: {
     position: 'absolute',
     width: MARKER_SIZE,
     height: MARKER_SIZE,
-    backgroundColor: '#FF6B6B',
+    backgroundColor: Color.SECONDARY,
     borderRadius: MARKER_SIZE / 2,
     top: (TIMELINE_HEIGHT - MARKER_SIZE) / 2,
   },
@@ -355,8 +356,8 @@ const styles = StyleSheet.create({
   playhead: {
     width: 2,
     height: TIMELINE_HEIGHT,
-    backgroundColor: '#000',
-    shadowColor: '#000',
+    backgroundColor: Color.BLACK,
+    shadowColor: Color.BLACK,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 2,
@@ -371,12 +372,12 @@ const styles = StyleSheet.create({
   },
   timeCurrent: {
     fontSize: 16,
-    color: '#666',
+    color: Color.GRAY_DARK,
     fontWeight: '600',
   },
   timeTotal: {
     fontSize: 16,
-    color: '#666',
+    color: Color.GRAY_DARK,
     textAlign: 'right',
     flex: 1,
   },
