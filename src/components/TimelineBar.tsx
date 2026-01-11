@@ -16,7 +16,7 @@ import {
 } from 'react-native'
 import { useStore } from '../store'
 
-const SEGMENT_WIDTH = 3 // pixels
+const SEGMENT_WIDTH = 4 // pixels
 const SEGMENT_GAP = 2 // pixels - gap between segments
 const SEGMENT_DURATION = 5000 // milliseconds (5 seconds)
 const SEGMENT_HEIGHT = 40
@@ -67,7 +67,7 @@ export default function TimelineBar() {
     if (containerWidth === 0) return
 
     // Calculate which position was tapped in the timeline content
-    const tappedX = event.nativeEvent.locationX + scrollX.current
+    const tappedX = event.nativeEvent.locationX
 
     // Subtract the initial placeholder offset to get actual audio position
     const placeholderOffset = halfScreenSegments * (SEGMENT_WIDTH + SEGMENT_GAP)
@@ -75,7 +75,9 @@ export default function TimelineBar() {
 
     // Convert to timestamp and seek to that position
     const tappedTime = scrollToTime(adjustedTappedX)
-    await seek(Math.max(0, Math.min(tappedTime, playback.duration)))
+    const finalSeekPosition = Math.max(0, Math.min(tappedTime, playback.duration))
+
+    await seek(finalSeekPosition)
   }
 
   const handleScrollBeginDrag = () => {
@@ -126,8 +128,8 @@ export default function TimelineBar() {
           showsHorizontalScrollIndicator={false}
           onScrollBeginDrag={handleScrollBeginDrag}
           onScroll={handleScroll}
-          onMomentumScrollEnd={handleMomentumScrollEnd}
           onTouchEnd={handleTouchEnd}
+          onMomentumScrollEnd={handleMomentumScrollEnd}
           scrollEventThrottle={16}
         >
           <View style={styles.segmentsContainer}>
