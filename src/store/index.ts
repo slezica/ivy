@@ -24,7 +24,9 @@ interface AppState {
 
   // Actions
   loadFile: (pickedFile: PickedFile) => Promise<void>
-  pickAndLoadFile: () => Promise<void>
+  loadFileWithUri: (uri: string, name: string) => Promise<void>
+  loadFileWithPicker: () => Promise<void>
+  getAllFiles: () => AudioFile[]
   play: () => Promise<void>
   pause: () => Promise<void>
   seek: (position: number) => Promise<void>
@@ -66,8 +68,10 @@ export const useStore = create<AppState>((set, get) => {
     clips: {},
 
     // Actions (below)
-    pickAndLoadFile,
+    loadFileWithPicker,
     loadFile,
+    loadFileWithUri,
+    getAllFiles,
     play,
     pause,
     seek,
@@ -79,7 +83,15 @@ export const useStore = create<AppState>((set, get) => {
     jumpToClip
   }
 
-  async function pickAndLoadFile() {
+  function getAllFiles(): AudioFile[] {
+    return dbService.getAllFiles()
+  }
+
+  async function loadFileWithUri(uri: string, name: string) {
+    await get().loadFile({ uri, name })
+  }
+
+  async function loadFileWithPicker() {
     const pickedFile = await fileService.pickAudioFile()
     if (pickedFile) {
       await get().loadFile(pickedFile)

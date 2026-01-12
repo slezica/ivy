@@ -125,6 +125,12 @@ export class DatabaseService {
     return result || null
   }
 
+  getAllFiles(): AudioFile[] {
+    return this.db.getAllSync<AudioFile>(
+      'SELECT * FROM files ORDER BY opened_at DESC'
+    )
+  }
+
   upsertFile(uri: string, name: string, duration: number | null, position: number): void {
     const now = Date.now()
     const existing = this.getFile(uri)

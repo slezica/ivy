@@ -128,6 +128,10 @@ export class AudioService {
     this.stopStatusPolling()
 
     if (this.player) {
+      // Stop playback before removing player
+      if (this.player.playing) {
+        this.player.pause()
+      }
       this.player.remove()
       this.player = null
     }
