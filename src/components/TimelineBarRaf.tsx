@@ -43,6 +43,9 @@ const DECELERATION = 0.95 // Velocity multiplier per frame
 const MIN_VELOCITY = 0.5 // Stop momentum below this
 const VELOCITY_SCALE = 1 / 60 // Convert gesture velocity (px/s) to px/frame
 
+// Animation constants
+const SCROLL_TO_DURATION = 200 // ms for tap-to-seek animation
+
 // Precompute segment heights
 const MAX_PRECOMPUTED_SEGMENTS = 10000
 const SEGMENT_HEIGHTS = new Float32Array(MAX_PRECOMPUTED_SEGMENTS)
@@ -220,12 +223,68 @@ export default function TimelineBarRaf() {
   const dragStartOffsetRef = useRef(0)
   const rafIdRef = useRef<number | null>(null)
 
+  // Animation state for tap-to-seek
+  const animationRef = useRef<{
+    startOffset: number
+    targetOffset: number
+    startTime: number
+  } | null>(null)
+
   // Display position for time indicator
   const [displayPosition, setDisplayPosition] = useState(playback.position)
 
   // Computed values
   const totalSegments = Math.ceil(playback.duration / SEGMENT_DURATION)
   const maxScrollOffset = timeToX(playback.duration)
+
+  // Ease-out function for smooth animation
+  const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3)
+
+  // Animated scroll to target position
+  const animateToPosition = useCallback((targetOffset: number) => {
+    // Cancel any existing animation/momentum
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current)
+      rafIdRef.current = null
+    }
+    velocityRef.current = 0
+
+    // Setup animation
+    animationRef.current = {
+      startOffset: scrollOffsetRef.current,
+      targetOffset: clamp(targetOffset, 0, maxScrollOffset),
+      startTime: performance.now(),
+    }
+
+    const tick = () => {
+      if (!animationRef.current || isDraggingRef.current) {
+        animationRef.current = null
+        rafIdRef.current = null
+        return
+      }
+
+      const elapsed = performance.now() - animationRef.current.startTime
+      const progress = Math.min(elapsed / SCROLL_TO_DURATION, 1)
+      const easedProgress = easeOutCubic(progress)
+
+      const { startOffset, targetOffset } = animationRef.current
+      scrollOffsetRef.current = startOffset + (targetOffset - startOffset) * easedProgress
+
+      setDisplayPosition(xToTime(scrollOffsetRef.current))
+      setFrame(f => f + 1)
+
+      if (progress < 1) {
+        rafIdRef.current = requestAnimationFrame(tick)
+      } else {
+        // Animation complete - seek to final position
+        animationRef.current = null
+        rafIdRef.current = null
+        seek(xToTime(scrollOffsetRef.current))
+      }
+    }
+
+    rafIdRef.current = requestAnimationFrame(tick)
+  }, [maxScrollOffset, seek])
 
   // RAF loop for momentum physics
   const startMomentumLoop = useCallback(() => {
@@ -292,12 +351,15 @@ export default function TimelineBarRaf() {
   // Track if we stopped momentum on this touch (don't seek if so)
   const stoppedMomentumRef = useRef(false)
 
-  // Called on finger down - stops momentum immediately
+  // Called on finger down - stops momentum/animation immediately
   const handleTouchDown = useCallback(() => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current)
-      rafIdRef.current = null
+    if (rafIdRef.current !== null || animationRef.current !== null) {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
       velocityRef.current = 0
+      animationRef.current = null
       stoppedMomentumRef.current = true
       // Seek to where we stopped
       seek(xToTime(scrollOffsetRef.current))
@@ -306,7 +368,7 @@ export default function TimelineBarRaf() {
     }
   }, [seek])
 
-  // Called on finger up - seeks to tapped position (unless we just stopped momentum)
+  // Called on finger up - animates to tapped position (unless we just stopped momentum)
   const handleTap = useCallback((x: number, y: number) => {
     // Don't seek if we just stopped momentum
     if (stoppedMomentumRef.current) {
@@ -314,17 +376,15 @@ export default function TimelineBarRaf() {
       return
     }
 
-    // Seek to tapped position
+    // Animate to tapped position
     const halfWidth = containerWidth / 2
     const offsetFromCenter = x - halfWidth
     const tappedTime = xToTime(scrollOffsetRef.current + offsetFromCenter)
     const clampedTime = clamp(tappedTime, 0, playback.duration)
+    const targetOffset = timeToX(clampedTime)
 
-    scrollOffsetRef.current = timeToX(clampedTime)
-    setDisplayPosition(clampedTime)
-    setFrame(f => f + 1)
-    seek(clampedTime)
-  }, [containerWidth, playback.duration, seek])
+    animateToPosition(targetOffset)
+  }, [containerWidth, playback.duration, animateToPosition])
 
   // Gesture callbacks (run on JS thread)
   const onPanStart = useCallback(() => {
