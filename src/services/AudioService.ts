@@ -14,7 +14,7 @@ export interface AudioServiceListeners {
 export class AudioService {
   private player: AudioPlayer | null = null
   private listeners: AudioServiceListeners
-  private statusInterval: NodeJS.Timeout | null = null
+  private statusInterval: ReturnType<typeof setInterval> | null = null
   private currentDuration: number = 0
 
   constructor(listeners: AudioServiceListeners = {}) {
@@ -27,7 +27,6 @@ export class AudioService {
       await setAudioModeAsync({
         playsInSilentMode: true,
         shouldPlayInBackground: true,
-        staysActiveInBackground: true,
       })
     } catch (error) {
       console.error('Failed to set audio mode:', error)
