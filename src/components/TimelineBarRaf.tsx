@@ -1,13 +1,102 @@
 /**
  * TimelineBarRaf
  *
- * RAF-based timeline with imperative Skia drawing and custom scroll physics.
+ * An interactive audio timeline for scrubbing through audio files.
  *
- * Architecture:
- * - Drawing: Imperative via Skia Picture API, no segment components
- * - Physics: Custom momentum/deceleration in RAF loop
- * - State: Pure refs for scroll/velocity (minimal React state)
- * - Gestures: Pan with velocity capture, tap detection
+ *
+ * ## What You're Looking At
+ *
+ * Visually, this component displays:
+ *
+ *   - A horizontal row of vertical bars, like a waveform visualization
+ *   - A thin vertical line (the "playhead") fixed at the center of the screen
+ *   - Time indicators showing current position and total duration
+ *
+ * The bars represent segments of time. Each bar = 5 seconds of audio. A 1-hour
+ * file has 720 bars; a 20-hour audiobook has 14,400. The varying bar heights
+ * are decorative (a fake waveform pattern), not actual audio analysis.
+ *
+ * Bars to the LEFT of the playhead are "played" (gray). Bars to the RIGHT are
+ * "unplayed" (colored). If a bar straddles the playhead, it's split-colored.
+ *
+ *
+ * ## How Interaction Works
+ *
+ * The playhead stays fixed at center. When the user drags, the bars scroll
+ * behind the playhead - like scrubbing a video timeline. This creates the
+ * illusion of moving through time.
+ *
+ * Supported interactions:
+ *   - **Drag** to scrub through the audio
+ *   - **Flick** to scroll with momentum (gradually decelerates)
+ *   - **Tap** to seek to that position (animates smoothly)
+ *   - **Tap while scrolling** to stop the momentum
+ *
+ *
+ * ## The Performance Challenge
+ *
+ * The naive React approach would create one <View> component per bar. With
+ * 14,400 bars, that's 14,400 components. During playback or scrolling, many
+ * would re-render every frame. This destroys performance and drains battery.
+ *
+ * Our solution: don't use React components for bars at all. Instead, we draw
+ * directly to a GPU-accelerated canvas using react-native-skia. The entire
+ * visible timeline is one draw operation, and we only draw the bars currently
+ * on screen.
+ *
+ *
+ * ## How Drawing Works
+ *
+ * We use Skia's "Picture" API. A Picture is a recorded sequence of drawing
+ * commands that can be replayed efficiently. Each frame:
+ *
+ *   1. We figure out which bars are visible given the current scroll position
+ *   2. We draw just those bars to a Picture (with appropriate colors)
+ *   3. Skia renders the Picture to the screen
+ *
+ * The drawing logic is a plain function (`drawTimeline`) that takes a canvas
+ * and the current state, then imperatively draws rectangles. No components,
+ * no JSX, no reconciliation.
+ *
+ *
+ * ## How Animation Works
+ *
+ * Smooth 60fps animation requires updating position every ~16ms. React state
+ * updates are too slow for this - each setState schedules a re-render, and
+ * the overhead adds up.
+ *
+ * Instead, we store animation values (scroll position, velocity) in refs.
+ * Refs can be mutated instantly without scheduling anything. A
+ * requestAnimationFrame loop updates these refs directly.
+ *
+ * But we still need React to re-render so we can rebuild the Picture. We use
+ * a simple trick: a "frame" counter in state. When the animation loop wants
+ * a redraw, it increments the counter. This triggers exactly one re-render,
+ * which rebuilds the Picture using the current ref values.
+ *
+ *
+ * ## Code Organization
+ *
+ * Reading top to bottom, you'll find:
+ *
+ *   1. **Constants** - Dimensions, timing, physics tuning values
+ *
+ *   2. **Utility functions** - Coordinate conversion, bar height calculation
+ *
+ *   3. **drawTimeline()** - The pure drawing function. Takes canvas + state,
+ *      draws the visible bars. This is where the actual rendering happens.
+ *
+ *   4. **useScrollPhysics()** - Custom hook containing all the scroll logic:
+ *      gesture handling, momentum physics, tap-to-seek animation, and the
+ *      frame counter. Returns everything the component needs.
+ *
+ *   5. **TimelineBarRaf** - The main component. Surprisingly small because
+ *      useScrollPhysics does the heavy lifting. Just wires up the canvas,
+ *      gestures, and layout.
+ *
+ *   6. **TimeIndicators** - Tiny subcomponent for the time display.
+ *
+ *   7. **Styles** - Standard React Native StyleSheet.
  */
 
 import { useCallback, useMemo, useEffect, useState, useRef } from 'react'
