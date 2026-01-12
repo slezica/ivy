@@ -1,8 +1,13 @@
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import { Pressable } from 'react-native'
+import { useStore } from '../../src/store'
 import { Color } from '../../src/theme'
 
 export default function TabsLayout() {
+  const { file } = useStore()
+  const hasFile = !!file
+
   return (
     <Tabs
       screenOptions={{
@@ -15,7 +20,7 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen
-        name="library"
+        name="index"
         options={{
           title: 'Library',
           headerShown: false,
@@ -25,12 +30,21 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="index"
+        name="player"
         options={{
           title: 'Player',
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="play-circle" size={size} color={color} />
+          ),
+          tabBarButton: (props) => (
+            <Pressable
+              {...props}
+              onPress={hasFile ? props.onPress : undefined}
+              style={[props.style, !hasFile && { opacity: 0.3 }]}
+            >
+              {props.children}
+            </Pressable>
           ),
         }}
       />
@@ -41,6 +55,15 @@ export default function TabsLayout() {
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="list" size={size} color={color} />
+          ),
+          tabBarButton: (props) => (
+            <Pressable
+              {...props}
+              onPress={hasFile ? props.onPress : undefined}
+              style={[props.style, !hasFile && { opacity: 0.3 }]}
+            >
+              {props.children}
+            </Pressable>
           ),
         }}
       />
