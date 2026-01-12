@@ -16,6 +16,7 @@ import { useStore } from '../store'
 import TimelineBar from '../components/TimelineBar'
 import IconButton from '../components/shared/IconButton'
 import { Color } from '../theme'
+import TimelineBarRaf from '../components/TimelineBarRaf'
 
 export default function PlayerScreen() {
   const { file, pickAndLoadFile, addClip, playback, play, pause } = useStore()
@@ -60,7 +61,7 @@ export default function PlayerScreen() {
               <Text style={styles.fileName}>{file.name}</Text>
             </View>
 
-            <TimelineBar />
+            <TimelineBarRaf />
 
             {/* Play/Pause Button */}
             <View style={styles.playbackControls}>
