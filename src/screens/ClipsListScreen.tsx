@@ -38,7 +38,7 @@ export default function ClipsListScreen() {
   const [editingClipId, setEditingClipId] = useState<number | null>(null)
   const [editNote, setEditNote] = useState('')
 
-  const clipsArray = Object.values(clips).sort((a, b) => a.start - b.start)
+  const clipsArray = Object.values(clips).sort((a, b) => b.created_at - a.created_at)
   const editingClip = editingClipId ? clips[editingClipId] : null
 
   const handleJumpToClip = async (clipId: number) => {
