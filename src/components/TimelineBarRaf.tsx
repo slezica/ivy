@@ -36,6 +36,7 @@ const SEGMENT_STEP = SEGMENT_WIDTH + SEGMENT_GAP
 const SEGMENT_DURATION = 5000 // 5 seconds per segment
 const TIMELINE_HEIGHT = 60
 const PLAYHEAD_WIDTH = 2
+const PLACEHOLDER_HEIGHT = 4 // Small height for virtual bars at ends
 
 // Physics constants
 const DECELERATION = 0.95 // Velocity multiplier per frame
@@ -105,21 +106,44 @@ function drawTimeline(
   const unplayed = Skia.Paint()
   unplayed.setColor(Skia.Color(Color.PRIMARY))
 
+  const placeholder = Skia.Paint()
+  placeholder.setColor(Skia.Color(Color.GRAY))
+
   const halfWidth = containerWidth / 2
   // The playhead is at center of screen, which corresponds to scrollOffset in timeline coordinates
   const playheadX = scrollOffset
 
-  // Calculate visible segment range with buffer
+  // Calculate visible range in timeline coordinates
   const visibleStartX = scrollOffset - halfWidth
   const visibleEndX = scrollOffset + halfWidth
+
+  // Real segment range
   const startSegment = Math.max(0, Math.floor(visibleStartX / SEGMENT_STEP) - 5)
   const endSegment = Math.min(totalSegments, Math.ceil(visibleEndX / SEGMENT_STEP) + 5)
+
+  // Timeline boundaries
+  const timelineStartX = 0
+  const timelineEndX = totalSegments * SEGMENT_STEP
 
   // Transform: position scrollOffset at center of canvas
   canvas.save()
   canvas.translate(halfWidth - scrollOffset, 0)
 
-  // Draw only visible segments
+  // Draw placeholder bars on the LEFT (before timeline start)
+  if (visibleStartX < timelineStartX) {
+    const placeholderY = (TIMELINE_HEIGHT - PLACEHOLDER_HEIGHT) / 2
+    // Draw from visible start to timeline start
+    let x = Math.floor(visibleStartX / SEGMENT_STEP) * SEGMENT_STEP
+    while (x < timelineStartX) {
+      canvas.drawRRect(
+        Skia.RRectXY(Skia.XYWHRect(x, placeholderY, SEGMENT_WIDTH, PLACEHOLDER_HEIGHT), 2, 2),
+        placeholder
+      )
+      x += SEGMENT_STEP
+    }
+  }
+
+  // Draw real segments
   for (let i = startSegment; i < endSegment; i++) {
     const x = i * SEGMENT_STEP
     const segmentEnd = x + SEGMENT_WIDTH
@@ -160,6 +184,20 @@ function drawTimeline(
         unplayed
       )
       canvas.restore()
+    }
+  }
+
+  // Draw placeholder bars on the RIGHT (after timeline end)
+  if (visibleEndX > timelineEndX) {
+    const placeholderY = (TIMELINE_HEIGHT - PLACEHOLDER_HEIGHT) / 2
+    // Draw from timeline end to visible end
+    let x = timelineEndX
+    while (x < visibleEndX) {
+      canvas.drawRRect(
+        Skia.RRectXY(Skia.XYWHRect(x, placeholderY, SEGMENT_WIDTH, PLACEHOLDER_HEIGHT), 2, 2),
+        placeholder
+      )
+      x += SEGMENT_STEP
     }
   }
 
