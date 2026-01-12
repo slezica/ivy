@@ -5,8 +5,8 @@ import { useStore } from '../../src/store'
 import { Color } from '../../src/theme'
 
 export default function TabsLayout() {
-  const { file } = useStore()
-  const hasFile = !!file
+  const { currentFile } = useStore()
+  const hasFile = !!currentFile
 
   return (
     <Tabs

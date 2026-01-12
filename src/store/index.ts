@@ -19,14 +19,15 @@ interface PlaybackState {
 interface AppState {
   // State
   playback: PlaybackState
-  file: AudioFile | null
+  currentFile: AudioFile | null
   clips: Record<number, Clip>
+  files: Record<string, AudioFile>
 
   // Actions
   loadFile: (pickedFile: PickedFile) => Promise<void>
   loadFileWithUri: (uri: string, name: string) => Promise<void>
   loadFileWithPicker: () => Promise<void>
-  getAllFiles: () => AudioFile[]
+  fetchFiles: () => void
   play: () => Promise<void>
   pause: () => Promise<void>
   seek: (position: number) => Promise<void>
@@ -50,9 +51,9 @@ export const useStore = create<AppState>((set, get) => {
       set({ playback: status })
 
       // Update file position in database
-      const { file } = get()
-      if (file) {
-        dbService.updateFilePosition(file.uri, status.position)
+      const { currentFile } = get()
+      if (currentFile) {
+        dbService.updateFilePosition(currentFile.uri, status.position)
       }
     },
   })
@@ -64,14 +65,15 @@ export const useStore = create<AppState>((set, get) => {
       position: 0,
       duration: 0,
     },
-    file: null,
+    currentFile: null,
     clips: {},
+    files: {},
 
     // Actions (below)
     loadFileWithPicker,
     loadFile,
     loadFileWithUri,
-    getAllFiles,
+    fetchFiles,
     play,
     pause,
     seek,
@@ -83,8 +85,16 @@ export const useStore = create<AppState>((set, get) => {
     jumpToClip
   }
 
-  function getAllFiles(): AudioFile[] {
-    return dbService.getAllFiles()
+  function fetchFiles(): void {
+    const allFiles = dbService.getAllFiles()
+
+    // Update files mapping in store
+    const filesMap = allFiles.reduce((acc, file) => {
+      acc[file.uri] = file
+      return acc
+    }, {} as Record<string, AudioFile>)
+
+    set({ files: filesMap })
   }
 
   async function loadFileWithUri(uri: string, name: string) {
@@ -123,7 +133,7 @@ export const useStore = create<AppState>((set, get) => {
 
       // Update state
       set({
-        file: audioFile,
+        currentFile: audioFile,
         clips: clipsMap,
         playback: {
           isPlaying: false,
@@ -203,13 +213,13 @@ export const useStore = create<AppState>((set, get) => {
   }
 
   async function addClip(note: string) {
-    const { file, playback } = get()
-    if (!file) {
+    const { currentFile, playback } = get()
+    if (!currentFile) {
       throw new Error('No file loaded')
     }
 
     const clip = dbService.createClip(
-      file.uri,
+      currentFile.uri,
       playback.position,
       DEFAULT_CLIP_DURATION_MS,
       note

@@ -5,7 +5,7 @@
  */
 
 import { View, Text, StyleSheet, SafeAreaView, Alert, FlatList, TouchableOpacity } from 'react-native'
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { useStore } from '../../src/store'
 import IconButton from '../../src/components/shared/IconButton'
@@ -39,21 +39,20 @@ function formatDate(timestamp: number): string {
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, getAllFiles, loadFileWithUri } = useStore()
-  const [files, setFiles] = useState<AudioFile[]>([])
+  const { loadFileWithPicker, fetchFiles, loadFileWithUri, files } = useStore()
 
   // Refresh file list when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      setFiles(getAllFiles())
-    }, [getAllFiles])
+      fetchFiles()
+    }, [fetchFiles])
   )
 
   const handleLoadFile = async () => {
     try {
       await loadFileWithPicker()
       // Refresh list and navigate to player
-      setFiles(getAllFiles())
+      fetchFiles()
       router.push('/player')
     } catch (error) {
       console.error(error)
@@ -71,15 +70,17 @@ export default function LibraryScreen() {
     }
   }
 
+  const filesArray = Object.values(files)
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Library</Text>
       </View>
 
-      {files.length > 0 ? (
+      {filesArray.length > 0 ? (
         <FlatList
-          data={files}
+          data={filesArray}
           keyExtractor={(item) => item.uri}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (

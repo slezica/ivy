@@ -14,11 +14,11 @@ import IconButton from '../components/shared/IconButton'
 
 
 export default function PlayerScreen() {
-  const { file, pickAndLoadFile, addClip, playback, play, pause } = useStore()
+  const { currentFile, loadFileWithPicker, addClip, playback, play, pause } = useStore()
 
   const handleLoadFile = async () => {
     try {
-      await pickAndLoadFile()
+      await loadFileWithPicker()
     } catch (error) {
       console.error(error)
       Alert.alert('Error', 'Failed to load audio file')
@@ -50,8 +50,8 @@ export default function PlayerScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        {file
-          ? <Player file={file} playback={playback} onPlayPause={handlePlayPause} onAddClip={handleAddClip} />
+        {currentFile
+          ? <Player file={currentFile} playback={playback} onPlayPause={handlePlayPause} onAddClip={handleAddClip} />
           : <FileLoader onLoadFile={handleLoadFile} />
         }
       </View>

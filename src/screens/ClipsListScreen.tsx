@@ -34,7 +34,7 @@ function formatTime(milliseconds: number): string {
 
 export default function ClipsListScreen() {
   const router = useRouter()
-  const { clips, file, jumpToClip, deleteClip, updateClip } = useStore()
+  const { clips, currentFile, jumpToClip, deleteClip, updateClip } = useStore()
   const [editingClipId, setEditingClipId] = useState<number | null>(null)
   const [editNote, setEditNote] = useState('')
 
@@ -91,7 +91,7 @@ export default function ClipsListScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Clips</Text>
-        {file && <Text style={styles.subtitle}>{file.name}</Text>}
+        {currentFile && <Text style={styles.subtitle}>{currentFile.name}</Text>}
       </View>
 
       {clipsArray.length > 0 ? (
