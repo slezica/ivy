@@ -10,16 +10,18 @@ const SKIP_BACKWARD_MS = 30 * 1000
 const DEFAULT_CLIP_DURATION_MS = 20 * 1000
 
 
-interface PlaybackState {
-  isPlaying: boolean
+type PlayerStatus = 'loading' | 'paused' | 'playing'
+
+interface PlayerState {
+  status: PlayerStatus
   position: number
   duration: number
+  file: AudioFile | null
 }
 
 interface AppState {
   // State
-  playback: PlaybackState
-  currentFile: AudioFile | null
+  player: PlayerState
   clips: Record<number, Clip>
   files: Record<string, AudioFile>
 
@@ -48,24 +50,31 @@ export const useStore = create<AppState>((set, get) => {
 
   const audioService = new AudioService({
     onPlaybackStatusChange: (status) => {
-      set({ playback: status })
+      set((state) => ({
+        player: {
+          ...state.player,
+          status: status.status,
+          position: status.position,
+          duration: status.duration,
+        },
+      }))
 
       // Update file position in database
-      const { currentFile } = get()
-      if (currentFile) {
-        dbService.updateFilePosition(currentFile.uri, status.position)
+      const { player } = get()
+      if (player.file) {
+        dbService.updateFilePosition(player.file.uri, status.position)
       }
     },
   })
 
   return {
     // Initial state
-    playback: {
-      isPlaying: false,
+    player: {
+      status: 'paused',
       position: 0,
       duration: 0,
+      file: null,
     },
-    currentFile: null,
     clips: {},
     files: {},
 
@@ -110,6 +119,11 @@ export const useStore = create<AppState>((set, get) => {
 
   async function loadFile(pickedFile: PickedFile) {
     try {
+      // Set loading status immediately
+      set((state) => ({
+        player: { ...state.player, status: 'loading' },
+      }))
+
       // Load audio and get duration
       const duration = await audioService.load(pickedFile.uri)
 
@@ -133,13 +147,13 @@ export const useStore = create<AppState>((set, get) => {
 
       // Update state
       set({
-        currentFile: audioFile,
-        clips: clipsMap,
-        playback: {
-          isPlaying: false,
+        player: {
+          status: 'paused',
           position: audioFile.position,
           duration,
+          file: audioFile,
         },
+        clips: clipsMap,
       })
 
       // Seek to saved position
@@ -148,13 +162,17 @@ export const useStore = create<AppState>((set, get) => {
       }
     } catch (error) {
       console.error(error)
+      // Reset loading state on error
+      set((state) => ({
+        player: { ...state.player, status: 'paused' },
+      }))
       throw error
     }
   }
 
   async function play() {
     set((state) => ({
-      playback: { ...state.playback, isPlaying: true },
+      player: { ...state.player, status: 'playing' },
     }))
 
     try {
@@ -162,7 +180,7 @@ export const useStore = create<AppState>((set, get) => {
     } catch (error) {
       console.error('Error playing audio:', error)
       set((state) => ({
-        playback: { ...state.playback, isPlaying: false },
+        player: { ...state.player, status: 'paused' },
       }))
       throw error
     }
@@ -170,7 +188,7 @@ export const useStore = create<AppState>((set, get) => {
 
   async function pause() {
     set((state) => ({
-      playback: { ...state.playback, isPlaying: false },
+      player: { ...state.player, status: 'paused' },
     }))
 
     try {
@@ -183,7 +201,7 @@ export const useStore = create<AppState>((set, get) => {
 
   async function seek(position: number) {
     set((state) => ({
-      playback: { ...state.playback, position },
+      player: { ...state.player, position },
     }))
 
     try {
@@ -213,14 +231,14 @@ export const useStore = create<AppState>((set, get) => {
   }
 
   async function addClip(note: string) {
-    const { currentFile, playback } = get()
-    if (!currentFile) {
+    const { player } = get()
+    if (!player.file) {
       throw new Error('No file loaded')
     }
 
     const clip = dbService.createClip(
-      currentFile.uri,
-      playback.position,
+      player.file.uri,
+      player.position,
       DEFAULT_CLIP_DURATION_MS,
       note
     )

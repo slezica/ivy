@@ -520,17 +520,17 @@ function useScrollPhysics({
 // =============================================================================
 
 export default function TimelineBar() {
-  const { playback, seek } = useStore()
+  const { player, seek } = useStore()
   const [containerWidth, setContainerWidth] = useState(0)
 
-  const totalSegments = Math.ceil(playback.duration / SEGMENT_DURATION)
-  const maxScrollOffset = timeToX(playback.duration)
+  const totalSegments = Math.ceil(player.duration / SEGMENT_DURATION)
+  const maxScrollOffset = timeToX(player.duration)
 
   const { scrollOffsetRef, displayPosition, frame, gesture } = useScrollPhysics({
     maxScrollOffset,
     containerWidth,
-    duration: playback.duration,
-    externalPosition: playback.position,
+    duration: player.duration,
+    externalPosition: player.position,
     onSeek: seek,
   })
 
@@ -580,7 +580,7 @@ export default function TimelineBar() {
       </GestureDetector>
 
       {/* Time indicators */}
-      <TimeIndicators position={displayPosition} duration={playback.duration} />
+      <TimeIndicators position={displayPosition} duration={player.duration} />
     </GestureHandlerRootView>
   )
 }

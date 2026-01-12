@@ -1,8 +1,10 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio'
 import type { AudioPlayer } from 'expo-audio'
 
+type PlayerStatus = 'loading' | 'paused' | 'playing'
+
 export interface PlaybackStatus {
-  isPlaying: boolean
+  status: PlayerStatus
   position: number
   duration: number
 }
@@ -63,7 +65,7 @@ export class AudioService {
     this.statusInterval = setInterval(() => {
       if (this.player && this.listeners.onPlaybackStatusChange) {
         this.listeners.onPlaybackStatusChange({
-          isPlaying: this.player.playing,
+          status: this.player.playing ? 'playing' : 'paused',
           position: this.player.currentTime * 1000, // Convert to milliseconds
           duration: this.currentDuration,
         })
@@ -118,7 +120,7 @@ export class AudioService {
     }
 
     return {
-      isPlaying: this.player.playing,
+      status: this.player.playing ? 'playing' : 'paused',
       position: this.player.currentTime * 1000,
       duration: this.currentDuration,
     }

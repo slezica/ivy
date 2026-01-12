@@ -14,7 +14,7 @@ import IconButton from '../components/shared/IconButton'
 
 
 export default function PlayerScreen() {
-  const { currentFile, loadFileWithPicker, addClip, playback, play, pause } = useStore()
+  const { player, loadFileWithPicker, addClip, play, pause } = useStore()
 
   const handleLoadFile = async () => {
     try {
@@ -36,7 +36,7 @@ export default function PlayerScreen() {
 
   const handlePlayPause = async () => {
     try {
-      if (playback.isPlaying) {
+      if (player.status === 'playing') {
         await pause()
       } else {
         await play()
@@ -50,16 +50,16 @@ export default function PlayerScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        {currentFile
-          ? <Player file={currentFile} playback={playback} onPlayPause={handlePlayPause} onAddClip={handleAddClip} />
-          : <FileLoader onLoadFile={handleLoadFile} />
+        {player.file
+          ? <Player file={player.file} player={player} onPlayPause={handlePlayPause} onAddClip={handleAddClip} />
+          : <FileLoader onLoadFile={handleLoadFile} isLoading={player.status === 'loading'} />
         }
       </View>
     </SafeAreaView>
   )
 }
 
-function Player({ file, playback, onPlayPause, onAddClip }: any) {
+function Player({ file, player, onPlayPause, onAddClip }: any) {
   return (
     <View style={styles.playerContainer}>
     <View style={styles.fileInfo}>
@@ -71,26 +71,31 @@ function Player({ file, playback, onPlayPause, onAddClip }: any) {
     <View style={styles.playbackControls}>
       <IconButton
         size={72}
-        iconName={playback.isPlaying ? 'pause' : 'play'}
+        iconName={player.status === 'playing' ? 'pause' : 'play'}
         onPress={onPlayPause}
+        disabled={player.status === 'loading'}
       />
       <IconButton
         iconName="bookmark"
         onPress={onAddClip}
         size={48}
+        disabled={player.status === 'loading'}
       />
     </View>
   </View>
   )
 }
 
-function FileLoader({ onLoadFile }: any) {
+function FileLoader({ onLoadFile, isLoading }: any) {
   return (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyText}>No audio file loaded</Text>
+      <Text style={styles.emptyText}>
+        {isLoading ? 'Loading audio file...' : 'No audio file loaded'}
+      </Text>
       <TouchableOpacity
         style={[styles.button, styles.loadButton]}
         onPress={onLoadFile}
+        disabled={isLoading}
       >
         <Text style={[styles.buttonText, styles.loadButtonText]}>
           Load Audio File
