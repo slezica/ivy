@@ -289,16 +289,37 @@ export default function TimelineBarRaf() {
     }
   }, [])
 
-  // Tap handler (coordinates available, no-op for now)
+  // Track if we stopped momentum on this touch (don't seek if so)
+  const stoppedMomentumRef = useRef(false)
+
+  // Called on finger down - stops momentum immediately
+  const handleTouchDown = useCallback(() => {
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current)
+      rafIdRef.current = null
+      velocityRef.current = 0
+      stoppedMomentumRef.current = true
+      // Seek to where we stopped
+      seek(xToTime(scrollOffsetRef.current))
+    } else {
+      stoppedMomentumRef.current = false
+    }
+  }, [seek])
+
+  // Called on finger up - seeks to tapped position (unless we just stopped momentum)
   const handleTap = useCallback((x: number, y: number) => {
-    // Convert tap position to timeline position
+    // Don't seek if we just stopped momentum
+    if (stoppedMomentumRef.current) {
+      stoppedMomentumRef.current = false
+      return
+    }
+
+    // Seek to tapped position
     const halfWidth = containerWidth / 2
     const offsetFromCenter = x - halfWidth
     const tappedTime = xToTime(scrollOffsetRef.current + offsetFromCenter)
     const clampedTime = clamp(tappedTime, 0, playback.duration)
 
-    // TODO: Tap handling logic here
-    // For now, just seek to tapped position
     scrollOffsetRef.current = timeToX(clampedTime)
     setDisplayPosition(clampedTime)
     setFrame(f => f + 1)
@@ -355,6 +376,7 @@ export default function TimelineBarRaf() {
   // Tap gesture - runs on JS thread
   const tapGesture = Gesture.Tap()
     .runOnJS(true)
+    .onBegin(handleTouchDown)
     .onEnd((event) => {
       handleTap(event.x, event.y)
     })
