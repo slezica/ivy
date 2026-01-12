@@ -15,6 +15,16 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen
+        name="library"
+        options={{
+          title: 'Library',
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="library" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
           title: 'Player',
