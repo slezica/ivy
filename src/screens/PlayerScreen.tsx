@@ -1,9 +1,3 @@
-/**
- * PlayerScreen
- *
- * Main playback screen with timeline control.
- */
-
 import {
   View,
   Text,
@@ -12,11 +6,12 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native'
+
+import { Color } from '../theme'
 import { useStore } from '../store'
 import TimelineBar from '../components/TimelineBar'
 import IconButton from '../components/shared/IconButton'
-import { Color } from '../theme'
-import TimelineBarRaf from '../components/TimelineBarRaf'
+
 
 export default function PlayerScreen() {
   const { file, pickAndLoadFile, addClip, playback, play, pause } = useStore()
@@ -55,43 +50,53 @@ export default function PlayerScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        {file ? (
-          <View style={styles.playerContainer}>
-            <View style={styles.fileInfo}>
-              <Text style={styles.fileName}>{file.name}</Text>
-            </View>
-
-            <TimelineBarRaf />
-
-            {/* Play/Pause Button */}
-            <View style={styles.playbackControls}>
-              <IconButton
-                size={72}
-                iconName={playback.isPlaying ? 'pause' : 'play'}
-                onPress={handlePlayPause}
-              />
-              <IconButton
-                iconName="bookmark"
-                onPress={handleAddClip}
-                size={48}
-              />
-            </View>
-          </View>
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No audio file loaded</Text>
-            <TouchableOpacity
-              style={[styles.button, styles.loadButton]}
-              onPress={handleLoadFile}
-            >
-              <Text style={[styles.buttonText, styles.loadButtonText]}>
-                Load Audio File
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {file
+          ? <Player file={file} playback={playback} onPlayPause={handlePlayPause} onAddClip={handleAddClip} />
+          : <FileLoader onLoadFile={handleLoadFile} />
+        }
       </View>
     </SafeAreaView>
+  )
+}
+
+function Player({ file, playback, onPlayPause, onAddClip }: any) {
+  return (
+    <View style={styles.playerContainer}>
+    <View style={styles.fileInfo}>
+      <Text style={styles.fileName}>{file.name}</Text>
+    </View>
+
+    <TimelineBar />
+
+    <View style={styles.playbackControls}>
+      <IconButton
+        size={72}
+        iconName={playback.isPlaying ? 'pause' : 'play'}
+        onPress={onPlayPause}
+      />
+      <IconButton
+        iconName="bookmark"
+        onPress={onAddClip}
+        size={48}
+      />
+    </View>
+  </View>
+  )
+}
+
+function FileLoader({ onLoadFile }: any) {
+  return (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyText}>No audio file loaded</Text>
+      <TouchableOpacity
+        style={[styles.button, styles.loadButton]}
+        onPress={onLoadFile}
+      >
+        <Text style={[styles.buttonText, styles.loadButtonText]}>
+          Load Audio File
+        </Text>
+      </TouchableOpacity>
+    </View>
   )
 }
 

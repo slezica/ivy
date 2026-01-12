@@ -1,12 +1,7 @@
-/**
- * IconButton
- *
- * Reusable circular button component with icon.
- */
-
 import { TouchableOpacity, StyleSheet, ViewStyle } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Color } from '../../theme'
+
 
 interface IconButtonProps {
   iconName: keyof typeof Ionicons.glyphMap
@@ -16,6 +11,7 @@ interface IconButtonProps {
   iconColor?: string
   style?: ViewStyle
 }
+
 
 export default function IconButton({
   iconName,
