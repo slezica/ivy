@@ -160,6 +160,9 @@ export const useStore = create<AppState>((set, get) => {
       if (audioFile.position > 0) {
         await audioService.seek(audioFile.position)
       }
+
+      // Auto-play after loading
+      await get().play()
     } catch (error) {
       console.error(error)
       // Reset loading state on error
