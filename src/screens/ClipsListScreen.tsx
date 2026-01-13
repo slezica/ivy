@@ -17,26 +17,16 @@ import {
 } from 'react-native'
 import { useState } from 'react'
 import { useRouter } from 'expo-router'
+
 import { useStore } from '../store'
 import { Color } from '../theme'
+import { Clip } from '../services/DatabaseService'
 
-function formatTime(milliseconds: number): string {
-  const totalSeconds = Math.floor(milliseconds / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-  }
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
-}
 
 export default function ClipsListScreen() {
   const router = useRouter()
   const { clips, player, jumpToClip, deleteClip, updateClip } = useStore()
   const [editingClipId, setEditingClipId] = useState<number | null>(null)
-  const [editNote, setEditNote] = useState('')
 
   const clipsArray = Object.values(clips).sort((a, b) => b.created_at - a.created_at)
   const editingClip = editingClipId ? clips[editingClipId] : null
@@ -67,24 +57,20 @@ export default function ClipsListScreen() {
   }
 
   const handleEditClip = (clipId: number) => {
-    const clip = clips[clipId]
-    if (clip) {
-      setEditNote(clip.note)
+    if (clipId in clips) {
       setEditingClipId(clipId)
     }
   }
 
-  const handleSaveEdit = () => {
+  const handleSaveClip = ({ note }: Clip) => {
     if (editingClipId) {
-      updateClip(editingClipId, editNote)
+      updateClip(editingClipId, note)
       setEditingClipId(null)
-      setEditNote('')
     }
   }
 
-  const handleCancelEdit = () => {
+  const handleCancelEditClip = () => {
     setEditingClipId(null)
-    setEditNote('')
   }
 
   return (
@@ -94,100 +80,161 @@ export default function ClipsListScreen() {
         {player.file && <Text style={styles.subtitle}>{player.file.name}</Text>}
       </View>
 
-      {clipsArray.length > 0 ? (
-        <FlatList
-          data={clipsArray}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <View style={styles.clipItem}>
-              <TouchableOpacity
-                style={styles.clipContent}
-                onPress={() => handleJumpToClip(item.id)}
-              >
-                <View style={styles.clipHeader}>
-                  <Text style={styles.clipTime}>{formatTime(item.start)}</Text>
-                  {item.duration > 0 && (
-                    <Text style={styles.clipDuration}>
-                      ({formatTime(item.duration)})
-                    </Text>
-                  )}
-                </View>
-                {item.note && <Text style={styles.clipNote}>{item.note}</Text>}
-              </TouchableOpacity>
+      {clipsArray.length > 0 
+        ? <ClipList
+          clips={clipsArray}
+          onJumpToClip={handleJumpToClip}
+          onEditClip={handleEditClip}
+          onDeleteClip={handleDeleteClip} />
 
-              <View style={styles.clipActions}>
-                <TouchableOpacity
-                  style={styles.editButton}
-                  onPress={() => handleEditClip(item.id)}
-                >
-                  <Text style={styles.editButtonText}>{item.note ? "Edit note" : "Add note"}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => handleDeleteClip(item.id)}
-                >
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+        : <EmptyList />
+      }
+
+      { editingClipId != null && 
+        <EditClipModal
+          clip={clips[editingClipId]}
+          visible={true}
+          onCancel={handleCancelEditClip}
+          onSave={handleSaveClip}
         />
-      ) : (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No clips yet</Text>
-          <Text style={styles.emptySubtext}>
-            Add clips from the player screen
-          </Text>
-        </View>
-      )}
-
-      <Modal
-        visible={editingClipId !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCancelEdit}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit Clip</Text>
-            {editingClip && (
-              <Text style={styles.modalSubtitle}>
-                at {formatTime(editingClip.start)}
-              </Text>
-            )}
-
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Add note (optional)"
-              value={editNote}
-              onChangeText={setEditNote}
-              autoFocus
-              multiline
-            />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalCancelButton]}
-                onPress={handleCancelEdit}
-              >
-                <Text style={styles.modalButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSaveButton]}
-                onPress={handleSaveEdit}
-              >
-                <Text style={[styles.modalButtonText, styles.modalSaveButtonText]}>
-                  Save
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      }
     </SafeAreaView>
   )
 }
+
+
+function ClipList({ clips, onJumpToClip, onEditClip, onDeleteClip }: any) {
+  return (
+    <FlatList
+      data={clips}
+      keyExtractor={(item) => item.id.toString()}
+      contentContainerStyle={styles.listContent}
+      renderItem={({ item }) => (
+        <View style={styles.clipItem}>
+          <TouchableOpacity
+            style={styles.clipContent}
+            onPress={() => onJumpToClip(item.id)}
+          >
+            <View style={styles.clipHeader}>
+              <Text style={styles.clipTime}>{formatTime(item.start)}</Text>
+              {item.duration > 0 && (
+                <Text style={styles.clipDuration}>
+                  ({formatTime(item.duration)})
+                </Text>
+              )}
+            </View>
+            {item.note && <Text style={styles.clipNote}>{item.note}</Text>}
+          </TouchableOpacity>
+
+          <View style={styles.clipActions}>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => onEditClip(item.id)}
+            >
+              <Text style={styles.editButtonText}>{item.note ? "Edit note" : "Add note"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => onDeleteClip(item.id)}
+            >
+              <Text style={styles.deleteButtonText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    />
+  )
+}
+
+
+function EmptyList() {
+  return (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyText}>No clips yet</Text>
+      <Text style={styles.emptySubtext}>
+        Add clips from the player screen
+      </Text>
+    </View>
+  )
+}
+
+
+function EditClipModal({ visible, clip, formNote, onCancel, onSave }: any) {
+  const [form, setForm] = useState({
+    note: clip.note
+  })
+
+  const handleNoteChange = (note: string) => {
+    setForm({ ...form, note })
+  }
+
+  const handleSave = () => {
+    onSave({ ...clip, ...form })
+  }
+
+  const handleCancel = () => {
+    onCancel()
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={handleCancel}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Edit Clip</Text>
+
+          <Text style={styles.modalSubtitle}>
+            at {formatTime(clip.start)}
+          </Text>
+
+          <TextInput
+            style={styles.modalInput}
+            placeholder="Add note (optional)"
+            value={form.note}
+            onChangeText={handleNoteChange}
+            autoFocus
+            multiline
+          />
+
+          <View style={styles.modalButtons}>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalCancelButton]}
+              onPress={handleCancel}
+            >
+              <Text style={styles.modalButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalSaveButton]}
+              onPress={handleSave}
+            >
+              <Text style={[styles.modalButtonText, styles.modalSaveButtonText]}>
+                Save
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+
+function formatTime(milliseconds: number): string {
+  const totalSeconds = Math.floor(milliseconds / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+  }
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
 
 const styles = StyleSheet.create({
   container: {
