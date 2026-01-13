@@ -44,9 +44,20 @@ export class AudioService {
     this.startStatusPolling()
 
     // Wait for player to be ready and get duration
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Failed to load audio file: timeout after 10 seconds'))
+      }, 10000) // 10 second timeout
+
       const checkDuration = () => {
-        if (this.player && this.player.duration > 0) {
+        if (!this.player) {
+          clearTimeout(timeout)
+          reject(new Error('Player was unloaded during loading'))
+          return
+        }
+
+        if (this.player.duration > 0) {
+          clearTimeout(timeout)
           this.currentDuration = this.player.duration * 1000 // Convert to milliseconds
           resolve(this.currentDuration)
         } else {

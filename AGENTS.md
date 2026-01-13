@@ -58,6 +58,8 @@ Singleton managing expo-audio instance. Handles:
 - Audio loading/playback/seeking
 - 100ms position polling
 - Auto-resume from saved position
+- **Important:** `load()` has a 10-second timeout - will reject if player doesn't report duration within 10s
+- This prevents hanging when content: URIs become invalid (common with Android content provider URIs)
 
 ### `src/services/DatabaseService.ts`
 SQLite operations. Schema:
@@ -171,6 +173,11 @@ No formal tests currently. Manual testing focuses on:
 - Audio position updates every 100ms
 - Always set `player.status = 'loading'` at start of async file operations
 - UI should check `player.status === 'loading'` to disable controls during loads
+- AudioService.load() has 10s timeout to prevent hanging on invalid URIs
+
+## Known Issues
+
+- **Content URIs can become invalid**: Android content: URIs stored in the database may become inaccessible after the app restarts or the granting app revokes access. This causes files to fail to load from the library. The picker works because it grants fresh URIs. AudioService now times out after 10s and shows an error instead of hanging.
 
 ## Recent Changes (as of last commit)
 
