@@ -52,7 +52,7 @@ export default function PlayerScreen() {
       <View style={styles.content}>
         {player.file
           ? <Player file={player.file} player={player} onPlayPause={handlePlayPause} onAddClip={handleAddClip} />
-          : <FileLoader onLoadFile={handleLoadFile} isLoading={player.status === 'loading'} />
+          : <FileLoader onLoadFile={handleLoadFile} />
         }
       </View>
     </SafeAreaView>
@@ -73,29 +73,24 @@ function Player({ file, player, onPlayPause, onAddClip }: any) {
         size={72}
         iconName={player.status === 'playing' ? 'pause' : 'play'}
         onPress={onPlayPause}
-        disabled={player.status === 'loading'}
       />
       <IconButton
         iconName="bookmark"
         onPress={onAddClip}
         size={48}
-        disabled={player.status === 'loading'}
       />
     </View>
   </View>
   )
 }
 
-function FileLoader({ onLoadFile, isLoading }: any) {
+function FileLoader({ onLoadFile }: any) {
   return (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyText}>
-        {isLoading ? 'Loading audio file...' : 'No audio file loaded'}
-      </Text>
+      <Text style={styles.emptyText}>No audio file loaded</Text>
       <TouchableOpacity
         style={[styles.button, styles.loadButton]}
         onPress={onLoadFile}
-        disabled={isLoading}
       >
         <Text style={[styles.buttonText, styles.loadButtonText]}>
           Load Audio File

@@ -51,8 +51,9 @@ export default function LibraryScreen() {
   const handleLoadFile = async () => {
     try {
       await loadFileWithPicker()
-      // Refresh list and navigate to player
+      // Refresh list
       fetchFiles()
+      // Navigate to player tab
       router.push('/player')
     } catch (error) {
       console.error(error)
@@ -63,6 +64,7 @@ export default function LibraryScreen() {
   const handleFilePress = async (file: AudioFile) => {
     try {
       await loadFileWithUri(file.uri, file.name)
+      // Navigate to player tab
       router.push('/player')
     } catch (error) {
       console.error('Error loading file:', error)

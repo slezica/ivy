@@ -53,7 +53,8 @@ export const useStore = create<AppState>((set, get) => {
       set((state) => ({
         player: {
           ...state.player,
-          status: status.status,
+          // Only update status if not currently loading
+          status: state.player.status === 'loading' ? 'loading' : status.status,
           position: status.position,
           duration: status.duration,
         },
@@ -145,23 +146,23 @@ export const useStore = create<AppState>((set, get) => {
         return acc
       }, {} as Record<number, Clip>)
 
-      // Update state
-      set({
+      // Update state (keep status as 'loading' until play starts)
+      set((state) => ({
         player: {
-          status: 'paused',
+          ...state.player,
           position: audioFile.position,
           duration,
           file: audioFile,
         },
         clips: clipsMap,
-      })
+      }))
 
       // Seek to saved position
       if (audioFile.position > 0) {
         await audioService.seek(audioFile.position)
       }
 
-      // Auto-play after loading
+      // Auto-play after loading (this will set status to 'playing')
       await get().play()
     } catch (error) {
       console.error(error)
