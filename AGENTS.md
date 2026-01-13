@@ -73,6 +73,12 @@ SQLite operations. Schema:
 - Draws only visible segments (not all bars)
 - Gestures: drag to scrub, flick with momentum, tap to seek
 
+### `src/components/LoadingModal.tsx`
+Global modal that blocks UI during file loading:
+- Watches `player.status === 'loading'`
+- Shows ActivityIndicator and "Loading audio file..." message
+- Transparent dark overlay prevents interaction
+
 ## Important Patterns
 
 ### Time Units
@@ -81,7 +87,7 @@ SQLite operations. Schema:
 ### Service Layer
 All I/O goes through service classes. Don't call expo-audio, SQLite, or DocumentPicker directly from components.
 
-AudioService reports status as `'paused'` or `'playing'` based on player state. The store adds `'loading'` status during file load operations.
+AudioService reports status as `'paused'` or `'playing'` based on player state. The store adds `'loading'` status during file load operations. **Important:** The polling callback preserves `'loading'` status - it only updates status to `'paused'`/`'playing'` when not in loading state. This prevents the polling from prematurely hiding the loading modal.
 
 ### Ref-Based Animation
 `TimelineBar` uses `useRef` for animation state (not `useState`) to avoid re-renders during 60fps RAF loops.
@@ -131,12 +137,13 @@ Example: Play button
 7. Components subscribed to store re-render
 
 Example: Loading file
-1. User picks file
+1. User picks file (from Library or Player screen)
 2. Store sets `player.status = 'loading'` immediately
-3. UI shows loading state (disabled buttons, "Loading..." text)
+3. LoadingModal blocks entire UI with spinner
 4. AudioService loads file asynchronously
-5. When complete, store sets `player.status = 'paused'` and updates `player.file`
-6. UI switches to player view
+5. When complete, store sets `player.status = 'playing'` (auto-play) and updates `player.file`
+6. Screen navigates to player tab
+7. Audio starts playing automatically
 
 ## Build/Run
 
@@ -169,6 +176,7 @@ No formal tests currently. Manual testing focuses on:
 
 - Refactored store structure: renamed `playback` to `player`, moved `currentFile` to `player.file`
 - Replaced `isPlaying` boolean with `status` enum: `'loading' | 'paused' | 'playing'`
-- Added loading state feedback: UI shows "Loading audio file..." during file load
+- Added global LoadingModal that blocks UI during file load
+- Files auto-play after loading completes
+- Loading a file automatically navigates to player tab
 - Updated all components (PlayerScreen, TimelineBar, ClipsListScreen, tab layout) to use new structure
-- Buttons disabled during loading state
