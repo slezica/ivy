@@ -40,4 +40,22 @@ app-example
 
 # generated native folders
 /ios
-/android
+/android/*
+# Exception: Keep custom native modules
+!/android/app
+/android/app/*
+!/android/app/src
+/android/app/src/*
+!/android/app/src/main
+/android/app/src/main/*
+!/android/app/src/main/java
+/android/app/src/main/java/*
+!/android/app/src/main/java/com
+/android/app/src/main/java/com/*
+!/android/app/src/main/java/com/anonymous
+/android/app/src/main/java/com/anonymous/*
+!/android/app/src/main/java/com/anonymous/audioplayerreactnative
+/android/app/src/main/java/com/anonymous/audioplayerreactnative/*
+!/android/app/src/main/java/com/anonymous/audioplayerreactnative/MainApplication.kt
+!/android/app/src/main/java/com/anonymous/audioplayerreactnative/TestModule.kt
+!/android/app/src/main/java/com/anonymous/audioplayerreactnative/TestPackage.kt
