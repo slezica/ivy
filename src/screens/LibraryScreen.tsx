@@ -11,6 +11,7 @@ import { useStore } from '../store'
 import IconButton from '../components/shared/IconButton'
 import { Color } from '../theme'
 import type { AudioFile } from '../services/DatabaseService'
+import TestModule from '../services/TestNativeModule'
 
 function formatTime(milliseconds: number): string {
   const totalSeconds = Math.floor(milliseconds / 1000)
@@ -95,18 +96,36 @@ export default function LibraryScreen() {
     )
   }
 
+  const handleTestNative = async () => {
+    try {
+      const result = await TestModule.getString()
+      Alert.alert('Native Module Test', result)
+    } catch (error) {
+      console.error('Error calling native module:', error)
+      Alert.alert('Error', 'Failed to call native module')
+    }
+  }
+
   const filesArray = Object.values(files)
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Library</Text>
-        <TouchableOpacity
-          style={styles.devResetButton}
-          onPress={handleDevReset}
-        >
-          <Text style={styles.devResetButtonText}>🔧 Reset</Text>
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.devTestButton}
+            onPress={handleTestNative}
+          >
+            <Text style={styles.devTestButtonText}>Test Native</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.devResetButton}
+            onPress={handleDevReset}
+          >
+            <Text style={styles.devResetButtonText}>🔧 Reset</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {filesArray.length > 0 ? (
@@ -183,6 +202,21 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: Color.BLACK,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  devTestButton: {
+    backgroundColor: Color.PRIMARY,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  devTestButtonText: {
+    color: Color.WHITE,
+    fontSize: 12,
+    fontWeight: '600',
   },
   devResetButton: {
     backgroundColor: Color.DESTRUCTIVE,
