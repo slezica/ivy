@@ -90,7 +90,7 @@
  *      gesture handling, momentum physics, tap-to-seek animation, and the
  *      frame counter. Returns everything the component needs.
  *
- *   5. **TimelineBarRaf** - The main component. Surprisingly small because
+ *   5. **TimelineBar** - The main component. Surprisingly small because
  *      useScrollPhysics does the heavy lifting. Just wires up the canvas,
  *      gestures, and layout.
  *
@@ -122,9 +122,9 @@ const SEGMENT_WIDTH = 4
 const SEGMENT_GAP = 2
 const SEGMENT_STEP = SEGMENT_WIDTH + SEGMENT_GAP
 const SEGMENT_DURATION = 5000 // 5 seconds per segment
-const TIMELINE_HEIGHT = 60
+const TIMELINE_HEIGHT = 90
 const PLAYHEAD_WIDTH = 2
-const PLACEHOLDER_HEIGHT = 4 // Small height for virtual bars at ends
+const PLACEHOLDER_HEIGHT = 8 // Small height for virtual bars at ends
 
 // Physics constants
 const DECELERATION = 0.95 // Velocity multiplier per frame
@@ -142,14 +142,16 @@ for (let i = 0; i < MAX_PRECOMPUTED_SEGMENTS; i++) {
 }
 
 function computeSegmentHeight(index: number): number {
-  const baseHeight = 30
-  const variation = 15
-  const wave1 = Math.sin(index * 0.15) * variation
-  const wave2 = Math.sin(index * 0.4) * (variation * 0.5)
-  const wave3 = Math.sin(index * 0.08) * (variation * 0.3)
-  const noise = ((index * 7919) % 100) / 100 * 8
-  const height = baseHeight + wave1 + wave2 + wave3 + noise
-  return Math.max(12, Math.min(50, height))
+  const baseHeight = TIMELINE_HEIGHT / 2
+  const variation = TIMELINE_HEIGHT / 4
+
+  let height = baseHeight
+  height += Math.sin(index * 0.15) * variation
+  height += Math.sin(index * 0.4) * (variation * 0.5)
+  height += Math.sin(index * 2) * (variation * 0.3)
+  height += ((index * 7919) % 100) / 100 * 8
+
+  return Math.max(12, Math.min(TIMELINE_HEIGHT, height))
 }
 
 function getSegmentHeight(index: number): number {
@@ -222,12 +224,13 @@ function drawTimeline(
 
   // Draw placeholder bars on the LEFT (before timeline start)
   if (visibleStartX < timelineStartX) {
-    const placeholderY = (TIMELINE_HEIGHT - PLACEHOLDER_HEIGHT) / 2
     // Draw from visible start to timeline start
     let x = Math.floor(visibleStartX / SEGMENT_STEP) * SEGMENT_STEP
     while (x < timelineStartX) {
+      const h = PLACEHOLDER_HEIGHT // - (Math.cos(x * 3 + 3) + 1) * (PLACEHOLDER_HEIGHT / 4)
+      const y = (TIMELINE_HEIGHT - h) / 2
       canvas.drawRRect(
-        Skia.RRectXY(Skia.XYWHRect(x, placeholderY, SEGMENT_WIDTH, PLACEHOLDER_HEIGHT), 2, 2),
+        Skia.RRectXY(Skia.XYWHRect(x, y, SEGMENT_WIDTH, h), 2, 2),
         placeholder
       )
       x += SEGMENT_STEP
