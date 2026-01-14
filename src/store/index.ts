@@ -3,6 +3,7 @@ import { AudioService } from '../services/AudioService'
 import { DatabaseService } from '../services/DatabaseService'
 import { FileService, PickedFile } from '../services/FileService'
 import { FileStorageService } from '../services/FileStorageService'
+import { ClipSharingService } from '../services/ClipSharingService'
 import type { Clip, AudioFile } from '../services/DatabaseService'
 
 
@@ -40,6 +41,7 @@ interface AppState {
   updateClip: (id: number, note: string) => void
   deleteClip: (id: number) => void
   jumpToClip: (clipId: number) => Promise<void>
+  shareClip: (clipId: number) => Promise<void>
 
   // Dev tools
   __DEV_resetApp: () => Promise<void>
@@ -53,6 +55,8 @@ export const useStore = create<AppState>((set, get) => {
   const fileService = new FileService()
 
   const fileStorageService = new FileStorageService()
+
+  const clipSharingService = new ClipSharingService()
 
   const audioService = new AudioService({
     onPlaybackStatusChange: (status) => {
@@ -101,6 +105,7 @@ export const useStore = create<AppState>((set, get) => {
     deleteClip,
     updateClip,
     jumpToClip,
+    shareClip,
     __DEV_resetApp
   }
 
@@ -327,6 +332,22 @@ export const useStore = create<AppState>((set, get) => {
     }
 
     await get().seek(clip.start)
+  }
+
+  async function shareClip(clipId: number) {
+    const { clips, player } = get()
+    const clip = clips[clipId]
+
+    if (!clip) {
+      throw new Error('Clip not found')
+    }
+
+    if (!player.file) {
+      throw new Error('No file loaded')
+    }
+
+    // Extract and share the clip
+    await clipSharingService.shareClip(clip, player.file.uri, player.file.name)
   }
 
   async function __DEV_resetApp() {

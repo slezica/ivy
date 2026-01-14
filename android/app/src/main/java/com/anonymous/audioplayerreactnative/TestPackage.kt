@@ -7,7 +7,10 @@ import com.facebook.react.uimanager.ViewManager
 
 class TestPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-        return listOf(TestModule(reactContext))
+        return listOf(
+            TestModule(reactContext),
+            AudioSlicerModule(reactContext)
+        )
     }
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {

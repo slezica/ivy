@@ -59,3 +59,4 @@ app-example
 !/android/app/src/main/java/com/anonymous/audioplayerreactnative/MainApplication.kt
 !/android/app/src/main/java/com/anonymous/audioplayerreactnative/TestModule.kt
 !/android/app/src/main/java/com/anonymous/audioplayerreactnative/TestPackage.kt
+!/android/app/src/main/java/com/anonymous/audioplayerreactnative/AudioSlicerModule.kt

@@ -25,8 +25,9 @@ import { Clip } from '../services/DatabaseService'
 
 export default function ClipsListScreen() {
   const router = useRouter()
-  const { clips, player, jumpToClip, deleteClip, updateClip } = useStore()
+  const { clips, player, jumpToClip, deleteClip, updateClip, shareClip } = useStore()
   const [editingClipId, setEditingClipId] = useState<number | null>(null)
+  const [sharingClipId, setSharingClipId] = useState<number | null>(null)
 
   const clipsArray = Object.values(clips).sort((a, b) => b.created_at - a.created_at)
   const editingClip = editingClipId ? clips[editingClipId] : null
@@ -73,6 +74,18 @@ export default function ClipsListScreen() {
     setEditingClipId(null)
   }
 
+  const handleShareClip = async (clipId: number) => {
+    setSharingClipId(clipId)
+    try {
+      await shareClip(clipId)
+    } catch (error) {
+      console.error('Error sharing clip:', error)
+      Alert.alert('Error', 'Failed to share clip')
+    } finally {
+      setSharingClipId(null)
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -80,12 +93,14 @@ export default function ClipsListScreen() {
         {player.file && <Text style={styles.subtitle}>{player.file.name}</Text>}
       </View>
 
-      {clipsArray.length > 0 
+      {clipsArray.length > 0
         ? <ClipList
           clips={clipsArray}
           onJumpToClip={handleJumpToClip}
           onEditClip={handleEditClip}
-          onDeleteClip={handleDeleteClip} />
+          onDeleteClip={handleDeleteClip}
+          onShareClip={handleShareClip}
+          sharingClipId={sharingClipId} />
 
         : <EmptyList />
       }
@@ -103,7 +118,7 @@ export default function ClipsListScreen() {
 }
 
 
-function ClipList({ clips, onJumpToClip, onEditClip, onDeleteClip }: any) {
+function ClipList({ clips, onJumpToClip, onEditClip, onDeleteClip, onShareClip, sharingClipId }: any) {
   return (
     <FlatList
       data={clips}
@@ -132,6 +147,15 @@ function ClipList({ clips, onJumpToClip, onEditClip, onDeleteClip }: any) {
               onPress={() => onEditClip(item.id)}
             >
               <Text style={styles.editButtonText}>{item.note ? "Edit note" : "Add note"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.shareButton}
+              onPress={() => onShareClip(item.id)}
+              disabled={sharingClipId === item.id}
+            >
+              <Text style={styles.shareButtonText}>
+                {sharingClipId === item.id ? 'Sharing...' : 'Share'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.deleteButton}
@@ -299,6 +323,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   editButtonText: {
+    color: Color.WHITE,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  shareButton: {
+    backgroundColor: Color.PRIMARY,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    flex: 1,
+  },
+  shareButtonText: {
     color: Color.WHITE,
     fontSize: 14,
     fontWeight: '600',
