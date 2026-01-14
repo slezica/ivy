@@ -4,7 +4,7 @@
  * Shows a list of previously opened audio files for quick access.
  */
 
-import { View, Text, StyleSheet, SafeAreaView, Alert, FlatList, TouchableOpacity, Image } from 'react-native'
+import { View, Text, StyleSheet, SafeAreaView, Alert, FlatList, TouchableOpacity, Image, StatusBar, Platform } from 'react-native'
 import { useCallback } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { useStore } from '../store'
@@ -214,6 +214,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    marginTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     borderBottomWidth: 1,
     borderBottomColor: Color.GRAY_LIGHT,
   },

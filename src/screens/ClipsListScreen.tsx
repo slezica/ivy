@@ -14,6 +14,8 @@ import {
   Alert,
   Modal,
   TextInput,
+  Platform,
+  StatusBar,
 } from 'react-native'
 import { useState } from 'react'
 import { useRouter } from 'expo-router'
@@ -270,6 +272,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: Color.GRAY_LIGHT,
+    marginTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   title: {
     fontSize: 24,
