@@ -1,27 +1,40 @@
 import { Paths, Directory, File } from 'expo-file-system'
+import RNFS from 'react-native-fs'
 
 /**
  * FileStorageService
  *
  * Manages copying external files to app-owned storage to avoid
  * content: URI invalidation issues.
+ * Uses react-native-fs for native file operations with content: URIs
  */
 export class FileStorageService {
   private storageDir: Directory
+  private storagePath: string
 
   constructor() {
     // Use documentDirectory for app-owned storage
     this.storageDir = new Directory(Paths.document, 'audio')
+    // RNFS uses string paths
+    this.storagePath = `${RNFS.DocumentDirectoryPath}/audio`
   }
 
   private async ensureStorageDirectory(): Promise<void> {
+    // Check with Expo FileSystem API
     if (!(await this.storageDir.exists)) {
       await this.storageDir.create()
+    }
+
+    // Also ensure it exists with RNFS
+    const exists = await RNFS.exists(this.storagePath)
+    if (!exists) {
+      await RNFS.mkdir(this.storagePath)
     }
   }
 
   /**
    * Copy a file from external URI to app storage
+   * Uses react-native-fs for native streaming copy (no OOM)
    * Returns the local file:// URI
    */
   async copyToAppStorage(externalUri: string, filename: string): Promise<string> {
@@ -36,25 +49,13 @@ export class FileStorageService {
     const nameWithoutExt = sanitized.substring(0, sanitized.lastIndexOf('.'))
     const uniqueFilename = `${nameWithoutExt}_${timestamp}${extension}`
 
-    const localFile = new File(this.storageDir, uniqueFilename)
+    const localPath = `${this.storagePath}/${uniqueFilename}`
 
-    // For content: URIs (like Google Drive), File.copy() doesn't work
-    // We need to read the data and write it manually
-    if (externalUri.startsWith('content:')) {
-      // Fetch the content from the content: URI
-      const response = await fetch(externalUri)
-      const arrayBuffer = await response.arrayBuffer()
-      const uint8Array = new Uint8Array(arrayBuffer)
+    // Use RNFS native copy - handles content: URIs and large files efficiently
+    await RNFS.copyFile(externalUri, localPath)
 
-      // Write to local file
-      await localFile.write(uint8Array)
-    } else {
-      // For file: URIs, use direct copy
-      const sourceFile = new File(externalUri)
-      await sourceFile.copy(localFile)
-    }
-
-    return localFile.uri
+    // Return as file:// URI
+    return `file://${localPath}`
   }
 
   /**
@@ -62,8 +63,9 @@ export class FileStorageService {
    */
   async fileExists(uri: string): Promise<boolean> {
     try {
-      const file = new File(uri)
-      return await file.exists
+      // Convert file:// URI to path
+      const path = uri.replace('file://', '')
+      return await RNFS.exists(path)
     } catch {
       return false
     }
@@ -74,9 +76,11 @@ export class FileStorageService {
    */
   async deleteFile(uri: string): Promise<void> {
     try {
-      const file = new File(uri)
-      if (await file.exists) {
-        await file.delete()
+      // Convert file:// URI to path
+      const path = uri.replace('file://', '')
+      const exists = await RNFS.exists(path)
+      if (exists) {
+        await RNFS.unlink(path)
       }
     } catch (error) {
       console.error('Error deleting file:', error)
