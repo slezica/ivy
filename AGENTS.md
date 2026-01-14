@@ -1,189 +1,227 @@
 # AI Agent Reference - Audio Player React Native
 
-Quick reference guide for AI agents working on this codebase.
+**Quick onboarding guide for AI agents.** Read this first when starting a new session.
+
+## Critical Architecture Decisions
+
+### 1. **File Storage Strategy** 🔥 MOST IMPORTANT
+External content: URIs (like Google Drive) become invalid after app restart. **Solution:**
+- **All files are copied to app-owned storage** on first load
+- Database stores: `uri` (local file:// path for playback) + `original_uri` (external source)
+- `FileStorageService` manages copying to `Paths.document/audio/`
+- Audio playback **only uses local file:// URIs**
+
+### 2. **Time Units**
+Everything internal is **milliseconds**. Convert to MM:SS only at display boundaries.
+
+### 3. **State Management**
+Single Zustand store (`src/store/index.ts`) is the source of truth. Services are stateless.
+
+### 4. **Player Status Enum**
+`'adding'` → `'loading'` → `'paused'` ⇄ `'playing'`
+- `adding`: Copying file to app storage
+- `loading`: Loading audio player
+- `paused`/`playing`: Playback states
+
+Polling callback preserves transitional states (`adding`/`loading`) - only updates to `paused`/`playing` when not in transition.
 
 ## Project Overview
 
-React Native Expo app for podcast/audiobook playback with library management, clips/bookmarks, and a high-performance timeline UI.
+**React Native Expo app** for podcast/audiobook playback with:
+- Library management (file history with resume positions)
+- Clips/bookmarks with notes
+- GPU-accelerated timeline UI (Skia Canvas)
+- Auto-play, resume from last position
 
-## Tech Stack
+**Tech Stack:**
+- React Native 0.81.5 + Expo 54
+- Zustand for state
+- Expo Router (file-based tabs)
+- expo-audio (100ms polling)
+- SQLite (expo-sqlite)
+- Skia for timeline rendering
+- New FileSystem API: `Paths.document`, `Directory`, `File` classes
 
-- **Framework**: React Native 0.81.5 + Expo 54
-- **State**: Zustand (v5.0.9) - single store in `src/store/index.ts`
-- **Routing**: Expo Router (file-based, tabs layout)
-- **Audio**: expo-audio (100ms polling interval)
-- **Database**: SQLite via expo-sqlite
-- **Graphics**: @shopify/react-native-skia (timeline rendering)
-- **Gestures**: react-native-gesture-handler + reanimated
-
-## Architecture
+## File Structure
 
 ```
 /src
-  ├── store/index.ts          # Zustand store - master state orchestrator
+  ├── store/index.ts              # Zustand store - all state
   ├── services/
-  │   ├── AudioService.ts     # expo-audio wrapper with polling
-  │   ├── DatabaseService.ts  # SQLite operations
-  │   └── FileService.ts      # Document picker integration
+  │   ├── AudioService.ts         # expo-audio wrapper (10s timeout)
+  │   ├── DatabaseService.ts      # SQLite operations
+  │   ├── FileService.ts          # Document picker
+  │   └── FileStorageService.ts   # File copying (NEW API)
   ├── screens/
-  │   ├── LibraryScreen.tsx   # File history/library
-  │   ├── PlayerScreen.tsx    # Main player UI
-  │   └── ClipsListScreen.tsx # Clip management
+  │   ├── LibraryScreen.tsx       # History + 🔧 Reset button
+  │   ├── PlayerScreen.tsx        # Main player
+  │   └── ClipsListScreen.tsx     # Clip management
   ├── components/
-  │   └── TimelineBar.tsx     # Skia-based timeline (most complex)
-  └── theme.ts                # Color palette
+  │   ├── TimelineBar.tsx         # GPU timeline (most complex)
+  │   └── LoadingModal.tsx        # "Adding..." / "Loading..." modal
+  └── theme.ts
 
 /app
+  ├── _layout.tsx                 # Root (includes LoadingModal)
   └── (tabs)/
-      ├── index.tsx           # Library tab
-      ├── player.tsx          # Player tab
-      └── clips.tsx           # Clips tab
+      ├── _layout.tsx             # Tab nav (disables tabs when no file)
+      ├── index.tsx               # Library
+      ├── player.tsx              # Player
+      └── clips.tsx               # Clips
 ```
 
-## Key Files
+## Database Schema
 
-### `src/store/index.ts`
-Central state management. All state lives here:
-- `player`: `{ status, position, duration, file }`
-  - `status`: `'loading' | 'paused' | 'playing'` - player state enum
-  - `position`, `duration`: in milliseconds
-  - `file`: Active AudioFile object or null
-- `clips`: Map of clip IDs to Clip objects
-- `files`: Map of file URIs to AudioFile objects
+**files table:**
+```sql
+uri TEXT PRIMARY KEY           -- Local file:// path (used for playback)
+original_uri TEXT              -- External content:// URI (reference only)
+name TEXT
+duration INTEGER               -- milliseconds
+position INTEGER               -- milliseconds (resume position)
+opened_at INTEGER              -- timestamp
+```
 
-Key actions: `loadFile`, `play`, `pause`, `seek`, `skipForward/Backward`, `addClip`, `updateClip`, `deleteClip`, `jumpToClip`
+**clips table:**
+```sql
+id INTEGER PRIMARY KEY
+file_uri TEXT                  -- References files.uri (local path)
+start INTEGER                  -- milliseconds
+duration INTEGER               -- milliseconds
+note TEXT
+created_at INTEGER
+updated_at INTEGER
+```
 
-### `src/services/AudioService.ts`
-Singleton managing expo-audio instance. Handles:
-- Audio loading/playback/seeking
-- 100ms position polling
-- Auto-resume from saved position
-- **Important:** `load()` has a 10-second timeout - will reject if player doesn't report duration within 10s
-- This prevents hanging when content: URIs become invalid (common with Android content provider URIs)
+## Store State Structure
 
-### `src/services/DatabaseService.ts`
-SQLite operations. Schema:
-- **files**: `(uri, name, duration, position, opened_at)` - library history
-- **clips**: `(id, file_uri, start, duration, note, created_at, updated_at)` - bookmarks
-- **sessions**: defined but unused
+```typescript
+player: {
+  status: 'adding' | 'loading' | 'paused' | 'playing'
+  position: number              // milliseconds
+  duration: number              // milliseconds
+  file: AudioFile | null        // Includes uri + original_uri
+}
+clips: Record<number, Clip>
+files: Record<string, AudioFile>  // Keyed by local URI
 
-### `src/components/TimelineBar.tsx`
-**Most complex component** - GPU-accelerated timeline:
-- Uses Skia Canvas for rendering (not React components)
-- Ref-based physics for 60fps drag/flick animations
-- Center-fixed playhead with scrolling content
-- Draws only visible segments (not all bars)
+// Key actions
+loadFile, play, pause, seek, skipForward/Backward
+addClip, updateClip, deleteClip, jumpToClip
+__DEV_resetApp                  // Dev tool (clears all data)
+```
+
+## File Loading Flow (Critical)
+
+1. **User picks file** → `pickedFile.uri` (external content: URI)
+2. **Check if already copied:**
+   - Lookup `dbService.getFile(pickedFile.uri)` - won't find it (searching by external URI)
+   - Need to track by local URI instead, so we always copy on first load
+3. **Copy to app storage:**
+   - `status = 'adding'` → Modal shows "Adding to library..."
+   - `FileStorageService.copyToAppStorage()` → returns local `file://` URI
+4. **Load audio:**
+   - `status = 'loading'` → Modal shows "Loading audio file..."
+   - `AudioService.load(localUri)` → 10s timeout if fails
+5. **Save to database:**
+   - `uri = localUri` (local file:// path)
+   - `original_uri = pickedFile.uri` (external content: URI)
+6. **Auto-play:**
+   - `status = 'playing'`
+   - Navigate to player tab
+
+**On reload from library:**
+- Lookup file by `uri` (local path)
+- If local file exists → load directly (no copying)
+- If local file missing → re-copy from original_uri (if still valid)
+
+## Development Tools
+
+### Reset App Data
+Library screen has **🔧 Reset** button (top-right):
+- Clears database (files, clips, sessions)
+- Unloads audio player
+- Resets store state
+- **Note:** Doesn't delete copied files from storage (orphaned)
+
+Access via: `store.__DEV_resetApp()`
+
+## Common Issues & Solutions
+
+### TypeScript Errors
+- **Expo FileSystem API changed in v54:**
+  - ❌ OLD: `FileSystem.documentDirectory`, `getInfoAsync`, `copyAsync`
+  - ✅ NEW: `Paths.document`, `Directory`, `File` classes
+  - Import: `import { Paths, Directory, File } from 'expo-file-system'`
+
+### File Won't Load
+1. Check console logs in `loadFile()` function
+2. Verify local file exists: `fileStorageService.fileExists()`
+3. Check if AudioService timeout (10s) - means player can't load file
+4. Try reset button and re-add file
+
+### Content URI Issues
+- External URIs (Google Drive, etc.) **will fail** after app restart
+- This is expected - files must be re-copied from local storage
+- Database `original_uri` is for reference only, don't use for playback
+
+## TimelineBar Details
+
+**Most complex component** - GPU-accelerated Skia Canvas:
+- Renders only visible segments (not all 14,400+ bars for long files)
+- Center-fixed playhead, content scrolls
+- Ref-based physics (not useState) for 60fps
+- Picture API: records drawing commands once, replays efficiently
 - Gestures: drag to scrub, flick with momentum, tap to seek
+- Split-colored bars when playhead crosses segment boundary
 
-### `src/components/LoadingModal.tsx`
-Global modal that blocks UI during file loading:
-- Watches `player.status === 'loading'`
-- Shows ActivityIndicator and "Loading audio file..." message
-- Transparent dark overlay prevents interaction
+## Adding Features
 
-## Important Patterns
-
-### Time Units
-**Everything internal is milliseconds.** Convert to MM:SS format only at display boundaries.
-
-### Service Layer
-All I/O goes through service classes. Don't call expo-audio, SQLite, or DocumentPicker directly from components.
-
-AudioService reports status as `'paused'` or `'playing'` based on player state. The store adds `'loading'` status during file load operations. **Important:** The polling callback preserves `'loading'` status - it only updates status to `'paused'`/`'playing'` when not in loading state. This prevents the polling from prematurely hiding the loading modal.
-
-### Ref-Based Animation
-`TimelineBar` uses `useRef` for animation state (not `useState`) to avoid re-renders during 60fps RAF loops.
-
-### Skia Picture API
-Timeline uses `makePicture` to record drawing commands once, then replays efficiently. Regenerated only when playback state changes.
-
-### Tab Navigation
-Player and Clips tabs are conditionally disabled until `currentFile` is loaded.
-
-## Common Tasks
-
-### Adding a new playback control
+### New Playback Control
 1. Add action to `src/store/index.ts`
 2. Call `AudioService` method
-3. Update `player` state in store (consider if `status` should change)
+3. Update `player.status` if needed
 4. Add UI in `PlayerScreen.tsx`
 
-### Adding database fields
-1. Update schema in `DatabaseService.ts` `initDatabase()`
-2. Add migration logic if needed
-3. Update TypeScript types in store
+### New Database Field
+1. Update interface in `DatabaseService.ts`
+2. Add migration with `ALTER TABLE` (wrapped in try/catch)
+3. Update `upsertFile` or relevant methods
+4. Update TypeScript types
 
-### Modifying timeline behavior
-- Visual changes: Edit Skia drawing code in `TimelineBar.tsx`
-- Gesture behavior: Modify gesture handlers in same file
-- Physics: Adjust friction/momentum in animation loop
-
-### Adding new screen
+### New Screen
 1. Create in `src/screens/`
 2. Add route in `app/(tabs)/`
 3. Update tab bar in `app/(tabs)/_layout.tsx`
 
-## State Flow
+## Key Patterns to Follow
 
-```
-User Action → Store Action → Service Layer → Update Store State → React Re-render
-```
+✅ **Do:**
+- Use services for all I/O (never call expo-audio, SQLite, FileSystem directly from components)
+- Store all times in milliseconds internally
+- Set `status = 'adding'` when copying files, `'loading'` when loading player
+- Use local file:// URIs for all audio playback
+- Keep services stateless (state lives in store)
 
-Example: Play button
-1. User taps play in `PlayerScreen`
-2. Calls `store.play()`
-3. Store immediately sets `player.status = 'playing'`
-4. Store calls `AudioService.play()`
-5. AudioService starts playback + polling
-6. Polling updates `player.position` every 100ms
-7. Components subscribed to store re-render
+❌ **Don't:**
+- Use external content: URIs for audio playback
+- Trigger React re-renders during TimelineBar animation (use refs)
+- Modify `status` from polling callback when in transitional state
+- Call `upsertFile` without both URIs (local and original)
 
-Example: Loading file
-1. User picks file (from Library or Player screen)
-2. Store sets `player.status = 'loading'` immediately
-3. LoadingModal blocks entire UI with spinner
-4. AudioService loads file asynchronously
-5. When complete, store sets `player.status = 'playing'` (auto-play) and updates `player.file`
-6. Screen navigates to player tab
-7. Audio starts playing automatically
+## Quick Reference
 
-## Build/Run
+**Start dev server:** `npm start`
+**Reset app data:** Tap 🔧 button in Library tab
+**Time format:** Always milliseconds internally
+**File playback:** Always use `audioFile.uri` (local path)
+**Status transitions:** `adding → loading → paused ⇄ playing`
 
-```bash
-npm start           # Start Expo dev server
-npm run ios         # iOS simulator
-npm run android     # Android emulator
-```
+## Recent Architecture
 
-## Testing Strategy
-
-No formal tests currently. Manual testing focuses on:
-- Resume playback from correct position
-- Timeline scrubbing accuracy
-- Clip creation/deletion
-- File switching
-
-## Known Patterns to Maintain
-
-- All time values in milliseconds internally
-- Store is single source of truth
-- Services are stateless (store holds state)
-- Timeline never triggers React re-renders during animation
-- SQLite operations are async
-- Audio position updates every 100ms
-- Always set `player.status = 'loading'` at start of async file operations
-- UI should check `player.status === 'loading'` to disable controls during loads
-- AudioService.load() has 10s timeout to prevent hanging on invalid URIs
-
-## Known Issues
-
-- **Content URIs can become invalid**: Android content: URIs stored in the database may become inaccessible after the app restarts or the granting app revokes access. This causes files to fail to load from the library. The picker works because it grants fresh URIs. AudioService now times out after 10s and shows an error instead of hanging.
-
-## Recent Changes (as of last commit)
-
-- Refactored store structure: renamed `playback` to `player`, moved `currentFile` to `player.file`
-- Replaced `isPlaying` boolean with `status` enum: `'loading' | 'paused' | 'playing'`
-- Added global LoadingModal that blocks UI during file load
-- Files auto-play after loading completes
-- Loading a file automatically navigates to player tab
-- Updated all components (PlayerScreen, TimelineBar, ClipsListScreen, tab layout) to use new structure
+- File storage with app-owned copies (v2 - current)
+- Player status enum extended with `'adding'` state
+- LoadingModal with dual messages
+- Dev reset button in Library
+- New FileSystem API (Paths, Directory, File)
+- Database schema: `uri` (local) + `original_uri` (external)
