@@ -280,10 +280,14 @@ export const useStore = create<AppState>((set, get) => {
       throw new Error('No file loaded')
     }
 
+    // Cap clip duration to not exceed remaining audio length
+    const remainingDuration = player.duration - player.position
+    const clipDuration = Math.min(DEFAULT_CLIP_DURATION_MS, remainingDuration)
+
     const clip = dbService.createClip(
       player.file.uri,
       player.position,
-      DEFAULT_CLIP_DURATION_MS,
+      clipDuration,
       note
     )
 
