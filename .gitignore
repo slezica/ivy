@@ -41,7 +41,7 @@ app-example
 # generated native folders
 /ios
 /android/*
-# Exception: Keep custom native modules
+# Exception: Keep custom native modules and gradle config
 !/android/app
 /android/app/*
 !/android/app/src
@@ -55,9 +55,4 @@ app-example
 !/android/app/src/main/java/com/anonymous
 /android/app/src/main/java/com/anonymous/*
 !/android/app/src/main/java/com/anonymous/audioplayerreactnative
-/android/app/src/main/java/com/anonymous/audioplayerreactnative/*
-!/android/app/src/main/java/com/anonymous/audioplayerreactnative/MainApplication.kt
-!/android/app/src/main/java/com/anonymous/audioplayerreactnative/TestModule.kt
-!/android/app/src/main/java/com/anonymous/audioplayerreactnative/TestPackage.kt
-!/android/app/src/main/java/com/anonymous/audioplayerreactnative/AudioSlicerModule.kt
 !/android/gradle.properties

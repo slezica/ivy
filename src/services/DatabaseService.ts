@@ -17,6 +17,9 @@ export interface AudioFile {
   duration: number
   position: number
   opened_at: number
+  title: string | null
+  artist: string | null
+  artwork: string | null
 }
 
 export interface Session {
@@ -80,6 +83,25 @@ export class DatabaseService {
     } catch (error) {
       // Column already exists, ignore error
     }
+
+    // Migration: Add metadata columns if they don't exist
+    try {
+      this.db.execSync(`ALTER TABLE files ADD COLUMN title TEXT;`)
+    } catch (error) {
+      // Column already exists, ignore error
+    }
+
+    try {
+      this.db.execSync(`ALTER TABLE files ADD COLUMN artist TEXT;`)
+    } catch (error) {
+      // Column already exists, ignore error
+    }
+
+    try {
+      this.db.execSync(`ALTER TABLE files ADD COLUMN artwork TEXT;`)
+    } catch (error) {
+      // Column already exists, ignore error
+    }
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -139,19 +161,28 @@ export class DatabaseService {
     )
   }
 
-  upsertFile(uri: string, name: string, duration: number | null, position: number, originalUri?: string | null): void {
+  upsertFile(
+    uri: string,
+    name: string,
+    duration: number | null,
+    position: number,
+    originalUri?: string | null,
+    title?: string | null,
+    artist?: string | null,
+    artwork?: string | null
+  ): void {
     const now = Date.now()
     const existing = this.getFile(uri)
 
     if (existing) {
       this.db.runSync(
-        'UPDATE files SET name = ?, duration = ?, position = ?, opened_at = ?, original_uri = ? WHERE uri = ?',
-        [name, duration, position, now, originalUri ?? null, uri]
+        'UPDATE files SET name = ?, duration = ?, position = ?, opened_at = ?, original_uri = ?, title = ?, artist = ?, artwork = ? WHERE uri = ?',
+        [name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null, uri]
       )
     } else {
       this.db.runSync(
-        'INSERT INTO files (uri, name, duration, position, opened_at, original_uri) VALUES (?, ?, ?, ?, ?, ?)',
-        [uri, name, duration, position, now, originalUri ?? null]
+        'INSERT INTO files (uri, name, duration, position, opened_at, original_uri, title, artist, artwork) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [uri, name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null]
       )
     }
   }

@@ -4,6 +4,7 @@ import { DatabaseService } from '../services/DatabaseService'
 import { FileService, PickedFile } from '../services/FileService'
 import { FileStorageService } from '../services/FileStorageService'
 import { ClipSharingService } from '../services/ClipSharingService'
+import { MetadataService } from '../services/MetadataService'
 import type { Clip, AudioFile } from '../services/DatabaseService'
 
 
@@ -57,6 +58,7 @@ export const useStore = create<AppState>((set, get) => {
   const fileStorageService = new FileStorageService()
 
   const clipSharingService = new ClipSharingService()
+  const metadataService = new MetadataService()
 
   const audioService = new AudioService({
     onPlaybackStatusChange: (status) => {
@@ -137,6 +139,7 @@ export const useStore = create<AppState>((set, get) => {
       // Step 1: Copy file to app storage if needed
       let localUri: string
       let audioFile = dbService.getFile(pickedFile.uri)
+      let isNewFile = false
 
       if (audioFile && await fileStorageService.fileExists(audioFile.uri)) {
         // Already have a local copy - use it
@@ -151,6 +154,15 @@ export const useStore = create<AppState>((set, get) => {
 
         localUri = await fileStorageService.copyToAppStorage(pickedFile.uri, pickedFile.name)
         console.log('File copied to:', localUri)
+        isNewFile = true
+      }
+
+      // Step 2: Read metadata (only for new files, during 'adding' phase)
+      let metadata = { title: null, artist: null, artwork: null }
+      if (isNewFile) {
+        console.log('Reading metadata from:', localUri)
+        metadata = await metadataService.readMetadata(localUri)
+        console.log('Metadata read:', metadata)
       }
 
       // Verify file exists before loading
@@ -160,7 +172,7 @@ export const useStore = create<AppState>((set, get) => {
         throw new Error(`Local file does not exist: ${localUri}`)
       }
 
-      // Step 2: Load audio from local URI
+      // Step 3: Load audio from local URI
       set((state) => ({
         player: { ...state.player, status: 'loading' },
       }))
@@ -169,14 +181,32 @@ export const useStore = create<AppState>((set, get) => {
       const duration = await audioService.load(localUri)
       console.log('Audio loaded successfully, duration:', duration)
 
-      // Step 3: Save/update file record in database
+      // Step 4: Save/update file record in database
       // Save local URI as 'uri' (what we actually use) and original as 'original_uri'
       if (!audioFile) {
-        dbService.upsertFile(localUri, pickedFile.name, duration, 0, pickedFile.uri)
+        dbService.upsertFile(
+          localUri,
+          pickedFile.name,
+          duration,
+          0,
+          pickedFile.uri,
+          metadata.title,
+          metadata.artist,
+          metadata.artwork
+        )
         audioFile = dbService.getFile(localUri)
       } else {
-        // Update existing record
-        dbService.upsertFile(localUri, pickedFile.name, duration, audioFile.position, pickedFile.uri)
+        // Update existing record (preserve existing metadata if not reading new)
+        dbService.upsertFile(
+          localUri,
+          pickedFile.name,
+          duration,
+          audioFile.position,
+          pickedFile.uri,
+          isNewFile ? metadata.title : audioFile.title,
+          isNewFile ? metadata.artist : audioFile.artist,
+          isNewFile ? metadata.artwork : audioFile.artwork
+        )
         audioFile = dbService.getFile(localUri)
       }
 

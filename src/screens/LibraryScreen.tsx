@@ -4,7 +4,7 @@
  * Shows a list of previously opened audio files for quick access.
  */
 
-import { View, Text, StyleSheet, SafeAreaView, Alert, FlatList, TouchableOpacity } from 'react-native'
+import { View, Text, StyleSheet, SafeAreaView, Alert, FlatList, TouchableOpacity, Image } from 'react-native'
 import { useCallback } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { useStore } from '../store'
@@ -139,10 +139,29 @@ export default function LibraryScreen() {
               onPress={() => handleFilePress(item)}
               activeOpacity={0.7}
             >
+              {/* Artwork */}
+              {item.artwork ? (
+                <Image
+                  source={{ uri: item.artwork }}
+                  style={styles.artwork}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.artworkPlaceholder}>
+                  <Text style={styles.artworkPlaceholderIcon}>🎵</Text>
+                </View>
+              )}
+
+              {/* File Info */}
               <View style={styles.fileInfo}>
                 <Text style={styles.fileName} numberOfLines={1}>
-                  {item.name}
+                  {item.title || item.name}
                 </Text>
+                {item.artist && (
+                  <Text style={styles.fileArtist} numberOfLines={1}>
+                    {item.artist}
+                  </Text>
+                )}
                 <View style={styles.fileMetadata}>
                   {item.duration > 0 && (
                     <Text style={styles.fileDuration}>
@@ -234,18 +253,42 @@ const styles = StyleSheet.create({
     paddingBottom: 80, // Space for FAB
   },
   fileItem: {
+    flexDirection: 'row',
     backgroundColor: Color.GRAY_LIGHTER,
     borderRadius: 8,
-    padding: 16,
+    padding: 12,
     marginBottom: 12,
+    gap: 12,
+  },
+  artwork: {
+    width: 60,
+    height: 60,
+    borderRadius: 6,
+  },
+  artworkPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 6,
+    backgroundColor: Color.GRAY_LIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  artworkPlaceholderIcon: {
+    fontSize: 24,
   },
   fileInfo: {
+    flex: 1,
     gap: 4,
   },
   fileName: {
     fontSize: 16,
     fontWeight: '600',
     color: Color.BLACK,
+  },
+  fileArtist: {
+    fontSize: 14,
+    color: Color.GRAY_DARK,
+    fontWeight: '500',
   },
   fileMetadata: {
     flexDirection: 'row',
