@@ -155,6 +155,13 @@ export class DatabaseService {
     )
   }
 
+  // Development: Clear all data
+  clearAllData(): void {
+    this.db.runSync('DELETE FROM clips')
+    this.db.runSync('DELETE FROM files')
+    this.db.runSync('DELETE FROM sessions')
+  }
+
   // -----------------------------------------------------------------------------------------------
   // Sessions
 

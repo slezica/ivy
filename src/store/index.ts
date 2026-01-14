@@ -39,6 +39,9 @@ interface AppState {
   updateClip: (id: number, note: string) => void
   deleteClip: (id: number) => void
   jumpToClip: (clipId: number) => Promise<void>
+
+  // Dev tools
+  __DEV_resetApp: () => Promise<void>
 }
 
 
@@ -92,7 +95,8 @@ export const useStore = create<AppState>((set, get) => {
     addClip,
     deleteClip,
     updateClip,
-    jumpToClip
+    jumpToClip,
+    __DEV_resetApp
   }
 
   function fetchFiles(): void {
@@ -283,5 +287,27 @@ export const useStore = create<AppState>((set, get) => {
     }
 
     await get().seek(clip.start)
+  }
+
+  async function __DEV_resetApp() {
+    // Unload current player
+    await audioService.unload()
+
+    // Clear database
+    dbService.clearAllData()
+
+    // Reset store state
+    set({
+      player: {
+        status: 'paused',
+        position: 0,
+        duration: 0,
+        file: null,
+      },
+      clips: {},
+      files: {},
+    })
+
+    console.log('App reset complete')
   }
 })

@@ -39,7 +39,7 @@ function formatDate(timestamp: number): string {
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchFiles, loadFileWithUri, files } = useStore()
+  const { loadFileWithPicker, fetchFiles, loadFileWithUri, files, __DEV_resetApp } = useStore()
 
   // Refresh file list when screen comes into focus
   useFocusEffect(
@@ -72,12 +72,41 @@ export default function LibraryScreen() {
     }
   }
 
+  const handleDevReset = () => {
+    Alert.alert(
+      'Reset App',
+      'This will clear all files, clips, and playback data. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await __DEV_resetApp()
+              Alert.alert('Success', 'App reset complete!')
+            } catch (error) {
+              console.error('Error resetting app:', error)
+              Alert.alert('Error', 'Failed to reset app')
+            }
+          },
+        },
+      ]
+    )
+  }
+
   const filesArray = Object.values(files)
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Library</Text>
+        <TouchableOpacity
+          style={styles.devResetButton}
+          onPress={handleDevReset}
+        >
+          <Text style={styles.devResetButtonText}>🔧 Reset</Text>
+        </TouchableOpacity>
       </View>
 
       {filesArray.length > 0 ? (
@@ -142,6 +171,9 @@ const styles = StyleSheet.create({
     backgroundColor: Color.WHITE,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
@@ -151,6 +183,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: Color.BLACK,
+  },
+  devResetButton: {
+    backgroundColor: Color.DESTRUCTIVE,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  devResetButtonText: {
+    color: Color.WHITE,
+    fontSize: 12,
+    fontWeight: '600',
   },
   listContent: {
     padding: 16,
