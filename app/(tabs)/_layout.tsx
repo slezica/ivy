@@ -56,15 +56,6 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="list" size={size} color={color} />
           ),
-          tabBarButton: (props) => (
-            <Pressable
-              {...props}
-              onPress={hasFile ? props.onPress : undefined}
-              style={[props.style, !hasFile && { opacity: 0.3 }]}
-            >
-              {props.children}
-            </Pressable>
-          ),
         }}
       />
     </Tabs>

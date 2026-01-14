@@ -1,7 +1,8 @@
 /**
  * ClipsListScreen
  *
- * Lists all clips/bookmarks for the current file.
+ * Lists all clips/bookmarks from all audio files.
+ * Each clip shows which file it belongs to.
  */
 
 import {
@@ -18,18 +19,26 @@ import {
   StatusBar,
 } from 'react-native'
 import { useState } from 'react'
-import { useRouter } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
+import { useCallback } from 'react'
 
 import { useStore } from '../store'
 import { Color } from '../theme'
-import { Clip } from '../services/DatabaseService'
+import { ClipWithFile } from '../services/DatabaseService'
 
 
 export default function ClipsListScreen() {
   const router = useRouter()
-  const { clips, player, jumpToClip, deleteClip, updateClip, shareClip } = useStore()
+  const { clips, player, jumpToClip, deleteClip, updateClip, shareClip, fetchAllClips } = useStore()
   const [editingClipId, setEditingClipId] = useState<number | null>(null)
   const [sharingClipId, setSharingClipId] = useState<number | null>(null)
+
+  // Fetch all clips when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      fetchAllClips()
+    }, [fetchAllClips])
+  )
 
   const clipsArray = Object.values(clips).sort((a, b) => b.created_at - a.created_at)
   const editingClip = editingClipId ? clips[editingClipId] : null
@@ -65,7 +74,7 @@ export default function ClipsListScreen() {
     }
   }
 
-  const handleSaveClip = ({ note }: Clip) => {
+  const handleSaveClip = ({ note }: ClipWithFile) => {
     if (editingClipId) {
       updateClip(editingClipId, note)
       setEditingClipId(null)
@@ -91,8 +100,8 @@ export default function ClipsListScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Clips</Text>
-        {player.file && <Text style={styles.subtitle}>{player.file.name}</Text>}
+        <Text style={styles.title}>All Clips</Text>
+        <Text style={styles.subtitle}>From all audio files</Text>
       </View>
 
       {clipsArray.length > 0
@@ -132,6 +141,11 @@ function ClipList({ clips, onJumpToClip, onEditClip, onDeleteClip, onShareClip, 
             style={styles.clipContent}
             onPress={() => onJumpToClip(item.id)}
           >
+            {/* File label */}
+            <Text style={styles.clipFileLabel} numberOfLines={1}>
+              {item.file_title || item.file_name}
+            </Text>
+
             <View style={styles.clipHeader}>
               <Text style={styles.clipTime}>{formatTime(item.start)}</Text>
               {item.duration > 0 && (
@@ -294,6 +308,14 @@ const styles = StyleSheet.create({
   },
   clipContent: {
     padding: 16,
+  },
+  clipFileLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Color.GRAY_DARK,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   clipHeader: {
     flexDirection: 'row',

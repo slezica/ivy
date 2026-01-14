@@ -10,6 +10,12 @@ export interface Clip {
   updated_at: number
 }
 
+export interface ClipWithFile extends Clip {
+  file_name: string
+  file_title: string | null
+  file_artist: string | null
+}
+
 export interface AudioFile {
   uri: string
   original_uri: string | null
@@ -111,6 +117,19 @@ export class DatabaseService {
     return this.db.getAllSync<Clip>(
       'SELECT * FROM clips WHERE file_uri = ? ORDER BY start ASC',
       [fileUri]
+    )
+  }
+
+  getAllClips(): ClipWithFile[] {
+    return this.db.getAllSync<ClipWithFile>(
+      `SELECT
+        clips.*,
+        files.name as file_name,
+        files.title as file_title,
+        files.artist as file_artist
+      FROM clips
+      INNER JOIN files ON clips.file_uri = files.uri
+      ORDER BY clips.created_at DESC`
     )
   }
 

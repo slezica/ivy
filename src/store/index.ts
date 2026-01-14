@@ -5,7 +5,7 @@ import { FileService, PickedFile } from '../services/FileService'
 import { FileStorageService } from '../services/FileStorageService'
 import { ClipSharingService } from '../services/ClipSharingService'
 import { MetadataService } from '../services/MetadataService'
-import type { Clip, AudioFile } from '../services/DatabaseService'
+import type { Clip, ClipWithFile, AudioFile } from '../services/DatabaseService'
 
 
 const SKIP_FORWARD_MS = 25 * 1000
@@ -25,7 +25,7 @@ interface PlayerState {
 interface AppState {
   // State
   player: PlayerState
-  clips: Record<number, Clip>
+  clips: Record<number, ClipWithFile>
   files: Record<string, AudioFile>
 
   // Actions
@@ -33,6 +33,7 @@ interface AppState {
   loadFileWithUri: (uri: string, name: string) => Promise<void>
   loadFileWithPicker: () => Promise<void>
   fetchFiles: () => void
+  fetchAllClips: () => void
   play: () => Promise<void>
   pause: () => Promise<void>
   seek: (position: number) => Promise<void>
@@ -98,6 +99,7 @@ export const useStore = create<AppState>((set, get) => {
     loadFile,
     loadFileWithUri,
     fetchFiles,
+    fetchAllClips,
     play,
     pause,
     seek,
@@ -121,6 +123,18 @@ export const useStore = create<AppState>((set, get) => {
     }, {} as Record<string, AudioFile>)
 
     set({ files: filesMap })
+  }
+
+  function fetchAllClips(): void {
+    const allClips = dbService.getAllClips()
+
+    // Update clips mapping in store
+    const clipsMap = allClips.reduce((acc, clip) => {
+      acc[clip.id] = clip
+      return acc
+    }, {} as Record<number, ClipWithFile>)
+
+    set({ clips: clipsMap })
   }
 
   async function loadFileWithUri(uri: string, name: string) {
@@ -214,12 +228,8 @@ export const useStore = create<AppState>((set, get) => {
         throw new Error('Failed to create file record')
       }
 
-      // Load clips for this file
-      const clips = dbService.getClipsForFile(pickedFile.uri)
-      const clipsMap = clips.reduce((acc, clip) => {
-        acc[clip.id] = clip
-        return acc
-      }, {} as Record<number, Clip>)
+      // Load all clips from all files
+      fetchAllClips()
 
       // Update state (keep status as 'loading' until play starts)
       set((state) => ({
@@ -229,7 +239,6 @@ export const useStore = create<AppState>((set, get) => {
           duration,
           file: audioFile,
         },
-        clips: clipsMap,
       }))
 
       // Seek to saved position
@@ -319,16 +328,15 @@ export const useStore = create<AppState>((set, get) => {
     const remainingDuration = player.duration - player.position
     const clipDuration = Math.min(DEFAULT_CLIP_DURATION_MS, remainingDuration)
 
-    const clip = dbService.createClip(
+    dbService.createClip(
       player.file.uri,
       player.position,
       clipDuration,
       note
     )
 
-    set((state) => ({
-      clips: { ...state.clips, [clip.id]: clip },
-    }))
+    // Reload all clips to include file information
+    fetchAllClips()
   }
 
   function updateClip(id: number, note: string) {
