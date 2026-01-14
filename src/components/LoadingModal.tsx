@@ -4,11 +4,11 @@ import { Color } from '../theme'
 
 export default function LoadingModal() {
   const { player } = useStore()
-  const isLoading = player.status === 'loading'
+  const isVisible = player.status === 'adding'
 
   return (
     <Modal
-      visible={isLoading}
+      visible={isVisible}
       transparent
       animationType="fade"
       statusBarTranslucent
@@ -16,7 +16,7 @@ export default function LoadingModal() {
       <View style={styles.overlay}>
         <View style={styles.content}>
           <ActivityIndicator size="large" color={Color.PRIMARY} />
-          <Text style={styles.text}>Loading audio file...</Text>
+          <Text style={styles.text}>Adding to library...</Text>
         </View>
       </View>
     </Modal>

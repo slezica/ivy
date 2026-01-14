@@ -12,6 +12,7 @@ export interface Clip {
 
 export interface AudioFile {
   uri: string
+  original_uri: string | null
   name: string
   duration: number
   position: number
@@ -72,6 +73,13 @@ export class DatabaseService {
         opened_at INTEGER
       );
     `)
+
+    // Migration: Add original_uri column if it doesn't exist
+    try {
+      this.db.execSync(`ALTER TABLE files ADD COLUMN original_uri TEXT;`)
+    } catch (error) {
+      // Column already exists, ignore error
+    }
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -131,19 +139,19 @@ export class DatabaseService {
     )
   }
 
-  upsertFile(uri: string, name: string, duration: number | null, position: number): void {
+  upsertFile(uri: string, name: string, duration: number | null, position: number, originalUri?: string | null): void {
     const now = Date.now()
     const existing = this.getFile(uri)
 
     if (existing) {
       this.db.runSync(
-        'UPDATE files SET name = ?, duration = ?, position = ?, opened_at = ? WHERE uri = ?',
-        [name, duration, position, now, uri]
+        'UPDATE files SET name = ?, duration = ?, position = ?, opened_at = ?, original_uri = ? WHERE uri = ?',
+        [name, duration, position, now, originalUri ?? null, uri]
       )
     } else {
       this.db.runSync(
-        'INSERT INTO files (uri, name, duration, position, opened_at) VALUES (?, ?, ?, ?, ?)',
-        [uri, name, duration, position, now]
+        'INSERT INTO files (uri, name, duration, position, opened_at, original_uri) VALUES (?, ?, ?, ?, ?, ?)',
+        [uri, name, duration, position, now, originalUri ?? null]
       )
     }
   }

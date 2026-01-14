@@ -1,7 +1,7 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio'
 import type { AudioPlayer } from 'expo-audio'
 
-type PlayerStatus = 'loading' | 'paused' | 'playing'
+type PlayerStatus = 'adding' | 'loading' | 'paused' | 'playing'
 
 export interface PlaybackStatus {
   status: PlayerStatus

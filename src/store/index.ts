@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { AudioService } from '../services/AudioService'
 import { DatabaseService } from '../services/DatabaseService'
 import { FileService, PickedFile } from '../services/FileService'
+import { FileStorageService } from '../services/FileStorageService'
 import type { Clip, AudioFile } from '../services/DatabaseService'
 
 
@@ -10,7 +11,7 @@ const SKIP_BACKWARD_MS = 30 * 1000
 const DEFAULT_CLIP_DURATION_MS = 20 * 1000
 
 
-type PlayerStatus = 'loading' | 'paused' | 'playing'
+type PlayerStatus = 'adding' | 'loading' | 'paused' | 'playing'
 
 interface PlayerState {
   status: PlayerStatus
@@ -51,13 +52,17 @@ export const useStore = create<AppState>((set, get) => {
 
   const fileService = new FileService()
 
+  const fileStorageService = new FileStorageService()
+
   const audioService = new AudioService({
     onPlaybackStatusChange: (status) => {
       set((state) => ({
         player: {
           ...state.player,
-          // Only update status if not currently loading
-          status: state.player.status === 'loading' ? 'loading' : status.status,
+          // Only update status if not currently in a transitional state
+          status: (state.player.status === 'loading' || state.player.status === 'adding')
+            ? state.player.status
+            : status.status,
           position: status.position,
           duration: status.duration,
         },
@@ -124,19 +129,50 @@ export const useStore = create<AppState>((set, get) => {
 
   async function loadFile(pickedFile: PickedFile) {
     try {
-      // Set loading status immediately
+      // Step 1: Copy file to app storage if needed
+      let localUri: string
+      let audioFile = dbService.getFile(pickedFile.uri)
+
+      if (audioFile && await fileStorageService.fileExists(audioFile.uri)) {
+        // Already have a local copy - use it
+        localUri = audioFile.uri
+        console.log('Using existing local file:', localUri)
+      } else {
+        // Need to copy file to app storage
+        console.log('Copying file to app storage from:', pickedFile.uri)
+        set((state) => ({
+          player: { ...state.player, status: 'adding' },
+        }))
+
+        localUri = await fileStorageService.copyToAppStorage(pickedFile.uri, pickedFile.name)
+        console.log('File copied to:', localUri)
+      }
+
+      // Verify file exists before loading
+      const exists = await fileStorageService.fileExists(localUri)
+      console.log('Local file exists check:', exists, localUri)
+      if (!exists) {
+        throw new Error(`Local file does not exist: ${localUri}`)
+      }
+
+      // Step 2: Load audio from local URI
       set((state) => ({
         player: { ...state.player, status: 'loading' },
       }))
 
-      // Load audio and get duration
-      const duration = await audioService.load(pickedFile.uri)
+      console.log('Loading audio from:', localUri)
+      const duration = await audioService.load(localUri)
+      console.log('Audio loaded successfully, duration:', duration)
 
-      // Get or create file record from database
-      let audioFile = dbService.getFile(pickedFile.uri)
+      // Step 3: Save/update file record in database
+      // Save local URI as 'uri' (what we actually use) and original as 'original_uri'
       if (!audioFile) {
-        dbService.upsertFile(pickedFile.uri, pickedFile.name, duration, 0)
-        audioFile = dbService.getFile(pickedFile.uri)
+        dbService.upsertFile(localUri, pickedFile.name, duration, 0, pickedFile.uri)
+        audioFile = dbService.getFile(localUri)
+      } else {
+        // Update existing record
+        dbService.upsertFile(localUri, pickedFile.name, duration, audioFile.position, pickedFile.uri)
+        audioFile = dbService.getFile(localUri)
       }
 
       if (!audioFile) {
