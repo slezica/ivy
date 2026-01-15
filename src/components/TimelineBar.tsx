@@ -126,6 +126,8 @@ const SEGMENT_DURATION = 5000 // 5 seconds per segment
 const TIMELINE_HEIGHT = 90
 const PLAYHEAD_WIDTH = 2
 const PLACEHOLDER_HEIGHT = 8 // Small height for virtual bars at ends
+const TIME_INDICATORS_HEIGHT = 24
+const TIME_INDICATORS_MARGIN = 8
 
 // Physics constants
 const DECELERATION = 0.95 // Velocity multiplier per frame
@@ -511,7 +513,11 @@ function useScrollPhysics({
 // TimelineBar - Main component
 // =============================================================================
 
-export default function TimelineBar() {
+interface TimelineBarProps {
+  timePosition?: 'top' | 'bottom'
+}
+
+export default function TimelineBar({ timePosition = 'bottom' }: TimelineBarProps) {
   const { player, seek } = useStore()
   const [containerWidth, setContainerWidth] = useState(0)
 
@@ -552,10 +558,23 @@ export default function TimelineBar() {
     }
   }, [frame, containerWidth, totalSegments])
 
+  // Calculate playhead top offset based on time position
+  const playheadTop = timePosition === 'top'
+    ? 10 + TIME_INDICATORS_HEIGHT + TIME_INDICATORS_MARGIN
+    : 10
+
   return (
     <GestureHandlerRootView style={styles.container}>
+      {timePosition === 'top' && (
+        <TimeIndicators
+          position={displayPosition}
+          duration={player.duration}
+          placement="top"
+        />
+      )}
+
       {/* Playhead indicator at center */}
-      <View style={styles.playheadContainer} pointerEvents="none">
+      <View style={[styles.playheadContainer, { top: playheadTop }]} pointerEvents="none">
         <View style={styles.playhead} />
       </View>
 
@@ -571,15 +590,30 @@ export default function TimelineBar() {
         </View>
       </GestureDetector>
 
-      {/* Time indicators */}
-      <TimeIndicators position={displayPosition} duration={player.duration} />
+      {timePosition === 'bottom' && (
+        <TimeIndicators
+          position={displayPosition}
+          duration={player.duration}
+          placement="bottom"
+        />
+      )}
     </GestureHandlerRootView>
   )
 }
 
-function TimeIndicators({ position, duration }: { position: number; duration: number }) {
+interface TimeIndicatorsProps {
+  position: number
+  duration: number
+  placement: 'top' | 'bottom'
+}
+
+function TimeIndicators({ position, duration, placement }: TimeIndicatorsProps) {
+  const marginStyle = placement === 'top'
+    ? { marginBottom: TIME_INDICATORS_MARGIN }
+    : { marginTop: TIME_INDICATORS_MARGIN }
+
   return (
-    <View style={styles.timeContainer}>
+    <View style={[styles.timeContainer, marginStyle]}>
       <View style={styles.timeSpacer} />
       <Text style={styles.timeCurrent}>{formatTime(position)}</Text>
       <Text style={styles.timeTotal}>{formatTime(duration)}</Text>
@@ -595,12 +629,10 @@ const styles = StyleSheet.create({
   timelineContainer: {
     height: TIMELINE_HEIGHT,
     justifyContent: 'center',
-    marginBottom: 8,
     overflow: 'hidden',
   },
   playheadContainer: {
     position: 'absolute',
-    top: 10,
     left: 0,
     right: 0,
     height: TIMELINE_HEIGHT,
