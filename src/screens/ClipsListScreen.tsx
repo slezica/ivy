@@ -22,6 +22,7 @@ import { useCallback } from 'react'
 import { useStore } from '../store'
 import { Color } from '../theme'
 import ScreenArea from '../components/shared/ScreenArea'
+import Header from '../components/shared/Header'
 import { ClipWithFile } from '../services/DatabaseService'
 
 
@@ -97,10 +98,7 @@ export default function ClipsListScreen() {
 
   return (
     <ScreenArea>
-      <View style={styles.header}>
-        <Text style={styles.title}>All Clips</Text>
-        <Text style={styles.subtitle}>From all audio files</Text>
-      </View>
+      <Header title="All Clips" subtitle="From all audio files" />
 
       {clipsArray.length > 0
         ? <ClipList
@@ -275,21 +273,6 @@ function formatTime(milliseconds: number): string {
 
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Color.GRAY_LIGHT,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Color.GRAY_DARK,
-  },
   listContent: {
     padding: 16,
   },

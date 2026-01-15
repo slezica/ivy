@@ -10,6 +10,7 @@ import { useRouter, useFocusEffect } from 'expo-router'
 import { useStore } from '../store'
 import IconButton from '../components/shared/IconButton'
 import ScreenArea from '../components/shared/ScreenArea'
+import Header from '../components/shared/Header'
 import { Color } from '../theme'
 import type { AudioFile } from '../services/DatabaseService'
 
@@ -100,15 +101,14 @@ export default function LibraryScreen() {
 
   return (
     <ScreenArea>
-      <View style={styles.header}>
-        <Text style={styles.title}>Library</Text>
+      <Header title="Library">
         <TouchableOpacity
           style={styles.devResetButton}
           onPress={handleDevReset}
         >
           <Text style={styles.devResetButtonText}>🔧 Reset</Text>
         </TouchableOpacity>
-      </View>
+      </Header>
 
       {filesArray.length > 0 ? (
         <FlatList
@@ -186,20 +186,6 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Color.GRAY_LIGHT,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Color.BLACK,
-  },
   devResetButton: {
     backgroundColor: Color.DESTRUCTIVE,
     paddingHorizontal: 12,
