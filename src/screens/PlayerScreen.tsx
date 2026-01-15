@@ -90,9 +90,7 @@ const styles = StyleSheet.create({
   playerContainer: {
     flex: 1,
     justifyContent: 'center',
-    position: 'relative',
-    gap: 16,
-    paddingTop: 96
+    gap: 24,
   },
   fileInfo: {
     paddingHorizontal: 32,
@@ -114,7 +112,6 @@ const styles = StyleSheet.create({
   },
   playbackControls: {
     alignItems: 'center',
-    paddingVertical: 20,
     gap: 24,
   },
 })
