@@ -25,6 +25,27 @@ Single Zustand store (`src/store/index.ts`) is the source of truth. Services are
 
 Polling callback preserves transitional states (`adding`/`loading`) - only updates to `paused`/`playing` when not in transition.
 
+### 5. **Playback Ownership** 🔥 IMPORTANT
+Multiple UI components can control playback (PlayerScreen, clip editor). To prevent conflicts:
+- `player.ownerId` tracks which component last took control
+- Components pass `ownerId` when calling `play()` to claim ownership
+- Ownership persists until another component calls `play()` with different `ownerId`
+- Components check `player.ownerId === myId` to know if they're in control
+
+```typescript
+// Component generates stable ID
+const ownerId = useRef('clip-editor-123').current
+
+// Check ownership
+const isOwner = player.ownerId === ownerId
+const isPlaying = isOwner && player.status === 'playing'
+
+// Claim ownership when playing
+await play({ fileUri, position, ownerId })
+```
+
+This enables future "now playing" widgets to show context about who initiated playback.
+
 ## Project Overview
 
 **React Native Expo app** for podcast/audiobook playback with:
@@ -145,6 +166,7 @@ player: {
   position: number              // milliseconds
   duration: number              // milliseconds
   file: AudioFile | null        // Includes uri + original_uri
+  ownerId: string | null        // ID of component controlling playback
 }
 clips: Record<number, Clip>
 files: Record<string, AudioFile>  // Keyed by local URI
@@ -155,6 +177,11 @@ addClip, deleteClip, jumpToClip, shareClip
 updateClip(id, { note?, start?, duration? })  // Edit clip bounds and note
 updateClipTranscription         // Called by TranscriptionService
 __DEV_resetApp                  // Dev tool (clears all data)
+
+// Context-based playback API
+play(context?: { fileUri, position, ownerId? })  // Loads file if different, claims ownership
+seek(context: { fileUri, position })             // Only seeks if fileUri matches loaded file
+pause()                                          // Pauses, preserves ownership
 ```
 
 ## File Loading Flow (Critical)
@@ -260,11 +287,12 @@ Used in PlayerScreen for audio scrubbing:
 
 ### SelectionTimeline
 Used in clip edit modal for adjusting clip bounds:
-- Movable playhead (follows playback position, can scroll out of view)
+- Center-fixed playhead (same behavior as PlaybackTimeline)
 - Two selection handles with draggable yellow circles at bottom
 - Bars colored primary (default) or yellow (within selection)
 - Handles enforce 1 second minimum gap, cannot cross each other
-- No auto-sync to playback position (user scrolls freely)
+- Scrolling = seeking (when component owns playback)
+- Auto-syncs to playback position when idle
 
 ```typescript
 // SelectionTimeline props
@@ -359,12 +387,17 @@ On-device automatic clip transcription using Whisper:
 - Set `status = 'adding'` when copying files, `'loading'` when loading player
 - Use local file:// URIs for all audio playback
 - Keep services stateless (state lives in store)
+- Pass `{ fileUri, position, ownerId }` when calling `play()` from UI components
+- Maintain local position state in playback components
+- Check `player.ownerId === myId` before syncing from global player state
 
 ❌ **Don't:**
 - Use external content: URIs for audio playback
 - Trigger React re-renders during TimelineBar animation (use refs)
 - Modify `status` from polling callback when in transitional state
 - Call `upsertFile` without both URIs (local and original)
+- Call `play()` or `seek()` without file context from UI components
+- Assume global `player.position` is relevant to your component (check ownership first)
 
 ## Quick Reference
 
@@ -393,3 +426,6 @@ On-device automatic clip transcription using Whisper:
 - Timeline components refactored into `timeline/` module with shared code
 - SelectionTimeline for clip length editing with draggable handles
 - Clip edit modal with playback preview
+- **Context-based playback API**: `play()` and `seek()` require file/position context
+- **Playback ownership**: `player.ownerId` tracks which component controls playback
+- Components maintain local position state, sync from global only when they own playback
