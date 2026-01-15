@@ -421,8 +421,8 @@ function useSelectionPhysics({
 
   const onPanUpdate = useCallback((translationX: number) => {
     if (draggingHandleRef.current) {
-      // Dragging a handle
-      const deltaTime = xToTime(-translationX)
+      // Dragging a handle - positive translationX (drag right) should increase time
+      const deltaTime = xToTime(translationX)
       const newValue = handleDragStartValueRef.current + deltaTime
 
       if (draggingHandleRef.current === 'start') {
