@@ -38,6 +38,7 @@ export interface ClipWithFile extends Clip {
   file_name: string
   file_title: string | null
   file_artist: string | null
+  file_duration: number
 }
 
 export interface Session {
@@ -134,7 +135,8 @@ export class DatabaseService {
         clips.*,
         files.name as file_name,
         files.title as file_title,
-        files.artist as file_artist
+        files.artist as file_artist,
+        files.duration as file_duration
       FROM clips
       INNER JOIN files ON clips.file_uri = files.uri
       ORDER BY clips.created_at DESC`
@@ -160,11 +162,28 @@ export class DatabaseService {
     }
   }
 
-  updateClip(id: number, note: string): void {
+  updateClip(id: number, updates: { note?: string; start?: number; duration?: number }): void {
     const now = Date.now()
+    const setClauses: string[] = ['updated_at = ?']
+    const values: (string | number)[] = [now]
+
+    if (updates.note !== undefined) {
+      setClauses.push('note = ?')
+      values.push(updates.note)
+    }
+    if (updates.start !== undefined) {
+      setClauses.push('start = ?')
+      values.push(updates.start)
+    }
+    if (updates.duration !== undefined) {
+      setClauses.push('duration = ?')
+      values.push(updates.duration)
+    }
+
+    values.push(id)
     this.db.runSync(
-      'UPDATE clips SET note = ?, updated_at = ? WHERE id = ?',
-      [note, now, id]
+      `UPDATE clips SET ${setClauses.join(', ')} WHERE id = ?`,
+      values
     )
   }
 

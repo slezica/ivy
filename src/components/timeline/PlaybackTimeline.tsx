@@ -1,5 +1,5 @@
 /**
- * TimelineBarRaf
+ * PlaybackTimeline (exported as TimelineBar for backward compatibility)
  *
  * An interactive audio timeline for scrubbing through audio files.
  *
@@ -54,9 +54,9 @@
  *   2. We draw just those bars to a Picture (with appropriate colors)
  *   3. Skia renders the Picture to the screen
  *
- * The drawing logic is a plain function (`drawTimeline`) that takes a canvas
- * and the current state, then imperatively draws rectangles. No components,
- * no JSX, no reconciliation.
+ * The drawing logic is a plain function (`drawPlaybackTimeline`) that takes a
+ * canvas and the current state, then imperatively draws rectangles. No
+ * components, no JSX, no reconciliation.
  *
  *
  * ## How Animation Works
@@ -77,29 +77,11 @@
  *
  * ## Code Organization
  *
- * Reading top to bottom, you'll find:
- *
- *   1. **Constants** - Dimensions, timing, physics tuning values
- *
- *   2. **Utility functions** - Coordinate conversion, bar height calculation
- *
- *   3. **drawTimeline()** - The pure drawing function. Takes canvas + state,
- *      draws the visible bars. This is where the actual rendering happens.
- *
- *   4. **useScrollPhysics()** - Custom hook containing all the scroll logic:
- *      gesture handling, momentum physics, tap-to-seek animation, and the
- *      frame counter. Returns everything the component needs.
- *
- *   5. **TimelineBar** - The main component. Surprisingly small because
- *      useScrollPhysics does the heavy lifting. Just wires up the canvas,
- *      gestures, and layout.
- *
- *   6. **TimeIndicators** - Tiny subcomponent for the time display.
- *
- *   7. **Styles** - Standard React Native StyleSheet.
+ * Shared code (constants, utils, scroll physics) lives in this directory.
+ * This file contains only the playback-specific drawing and component.
  */
 
-import { useCallback, useMemo, useEffect, useState, useRef } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { View, Text, StyleSheet, LayoutChangeEvent } from 'react-native'
 import {
   Canvas,
@@ -110,74 +92,36 @@ import {
   ClipOp,
 } from '@shopify/react-native-skia'
 import {
-  Gesture,
   GestureDetector,
   GestureHandlerRootView,
 } from 'react-native-gesture-handler'
-import { useStore } from '../store'
-import { Color } from '../theme'
-import { formatTime } from '../utils'
+import { useStore } from '../../store'
+import { Color } from '../../theme'
+import { formatTime } from '../../utils'
 
-// Layout constants
-const SEGMENT_WIDTH = 4
-const SEGMENT_GAP = 2
-const SEGMENT_STEP = SEGMENT_WIDTH + SEGMENT_GAP
-const SEGMENT_DURATION = 5000 // 5 seconds per segment
-const TIMELINE_HEIGHT = 90
-const PLAYHEAD_WIDTH = 2
-const PLACEHOLDER_HEIGHT = 8 // Small height for virtual bars at ends
-const TIME_INDICATORS_HEIGHT = 24
-const TIME_INDICATORS_MARGIN = 8
+import {
+  SEGMENT_WIDTH,
+  SEGMENT_STEP,
+  SEGMENT_DURATION,
+  TIMELINE_HEIGHT,
+  PLAYHEAD_WIDTH,
+  PLACEHOLDER_HEIGHT,
+  TIME_INDICATORS_HEIGHT,
+  TIME_INDICATORS_MARGIN,
+  timeToX,
+  getSegmentHeight,
+  useScrollPhysics,
+} from '.'
 
-// Physics constants
-const DECELERATION = 0.95 // Velocity multiplier per frame
-const MIN_VELOCITY = 0.5 // Stop momentum below this
-const VELOCITY_SCALE = 1 / 60 // Convert gesture velocity (px/s) to px/frame
+// =============================================================================
+// Drawing - Playback mode (played/unplayed bar colors)
+// =============================================================================
 
-// Animation constants
-const SCROLL_TO_DURATION = 200 // ms for tap-to-seek animation
-
-// Precompute segment heights
-const MAX_PRECOMPUTED_SEGMENTS = 10000
-const SEGMENT_HEIGHTS = new Float32Array(MAX_PRECOMPUTED_SEGMENTS)
-for (let i = 0; i < MAX_PRECOMPUTED_SEGMENTS; i++) {
-  SEGMENT_HEIGHTS[i] = computeSegmentHeight(i)
-}
-
-function computeSegmentHeight(index: number): number {
-  const baseHeight = TIMELINE_HEIGHT / 2
-  const variation = TIMELINE_HEIGHT / 4
-
-  let height = baseHeight
-  height += Math.sin(index * 0.15) * variation
-  height += Math.sin(index * 0.4) * (variation * 0.5)
-  height += Math.sin(index * 2) * (variation * 0.3)
-  height += ((index * 7919) % 100) / 100 * 8
-
-  return Math.max(12, Math.min(TIMELINE_HEIGHT, height * 0.8))
-}
-
-function getSegmentHeight(index: number): number {
-  if (index >= 0 && index < MAX_PRECOMPUTED_SEGMENTS) {
-    return SEGMENT_HEIGHTS[index]
-  }
-  return computeSegmentHeight(index)
-}
-
-function timeToX(time: number): number {
-  return (time / SEGMENT_DURATION) * SEGMENT_STEP
-}
-
-function xToTime(x: number): number {
-  return (x / SEGMENT_STEP) * SEGMENT_DURATION
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
-}
-
-// Imperative drawing function - draws visible segments to canvas
-function drawTimeline(
+/**
+ * Draw the playback timeline with played (gray) and unplayed (primary) bars.
+ * The playhead position determines the split point.
+ */
+function drawPlaybackTimeline(
   canvas: SkCanvas,
   scrollOffset: number,
   containerWidth: number,
@@ -215,10 +159,9 @@ function drawTimeline(
 
   // Draw placeholder bars on the LEFT (before timeline start)
   if (visibleStartX < timelineStartX) {
-    // Draw from visible start to timeline start
     let x = Math.floor(visibleStartX / SEGMENT_STEP) * SEGMENT_STEP
     while (x < timelineStartX) {
-      const h = PLACEHOLDER_HEIGHT // - (Math.cos(x * 3 + 3) + 1) * (PLACEHOLDER_HEIGHT / 4)
+      const h = PLACEHOLDER_HEIGHT
       const y = (TIMELINE_HEIGHT - h) / 2
       canvas.drawRRect(
         Skia.RRectXY(Skia.XYWHRect(x, y, SEGMENT_WIDTH, h), 2, 2),
@@ -242,7 +185,7 @@ function drawTimeline(
         played
       )
     } else if (x >= playheadX) {
-      // Fully unplayed - draw cyan
+      // Fully unplayed - draw primary
       canvas.drawRRect(
         Skia.RRectXY(Skia.XYWHRect(x, y, SEGMENT_WIDTH, height), 2, 2),
         unplayed
@@ -275,7 +218,6 @@ function drawTimeline(
   // Draw placeholder bars on the RIGHT (after timeline end)
   if (visibleEndX > timelineEndX) {
     const placeholderY = (TIMELINE_HEIGHT - PLACEHOLDER_HEIGHT) / 2
-    // Draw from timeline end to visible end
     let x = timelineEndX
     while (x < visibleEndX) {
       canvas.drawRRect(
@@ -290,234 +232,14 @@ function drawTimeline(
 }
 
 // =============================================================================
-// useScrollPhysics - Custom hook for scroll momentum and tap-to-seek animation
+// PlaybackTimeline - Main component
 // =============================================================================
 
-interface UseScrollPhysicsOptions {
-  maxScrollOffset: number
-  containerWidth: number
-  duration: number
-  externalPosition: number
-  onSeek: (position: number) => void
-}
-
-function useScrollPhysics({
-  maxScrollOffset,
-  containerWidth,
-  duration,
-  externalPosition,
-  onSeek,
-}: UseScrollPhysicsOptions) {
-  // Frame counter - incrementing triggers picture rebuild
-  const [frame, setFrame] = useState(0)
-  const [displayPosition, setDisplayPosition] = useState(externalPosition)
-
-  // Physics state (refs to avoid re-renders)
-  const scrollOffsetRef = useRef(0)
-  const velocityRef = useRef(0)
-  const isDraggingRef = useRef(false)
-  const dragStartOffsetRef = useRef(0)
-  const rafIdRef = useRef<number | null>(null)
-
-  // Animation state for tap-to-seek
-  const animationRef = useRef<{
-    startOffset: number
-    targetOffset: number
-    startTime: number
-  } | null>(null)
-
-  // Track if we stopped momentum on this touch (to skip seek on tap end)
-  const stoppedMomentumRef = useRef(false)
-
-  // Ease-out function for smooth animation
-  const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3)
-
-  // Stop any running animation/momentum
-  const stopAnimation = useCallback(() => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current)
-      rafIdRef.current = null
-    }
-    velocityRef.current = 0
-    animationRef.current = null
-  }, [])
-
-  // Animated scroll to target position
-  const animateToPosition = useCallback((targetOffset: number) => {
-    stopAnimation()
-
-    animationRef.current = {
-      startOffset: scrollOffsetRef.current,
-      targetOffset: clamp(targetOffset, 0, maxScrollOffset),
-      startTime: performance.now(),
-    }
-
-    const tick = () => {
-      if (!animationRef.current || isDraggingRef.current) {
-        animationRef.current = null
-        rafIdRef.current = null
-        return
-      }
-
-      const elapsed = performance.now() - animationRef.current.startTime
-      const progress = Math.min(elapsed / SCROLL_TO_DURATION, 1)
-      const easedProgress = easeOutCubic(progress)
-
-      const { startOffset, targetOffset } = animationRef.current
-      scrollOffsetRef.current = startOffset + (targetOffset - startOffset) * easedProgress
-
-      setDisplayPosition(xToTime(scrollOffsetRef.current))
-      setFrame(f => f + 1)
-
-      if (progress < 1) {
-        rafIdRef.current = requestAnimationFrame(tick)
-      } else {
-        animationRef.current = null
-        rafIdRef.current = null
-        onSeek(xToTime(scrollOffsetRef.current))
-      }
-    }
-
-    rafIdRef.current = requestAnimationFrame(tick)
-  }, [maxScrollOffset, onSeek, stopAnimation])
-
-  // RAF loop for momentum physics
-  const startMomentumLoop = useCallback(() => {
-    const tick = () => {
-      if (isDraggingRef.current) {
-        rafIdRef.current = null
-        return
-      }
-
-      if (Math.abs(velocityRef.current) > MIN_VELOCITY) {
-        scrollOffsetRef.current = clamp(
-          scrollOffsetRef.current + velocityRef.current,
-          0,
-          maxScrollOffset
-        )
-        velocityRef.current *= DECELERATION
-
-        setDisplayPosition(xToTime(scrollOffsetRef.current))
-        setFrame(f => f + 1)
-        rafIdRef.current = requestAnimationFrame(tick)
-      } else {
-        velocityRef.current = 0
-        rafIdRef.current = null
-        onSeek(xToTime(scrollOffsetRef.current))
-      }
-    }
-
-    // Cancel existing RAF but preserve velocity (don't call stopAnimation)
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current)
-    }
-    animationRef.current = null
-    rafIdRef.current = requestAnimationFrame(tick)
-  }, [maxScrollOffset, onSeek])
-
-  // Sync to external playback position when idle
-  useEffect(() => {
-    if (!isDraggingRef.current && rafIdRef.current === null) {
-      scrollOffsetRef.current = timeToX(externalPosition)
-      setDisplayPosition(externalPosition)
-      setFrame(f => f + 1)
-    }
-  }, [externalPosition])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current)
-      }
-    }
-  }, [])
-
-  // --- Gesture handlers ---
-
-  const handleTouchDown = useCallback(() => {
-    if (rafIdRef.current !== null || animationRef.current !== null) {
-      stopAnimation()
-      stoppedMomentumRef.current = true
-      onSeek(xToTime(scrollOffsetRef.current))
-    } else {
-      stoppedMomentumRef.current = false
-    }
-  }, [onSeek, stopAnimation])
-
-  const handleTap = useCallback((x: number) => {
-    if (stoppedMomentumRef.current) {
-      stoppedMomentumRef.current = false
-      return
-    }
-
-    const halfWidth = containerWidth / 2
-    const offsetFromCenter = x - halfWidth
-    const tappedTime = xToTime(scrollOffsetRef.current + offsetFromCenter)
-    const clampedTime = clamp(tappedTime, 0, duration)
-
-    animateToPosition(timeToX(clampedTime))
-  }, [containerWidth, duration, animateToPosition])
-
-  const onPanStart = useCallback(() => {
-    isDraggingRef.current = true
-    velocityRef.current = 0
-    dragStartOffsetRef.current = scrollOffsetRef.current
-    stopAnimation()
-  }, [stopAnimation])
-
-  const onPanUpdate = useCallback((translationX: number) => {
-    scrollOffsetRef.current = clamp(
-      dragStartOffsetRef.current - translationX,
-      0,
-      maxScrollOffset
-    )
-    setDisplayPosition(xToTime(scrollOffsetRef.current))
-    setFrame(f => f + 1)
-  }, [maxScrollOffset])
-
-  const onPanEnd = useCallback((velocityX: number) => {
-    isDraggingRef.current = false
-    velocityRef.current = -velocityX * VELOCITY_SCALE
-
-    if (Math.abs(velocityRef.current) > MIN_VELOCITY) {
-      startMomentumLoop()
-    } else {
-      onSeek(xToTime(scrollOffsetRef.current))
-    }
-  }, [startMomentumLoop, onSeek])
-
-  // Build composed gesture
-  const panGesture = Gesture.Pan()
-    .runOnJS(true)
-    .onStart(onPanStart)
-    .onUpdate((event) => onPanUpdate(event.translationX))
-    .onEnd((event) => onPanEnd(event.velocityX))
-
-  const tapGesture = Gesture.Tap()
-    .runOnJS(true)
-    .onBegin(handleTouchDown)
-    .onEnd((event) => handleTap(event.x))
-
-  const gesture = Gesture.Race(panGesture, tapGesture)
-
-  return {
-    scrollOffsetRef,
-    displayPosition,
-    frame,
-    gesture,
-  }
-}
-
-// =============================================================================
-// TimelineBar - Main component
-// =============================================================================
-
-interface TimelineBarProps {
+interface PlaybackTimelineProps {
   showTime?: 'top' | 'bottom' | 'hidden'
 }
 
-export default function TimelineBar({ showTime = 'bottom' }: TimelineBarProps) {
+function PlaybackTimeline({ showTime = 'bottom' }: PlaybackTimelineProps) {
   const { player, seek } = useStore()
   const [containerWidth, setContainerWidth] = useState(0)
 
@@ -530,6 +252,7 @@ export default function TimelineBar({ showTime = 'bottom' }: TimelineBarProps) {
     duration: player.duration,
     externalPosition: player.position,
     onSeek: seek,
+    autoSyncToPosition: true,
   })
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -543,7 +266,7 @@ export default function TimelineBar({ showTime = 'bottom' }: TimelineBarProps) {
     try {
       return createPicture(
         (canvas) => {
-          drawTimeline(
+          drawPlaybackTimeline(
             canvas,
             scrollOffsetRef.current,
             containerWidth,
@@ -601,6 +324,10 @@ export default function TimelineBar({ showTime = 'bottom' }: TimelineBarProps) {
   )
 }
 
+// =============================================================================
+// TimeIndicators - Time display subcomponent
+// =============================================================================
+
 interface TimeIndicatorsProps {
   position: number
   duration: number
@@ -620,6 +347,10 @@ function TimeIndicators({ position, duration, placement }: TimeIndicatorsProps) 
     </View>
   )
 }
+
+// =============================================================================
+// Styles
+// =============================================================================
 
 const styles = StyleSheet.create({
   container: {
@@ -669,3 +400,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 })
+
+// =============================================================================
+// Exports
+// =============================================================================
+
+export { PlaybackTimeline }
+export default PlaybackTimeline // Backward compatible default export

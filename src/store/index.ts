@@ -48,7 +48,7 @@ interface AppState {
   skipForward: () => Promise<void>
   skipBackward: () => Promise<void>
   addClip: (note: string) => Promise<void>
-  updateClip: (id: number, note: string) => void
+  updateClip: (id: number, updates: { note?: string; start?: number; duration?: number }) => void
   updateClipTranscription: (id: number, transcription: string) => void
   deleteClip: (id: number) => void
   jumpToClip: (clipId: number) => Promise<void>
@@ -381,15 +381,15 @@ export const useStore = create<AppState>((set, get) => {
     transcriptionService.queueClip(clip.id)
   }
 
-  function updateClip(id: number, note: string) {
-    dbService.updateClip(id, note)
+  function updateClip(id: number, updates: { note?: string; start?: number; duration?: number }) {
+    dbService.updateClip(id, updates)
 
     set((state) => ({
       clips: {
         ...state.clips,
         [id]: {
           ...state.clips[id],
-          note,
+          ...updates,
           updated_at: Date.now(),
         },
       },

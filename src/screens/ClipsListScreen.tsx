@@ -27,6 +27,7 @@ import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
+import { SelectionTimeline } from '../components/timeline'
 import type { ClipWithFile } from '../services'
 import { formatTime } from '../utils'
 
@@ -78,9 +79,9 @@ export default function ClipsListScreen() {
     }
   }
 
-  const handleSaveClip = ({ note }: ClipWithFile) => {
+  const handleSaveClip = (updates: { note?: string; start?: number; duration?: number }) => {
     if (editingClipId) {
-      updateClip(editingClipId, note)
+      updateClip(editingClipId, updates)
       setEditingClipId(null)
     }
   }
@@ -214,21 +215,37 @@ function ClipList({ clips, onJumpToClip, onOpenMenu }: any) {
 }
 
 
-function EditClipModal({ visible, clip, formNote, onCancel, onSave }: any) {
-  const [form, setForm] = useState({
-    note: clip.note
-  })
+interface EditClipModalProps {
+  visible: boolean
+  clip: ClipWithFile
+  onCancel: () => void
+  onSave: (updates: { note?: string; start?: number; duration?: number }) => void
+}
 
-  const handleNoteChange = (note: string) => {
-    setForm({ ...form, note })
+function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) {
+  const [note, setNote] = useState(clip.note)
+  const [selectionStart, setSelectionStart] = useState(clip.start)
+  const [selectionEnd, setSelectionEnd] = useState(clip.start + clip.duration)
+
+  // Simulated playback position for preview (could be wired to actual playback later)
+  const [position, setPosition] = useState(clip.start)
+
+  const handleSelectionChange = (start: number, end: number) => {
+    setSelectionStart(start)
+    setSelectionEnd(end)
+  }
+
+  const handleSeek = (pos: number) => {
+    setPosition(pos)
   }
 
   const handleSave = () => {
-    onSave({ ...clip, ...form })
-  }
-
-  const handleCancel = () => {
-    onCancel()
+    const newDuration = selectionEnd - selectionStart
+    onSave({
+      note,
+      start: selectionStart,
+      duration: newDuration,
+    })
   }
 
   return (
@@ -236,29 +253,39 @@ function EditClipModal({ visible, clip, formNote, onCancel, onSave }: any) {
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={handleCancel}
+      onRequestClose={onCancel}
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <Header
             title="Edit Clip"
-            subtitle={`at ${formatTime(clip.start)}`}
+            subtitle={`${formatTime(selectionStart)} - ${formatTime(selectionEnd)}`}
             noBorder
+          />
+
+          <SelectionTimeline
+            duration={clip.file_duration}
+            position={position}
+            selectionStart={selectionStart}
+            selectionEnd={selectionEnd}
+            onSelectionChange={handleSelectionChange}
+            onSeek={handleSeek}
+            showTime="hidden"
           />
 
           <TextInput
             style={styles.modalInput}
             placeholder="Add note (optional)"
-            value={form.note}
-            onChangeText={handleNoteChange}
-            autoFocus
+            placeholderTextColor={Color.GRAY}
+            value={note}
+            onChangeText={setNote}
             multiline
           />
 
           <View style={styles.modalButtons}>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalCancelButton]}
-              onPress={handleCancel}
+              onPress={onCancel}
             >
               <Text style={styles.modalButtonText}>Cancel</Text>
             </TouchableOpacity>

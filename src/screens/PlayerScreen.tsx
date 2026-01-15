@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, Alert } from 'react-native'
 
 import { Color } from '../theme'
 import { useStore } from '../store'
-import TimelineBar from '../components/TimelineBar'
+import { PlaybackTimeline } from '../components/timeline'
 import IconButton from '../components/shared/IconButton'
 import ScreenArea from '../components/shared/ScreenArea'
 import EmptyState from '../components/shared/EmptyState'
@@ -65,7 +65,7 @@ function Player({ file, player, onPlayPause, onAddClip }: any) {
         )}
       </View>
 
-      <TimelineBar />
+      <PlaybackTimeline />
 
     <View style={styles.playbackControls}>
       <IconButton

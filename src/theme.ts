@@ -9,6 +9,7 @@ export const Color = {
   PRIMARY: '#00adb5',
   SECONDARY: '#ff6b6b',
   DESTRUCTIVE: '#ff453a',
+  SELECTION: '#ffd166',
 
   // Grayscale (dark theme)
   WHITE: '#222831',
