@@ -191,6 +191,11 @@ function ClipList({ clips, onJumpToClip, onOpenMenu }: any) {
                 </Text>
               )}
             </View>
+            {item.transcription ? (
+              <Text style={styles.clipTranscription} numberOfLines={2}>
+                "{item.transcription}"
+              </Text>
+            ) : null}
             {item.note && <Text style={styles.clipNote}>{item.note}</Text>}
           </View>
 
@@ -308,6 +313,12 @@ const styles = StyleSheet.create({
   clipDuration: {
     fontSize: 14,
     color: Color.GRAY_DARK,
+  },
+  clipTranscription: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: Color.GRAY_DARK,
+    marginTop: 4,
   },
   clipNote: {
     fontSize: 14,
