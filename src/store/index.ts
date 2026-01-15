@@ -65,6 +65,7 @@ interface AppState {
   deleteClip: (id: number) => void
   jumpToClip: (clipId: number) => Promise<void>
   shareClip: (clipId: number) => Promise<void>
+  syncPlaybackState: () => Promise<void>
 
   // Dev tools
   __DEV_resetApp: () => Promise<void>
@@ -158,6 +159,7 @@ export const useStore = create<AppState>((set, get) => {
     updateClipTranscription,
     jumpToClip,
     shareClip,
+    syncPlaybackState,
     __DEV_resetApp
   }
 
@@ -435,6 +437,22 @@ export const useStore = create<AppState>((set, get) => {
       console.error('Error skipping backward:', error)
       throw error
     }
+  }
+
+  async function syncPlaybackState() {
+    const status = await audioService.getStatus()
+    if (!status) return
+
+    set((state) => ({
+      player: {
+        ...state.player,
+        status: (state.player.status === 'loading' || state.player.status === 'adding')
+          ? state.player.status
+          : status.status,
+        position: status.position,
+        duration: status.duration || state.player.duration,
+      },
+    }))
   }
 
   async function addClip(note: string) {

@@ -1,4 +1,6 @@
+import { useCallback } from 'react'
 import { View, Text, StyleSheet, Alert } from 'react-native'
+import { useFocusEffect } from 'expo-router'
 
 import { Color } from '../theme'
 import { useStore } from '../store'
@@ -10,7 +12,14 @@ import EmptyState from '../components/shared/EmptyState'
 const PLAYER_OWNER_ID = 'player-screen'
 
 export default function PlayerScreen() {
-  const { player, addClip, play, pause } = useStore()
+  const { player, addClip, play, pause, syncPlaybackState } = useStore()
+
+  // Sync position immediately when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      syncPlaybackState()
+    }, [syncPlaybackState])
+  )
 
   const handleAddClip = async () => {
     try {
