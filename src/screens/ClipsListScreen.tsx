@@ -135,7 +135,7 @@ export default function ClipsListScreen() {
 
   return (
     <ScreenArea>
-      <Header title="All Clips" subtitle="From all audio files" />
+      <Header title="Clips" />
 
       {clipsArray.length > 0
         ? <ClipList
