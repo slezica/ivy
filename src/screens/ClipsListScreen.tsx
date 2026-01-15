@@ -23,6 +23,7 @@ import { useStore } from '../store'
 import { Color } from '../theme'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
+import EmptyState from '../components/shared/EmptyState'
 import { ClipWithFile } from '../services/DatabaseService'
 
 
@@ -109,7 +110,7 @@ export default function ClipsListScreen() {
           onShareClip={handleShareClip}
           sharingClipId={sharingClipId} />
 
-        : <EmptyList />
+        : <EmptyState title="No clips yet" subtitle="Add clips from the player screen" />
       }
 
       { editingClipId != null && 
@@ -179,18 +180,6 @@ function ClipList({ clips, onJumpToClip, onEditClip, onDeleteClip, onShareClip, 
         </View>
       )}
     />
-  )
-}
-
-
-function EmptyList() {
-  return (
-    <View style={styles.emptyState}>
-      <Text style={styles.emptyText}>No clips yet</Text>
-      <Text style={styles.emptySubtext}>
-        Add clips from the player screen
-      </Text>
-    </View>
   )
 }
 
@@ -351,21 +340,6 @@ const styles = StyleSheet.create({
     color: Color.WHITE,
     fontSize: 14,
     fontWeight: '600',
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Color.GRAY_DARK,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: Color.GRAY_MEDIUM,
   },
   modalOverlay: {
     flex: 1,

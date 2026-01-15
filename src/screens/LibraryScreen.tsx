@@ -11,6 +11,7 @@ import { useStore } from '../store'
 import IconButton from '../components/shared/IconButton'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
+import EmptyState from '../components/shared/EmptyState'
 import { Color } from '../theme'
 import type { AudioFile } from '../services/DatabaseService'
 
@@ -164,12 +165,10 @@ export default function LibraryScreen() {
           )}
         />
       ) : (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No files yet</Text>
-          <Text style={styles.emptySubtext}>
-            Open an audio file to add it to your library
-          </Text>
-        </View>
+        <EmptyState
+          title="No files yet"
+          subtitle="Open an audio file to add it to your library"
+        />
       )}
 
       {/* FAB */}
@@ -256,21 +255,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Color.GRAY_MEDIUM,
     marginTop: 2,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Color.GRAY_DARK,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: Color.GRAY_MEDIUM,
   },
   fabContainer: {
     position: 'absolute',
