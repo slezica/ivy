@@ -14,7 +14,9 @@ import {
   Alert,
   Modal,
   TextInput,
+  Pressable,
 } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useState } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { useCallback } from 'react'
@@ -30,9 +32,9 @@ import { formatTime } from '../utils'
 
 export default function ClipsListScreen() {
   const router = useRouter()
-  const { clips, player, jumpToClip, deleteClip, updateClip, shareClip, fetchAllClips } = useStore()
+  const { clips, jumpToClip, deleteClip, updateClip, shareClip, fetchAllClips } = useStore()
   const [editingClipId, setEditingClipId] = useState<number | null>(null)
-  const [sharingClipId, setSharingClipId] = useState<number | null>(null)
+  const [menuClipId, setMenuClipId] = useState<number | null>(null)
 
   // Fetch all clips when screen is focused
   useFocusEffect(
@@ -87,14 +89,37 @@ export default function ClipsListScreen() {
   }
 
   const handleShareClip = async (clipId: number) => {
-    setSharingClipId(clipId)
     try {
       await shareClip(clipId)
     } catch (error) {
       console.error('Error sharing clip:', error)
       Alert.alert('Error', 'Failed to share clip')
-    } finally {
-      setSharingClipId(null)
+    }
+  }
+
+  const handleOpenMenu = (clipId: number) => {
+    setMenuClipId(clipId)
+  }
+
+  const handleCloseMenu = () => {
+    setMenuClipId(null)
+  }
+
+  const handleMenuAction = (action: 'edit' | 'share' | 'delete') => {
+    if (menuClipId === null) return
+    const clipId = menuClipId
+    handleCloseMenu()
+
+    switch (action) {
+      case 'edit':
+        handleEditClip(clipId)
+        break
+      case 'share':
+        handleShareClip(clipId)
+        break
+      case 'delete':
+        handleDeleteClip(clipId)
+        break
     }
   }
 
@@ -104,17 +129,14 @@ export default function ClipsListScreen() {
 
       {clipsArray.length > 0
         ? <ClipList
-          clips={clipsArray}
-          onJumpToClip={handleJumpToClip}
-          onEditClip={handleEditClip}
-          onDeleteClip={handleDeleteClip}
-          onShareClip={handleShareClip}
-          sharingClipId={sharingClipId} />
-
+            clips={clipsArray}
+            onJumpToClip={handleJumpToClip}
+            onOpenMenu={handleOpenMenu}
+          />
         : <EmptyState title="No clips yet" subtitle="Add clips from the player screen" />
       }
 
-      { editingClipId != null && 
+      {editingClipId != null &&
         <EditClipModal
           clip={clips[editingClipId]}
           visible={true}
@@ -122,24 +144,31 @@ export default function ClipsListScreen() {
           onSave={handleSaveClip}
         />
       }
+
+      <ClipMenu
+        visible={menuClipId !== null}
+        clip={menuClipId !== null ? clips[menuClipId] : null}
+        onClose={handleCloseMenu}
+        onAction={handleMenuAction}
+      />
     </ScreenArea>
   )
 }
 
 
-function ClipList({ clips, onJumpToClip, onEditClip, onDeleteClip, onShareClip, sharingClipId }: any) {
+function ClipList({ clips, onJumpToClip, onOpenMenu }: any) {
   return (
     <FlatList
       data={clips}
       keyExtractor={(item) => item.id.toString()}
       contentContainerStyle={styles.listContent}
       renderItem={({ item }) => (
-        <View style={styles.clipItem}>
-          <TouchableOpacity
-            style={styles.clipContent}
-            onPress={() => onJumpToClip(item.id)}
-          >
-            {/* File label */}
+        <TouchableOpacity
+          style={styles.clipItem}
+          onPress={() => onJumpToClip(item.id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.clipContent}>
             <Text style={styles.clipFileLabel} numberOfLines={1}>
               {item.file_title || item.file_name}
             </Text>
@@ -153,34 +182,64 @@ function ClipList({ clips, onJumpToClip, onEditClip, onDeleteClip, onShareClip, 
               )}
             </View>
             {item.note && <Text style={styles.clipNote}>{item.note}</Text>}
-          </TouchableOpacity>
-
-          <View style={styles.clipActions}>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => onEditClip(item.id)}
-            >
-              <Text style={styles.editButtonText}>{item.note ? "Edit note" : "Add note"}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.shareButton}
-              onPress={() => onShareClip(item.id)}
-              disabled={sharingClipId === item.id}
-            >
-              <Text style={styles.shareButtonText}>
-                {sharingClipId === item.id ? 'Sharing...' : 'Share'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => onDeleteClip(item.id)}
-            >
-              <Text style={styles.deleteButtonText}>Delete</Text>
-            </TouchableOpacity>
           </View>
-        </View>
+
+          <Pressable
+            style={styles.menuButton}
+            onPress={() => onOpenMenu(item.id)}
+            hitSlop={8}
+          >
+            <Ionicons name="ellipsis-vertical" size={20} color={Color.GRAY_DARK} />
+          </Pressable>
+        </TouchableOpacity>
       )}
     />
+  )
+}
+
+
+function ClipMenu({ visible, clip, onClose, onAction }: any) {
+  if (!clip) return null
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.menuOverlay} onPress={onClose}>
+        <View style={styles.menuContent}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => onAction('edit')}
+          >
+            <Ionicons name="pencil" size={20} color={Color.BLACK} />
+            <Text style={styles.menuItemText}>
+              {clip.note ? 'Edit note' : 'Add note'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => onAction('share')}
+          >
+            <Ionicons name="share-outline" size={20} color={Color.BLACK} />
+            <Text style={styles.menuItemText}>Share</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.menuItem, styles.menuItemDestructive]}
+            onPress={() => onAction('delete')}
+          >
+            <Ionicons name="trash-outline" size={20} color={Color.DESTRUCTIVE} />
+            <Text style={[styles.menuItemText, styles.menuItemTextDestructive]}>
+              Delete
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Pressable>
+    </Modal>
   )
 }
 
@@ -254,12 +313,13 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   clipItem: {
+    flexDirection: 'row',
     backgroundColor: Color.GRAY_LIGHTER,
     borderRadius: 8,
-    marginBottom: 24,
-    overflow: 'hidden',
+    marginBottom: 16,
   },
   clipContent: {
+    flex: 1,
     padding: 16,
   },
   clipFileLabel: {
@@ -290,44 +350,40 @@ const styles = StyleSheet.create({
     color: Color.GRAY_DARKER,
     marginTop: 4,
   },
-  clipActions: {
+  menuButton: {
+    padding: 16,
+    justifyContent: 'flex-start',
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: Color.MODAL_OVERLAY,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  menuContent: {
+    backgroundColor: Color.WHITE,
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 300,
+    overflow: 'hidden',
+  },
+  menuItem: {
     flexDirection: 'row',
-  },
-  editButton: {
-    backgroundColor: Color.PRIMARY,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
     alignItems: 'center',
-    flex: 1,
+    padding: 16,
+    gap: 12,
   },
-  editButtonText: {
-    color: Color.WHITE,
-    fontSize: 14,
-    fontWeight: '600',
+  menuItemText: {
+    fontSize: 16,
+    color: Color.BLACK,
   },
-  shareButton: {
-    backgroundColor: Color.PRIMARY,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    flex: 1,
+  menuItemDestructive: {
+    borderTopWidth: 1,
+    borderTopColor: Color.GRAY_LIGHT,
   },
-  shareButtonText: {
-    color: Color.WHITE,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  deleteButton: {
-    backgroundColor: Color.DESTRUCTIVE,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    flex: 1,
-  },
-  deleteButtonText: {
-    color: Color.WHITE,
-    fontSize: 14,
-    fontWeight: '600',
+  menuItemTextDestructive: {
+    color: Color.DESTRUCTIVE,
   },
   modalOverlay: {
     flex: 1,
