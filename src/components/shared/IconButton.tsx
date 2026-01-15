@@ -6,6 +6,8 @@ import { Color } from '../../theme'
 interface IconButtonProps {
   iconName: keyof typeof Ionicons.glyphMap
   onPress: () => void
+  onLongPress?: () => void
+  testID?: string
   size?: number
   backgroundColor?: string
   iconColor?: string
@@ -16,6 +18,8 @@ interface IconButtonProps {
 export default function IconButton({
   iconName,
   onPress,
+  onLongPress,
+  testID,
   size = 64,
   backgroundColor = Color.PRIMARY,
   iconColor = Color.BLACK,
@@ -37,6 +41,8 @@ export default function IconButton({
         style,
       ]}
       onPress={onPress}
+      onLongPress={onLongPress}
+      testID={testID}
     >
       <Ionicons name={iconName} size={iconSize} color={iconColor} />
     </TouchableOpacity>
