@@ -4,11 +4,12 @@
  * Shows a list of previously opened audio files for quick access.
  */
 
-import { View, Text, StyleSheet, SafeAreaView, Alert, FlatList, TouchableOpacity, Image, StatusBar, Platform } from 'react-native'
+import { View, Text, StyleSheet, Alert, FlatList, TouchableOpacity, Image } from 'react-native'
 import { useCallback } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { useStore } from '../store'
 import IconButton from '../components/shared/IconButton'
+import ScreenArea from '../components/shared/ScreenArea'
 import { Color } from '../theme'
 import type { AudioFile } from '../services/DatabaseService'
 
@@ -98,7 +99,7 @@ export default function LibraryScreen() {
   const filesArray = Object.values(files)
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ScreenArea>
       <View style={styles.header}>
         <Text style={styles.title}>Library</Text>
         <TouchableOpacity
@@ -180,22 +181,17 @@ export default function LibraryScreen() {
           style={styles.fab}
         />
       </View>
-    </SafeAreaView>
+    </ScreenArea>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Color.WHITE,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    marginTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     borderBottomWidth: 1,
     borderBottomColor: Color.GRAY_LIGHT,
   },

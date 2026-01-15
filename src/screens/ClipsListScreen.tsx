@@ -11,12 +11,9 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   Modal,
   TextInput,
-  Platform,
-  StatusBar,
 } from 'react-native'
 import { useState } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
@@ -24,6 +21,7 @@ import { useCallback } from 'react'
 
 import { useStore } from '../store'
 import { Color } from '../theme'
+import ScreenArea from '../components/shared/ScreenArea'
 import { ClipWithFile } from '../services/DatabaseService'
 
 
@@ -98,7 +96,7 @@ export default function ClipsListScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ScreenArea>
       <View style={styles.header}>
         <Text style={styles.title}>All Clips</Text>
         <Text style={styles.subtitle}>From all audio files</Text>
@@ -124,7 +122,7 @@ export default function ClipsListScreen() {
           onSave={handleSaveClip}
         />
       }
-    </SafeAreaView>
+    </ScreenArea>
   )
 }
 
@@ -277,16 +275,11 @@ function formatTime(milliseconds: number): string {
 
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Color.WHITE,
-  },
   header: {
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: Color.GRAY_LIGHT,
-    marginTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   title: {
     fontSize: 24,

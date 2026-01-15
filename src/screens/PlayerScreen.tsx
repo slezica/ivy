@@ -3,7 +3,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
 } from 'react-native'
 
@@ -11,6 +10,7 @@ import { Color } from '../theme'
 import { useStore } from '../store'
 import TimelineBar from '../components/TimelineBar'
 import IconButton from '../components/shared/IconButton'
+import ScreenArea from '../components/shared/ScreenArea'
 
 
 export default function PlayerScreen() {
@@ -48,7 +48,7 @@ export default function PlayerScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ScreenArea>
       <View style={styles.content}>
         {player.file
           ? <Player
@@ -60,7 +60,7 @@ export default function PlayerScreen() {
           : <FileLoader onLoadFile={handleLoadFile} />
         }
       </View>
-    </SafeAreaView>
+    </ScreenArea>
   )
 }
 
@@ -109,10 +109,6 @@ function FileLoader({ onLoadFile }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Color.WHITE,
-  },
   content: {
     flex: 1,
   },
