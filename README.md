@@ -156,8 +156,52 @@ eas build --platform all
 
 ## Development Tools
 
-**Reset App Data:**
-Tap the 🔧 Reset button in the Library screen to clear all data (files, clips, sessions).
+The Library screen header has dev-only buttons:
+
+- **Sample**: Load bundled test audio file (useful for quick testing)
+- **Reset**: Clear all data (files, clips, sessions)
+
+## E2E Testing
+
+End-to-end tests use [Maestro](https://maestro.mobile.dev/) for UI automation.
+
+### Prerequisites
+
+1. Install Maestro CLI:
+   ```bash
+   curl -Ls "https://get.maestro.mobile.dev" | bash
+   ```
+
+2. Start an Android emulator with the dev client installed
+
+3. Start the Expo dev server:
+   ```bash
+   npx expo start --dev-client
+   ```
+
+### Running Tests
+
+```bash
+# Run all tests
+maestro test maestro/
+
+# Run a specific test
+maestro test maestro/smoke-test.yaml
+maestro test maestro/load-and-play.yaml
+```
+
+### Available Test Flows
+
+| Flow | Description |
+|------|-------------|
+| `smoke-test.yaml` | Verifies empty states on Library and Clips screens |
+| `load-and-play.yaml` | Tests file loading, playback controls, and library persistence |
+
+### Writing Tests
+
+Tests are YAML files in the `maestro/` directory. A bundled test audio file (`assets/test/test-audio.mp3`) is available for tests — the "Sample" button loads it without needing the file picker.
+
+See [Maestro documentation](https://maestro.mobile.dev/getting-started/writing-your-first-flow) for flow syntax.
 
 ## License
 

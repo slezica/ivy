@@ -90,6 +90,13 @@ Polling callback preserves transitional states (`adding`/`loading`) - only updat
 /android/app/src/main/java/.../audioslicer/
   ├── AudioSlicerPackage.kt       # Native module package registration
   └── AudioSlicerModule.kt        # Kotlin native module for audio slicing
+
+/maestro                          # Maestro e2e test flows
+  ├── smoke-test.yaml             # Empty state verification
+  └── load-and-play.yaml          # File loading and playback test
+
+/assets/test
+  └── test-audio.mp3              # Bundled test file for automated tests
 ```
 
 ## Database Schema
@@ -161,14 +168,41 @@ __DEV_resetApp                  // Dev tool (clears all data)
 
 ## Development Tools
 
-### Reset App Data
-Library screen has **🔧 Reset** button (top-right):
+Library screen header has dev-only buttons (top-right):
+
+### Sample Button
+- Loads bundled test audio file (`assets/test/test-audio.mp3`)
+- Useful for quick testing without file picker
+- Navigates to Player tab after loading
+
+### Reset Button
 - Clears database (files, clips, sessions)
 - Unloads audio player
 - Resets store state
 - **Note:** Doesn't delete copied files from storage (orphaned)
+- Access via: `store.__DEV_resetApp()`
 
-Access via: `store.__DEV_resetApp()`
+## E2E Testing (Maestro)
+
+Automated UI tests using [Maestro](https://maestro.mobile.dev/). Tests are in `maestro/` directory.
+
+**Run all tests:**
+```bash
+maestro test maestro/
+```
+
+**Run single test:**
+```bash
+maestro test maestro/smoke-test.yaml
+```
+
+**Available flows:**
+- `smoke-test.yaml` - Verifies empty states (Library, Clips screens)
+- `load-and-play.yaml` - File loading, playback controls, library persistence
+
+**Ad-hoc testing:** During development, you can write quick one-off Maestro flows to test specific interactions without committing them. Useful for debugging or verifying fixes.
+
+**Test file:** A bundled test audio file (`assets/test/test-audio.mp3`) is available. The Sample button loads it without needing the file picker.
 
 ## Common Issues & Solutions
 
@@ -282,7 +316,9 @@ On-device automatic clip transcription using Whisper:
 ## Quick Reference
 
 **Start dev server:** `npm start`
-**Reset app data:** Tap 🔧 button in Library tab
+**Run e2e tests:** `maestro test maestro/`
+**Load test file:** Tap "Sample" button in Library
+**Reset app data:** Tap "Reset" button in Library
 **Time format:** Always milliseconds internally
 **File playback:** Always use `audioFile.uri` (local path)
 **Status transitions:** `adding → loading → paused ⇄ playing`
