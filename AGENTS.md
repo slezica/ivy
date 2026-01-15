@@ -54,15 +54,20 @@ Polling callback preserves transitional states (`adding`/`loading`) - only updat
 /src
   ├── store/index.ts              # Zustand store - all state
   ├── services/
-  │   ├── AudioService.ts         # expo-audio wrapper (10s timeout)
-  │   ├── AudioSlicerModule.ts    # Native module interface for audio slicing
-  │   ├── AudioExtractionService.ts # Extract clip audio for transcription
-  │   ├── ClipSharingService.ts   # Share clips via native share sheet
-  │   ├── DatabaseService.ts      # SQLite operations
-  │   ├── FileService.ts          # Document picker
-  │   ├── FileStorageService.ts   # File copying (NEW API)
-  │   ├── TranscriptionService.ts # Background transcription queue
-  │   └── WhisperService.ts       # On-device speech-to-text (whisper.rn)
+  │   ├── index.ts                # Barrel exports
+  │   ├── audio/
+  │   │   ├── player.ts           # expo-audio wrapper (10s timeout)
+  │   │   ├── metadata.ts         # ID3/metadata extraction
+  │   │   └── slicer.ts           # Audio segment extraction (native module)
+  │   ├── storage/
+  │   │   ├── database.ts         # SQLite operations
+  │   │   ├── files.ts            # File copying to app storage
+  │   │   └── picker.ts           # Document picker
+  │   ├── transcription/
+  │   │   ├── queue.ts            # Background transcription queue
+  │   │   └── whisper.ts          # On-device speech-to-text (whisper.rn)
+  │   └── system/
+  │       └── sharing.ts          # Share clips via native share sheet
   ├── screens/
   │   ├── LibraryScreen.tsx       # History + 🔧 Reset button
   │   ├── PlayerScreen.tsx        # Main player
@@ -150,10 +155,10 @@ __DEV_resetApp                  // Dev tool (clears all data)
    - Need to track by local URI instead, so we always copy on first load
 3. **Copy to app storage:**
    - `status = 'adding'` → Modal shows "Adding to library..."
-   - `FileStorageService.copyToAppStorage()` → returns local `file://` URI
+   - `fileStorageService.copyToAppStorage()` → returns local `file://` URI
 4. **Load audio:**
    - `status = 'loading'` → Modal shows "Loading audio file..."
-   - `AudioService.load(localUri)` → 10s timeout if fails
+   - `audioService.load(localUri)` → 10s timeout if fails
 5. **Save to database:**
    - `uri = localUri` (local file:// path)
    - `original_uri = pickedFile.uri` (external content: URI)
@@ -255,7 +260,7 @@ maestro test maestro/smoke-test.yaml
 
 **AudioSlicer** (`android/.../audioslicer/`):
 - Kotlin native module for extracting audio segments
-- Used by `ClipSharingService` (sharing clips) and `AudioExtractionService` (transcription)
+- Wrapped by `services/audio/slicer.ts` (used for sharing and transcription)
 - Interface: `sliceAudio(inputPath, startMs, endMs, outputPath) → Promise<string>`
 
 ## Transcription Architecture
@@ -263,16 +268,15 @@ maestro test maestro/smoke-test.yaml
 On-device automatic clip transcription using Whisper:
 
 **Flow:**
-1. Clip created → `TranscriptionService.queueClip(clipId)`
-2. `AudioExtractionService` extracts first 5s of clip audio to temp file
-3. `WhisperService` transcribes the audio (using whisper.rn with ggml-tiny model)
+1. Clip created → `transcriptionService.queueClip(clipId)`
+2. `audioSlicerService` extracts first 5s of clip audio to temp file
+3. `whisperService` transcribes the audio (using whisper.rn with ggml-tiny model)
 4. Result stored in `clips.transcription` column
 5. Callback notifies store to update UI
 
-**Services:**
-- `WhisperService` - Downloads/caches Whisper model, runs transcription
-- `AudioExtractionService` - Uses native AudioSlicer to extract clip segments
-- `TranscriptionService` - Background queue that processes clips sequentially
+**Services** (`services/transcription/`):
+- `whisper.ts` - Downloads/caches Whisper model, runs transcription
+- `queue.ts` - Background queue that processes clips sequentially (uses slicer)
 
 **Key Points:**
 - Model auto-downloads on first use (~75MB ggml-tiny.bin from HuggingFace)
@@ -285,12 +289,12 @@ On-device automatic clip transcription using Whisper:
 
 ### New Playback Control
 1. Add action to `src/store/index.ts`
-2. Call `AudioService` method
+2. Call `AudioPlayerService` method (from `services/audio/player.ts`)
 3. Update `player.status` if needed
 4. Add UI in `PlayerScreen.tsx`
 
 ### New Database Field
-1. Update interface in `DatabaseService.ts`
+1. Update interface in `services/storage/database.ts`
 2. Add migration with `ALTER TABLE` (wrapped in try/catch)
 3. Update `upsertFile` or relevant methods
 4. Update TypeScript types
@@ -304,6 +308,8 @@ On-device automatic clip transcription using Whisper:
 
 ✅ **Do:**
 - Use services for all I/O (never call expo-audio, SQLite, FileSystem directly from components)
+- Import services from `services/` barrel export (e.g., `import { databaseService } from '../services'`)
+- Use dependency injection for services that depend on other services
 - Store all times in milliseconds internally
 - Set `status = 'adding'` when copying files, `'loading'` when loading player
 - Use local file:// URIs for all audio playback
@@ -327,6 +333,8 @@ On-device automatic clip transcription using Whisper:
 
 ## Recent Architecture
 
+- Services reorganized into domain modules (`audio/`, `storage/`, `transcription/`, `system/`)
+- Dependency injection for services with cross-module dependencies
 - File storage with app-owned copies (v2 - current)
 - Player status enum extended with `'adding'` state
 - LoadingModal with dual messages
