@@ -5,11 +5,12 @@ interface HeaderProps {
   title: string
   subtitle?: string
   children?: React.ReactNode
+  noBorder?: boolean
 }
 
-export default function Header({ title, subtitle, children }: HeaderProps) {
+export default function Header({ title, subtitle, children, noBorder }: HeaderProps) {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, noBorder && styles.noBorder]}>
       <View style={styles.titleArea}>
         <Text style={styles.title}>{title}</Text>
         {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
@@ -41,5 +42,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Color.GRAY_DARK,
     marginTop: 4,
+  },
+  noBorder: {
+    borderBottomWidth: 0,
   },
 })

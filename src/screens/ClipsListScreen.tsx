@@ -270,11 +270,11 @@ function EditClipModal({ visible, clip, formNote, onCancel, onSave }: any) {
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Edit Clip</Text>
-
-          <Text style={styles.modalSubtitle}>
-            at {formatTime(clip.start)}
-          </Text>
+          <Header
+            title="Edit Clip"
+            subtitle={`at ${formatTime(clip.start)}`}
+            noBorder
+          />
 
           <TextInput
             style={styles.modalInput}
@@ -395,21 +395,12 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: Color.WHITE,
     borderRadius: 12,
-    padding: 20,
     width: '100%',
     maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: Color.GRAY_DARK,
-    marginBottom: 16,
+    overflow: 'hidden',
   },
   modalInput: {
+    marginHorizontal: 20,
     borderWidth: 1,
     borderColor: Color.GRAY_BORDER,
     borderRadius: 8,
@@ -423,6 +414,8 @@ const styles = StyleSheet.create({
   modalButtons: {
     flexDirection: 'row',
     gap: 12,
+    padding: 20,
+    paddingTop: 0,
   },
   modalButton: {
     flex: 1,
