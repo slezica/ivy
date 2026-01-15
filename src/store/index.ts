@@ -5,6 +5,7 @@ import { FileService, PickedFile } from '../services/FileService'
 import { FileStorageService } from '../services/FileStorageService'
 import { ClipSharingService } from '../services/ClipSharingService'
 import { MetadataService } from '../services/MetadataService'
+import { transcriptionService } from '../services/TranscriptionService'
 import type { Clip, ClipWithFile, AudioFile } from '../services/DatabaseService'
 
 
@@ -41,6 +42,7 @@ interface AppState {
   skipBackward: () => Promise<void>
   addClip: (note: string) => Promise<void>
   updateClip: (id: number, note: string) => void
+  updateClipTranscription: (id: number, transcription: string) => void
   deleteClip: (id: number) => void
   jumpToClip: (clipId: number) => Promise<void>
   shareClip: (clipId: number) => Promise<void>
@@ -84,6 +86,23 @@ export const useStore = create<AppState>((set, get) => {
     },
   })
 
+  // Set up transcription callback to update store when transcription completes
+  transcriptionService.setCallback((clipId, transcription) => {
+    const { clips } = get()
+    if (clips[clipId]) {
+      set((state) => ({
+        clips: {
+          ...state.clips,
+          [clipId]: {
+            ...state.clips[clipId],
+            transcription,
+            updated_at: Date.now(),
+          },
+        },
+      }))
+    }
+  })
+
   return {
     // Initial state
     player: {
@@ -109,6 +128,7 @@ export const useStore = create<AppState>((set, get) => {
     addClip,
     deleteClip,
     updateClip,
+    updateClipTranscription,
     jumpToClip,
     shareClip,
     __DEV_resetApp
@@ -329,7 +349,7 @@ export const useStore = create<AppState>((set, get) => {
     const remainingDuration = player.duration - player.position
     const clipDuration = Math.min(DEFAULT_CLIP_DURATION_MS, remainingDuration)
 
-    dbService.createClip(
+    const clip = dbService.createClip(
       player.file.uri,
       player.position,
       clipDuration,
@@ -338,6 +358,9 @@ export const useStore = create<AppState>((set, get) => {
 
     // Reload all clips to include file information
     fetchAllClips()
+
+    // Queue for transcription
+    transcriptionService.queueClip(clip.id)
   }
 
   function updateClip(id: number, note: string) {
@@ -353,6 +376,24 @@ export const useStore = create<AppState>((set, get) => {
         },
       },
     }))
+  }
+
+  function updateClipTranscription(id: number, transcription: string) {
+    set((state) => {
+      const clip = state.clips[id]
+      if (!clip) return state
+
+      return {
+        clips: {
+          ...state.clips,
+          [id]: {
+            ...clip,
+            transcription,
+            updated_at: Date.now(),
+          },
+        },
+      }
+    })
   }
 
   function deleteClip(id: number) {
