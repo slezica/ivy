@@ -53,6 +53,7 @@ export default function PlayerScreen() {
 function Player({ file, player, onPlayPause, onAddClip }: any) {
   return (
     <View style={styles.playerContainer}>
+      <View style={styles.spacerTop} />
       <View style={styles.fileInfo}>
         <Text style={styles.title} numberOfLines={2}>
           {file.title || file.name}
@@ -81,6 +82,7 @@ function Player({ file, player, onPlayPause, onAddClip }: any) {
         size={48}
       />
     </View>
+    <View style={styles.spacerBottom} />
   </View>
   )
 }
@@ -91,8 +93,13 @@ const styles = StyleSheet.create({
   },
   playerContainer: {
     flex: 1,
-    justifyContent: 'center',
     gap: 24,
+  },
+  spacerTop: {
+    flex: 8,
+  },
+  spacerBottom: {
+    flex: 2,
   },
   fileInfo: {
     paddingHorizontal: 32,

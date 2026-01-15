@@ -1,4 +1,4 @@
-package com.anonymous.audioplayerreactnative
+package com.salezica.ivy
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

@@ -1,4 +1,4 @@
-package com.anonymous.audioplayerreactnative
+package com.salezica.ivy
 
 import android.media.MediaExtractor
 import android.media.MediaFormat

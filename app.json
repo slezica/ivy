@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "audio-player-react-native",
-    "slug": "audio-player-react-native",
+    "name": "Ivy",
+    "slug": "ivy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "audioplayerreactnative",
+    "scheme": "ivy",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -16,7 +16,7 @@
           "audio"
         ]
       },
-      "bundleIdentifier": "com.anonymous.audioplayerreactnative"
+      "bundleIdentifier": "com.salezica.ivy"
     },
     "android": {
       "adaptiveIcon": {
@@ -33,7 +33,7 @@
         "FOREGROUND_SERVICE",
         "WAKE_LOCK"
       ],
-      "package": "com.anonymous.audioplayerreactnative"
+      "package": "com.salezica.ivy"
     },
     "web": {
       "output": "static",

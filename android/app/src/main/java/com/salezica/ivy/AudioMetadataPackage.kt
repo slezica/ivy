@@ -1,4 +1,4 @@
-package com.anonymous.audioplayerreactnative
+package com.salezica.ivy
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule
