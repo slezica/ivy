@@ -26,6 +26,7 @@ import { Color } from '../theme'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
+import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import { ClipWithFile } from '../services/DatabaseService'
 import { formatTime } from '../utils'
 
@@ -105,7 +106,7 @@ export default function ClipsListScreen() {
     setMenuClipId(null)
   }
 
-  const handleMenuAction = (action: 'edit' | 'share' | 'delete') => {
+  const handleMenuAction = (action: string) => {
     if (menuClipId === null) return
     const clipId = menuClipId
     handleCloseMenu()
@@ -121,6 +122,15 @@ export default function ClipsListScreen() {
         handleDeleteClip(clipId)
         break
     }
+  }
+
+  const getMenuItems = (): ActionMenuItem[] => {
+    const clip = menuClipId !== null ? clips[menuClipId] : null
+    return [
+      { key: 'edit', label: clip?.note ? 'Edit note' : 'Add note', icon: 'pencil' },
+      { key: 'share', label: 'Share', icon: 'share-outline' },
+      { key: 'delete', label: 'Delete', icon: 'trash-outline', destructive: true },
+    ]
   }
 
   return (
@@ -145,11 +155,11 @@ export default function ClipsListScreen() {
         />
       }
 
-      <ClipMenu
+      <ActionMenu
         visible={menuClipId !== null}
-        clip={menuClipId !== null ? clips[menuClipId] : null}
         onClose={handleCloseMenu}
         onAction={handleMenuAction}
+        items={getMenuItems()}
       />
     </ScreenArea>
   )
@@ -194,52 +204,6 @@ function ClipList({ clips, onJumpToClip, onOpenMenu }: any) {
         </TouchableOpacity>
       )}
     />
-  )
-}
-
-
-function ClipMenu({ visible, clip, onClose, onAction }: any) {
-  if (!clip) return null
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <Pressable style={styles.menuOverlay} onPress={onClose}>
-        <View style={styles.menuContent}>
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => onAction('edit')}
-          >
-            <Ionicons name="pencil" size={20} color={Color.BLACK} />
-            <Text style={styles.menuItemText}>
-              {clip.note ? 'Edit note' : 'Add note'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => onAction('share')}
-          >
-            <Ionicons name="share-outline" size={20} color={Color.BLACK} />
-            <Text style={styles.menuItemText}>Share</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuItem, styles.menuItemDestructive]}
-            onPress={() => onAction('delete')}
-          >
-            <Ionicons name="trash-outline" size={20} color={Color.DESTRUCTIVE} />
-            <Text style={[styles.menuItemText, styles.menuItemTextDestructive]}>
-              Delete
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </Pressable>
-    </Modal>
   )
 }
 
@@ -353,37 +317,6 @@ const styles = StyleSheet.create({
   menuButton: {
     padding: 16,
     justifyContent: 'flex-start',
-  },
-  menuOverlay: {
-    flex: 1,
-    backgroundColor: Color.MODAL_OVERLAY,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  menuContent: {
-    backgroundColor: Color.WHITE,
-    borderRadius: 12,
-    width: '100%',
-    maxWidth: 300,
-    overflow: 'hidden',
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 12,
-  },
-  menuItemText: {
-    fontSize: 16,
-    color: Color.BLACK,
-  },
-  menuItemDestructive: {
-    borderTopWidth: 1,
-    borderTopColor: Color.GRAY_LIGHT,
-  },
-  menuItemTextDestructive: {
-    color: Color.DESTRUCTIVE,
   },
   modalOverlay: {
     flex: 1,
