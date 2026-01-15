@@ -207,10 +207,17 @@ export class DatabaseService {
   }
 
   updateFilePosition(uri: string, position: number): void {
-    this.db.runSync(
-      'UPDATE files SET position = ? WHERE uri = ?',
-      [position, uri]
-    )
+    try {
+      this.db.runSync(
+        'UPDATE files SET position = ? WHERE uri = ?',
+        [position, uri]
+      )
+    } catch (error) {
+      // Silently ignore database errors during position updates
+      // This can happen during app transitions/resets when DB is being closed
+      // Position will be updated on next successful write
+      console.debug('Failed to update file position (non-critical):', error)
+    }
   }
 
   // Development: Clear all data
