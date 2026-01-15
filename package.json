@@ -11,13 +11,11 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
-    "@missingcore/audio-metadata": "^1.3.0",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "@shopify/react-native-skia": "^2.2.12",
     "expo": "~54.0.30",
-    "expo-audio": "^1.1.1",
     "expo-constants": "~18.0.12",
     "expo-dev-client": "~6.0.20",
     "expo-document-picker": "^14.0.8",
