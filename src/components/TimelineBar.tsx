@@ -154,7 +154,7 @@ function computeSegmentHeight(index: number): number {
   height += Math.sin(index * 2) * (variation * 0.3)
   height += ((index * 7919) % 100) / 100 * 8
 
-  return Math.max(12, Math.min(TIMELINE_HEIGHT, height))
+  return Math.max(12, Math.min(TIMELINE_HEIGHT, height * 0.8))
 }
 
 function getSegmentHeight(index: number): number {
