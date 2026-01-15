@@ -73,12 +73,19 @@ Polling callback preserves transitional states (`adding`/`loading`) - only updat
   │   ├── PlayerScreen.tsx        # Main player
   │   └── ClipsListScreen.tsx     # Clip management
   ├── components/
-  │   ├── TimelineBar.tsx         # GPU timeline (most complex)
+  │   ├── timeline/               # GPU-accelerated timeline components
+  │   │   ├── constants.ts        # Dimensions, physics, animation timing
+  │   │   ├── utils.ts            # timeToX, xToTime, segment heights
+  │   │   ├── useScrollPhysics.ts # Scroll/momentum hook (shared)
+  │   │   ├── PlaybackTimeline.tsx # Center-fixed playhead, played/unplayed bars
+  │   │   ├── SelectionTimeline.tsx # Movable playhead, draggable selection handles
+  │   │   └── index.ts            # Barrel exports
   │   ├── LoadingModal.tsx        # "Adding..." / "Loading..." modal
   │   └── shared/
   │       ├── ScreenArea.tsx      # Safe area wrapper (react-native-safe-area-context)
   │       ├── Header.tsx          # Reusable header (title, subtitle, noBorder)
   │       ├── EmptyState.tsx      # Empty state display
+  │       ├── IconButton.tsx      # Circular icon button
   │       └── ActionMenu.tsx      # Overflow menu (3-dot)
   ├── utils/
   │   └── index.ts                # Shared utilities (formatTime, formatDate)
@@ -143,8 +150,9 @@ clips: Record<number, Clip>
 files: Record<string, AudioFile>  // Keyed by local URI
 
 // Key actions
-loadFile, play, pause, seek, skipForward/Backward
-addClip, updateClip, deleteClip, jumpToClip, shareClip
+loadFile, loadFileWithUri, play, pause, seek, skipForward/Backward
+addClip, deleteClip, jumpToClip, shareClip
+updateClip(id, { note?, start?, duration? })  // Edit clip bounds and note
 updateClipTranscription         // Called by TranscriptionService
 __DEV_resetApp                  // Dev tool (clears all data)
 ```
@@ -232,16 +240,44 @@ maestro test maestro/smoke-test.yaml
 - This is expected - files must be re-copied from local storage
 - Database `original_uri` is for reference only, don't use for playback
 
-## TimelineBar Details
+## Timeline Components
 
-**Most complex component** - GPU-accelerated Skia Canvas:
+GPU-accelerated Skia Canvas components in `src/components/timeline/`:
+
+### Shared Architecture
 - Renders only visible segments (not all 14,400+ bars for long files)
-- Center-fixed playhead, content scrolls
-- Ref-based physics (not useState) for 60fps
+- Ref-based physics (not useState) for 60fps animation
 - Picture API: records drawing commands once, replays efficiently
 - Gestures: drag to scrub, flick with momentum, tap to seek
+- `showTime` prop: `'top'` | `'bottom'` | `'hidden'`
+
+### PlaybackTimeline
+Used in PlayerScreen for audio scrubbing:
+- Center-fixed playhead, content scrolls behind it
+- Bars colored gray (played) or primary (unplayed)
 - Split-colored bars when playhead crosses segment boundary
-- `showTime` prop: `'top'` | `'bottom'` | `'hidden'` - controls time display position
+- Auto-syncs scroll position to playback position when idle
+
+### SelectionTimeline
+Used in clip edit modal for adjusting clip bounds:
+- Movable playhead (follows playback position, can scroll out of view)
+- Two selection handles with draggable yellow circles at bottom
+- Bars colored primary (default) or yellow (within selection)
+- Handles enforce 1 second minimum gap, cannot cross each other
+- No auto-sync to playback position (user scrolls freely)
+
+```typescript
+// SelectionTimeline props
+interface SelectionTimelineProps {
+  duration: number                    // Total file duration
+  position: number                    // Current playback position
+  selectionStart: number              // Selection start time (ms)
+  selectionEnd: number                // Selection end time (ms)
+  onSelectionChange: (start, end) => void
+  onSeek?: (position) => void
+  showTime?: 'top' | 'bottom' | 'hidden'
+}
+```
 
 ## Shared Components
 
@@ -350,7 +386,10 @@ On-device automatic clip transcription using Whisper:
 - Dev reset button in Library
 - New FileSystem API (Paths, Directory, File)
 - Database schema: `uri` (local) + `original_uri` (external)
-- Shared components extracted (ScreenArea, Header, EmptyState, ActionMenu)
+- Shared components extracted (ScreenArea, Header, EmptyState, ActionMenu, IconButton)
 - Automatic clip transcription via on-device Whisper
 - Native AudioSlicer module for audio segment extraction
 - Clip sharing via native share sheet
+- Timeline components refactored into `timeline/` module with shared code
+- SelectionTimeline for clip length editing with draggable handles
+- Clip edit modal with playback preview
