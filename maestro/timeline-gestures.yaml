@@ -1,0 +1,63 @@
+appId: com.anonymous.audioplayerreactnative
+---
+# Flow 3: Timeline Gestures
+# Tests tap-to-seek, drag-to-scrub, and swipe with momentum
+# Note: Can't assert exact positions (Skia canvas), using screenshots for visual verification
+
+- launchApp
+
+# Reset and load test file
+- tapOn: "Reset"
+- tapOn: "Reset"  # Confirm
+- tapOn: "Sample"
+- extendedWaitUntil:
+    visible: "The Selfish Gene"
+    timeout: 15000
+
+# Pause playback so timeline stays still
+- tapOn:
+    id: "play-pause-button"
+- takeScreenshot: screenshots/timeline-01-initial
+
+# Tap on right side of timeline to seek forward
+# Timeline is at roughly 42% from top of screen
+- tapOn:
+    point: "80%,42%"
+- waitForAnimationToEnd
+- takeScreenshot: screenshots/timeline-02-after-tap-seek
+
+# Swipe left on timeline to scrub backward
+- swipe:
+    start: "30%,42%"
+    end: "70%,42%"
+    duration: 500
+- waitForAnimationToEnd
+- takeScreenshot: screenshots/timeline-03-after-swipe-left
+
+# Swipe right to scrub forward
+- swipe:
+    start: "70%,42%"
+    end: "30%,42%"
+    duration: 500
+- waitForAnimationToEnd
+- takeScreenshot: screenshots/timeline-04-after-swipe-right
+
+# Quick flick for momentum scrolling
+- swipe:
+    start: "60%,42%"
+    end: "20%,42%"
+    duration: 150
+- waitForAnimationToEnd
+- takeScreenshot: screenshots/timeline-05-after-flick
+
+# Tap to stop any remaining momentum and seek to specific point
+- tapOn:
+    point: "50%,42%"
+- waitForAnimationToEnd
+- takeScreenshot: screenshots/timeline-06-final
+
+# Verify we can still play after all the gestures
+- tapOn:
+    id: "play-pause-button"
+- waitForAnimationToEnd
+- takeScreenshot: screenshots/timeline-07-playing
