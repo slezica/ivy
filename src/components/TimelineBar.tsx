@@ -116,6 +116,7 @@ import {
 } from 'react-native-gesture-handler'
 import { useStore } from '../store'
 import { Color } from '../theme'
+import { formatTime } from '../utils'
 
 // Layout constants
 const SEGMENT_WIDTH = 4
@@ -171,18 +172,6 @@ function xToTime(x: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
-}
-
-function formatTime(milliseconds: number): string {
-  const totalSeconds = Math.floor(milliseconds / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-  }
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
 // Imperative drawing function - draws visible segments to canvas

@@ -14,18 +14,7 @@ import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import { Color } from '../theme'
 import type { AudioFile } from '../services/DatabaseService'
-
-function formatTime(milliseconds: number): string {
-  const totalSeconds = Math.floor(milliseconds / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-  }
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
-}
+import { formatTime } from '../utils'
 
 function formatDate(timestamp: number): string {
   const date = new Date(timestamp)

@@ -25,6 +25,7 @@ import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import { ClipWithFile } from '../services/DatabaseService'
+import { formatTime } from '../utils'
 
 
 export default function ClipsListScreen() {
@@ -245,19 +246,6 @@ function EditClipModal({ visible, clip, formNote, onCancel, onSave }: any) {
       </View>
     </Modal>
   )
-}
-
-
-function formatTime(milliseconds: number): string {
-  const totalSeconds = Math.floor(milliseconds / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-  }
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
 
