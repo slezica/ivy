@@ -239,6 +239,13 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
   const [localPosition, setLocalPosition] = useState(clip.start)
   const position = isFileLoaded ? player.position : localPosition
 
+  // Seek to selection start when modal opens (if file is loaded)
+  useEffect(() => {
+    if (isFileLoaded) {
+      seek(clip.start)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSelectionChange = (start: number, end: number) => {
     setSelectionStart(start)
     setSelectionEnd(end)

@@ -2,21 +2,23 @@
  * SelectionTimeline
  *
  * A timeline component for selecting a range of audio (clip editing).
+ * Behaves like PlaybackTimeline (center-fixed playhead, scroll = seek) with
+ * the addition of draggable selection handles.
  *
  *
- * ## Differences from PlaybackTimeline
+ * ## Behavior (same as PlaybackTimeline)
  *
- * - **Playhead**: Moves with playback position, not fixed at center. Can scroll
- *   out of view as user pans the timeline.
+ * - **Playhead**: Fixed at center, content scrolls behind it
+ * - **Scrolling**: Pan/flick to scroll, which also seeks playback position
+ * - **Tap**: Seeks to tapped position
+ * - **Auto-sync**: View syncs to playback position when idle
  *
- * - **Bar coloring**: No played/unplayed distinction. Bars are either primary
- *   (default) or yellow (within selection range).
  *
- * - **Selection handles**: Two vertical lines with draggable circles at the
- *   bottom mark the selection start and end.
+ * ## Selection-specific features
  *
- * - **Gestures**: Pan on timeline scrolls. Pan on handle circles drags that
- *   selection edge. Tap seeks to that position.
+ * - **Bar coloring**: Bars are primary (default) or yellow (within selection)
+ * - **Selection handles**: Two vertical lines with draggable yellow circles
+ * - **Handle drag**: Adjusts selection bounds (independent of scrolling)
  *
  *
  * ## Selection Constraints
@@ -25,7 +27,7 @@
  * - Handles cannot cross each other
  */
 
-import { useCallback, useMemo, useState, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { View, Text, StyleSheet, LayoutChangeEvent } from 'react-native'
 import {
   Canvas,
@@ -73,14 +75,13 @@ const HANDLE_LINE_WIDTH = 2
 
 /**
  * Draw the selection timeline with selected (yellow) and unselected (primary) bars.
- * Also draws the playhead and selection handles.
+ * Also draws selection handles. Playhead is rendered as a React View overlay.
  */
 function drawSelectionTimeline(
   canvas: SkCanvas,
   scrollOffset: number,
   containerWidth: number,
   totalSegments: number,
-  playheadTime: number,
   selectionStart: number,
   selectionEnd: number
 ) {
@@ -94,9 +95,6 @@ function drawSelectionTimeline(
   const placeholderPaint = Skia.Paint()
   placeholderPaint.setColor(Skia.Color(Color.GRAY))
 
-  const playheadPaint = Skia.Paint()
-  playheadPaint.setColor(Skia.Color(Color.BLACK))
-
   const handlePaint = Skia.Paint()
   handlePaint.setColor(Skia.Color(Color.SELECTION))
 
@@ -105,7 +103,6 @@ function drawSelectionTimeline(
   // Convert times to x coordinates
   const selectionStartX = timeToX(selectionStart)
   const selectionEndX = timeToX(selectionEnd)
-  const playheadX = timeToX(playheadTime)
 
   // Calculate visible range in timeline coordinates
   const visibleStartX = scrollOffset - halfWidth
@@ -190,14 +187,6 @@ function drawSelectionTimeline(
     canvas.drawCircle(selectionEndX, circleY, HANDLE_CIRCLE_RADIUS, handlePaint)
   }
 
-  // Draw playhead (if visible)
-  if (playheadX >= visibleStartX && playheadX <= visibleEndX) {
-    canvas.drawRect(
-      Skia.XYWHRect(playheadX - PLAYHEAD_WIDTH / 2, 0, PLAYHEAD_WIDTH, TIMELINE_HEIGHT),
-      playheadPaint
-    )
-  }
-
   canvas.restore()
 }
 
@@ -209,6 +198,7 @@ interface UseSelectionPhysicsOptions {
   maxScrollOffset: number
   containerWidth: number
   duration: number
+  externalPosition: number
   selectionStart: number
   selectionEnd: number
   onSelectionChange: (start: number, end: number) => void
@@ -219,6 +209,7 @@ function useSelectionPhysics({
   maxScrollOffset,
   containerWidth,
   duration,
+  externalPosition,
   selectionStart,
   selectionEnd,
   onSelectionChange,
@@ -227,7 +218,7 @@ function useSelectionPhysics({
   const [frame, setFrame] = useState(0)
 
   // Scroll state (refs for 60fps)
-  const scrollOffsetRef = useRef(timeToX((selectionStart + selectionEnd) / 2)) // Start centered on selection
+  const scrollOffsetRef = useRef(timeToX(externalPosition))
   const velocityRef = useRef(0)
   const isDraggingRef = useRef(false)
   const dragStartOffsetRef = useRef(0)
@@ -316,6 +307,8 @@ function useSelectionPhysics({
       } else {
         velocityRef.current = 0
         rafIdRef.current = null
+        // Seek to final position when momentum stops
+        onSeek?.(xToTime(scrollOffsetRef.current))
       }
     }
 
@@ -324,16 +317,24 @@ function useSelectionPhysics({
     }
     animationRef.current = null
     rafIdRef.current = requestAnimationFrame(tick)
-  }, [maxScrollOffset])
+  }, [maxScrollOffset, onSeek])
 
-  // Cleanup
-  useCallback(() => {
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current)
       }
     }
   }, [])
+
+  // Sync to external position when idle (not dragging, not in momentum, not dragging handle)
+  useEffect(() => {
+    if (!isDraggingRef.current && rafIdRef.current === null && !draggingHandleRef.current) {
+      scrollOffsetRef.current = timeToX(externalPosition)
+      setFrame(f => f + 1)
+    }
+  }, [externalPosition])
 
   // Check if touch is on a handle circle
   const getHandleAtPosition = useCallback((touchX: number, touchY: number): 'start' | 'end' | null => {
@@ -461,8 +462,11 @@ function useSelectionPhysics({
 
     if (Math.abs(velocityRef.current) > MIN_VELOCITY) {
       startMomentumLoop()
+    } else {
+      // No momentum - seek to current position
+      onSeek?.(xToTime(scrollOffsetRef.current))
     }
-  }, [startMomentumLoop])
+  }, [startMomentumLoop, onSeek])
 
   // Build gesture
   const panGesture = Gesture.Pan()
@@ -517,6 +521,7 @@ export function SelectionTimeline({
     maxScrollOffset,
     containerWidth,
     duration,
+    externalPosition: position,
     selectionStart,
     selectionEnd,
     onSelectionChange,
@@ -539,7 +544,6 @@ export function SelectionTimeline({
             scrollOffsetRef.current,
             containerWidth,
             totalSegments,
-            position,
             selectionStart,
             selectionEnd
           )
@@ -550,9 +554,14 @@ export function SelectionTimeline({
       console.error('Error creating picture:', error)
       return null
     }
-  }, [frame, containerWidth, totalSegments, position, selectionStart, selectionEnd])
+  }, [frame, containerWidth, totalSegments, selectionStart, selectionEnd])
 
   const canvasHeight = TIMELINE_HEIGHT + HANDLE_CIRCLE_RADIUS * 2
+
+  // Calculate playhead top offset based on time indicator position
+  const playheadTop = showTime === 'top'
+    ? TIME_INDICATORS_HEIGHT + TIME_INDICATORS_MARGIN
+    : 0
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -563,6 +572,11 @@ export function SelectionTimeline({
           placement="top"
         />
       )}
+
+      {/* Playhead indicator at center */}
+      <View style={[styles.playheadContainer, { top: playheadTop, height: canvasHeight }]} pointerEvents="none">
+        <View style={styles.playhead} />
+      </View>
 
       <GestureDetector gesture={gesture}>
         <View style={[styles.timelineContainer, { height: canvasHeight }]} onLayout={handleLayout}>
@@ -621,6 +635,23 @@ const styles = StyleSheet.create({
   timelineContainer: {
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  playheadContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  playhead: {
+    width: PLAYHEAD_WIDTH,
+    height: '100%',
+    backgroundColor: Color.BLACK,
+    shadowColor: Color.BLACK,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
   },
   timeContainer: {
     flexDirection: 'row',
