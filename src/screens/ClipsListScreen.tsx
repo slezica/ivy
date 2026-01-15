@@ -233,20 +233,35 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
   // Local position state - this is what the user is scrubbing to
   const [localPosition, setLocalPosition] = useState(clip.start)
 
+  // Track whether THIS component initiated playback
+  const [isActiveController, setIsActiveController] = useState(false)
+
   // Check if the clip's file is currently loaded in the global player
   const isFileLoaded = player.file?.uri === clip.file_uri
-  const isPlaying = isFileLoaded && player.status === 'playing'
-  const isLoading = player.status === 'loading' || player.status === 'adding'
 
-  // Display position: use global when our file is playing, otherwise local
-  const displayPosition = isFileLoaded ? player.position : localPosition
+  // We're "playing" only if we initiated it AND global player confirms
+  const isPlaying = isActiveController && isFileLoaded && player.status === 'playing'
+  const isLoading = isActiveController && (player.status === 'loading' || player.status === 'adding')
 
-  // Sync local position from player when our file is loaded and playing
+  // Reset active controller status when someone else takes over
   useEffect(() => {
-    if (isFileLoaded && player.status === 'playing') {
+    if (isActiveController) {
+      // Lost control if: different file loaded, or playback stopped externally
+      if (!isFileLoaded || player.status === 'paused') {
+        setIsActiveController(false)
+      }
+    }
+  }, [isActiveController, isFileLoaded, player.status])
+
+  // Display position: use global when we're actively playing, otherwise local
+  const displayPosition = isPlaying ? player.position : localPosition
+
+  // Sync local position from player only when we're actively playing
+  useEffect(() => {
+    if (isPlaying) {
       setLocalPosition(player.position)
     }
-  }, [isFileLoaded, player.position, player.status])
+  }, [isPlaying, player.position])
 
   const handleSelectionChange = (start: number, end: number) => {
     setSelectionStart(start)
@@ -267,12 +282,15 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
     try {
       if (isPlaying) {
         await pause()
+        setIsActiveController(false)
       } else {
-        // Play with our file and local position
+        // Take control and play with our file and local position
+        setIsActiveController(true)
         await play({ fileUri: clip.file_uri, position: localPosition })
       }
     } catch (error) {
       console.error('Error toggling playback:', error)
+      setIsActiveController(false)
     }
   }
 
