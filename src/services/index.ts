@@ -3,7 +3,9 @@
 // =============================================================================
 
 export { AudioPlayerService, audioPlayerService } from './audio'
-export type { PlayerStatus, PlaybackStatus, AudioPlayerListeners } from './audio'
+export type { PlayerStatus, PlaybackStatus, AudioPlayerListeners, TrackMetadata } from './audio'
+
+export { playbackService } from './audio'
 
 export { AudioMetadataService, audioMetadataService } from './audio'
 export type { AudioMetadata } from './audio'

@@ -244,7 +244,11 @@ export const useStore = create<AppState>((set, get) => {
       }))
 
       console.log('Loading audio from:', localUri)
-      const duration = await audioService.load(localUri)
+      const duration = await audioService.load(localUri, {
+        title: isNewFile ? metadata.title : audioFile?.title,
+        artist: isNewFile ? metadata.artist : audioFile?.artist,
+        artwork: isNewFile ? metadata.artwork : audioFile?.artwork,
+      })
       console.log('Audio loaded successfully, duration:', duration)
 
       // Step 4: Save/update file record in database
@@ -332,7 +336,11 @@ export const useStore = create<AppState>((set, get) => {
             },
           }))
 
-          const duration = await audioService.load(context.fileUri)
+          const duration = await audioService.load(context.fileUri, {
+            title: fileRecord.title,
+            artist: fileRecord.artist,
+            artwork: fileRecord.artwork,
+          })
 
           set((state) => ({
             player: {

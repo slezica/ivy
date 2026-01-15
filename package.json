@@ -1,6 +1,6 @@
 {
   "name": "ivy",
-  "main": "expo-router/entry",
+  "main": "./index.js",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
@@ -43,6 +43,7 @@
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
+    "react-native-track-player": "^5.0.0-alpha0",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.5.1",
     "whisper.rn": "^0.5.4",
