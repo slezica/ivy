@@ -136,31 +136,6 @@ eas build --platform ios
 eas build --platform all
 ```
 
-## Project Structure
-
-```
-/src
-  ├── store/index.ts              # Zustand store - all state
-  ├── services/
-  │   ├── AudioService.ts         # expo-audio wrapper
-  │   ├── DatabaseService.ts      # SQLite operations
-  │   ├── FileService.ts          # Document picker
-  │   └── FileStorageService.ts   # File copying with chunked streaming
-  ├── screens/
-  │   ├── LibraryScreen.tsx       # File history
-  │   ├── PlayerScreen.tsx        # Main player
-  │   └── ClipsListScreen.tsx     # Clip management
-  └── components/
-      └── TimelineBar.tsx         # GPU-accelerated timeline
-
-/app                              # Expo Router (file-based routing)
-  ├── _layout.tsx
-  └── (tabs)/
-      ├── index.tsx               # Library tab
-      ├── player.tsx              # Player tab
-      └── clips.tsx               # Clips tab
-```
-
 ## Tech Stack
 
 - React Native 0.81.5
