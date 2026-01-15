@@ -514,10 +514,10 @@ function useScrollPhysics({
 // =============================================================================
 
 interface TimelineBarProps {
-  timePosition?: 'top' | 'bottom'
+  showTime?: 'top' | 'bottom' | 'hidden'
 }
 
-export default function TimelineBar({ timePosition = 'bottom' }: TimelineBarProps) {
+export default function TimelineBar({ showTime = 'bottom' }: TimelineBarProps) {
   const { player, seek } = useStore()
   const [containerWidth, setContainerWidth] = useState(0)
 
@@ -558,14 +558,14 @@ export default function TimelineBar({ timePosition = 'bottom' }: TimelineBarProp
     }
   }, [frame, containerWidth, totalSegments])
 
-  // Calculate playhead top offset based on time position
-  const playheadTop = timePosition === 'top'
+  // Calculate playhead top offset based on time indicator position
+  const playheadTop = showTime === 'top'
     ? 10 + TIME_INDICATORS_HEIGHT + TIME_INDICATORS_MARGIN
     : 10
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      {timePosition === 'top' && (
+      {showTime === 'top' && (
         <TimeIndicators
           position={displayPosition}
           duration={player.duration}
@@ -590,7 +590,7 @@ export default function TimelineBar({ timePosition = 'bottom' }: TimelineBarProp
         </View>
       </GestureDetector>
 
-      {timePosition === 'bottom' && (
+      {showTime === 'bottom' && (
         <TimeIndicators
           position={displayPosition}
           duration={player.duration}
