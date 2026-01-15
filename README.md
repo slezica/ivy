@@ -196,6 +196,7 @@ maestro test maestro/load-and-play.yaml
 |------|-------------|
 | `smoke-test.yaml` | Verifies empty states on Library and Clips screens |
 | `load-and-play.yaml` | Tests file loading, playback controls, and library persistence |
+| `clip-crud.yaml` | Tests clip creation, note editing, and deletion |
 
 ### Writing Tests
 
