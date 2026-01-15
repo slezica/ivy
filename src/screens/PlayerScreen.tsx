@@ -53,12 +53,18 @@ export default function PlayerScreen() {
 function Player({ file, player, onPlayPause, onAddClip }: any) {
   return (
     <View style={styles.playerContainer}>
+      <View style={styles.fileInfo}>
+        <Text style={styles.title} numberOfLines={2}>
+          {file.title || file.name}
+        </Text>
+        {file.artist && (
+          <Text style={styles.artist} numberOfLines={1}>
+            {file.artist}
+          </Text>
+        )}
+      </View>
 
-    <View style={styles.fileInfo}>
-      <Text style={styles.fileName}>{file.name}</Text>
-    </View>
-
-    <TimelineBar />
+      <TimelineBar />
 
     <View style={styles.playbackControls}>
       <IconButton
@@ -89,15 +95,22 @@ const styles = StyleSheet.create({
     paddingTop: 96
   },
   fileInfo: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: 32,
     alignItems: 'center',
+    gap: 8,
   },
-  fileName: {
-    fontSize: 18,
-    fontWeight: '600',
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
     textAlign: 'center',
     color: Color.BLACK,
+    lineHeight: 28,
+  },
+  artist: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+    color: Color.GRAY_DARK,
   },
   playbackControls: {
     alignItems: 'center',
