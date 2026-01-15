@@ -23,7 +23,7 @@ Single Zustand store (`src/store/index.ts`) is the source of truth. Services are
 - `loading`: Loading audio player
 - `paused`/`playing`: Playback states
 
-Polling callback preserves transitional states (`adding`/`loading`) - only updates to `paused`/`playing` when not in transition.
+Event callback preserves transitional states (`adding`/`loading`) - only updates to `paused`/`playing` when not in transition.
 
 ### 5. **Playback Ownership** 🔥 IMPORTANT
 Multiple UI components can control playback (PlayerScreen, clip editor). To prevent conflicts:
@@ -56,12 +56,13 @@ This enables future "now playing" widgets to show context about who initiated pl
 - On-device speech-to-text via Whisper (privacy-first)
 - Metadata extraction (title, artist, artwork) via native Android module
 - Clip sharing via native share sheet
+- **System media controls** (notification, lock screen, Bluetooth)
 
 **Tech Stack:**
 - React Native 0.81.5 + Expo 54
 - Zustand for state
 - Expo Router (file-based tabs)
-- expo-audio (100ms polling)
+- react-native-track-player v5 (playback + system media controls)
 - SQLite (expo-sqlite)
 - Skia for timeline rendering
 - New FileSystem API: `Paths.document`, `Directory`, `File` classes
@@ -77,7 +78,8 @@ This enables future "now playing" widgets to show context about who initiated pl
   ├── services/
   │   ├── index.ts                # Barrel exports
   │   ├── audio/
-  │   │   ├── player.ts           # expo-audio wrapper (10s timeout)
+  │   │   ├── player.ts           # react-native-track-player wrapper
+  │   │   ├── integration.ts      # Playback service for remote control events
   │   │   ├── metadata.ts         # ID3/metadata extraction
   │   │   └── slicer.ts           # Audio segment extraction (native module)
   │   ├── storage/
@@ -114,11 +116,14 @@ This enables future "now playing" widgets to show context about who initiated pl
 
 /app
   ├── _layout.tsx                 # Root (includes LoadingModal)
+  ├── +not-found.tsx              # Catch-all redirect (handles notification clicks)
   └── (tabs)/
       ├── _layout.tsx             # Tab nav (disables tabs when no file)
       ├── index.tsx               # Library
       ├── player.tsx              # Player
       └── clips.tsx               # Clips
+
+/index.js                         # App entry point (registers RNTP playback service)
 
 /android/app/src/main/java/com/salezica/ivy/
   ├── AudioSlicerModule.kt        # Native module for audio slicing
@@ -380,7 +385,7 @@ On-device automatic clip transcription using Whisper:
 ## Key Patterns to Follow
 
 ✅ **Do:**
-- Use services for all I/O (never call expo-audio, SQLite, FileSystem directly from components)
+- Use services for all I/O (never call react-native-track-player, SQLite, FileSystem directly from components)
 - Import services from `services/` barrel export (e.g., `import { databaseService } from '../services'`)
 - Use dependency injection for services that depend on other services
 - Store all times in milliseconds internally
@@ -409,6 +414,28 @@ On-device automatic clip transcription using Whisper:
 **File playback:** Always use `audioFile.uri` (local path)
 **Status transitions:** `adding → loading → paused ⇄ playing`
 
+## System Media Controls
+
+Uses `react-native-track-player` v5 for system-level playback integration:
+
+**Features:**
+- Media notification with play/pause, skip forward/backward
+- Lock screen controls
+- Bluetooth/headphone controls
+- Background playback
+
+**Architecture:**
+- `player.ts` - Wraps TrackPlayer API, converts ms↔seconds, manages setup
+- `integration.ts` - Playback service handling remote events (runs in separate context)
+- `index.js` - Registers playback service at app startup (must be before expo-router)
+
+**Key Points:**
+- TrackPlayer uses **seconds**, app uses **milliseconds** - player.ts handles conversion
+- `load()` accepts metadata (title, artist, artwork) for notification display
+- Events are handled via `TrackPlayer.addEventListener()` in integration.ts
+- Notification click opens `ivy://notification.click` → caught by `+not-found.tsx` → redirects to player
+- v5 API: use `TrackPlayer.getProgress()` instead of separate `getPosition()`/`getDuration()`
+
 ## Recent Architecture
 
 - Services reorganized into domain modules (`audio/`, `storage/`, `transcription/`, `system/`)
@@ -429,3 +456,4 @@ On-device automatic clip transcription using Whisper:
 - **Context-based playback API**: `play()` and `seek()` require file/position context
 - **Playback ownership**: `player.ownerId` tracks which component controls playback
 - Components maintain local position state, sync from global only when they own playback
+- **react-native-track-player v5**: Replaced expo-audio for system media controls

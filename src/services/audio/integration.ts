@@ -39,4 +39,16 @@ export async function playbackService() {
     const newPosition = Math.max(progress.position - event.interval, 0)
     TrackPlayer.seekTo(newPosition)
   })
+
+  TrackPlayer.addEventListener(Event.RemoteNext, async () => {
+    const progress = await TrackPlayer.getProgress()
+    const newPosition = Math.min(progress.position + 25, progress.duration)
+    TrackPlayer.seekTo(newPosition)
+  })
+
+  TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
+    const progress = await TrackPlayer.getProgress()
+    const newPosition = Math.max(progress.position - 30, 0)
+    TrackPlayer.seekTo(newPosition)
+  })
 }
