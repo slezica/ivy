@@ -1,4 +1,4 @@
-# Audio Player React Native
+# Ivy
 
 A React Native Expo app for podcast and audiobook playback with library management, clips/bookmarks with notes, and GPU-accelerated timeline UI. Files are automatically copied to app-owned storage to prevent content URI invalidation issues, with resume position tracking and auto-play support.
 
@@ -61,7 +61,7 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 npx expo run:ios
 
 # Or build for device
-# Open ios/audioplayerreactnative.xcworkspace in Xcode
+# Open ios/Ivy.xcworkspace in Xcode
 # Select your device and build
 ```
 
@@ -109,7 +109,7 @@ cd android && ./gradlew bundleRelease
 
 ```bash
 # Open Xcode
-open ios/audioplayerreactnative.xcworkspace
+open ios/Ivy.xcworkspace
 
 # Product > Archive
 # Follow Xcode's distribution workflow

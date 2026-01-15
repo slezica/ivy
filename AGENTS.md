@@ -1,4 +1,4 @@
-# AI Agent Reference - Audio Player React Native
+# AI Agent Reference - Ivy
 
 **Quick onboarding guide for AI agents.** Read this first when starting a new session.
 
@@ -92,9 +92,11 @@ Polling callback preserves transitional states (`adding`/`loading`) - only updat
       ├── player.tsx              # Player
       └── clips.tsx               # Clips
 
-/android/app/src/main/java/.../audioslicer/
+/android/app/src/main/java/com/salezica/ivy/
+  ├── AudioSlicerModule.kt        # Native module for audio slicing
   ├── AudioSlicerPackage.kt       # Native module package registration
-  └── AudioSlicerModule.kt        # Kotlin native module for audio slicing
+  ├── AudioMetadataModule.kt      # Native module for metadata extraction
+  └── AudioMetadataPackage.kt     # Native module package registration
 
 /maestro                          # Maestro e2e test flows
   ├── smoke-test.yaml             # Empty state verification
@@ -258,10 +260,17 @@ maestro test maestro/smoke-test.yaml
 
 ## Native Modules
 
-**AudioSlicer** (`android/.../audioslicer/`):
+Located in `android/app/src/main/java/com/salezica/ivy/`:
+
+**AudioSlicer**:
 - Kotlin native module for extracting audio segments
 - Wrapped by `services/audio/slicer.ts` (used for sharing and transcription)
 - Interface: `sliceAudio(inputPath, startMs, endMs, outputPath) → Promise<string>`
+
+**AudioMetadata**:
+- Kotlin native module for extracting ID3 metadata (title, artist, artwork)
+- Wrapped by `services/audio/metadata.ts`
+- Interface: `extractMetadata(filePath) → Promise<{ title, artist, artwork }>`
 
 ## Transcription Architecture
 
