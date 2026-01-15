@@ -17,7 +17,7 @@ import {
   Pressable,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { useCallback } from 'react'
 
@@ -27,6 +27,7 @@ import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
+import IconButton from '../components/shared/IconButton'
 import { SelectionTimeline } from '../components/timeline'
 import type { ClipWithFile } from '../services'
 import { formatTime } from '../utils'
@@ -223,20 +224,50 @@ interface EditClipModalProps {
 }
 
 function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) {
+  const { player, play, pause, seek, loadFileWithUri } = useStore()
+
   const [note, setNote] = useState(clip.note)
   const [selectionStart, setSelectionStart] = useState(clip.start)
   const [selectionEnd, setSelectionEnd] = useState(clip.start + clip.duration)
 
-  // Simulated playback position for preview (could be wired to actual playback later)
-  const [position, setPosition] = useState(clip.start)
+  // Check if the clip's file is currently loaded
+  const isFileLoaded = player.file?.uri === clip.file_uri
+  const isPlaying = isFileLoaded && player.status === 'playing'
+  const isLoading = player.status === 'loading' || player.status === 'adding'
+
+  // Use player position when file is loaded, otherwise use local state
+  const [localPosition, setLocalPosition] = useState(clip.start)
+  const position = isFileLoaded ? player.position : localPosition
 
   const handleSelectionChange = (start: number, end: number) => {
     setSelectionStart(start)
     setSelectionEnd(end)
   }
 
-  const handleSeek = (pos: number) => {
-    setPosition(pos)
+  const handleSeek = async (pos: number) => {
+    if (isFileLoaded) {
+      await seek(pos)
+    } else {
+      setLocalPosition(pos)
+    }
+  }
+
+  const handlePlayPause = async () => {
+    try {
+      if (!isFileLoaded) {
+        // Load the clip's file first
+        await loadFileWithUri(clip.file_uri, clip.file_name)
+        // Seek to selection start after loading
+        await seek(selectionStart)
+        await play()
+      } else if (isPlaying) {
+        await pause()
+      } else {
+        await play()
+      }
+    } catch (error) {
+      console.error('Error toggling playback:', error)
+    }
   }
 
   const handleSave = () => {
@@ -272,6 +303,15 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
             onSeek={handleSeek}
             showTime="hidden"
           />
+
+          <View style={styles.playButtonContainer}>
+            <IconButton
+              iconName={isPlaying ? 'pause' : 'play'}
+              onPress={handlePlayPause}
+              size={48}
+              backgroundColor={isLoading ? Color.GRAY : Color.PRIMARY}
+            />
+          </View>
 
           <TextInput
             style={styles.modalInput}
@@ -370,6 +410,10 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     overflow: 'hidden',
+  },
+  playButtonContainer: {
+    alignItems: 'center',
+    paddingVertical: 12,
   },
   modalInput: {
     marginHorizontal: 20,
