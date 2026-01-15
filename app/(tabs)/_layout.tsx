@@ -14,9 +14,13 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: Color.GRAY_LIGHTER,
           borderTopColor: Color.GRAY_BORDER,
+          paddingVertical: 8,
         },
         tabBarActiveTintColor: Color.BLACK,
         tabBarInactiveTintColor: Color.GRAY,
+        tabBarIconStyle: {
+          marginTop: 4,
+        },
       }}
     >
       <Tabs.Screen
@@ -24,8 +28,8 @@ export default function TabsLayout() {
         options={{
           title: 'Library',
           headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="library" size={size} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="library" size={28} color={color} />
           ),
         }}
       />
@@ -35,8 +39,8 @@ export default function TabsLayout() {
         options={{
           title: 'Player',
           headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="play-circle" size={size} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="play-circle" size={28} color={color} />
           ),
           tabBarButton: (props) => (
             <Pressable
@@ -55,8 +59,8 @@ export default function TabsLayout() {
         options={{
           title: 'Clips',
           headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="list" size={28} color={color} />
           ),
         }}
       />
