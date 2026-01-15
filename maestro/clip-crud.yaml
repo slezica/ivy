@@ -35,8 +35,10 @@ appId: com.anonymous.audioplayerreactnative
 - assertVisible: "Add note"
 - tapOn: "Add note"
 
-# Edit modal should appear
-- assertVisible: "Edit Clip"
+# Edit modal should appear - wait for it
+- extendedWaitUntil:
+    visible: "Edit Clip"
+    timeout: 5000
 - inputText: "This is a test note for the clip"
 - tapOn: "Save"
 
@@ -49,6 +51,11 @@ appId: com.anonymous.audioplayerreactnative
     id: "clip-menu-button"
 - assertVisible: "Edit note"
 - tapOn: "Edit note"
+
+# Wait for edit modal
+- extendedWaitUntil:
+    visible: "Edit Clip"
+    timeout: 5000
 
 # Clear and update the note
 - eraseText: 50

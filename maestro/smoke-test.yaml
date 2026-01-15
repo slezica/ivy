@@ -4,6 +4,10 @@ appId: com.anonymous.audioplayerreactnative
 
 - launchApp
 
+# Reset to ensure clean state
+- tapOn: "Reset"
+- tapOn: "Reset"  # Confirm
+
 # Library screen should show empty state
 - assertVisible: "No files yet"
 - assertVisible: "Open an audio file to add it to your library"
