@@ -203,6 +203,7 @@ function ClipList({ clips, onJumpToClip, onOpenMenu }: any) {
             style={styles.menuButton}
             onPress={() => onOpenMenu(item.id)}
             hitSlop={8}
+            testID="clip-menu-button"
           >
             <Ionicons name="ellipsis-vertical" size={20} color={Color.GRAY_DARK} />
           </Pressable>

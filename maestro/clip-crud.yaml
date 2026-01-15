@@ -1,0 +1,73 @@
+appId: com.anonymous.audioplayerreactnative
+---
+# Flow 2: Clip CRUD - Create, Read, Update, Delete
+# Tests clip creation, editing notes, and deletion
+
+- launchApp
+
+# Reset to clean state
+- tapOn: "Reset"
+- tapOn: "Reset"  # Confirm
+- assertVisible: "No files yet"
+
+# Load test file
+- tapOn: "Sample"
+- extendedWaitUntil:
+    visible: "The Selfish Gene"
+    timeout: 15000
+
+# Create a clip at current position
+- tapOn:
+    id: "add-clip-button"
+
+# Navigate to Clips tab
+- tapOn: "Clips"
+
+# Verify clip appears with file title
+- assertVisible: "THE SELFISH GENE"
+- takeScreenshot: screenshots/clip-01-created
+
+# Open menu on the clip (tap the 3-dot icon)
+- tapOn:
+    id: "clip-menu-button"
+
+# Wait for menu to appear and tap "Add note"
+- assertVisible: "Add note"
+- tapOn: "Add note"
+
+# Edit modal should appear
+- assertVisible: "Edit Clip"
+- inputText: "This is a test note for the clip"
+- tapOn: "Save"
+
+# Verify note appears in the clip card
+- assertVisible: "This is a test note for the clip"
+- takeScreenshot: screenshots/clip-02-with-note
+
+# Open menu again to edit the note
+- tapOn:
+    id: "clip-menu-button"
+- assertVisible: "Edit note"
+- tapOn: "Edit note"
+
+# Clear and update the note
+- eraseText: 50
+- inputText: "Updated note text"
+- tapOn: "Save"
+
+# Verify updated note
+- assertVisible: "Updated note text"
+- takeScreenshot: screenshots/clip-03-note-updated
+
+# Now delete the clip
+- tapOn:
+    id: "clip-menu-button"
+- tapOn: "Delete"
+
+# Confirm deletion in alert
+- assertVisible: "Are you sure you want to delete this clip?"
+- tapOn: "Delete"
+
+# Verify clip is gone - should show empty state
+- assertVisible: "No clips yet"
+- takeScreenshot: screenshots/clip-04-deleted
