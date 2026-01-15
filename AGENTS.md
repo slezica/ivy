@@ -200,6 +200,7 @@ maestro test maestro/smoke-test.yaml
 - `smoke-test.yaml` - Verifies empty states (Library, Clips screens)
 - `load-and-play.yaml` - File loading, playback controls, library persistence
 - `clip-crud.yaml` - Clip creation, note editing, deletion
+- `timeline-gestures.yaml` - Timeline tap-to-seek, swipe-to-scrub, flick momentum
 
 **Ad-hoc testing:** During development, you can write quick one-off Maestro flows to test specific interactions without committing them. Useful for debugging or verifying fixes.
 
