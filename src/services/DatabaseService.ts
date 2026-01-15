@@ -6,6 +6,7 @@ export interface Clip {
   start: number
   duration: number
   note: string
+  transcription: string | null
   created_at: number
   updated_at: number
 }
@@ -108,6 +109,13 @@ export class DatabaseService {
     } catch (error) {
       // Column already exists, ignore error
     }
+
+    // Migration: Add transcription column to clips
+    try {
+      this.db.execSync(`ALTER TABLE clips ADD COLUMN transcription TEXT;`)
+    } catch (error) {
+      // Column already exists, ignore error
+    }
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -146,6 +154,7 @@ export class DatabaseService {
       start,
       duration,
       note,
+      transcription: null,
       created_at: now,
       updated_at: now,
     }
@@ -156,6 +165,20 @@ export class DatabaseService {
     this.db.runSync(
       'UPDATE clips SET note = ?, updated_at = ? WHERE id = ?',
       [note, now, id]
+    )
+  }
+
+  updateClipTranscription(id: number, transcription: string): void {
+    const now = Date.now()
+    this.db.runSync(
+      'UPDATE clips SET transcription = ?, updated_at = ? WHERE id = ?',
+      [transcription, now, id]
+    )
+  }
+
+  getClipsNeedingTranscription(): Clip[] {
+    return this.db.getAllSync<Clip>(
+      'SELECT * FROM clips WHERE transcription IS NULL ORDER BY created_at ASC'
     )
   }
 
