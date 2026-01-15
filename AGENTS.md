@@ -28,10 +28,11 @@ Polling callback preserves transitional states (`adding`/`loading`) - only updat
 ## Project Overview
 
 **React Native Expo app** for podcast/audiobook playback with:
-- Library management (file history with resume positions)
-- Clips/bookmarks with notes
+- Library management (file history with resume positions + metadata)
+- Clips/bookmarks with notes (all clips viewable across all files)
 - GPU-accelerated timeline UI (Skia Canvas)
 - Auto-play, resume from last position
+- Metadata extraction (title, artist, artwork) via native Android module
 
 **Tech Stack:**
 - React Native 0.81.5 + Expo 54
