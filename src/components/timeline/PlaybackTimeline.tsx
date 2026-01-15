@@ -246,12 +246,19 @@ function PlaybackTimeline({ showTime = 'bottom' }: PlaybackTimelineProps) {
   const totalSegments = Math.ceil(player.duration / SEGMENT_DURATION)
   const maxScrollOffset = timeToX(player.duration)
 
+  // Wrap seek to provide file context - only seeks if file is still loaded
+  const handleSeek = useCallback((position: number) => {
+    if (player.file?.uri) {
+      seek({ fileUri: player.file.uri, position })
+    }
+  }, [player.file?.uri, seek])
+
   const { scrollOffsetRef, displayPosition, frame, gesture } = useScrollPhysics({
     maxScrollOffset,
     containerWidth,
     duration: player.duration,
     externalPosition: player.position,
-    onSeek: seek,
+    onSeek: handleSeek,
     autoSyncToPosition: true,
   })
 

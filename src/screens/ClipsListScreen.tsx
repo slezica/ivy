@@ -224,27 +224,29 @@ interface EditClipModalProps {
 }
 
 function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) {
-  const { player, play, pause, seek, loadFileWithUri } = useStore()
+  const { player, play, pause, seek } = useStore()
 
   const [note, setNote] = useState(clip.note)
   const [selectionStart, setSelectionStart] = useState(clip.start)
   const [selectionEnd, setSelectionEnd] = useState(clip.start + clip.duration)
 
-  // Check if the clip's file is currently loaded
+  // Local position state - this is what the user is scrubbing to
+  const [localPosition, setLocalPosition] = useState(clip.start)
+
+  // Check if the clip's file is currently loaded in the global player
   const isFileLoaded = player.file?.uri === clip.file_uri
   const isPlaying = isFileLoaded && player.status === 'playing'
   const isLoading = player.status === 'loading' || player.status === 'adding'
 
-  // Use player position when file is loaded, otherwise use local state
-  const [localPosition, setLocalPosition] = useState(clip.start)
-  const position = isFileLoaded ? player.position : localPosition
+  // Display position: use global when our file is playing, otherwise local
+  const displayPosition = isFileLoaded ? player.position : localPosition
 
-  // Seek to selection start when modal opens (if file is loaded)
+  // Sync local position from player when our file is loaded and playing
   useEffect(() => {
-    if (isFileLoaded) {
-      seek(clip.start)
+    if (isFileLoaded && player.status === 'playing') {
+      setLocalPosition(player.position)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isFileLoaded, player.position, player.status])
 
   const handleSelectionChange = (start: number, end: number) => {
     setSelectionStart(start)
@@ -252,25 +254,22 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
   }
 
   const handleSeek = async (pos: number) => {
+    // Always update local position
+    setLocalPosition(pos)
+
+    // If our file is loaded, also seek the global player
     if (isFileLoaded) {
-      await seek(pos)
-    } else {
-      setLocalPosition(pos)
+      await seek({ fileUri: clip.file_uri, position: pos })
     }
   }
 
   const handlePlayPause = async () => {
     try {
-      if (!isFileLoaded) {
-        // Load the clip's file first
-        await loadFileWithUri(clip.file_uri, clip.file_name)
-        // Seek to selection start after loading
-        await seek(selectionStart)
-        await play()
-      } else if (isPlaying) {
+      if (isPlaying) {
         await pause()
       } else {
-        await play()
+        // Play with our file and local position
+        await play({ fileUri: clip.file_uri, position: localPosition })
       }
     } catch (error) {
       console.error('Error toggling playback:', error)
@@ -303,7 +302,7 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
 
           <SelectionTimeline
             duration={clip.file_duration}
-            position={position}
+            position={displayPosition}
             selectionStart={selectionStart}
             selectionEnd={selectionEnd}
             onSelectionChange={handleSelectionChange}

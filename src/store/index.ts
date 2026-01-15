@@ -30,6 +30,16 @@ interface PlayerState {
   file: AudioFile | null
 }
 
+/**
+ * Context for playback actions. Components must specify which file
+ * and position they want to play/seek. This prevents "accidents" where
+ * a component unknowingly affects another component's playback.
+ */
+interface PlaybackContext {
+  fileUri: string
+  position: number
+}
+
 interface AppState {
   // State
   player: PlayerState
@@ -42,9 +52,9 @@ interface AppState {
   loadFileWithPicker: () => Promise<void>
   fetchFiles: () => void
   fetchAllClips: () => void
-  play: () => Promise<void>
+  play: (context?: PlaybackContext) => Promise<void>
   pause: () => Promise<void>
-  seek: (position: number) => Promise<void>
+  seek: (context: PlaybackContext) => Promise<void>
   skipForward: () => Promise<void>
   skipBackward: () => Promise<void>
   addClip: (note: string) => Promise<void>
@@ -297,12 +307,49 @@ export const useStore = create<AppState>((set, get) => {
     }
   }
 
-  async function play() {
-    set((state) => ({
-      player: { ...state.player, status: 'playing' },
-    }))
-
+  async function play(context?: PlaybackContext) {
     try {
+      // If context provided, may need to load file and seek first
+      if (context) {
+        const { player } = get()
+        const isFileSame = player.file?.uri === context.fileUri
+
+        if (!isFileSame) {
+          // Need to load a different file
+          const fileRecord = dbService.getFile(context.fileUri)
+          if (!fileRecord) {
+            throw new Error(`File not found in library: ${context.fileUri}`)
+          }
+
+          set((state) => ({
+            player: { ...state.player, status: 'loading' },
+          }))
+
+          const duration = await audioService.load(context.fileUri)
+
+          set((state) => ({
+            player: {
+              ...state.player,
+              file: fileRecord,
+              duration,
+              position: context.position,
+            },
+          }))
+
+          await audioService.seek(context.position)
+        } else if (player.position !== context.position) {
+          // Same file, different position - just seek
+          await audioService.seek(context.position)
+          set((state) => ({
+            player: { ...state.player, position: context.position },
+          }))
+        }
+      }
+
+      set((state) => ({
+        player: { ...state.player, status: 'playing' },
+      }))
+
       await audioService.play()
     } catch (error) {
       console.error('Error playing audio:', error)
@@ -326,13 +373,21 @@ export const useStore = create<AppState>((set, get) => {
     }
   }
 
-  async function seek(position: number) {
+  async function seek(context: PlaybackContext) {
+    const { player } = get()
+
+    // Only seek if the requested file is currently loaded
+    if (player.file?.uri !== context.fileUri) {
+      console.log('Seek ignored: file not loaded', context.fileUri)
+      return
+    }
+
     set((state) => ({
-      player: { ...state.player, position },
+      player: { ...state.player, position: context.position },
     }))
 
     try {
-      await audioService.seek(position)
+      await audioService.seek(context.position)
     } catch (error) {
       console.error('Error seeking:', error)
       throw error
@@ -429,7 +484,8 @@ export const useStore = create<AppState>((set, get) => {
       throw new Error('Clip not found')
     }
 
-    await get().seek(clip.start)
+    // Jump to clip includes loading the file if different
+    await get().play({ fileUri: clip.file_uri, position: clip.start })
   }
 
   async function shareClip(clipId: number) {

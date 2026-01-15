@@ -78,7 +78,7 @@ Polling callback preserves transitional states (`adding`/`loading`) - only updat
   │   │   ├── utils.ts            # timeToX, xToTime, segment heights
   │   │   ├── useScrollPhysics.ts # Scroll/momentum hook (shared)
   │   │   ├── PlaybackTimeline.tsx # Center-fixed playhead, played/unplayed bars
-  │   │   ├── SelectionTimeline.tsx # Movable playhead, draggable selection handles
+  │   │   ├── SelectionTimeline.tsx # Timeline with draggable selection handles
   │   │   └── index.ts            # Barrel exports
   │   ├── LoadingModal.tsx        # "Adding..." / "Loading..." modal
   │   └── shared/
