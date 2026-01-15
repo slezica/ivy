@@ -29,10 +29,12 @@ Polling callback preserves transitional states (`adding`/`loading`) - only updat
 
 **React Native Expo app** for podcast/audiobook playback with:
 - Library management (file history with resume positions + metadata)
-- Clips/bookmarks with notes (all clips viewable across all files)
+- Clips/bookmarks with notes and automatic transcription
 - GPU-accelerated timeline UI (Skia Canvas)
 - Auto-play, resume from last position
+- On-device speech-to-text via Whisper (privacy-first)
 - Metadata extraction (title, artist, artwork) via native Android module
+- Clip sharing via native share sheet
 
 **Tech Stack:**
 - React Native 0.81.5 + Expo 54
@@ -42,6 +44,9 @@ Polling callback preserves transitional states (`adding`/`loading`) - only updat
 - SQLite (expo-sqlite)
 - Skia for timeline rendering
 - New FileSystem API: `Paths.document`, `Directory`, `File` classes
+- whisper.rn for on-device transcription
+- react-native-safe-area-context (not deprecated SafeAreaView)
+- Native Kotlin modules for audio slicing
 
 ## File Structure
 
@@ -50,16 +55,28 @@ Polling callback preserves transitional states (`adding`/`loading`) - only updat
   ├── store/index.ts              # Zustand store - all state
   ├── services/
   │   ├── AudioService.ts         # expo-audio wrapper (10s timeout)
+  │   ├── AudioSlicerModule.ts    # Native module interface for audio slicing
+  │   ├── AudioExtractionService.ts # Extract clip audio for transcription
+  │   ├── ClipSharingService.ts   # Share clips via native share sheet
   │   ├── DatabaseService.ts      # SQLite operations
   │   ├── FileService.ts          # Document picker
-  │   └── FileStorageService.ts   # File copying (NEW API)
+  │   ├── FileStorageService.ts   # File copying (NEW API)
+  │   ├── TranscriptionService.ts # Background transcription queue
+  │   └── WhisperService.ts       # On-device speech-to-text (whisper.rn)
   ├── screens/
   │   ├── LibraryScreen.tsx       # History + 🔧 Reset button
   │   ├── PlayerScreen.tsx        # Main player
   │   └── ClipsListScreen.tsx     # Clip management
   ├── components/
   │   ├── TimelineBar.tsx         # GPU timeline (most complex)
-  │   └── LoadingModal.tsx        # "Adding..." / "Loading..." modal
+  │   ├── LoadingModal.tsx        # "Adding..." / "Loading..." modal
+  │   └── shared/
+  │       ├── ScreenArea.tsx      # Safe area wrapper (react-native-safe-area-context)
+  │       ├── Header.tsx          # Reusable header (title, subtitle, noBorder)
+  │       ├── EmptyState.tsx      # Empty state display
+  │       └── ActionMenu.tsx      # Overflow menu (3-dot)
+  ├── utils/
+  │   └── index.ts                # Shared utilities (formatTime, formatDate)
   └── theme.ts
 
 /app
@@ -69,6 +86,10 @@ Polling callback preserves transitional states (`adding`/`loading`) - only updat
       ├── index.tsx               # Library
       ├── player.tsx              # Player
       └── clips.tsx               # Clips
+
+/android/app/src/main/java/.../audioslicer/
+  ├── AudioSlicerPackage.kt       # Native module package registration
+  └── AudioSlicerModule.kt        # Kotlin native module for audio slicing
 ```
 
 ## Database Schema
@@ -90,6 +111,7 @@ file_uri TEXT                  -- References files.uri (local path)
 start INTEGER                  -- milliseconds
 duration INTEGER               -- milliseconds
 note TEXT
+transcription TEXT             -- Auto-generated from audio (Whisper)
 created_at INTEGER
 updated_at INTEGER
 ```
@@ -108,7 +130,8 @@ files: Record<string, AudioFile>  // Keyed by local URI
 
 // Key actions
 loadFile, play, pause, seek, skipForward/Backward
-addClip, updateClip, deleteClip, jumpToClip
+addClip, updateClip, deleteClip, jumpToClip, shareClip
+updateClipTranscription         // Called by TranscriptionService
 __DEV_resetApp                  // Dev tool (clears all data)
 ```
 
@@ -175,6 +198,52 @@ Access via: `store.__DEV_resetApp()`
 - Picture API: records drawing commands once, replays efficiently
 - Gestures: drag to scrub, flick with momentum, tap to seek
 - Split-colored bars when playhead crosses segment boundary
+- `showTime` prop: `'top'` | `'bottom'` | `'hidden'` - controls time display position
+
+## Shared Components
+
+`src/components/shared/` contains reusable UI components:
+
+- **ScreenArea** - Wraps screens with safe area insets (uses `react-native-safe-area-context`, NOT deprecated RN `SafeAreaView`)
+- **Header** - Standard screen header with `title`, `subtitle`, optional `children`, and `noBorder` prop
+- **EmptyState** - Centered empty state display with `title` and `subtitle`
+- **ActionMenu** - Bottom sheet action menu (3-dot overflow pattern) with `ActionMenuItem[]`
+
+## Utilities
+
+`src/utils/index.ts` exports:
+- `formatTime(ms)` - Converts milliseconds to `MM:SS` or `H:MM:SS` format
+- `formatDate(timestamp)` - Formats timestamp as `MMM D, YYYY`
+
+## Native Modules
+
+**AudioSlicer** (`android/.../audioslicer/`):
+- Kotlin native module for extracting audio segments
+- Used by `ClipSharingService` (sharing clips) and `AudioExtractionService` (transcription)
+- Interface: `sliceAudio(inputPath, startMs, endMs, outputPath) → Promise<string>`
+
+## Transcription Architecture
+
+On-device automatic clip transcription using Whisper:
+
+**Flow:**
+1. Clip created → `TranscriptionService.queueClip(clipId)`
+2. `AudioExtractionService` extracts first 5s of clip audio to temp file
+3. `WhisperService` transcribes the audio (using whisper.rn with ggml-tiny model)
+4. Result stored in `clips.transcription` column
+5. Callback notifies store to update UI
+
+**Services:**
+- `WhisperService` - Downloads/caches Whisper model, runs transcription
+- `AudioExtractionService` - Uses native AudioSlicer to extract clip segments
+- `TranscriptionService` - Background queue that processes clips sequentially
+
+**Key Points:**
+- Model auto-downloads on first use (~75MB ggml-tiny.bin from HuggingFace)
+- Processing is sequential (one clip at a time) to avoid overload
+- Failed transcriptions retry on next app start (transcription stays null)
+- Transcription displayed in ClipsListScreen below the time
+- `note` and `transcription` are separate fields (user notes vs auto-generated)
 
 ## Adding Features
 
@@ -226,3 +295,7 @@ Access via: `store.__DEV_resetApp()`
 - Dev reset button in Library
 - New FileSystem API (Paths, Directory, File)
 - Database schema: `uri` (local) + `original_uri` (external)
+- Shared components extracted (ScreenArea, Header, EmptyState, ActionMenu)
+- Automatic clip transcription via on-device Whisper
+- Native AudioSlicer module for audio segment extraction
+- Clip sharing via native share sheet
