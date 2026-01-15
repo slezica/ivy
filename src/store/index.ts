@@ -28,6 +28,7 @@ interface PlayerState {
   position: number
   duration: number
   file: AudioFile | null
+  ownerId: string | null  // ID of component that last took control
 }
 
 /**
@@ -38,6 +39,7 @@ interface PlayerState {
 interface PlaybackContext {
   fileUri: string
   position: number
+  ownerId?: string  // ID of component taking control (optional)
 }
 
 interface AppState {
@@ -134,6 +136,7 @@ export const useStore = create<AppState>((set, get) => {
       position: 0,
       duration: 0,
       file: null,
+      ownerId: null,
     },
     clips: {},
     files: {},
@@ -322,7 +325,11 @@ export const useStore = create<AppState>((set, get) => {
           }
 
           set((state) => ({
-            player: { ...state.player, status: 'loading' },
+            player: {
+              ...state.player,
+              status: 'loading',
+              ...(context.ownerId !== undefined && { ownerId: context.ownerId }),
+            },
           }))
 
           const duration = await audioService.load(context.fileUri)
@@ -344,11 +351,21 @@ export const useStore = create<AppState>((set, get) => {
             player: { ...state.player, position: context.position },
           }))
         }
-      }
 
-      set((state) => ({
-        player: { ...state.player, status: 'playing' },
-      }))
+        // Set status to playing, and owner if provided
+        set((state) => ({
+          player: {
+            ...state.player,
+            status: 'playing',
+            ...(context.ownerId !== undefined && { ownerId: context.ownerId }),
+          },
+        }))
+      } else {
+        // No context - just resume, keep existing owner
+        set((state) => ({
+          player: { ...state.player, status: 'playing' },
+        }))
+      }
 
       await audioService.play()
     } catch (error) {
@@ -518,6 +535,7 @@ export const useStore = create<AppState>((set, get) => {
         position: 0,
         duration: 0,
         file: null,
+        ownerId: null,
       },
       clips: {},
       files: {},

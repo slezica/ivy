@@ -7,6 +7,7 @@ import IconButton from '../components/shared/IconButton'
 import ScreenArea from '../components/shared/ScreenArea'
 import EmptyState from '../components/shared/EmptyState'
 
+const PLAYER_OWNER_ID = 'player-screen'
 
 export default function PlayerScreen() {
   const { player, addClip, play, pause } = useStore()
@@ -24,8 +25,13 @@ export default function PlayerScreen() {
     try {
       if (player.status === 'playing') {
         await pause()
-      } else {
-        await play()
+      } else if (player.file) {
+        // Claim ownership when playing from main player
+        await play({
+          fileUri: player.file.uri,
+          position: player.position,
+          ownerId: PLAYER_OWNER_ID,
+        })
       }
     } catch (error) {
       console.error('Error toggling playback:', error)

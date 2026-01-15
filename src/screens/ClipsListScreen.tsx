@@ -17,9 +17,8 @@ import {
   Pressable,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
-import { useCallback } from 'react'
 
 import { useStore } from '../store'
 import { Color } from '../theme'
@@ -233,35 +232,24 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
   // Local position state - this is what the user is scrubbing to
   const [localPosition, setLocalPosition] = useState(clip.start)
 
-  // Track whether THIS component initiated playback
-  const [isActiveController, setIsActiveController] = useState(false)
+  // Stable owner ID for this modal instance
+  const ownerId = useRef(`clip-editor-${clip.id}`).current
 
-  // Check if the clip's file is currently loaded in the global player
+  // Check ownership and file state from global player
   const isFileLoaded = player.file?.uri === clip.file_uri
+  const isOwner = player.ownerId === ownerId
+  const isPlaying = isOwner && player.status === 'playing'
+  const isLoading = isOwner && (player.status === 'loading' || player.status === 'adding')
 
-  // We're "playing" only if we initiated it AND global player confirms
-  const isPlaying = isActiveController && isFileLoaded && player.status === 'playing'
-  const isLoading = isActiveController && (player.status === 'loading' || player.status === 'adding')
+  // Display position: use global when we own playback, otherwise local
+  const displayPosition = isOwner && isFileLoaded ? player.position : localPosition
 
-  // Reset active controller status when someone else takes over
+  // Sync local position from player when we own playback
   useEffect(() => {
-    if (isActiveController) {
-      // Lost control if: different file loaded, or playback stopped externally
-      if (!isFileLoaded || player.status === 'paused') {
-        setIsActiveController(false)
-      }
-    }
-  }, [isActiveController, isFileLoaded, player.status])
-
-  // Display position: use global when we're actively playing, otherwise local
-  const displayPosition = isPlaying ? player.position : localPosition
-
-  // Sync local position from player only when we're actively playing
-  useEffect(() => {
-    if (isPlaying) {
+    if (isOwner && isFileLoaded) {
       setLocalPosition(player.position)
     }
-  }, [isPlaying, player.position])
+  }, [isOwner, isFileLoaded, player.position])
 
   const handleSelectionChange = (start: number, end: number) => {
     setSelectionStart(start)
@@ -272,8 +260,8 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
     // Always update local position
     setLocalPosition(pos)
 
-    // If our file is loaded, also seek the global player
-    if (isFileLoaded) {
+    // If our file is loaded and we own playback, also seek the global player
+    if (isFileLoaded && isOwner) {
       await seek({ fileUri: clip.file_uri, position: pos })
     }
   }
@@ -282,15 +270,12 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
     try {
       if (isPlaying) {
         await pause()
-        setIsActiveController(false)
       } else {
-        // Take control and play with our file and local position
-        setIsActiveController(true)
-        await play({ fileUri: clip.file_uri, position: localPosition })
+        // Take ownership and play with our file and local position
+        await play({ fileUri: clip.file_uri, position: localPosition, ownerId })
       }
     } catch (error) {
       console.error('Error toggling playback:', error)
-      setIsActiveController(false)
     }
   }
 
