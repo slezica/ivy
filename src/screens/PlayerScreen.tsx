@@ -71,11 +71,13 @@ function Player({ file, player, onPlayPause, onAddClip }: any) {
         size={72}
         iconName={player.status === 'playing' ? 'pause' : 'play'}
         onPress={onPlayPause}
+        testID="play-pause-button"
       />
 
       <IconButton
         iconName="bookmark"
         onPress={onAddClip}
+        testID="add-clip-button"
         size={48}
       />
     </View>

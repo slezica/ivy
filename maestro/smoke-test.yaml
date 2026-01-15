@@ -1,0 +1,25 @@
+appId: com.anonymous.audioplayerreactnative
+---
+# Smoke test: Verify app launches and shows empty state
+
+- launchApp
+
+# Library screen should show empty state
+- assertVisible: "No files yet"
+- assertVisible: "Open an audio file to add it to your library"
+
+# Tab bar should be visible
+- assertVisible: "Library"
+- assertVisible: "Player"
+- assertVisible: "Clips"
+
+# Take screenshot of initial state
+- takeScreenshot: "01-empty-library"
+
+# Navigate to Clips tab
+- tapOn: "Clips"
+- assertVisible: "No clips yet"
+- takeScreenshot: "02-empty-clips"
+
+# Player tab should be disabled (no file loaded), but let's verify it exists
+# We won't tap it since it's disabled

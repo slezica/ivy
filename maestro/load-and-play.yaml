@@ -1,0 +1,47 @@
+appId: com.anonymous.audioplayerreactnative
+---
+# Flow 1: Load test file and verify playback controls
+# Prerequisites: Test file pushed to /sdcard/Download/test-audio.mp3
+
+- launchApp
+
+# Reset app state first (tap Reset, then confirm)
+- tapOn: "Reset"
+- tapOn: "Reset"  # Confirm in alert
+
+# Wait for reset to complete and verify empty state
+- assertVisible: "No files yet"
+- takeScreenshot: screenshots/load-01-empty-state
+
+# Tap Sample button to load test file (dev-only feature)
+- tapOn: "Sample"
+
+# Wait for file to load (adding + loading states)
+- extendedWaitUntil:
+    visible: "The Selfish Gene"
+    timeout: 15000
+
+# Verify we're on player screen with file loaded
+- takeScreenshot: screenshots/load-02-player-with-file
+
+# Verify play button is visible and tap it
+- assertVisible:
+    id: "play-pause-button"
+- tapOn:
+    id: "play-pause-button"
+
+# Wait a moment for playback to start
+- waitForAnimationToEnd
+
+# Take screenshot of playing state
+- takeScreenshot: screenshots/load-03-playing
+
+# Tap again to pause
+- tapOn:
+    id: "play-pause-button"
+- takeScreenshot: screenshots/load-04-paused
+
+# Navigate back to library to verify file appears there
+- tapOn: "Library"
+- assertVisible: "The Selfish Gene"
+- takeScreenshot: screenshots/load-05-library-with-file

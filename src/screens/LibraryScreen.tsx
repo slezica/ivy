@@ -51,6 +51,24 @@ export default function LibraryScreen() {
     }
   }
 
+  // Dev-only: Long-press FAB to load test file (for Maestro tests)
+  const handleLoadTestFile = __DEV__
+    ? async () => {
+        try {
+          const { Asset } = await import('expo-asset')
+          const asset = Asset.fromModule(require('../../assets/test/test-audio.mp3'))
+          await asset.downloadAsync()
+          if (!asset.localUri) throw new Error('Failed to download test asset')
+          await loadFileWithUri(asset.localUri, 'test-audio.mp3')
+          fetchFiles()
+          router.push('/player')
+        } catch (error) {
+          console.error('Error loading test file:', error)
+          Alert.alert('Error', 'Failed to load test file')
+        }
+      }
+    : undefined
+
   const handleDevReset = () => {
     Alert.alert(
       'Reset App',
@@ -63,7 +81,6 @@ export default function LibraryScreen() {
           onPress: async () => {
             try {
               await __DEV_resetApp()
-              Alert.alert('Success', 'App reset complete!')
             } catch (error) {
               console.error('Error resetting app:', error)
               Alert.alert('Error', 'Failed to reset app')
@@ -79,12 +96,22 @@ export default function LibraryScreen() {
   return (
     <ScreenArea>
       <Header title="Library">
-        <TouchableOpacity
-          style={styles.devResetButton}
-          onPress={handleDevReset}
-        >
-          <Text style={styles.devResetButtonText}>🔧 Reset</Text>
-        </TouchableOpacity>
+        <View style={styles.devButtons}>
+          {__DEV__ && handleLoadTestFile && (
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleLoadTestFile}
+            >
+              <Text style={styles.devButtonText}>Sample</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.devButton, styles.devResetButton]}
+            onPress={handleDevReset}
+          >
+            <Text style={styles.devButtonText}>Reset</Text>
+          </TouchableOpacity>
+        </View>
       </Header>
 
       {filesArray.length > 0 ? (
@@ -152,6 +179,7 @@ export default function LibraryScreen() {
         <IconButton
           iconName="add"
           onPress={handleLoadFile}
+          testID="fab-add-file"
           size={56}
           style={styles.fab}
         />
@@ -161,13 +189,20 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
-  devResetButton: {
-    backgroundColor: Color.DESTRUCTIVE,
+  devButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  devButton: {
+    backgroundColor: Color.GRAY_DARK,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
   },
-  devResetButtonText: {
+  devResetButton: {
+    backgroundColor: Color.DESTRUCTIVE,
+  },
+  devButtonText: {
     color: Color.WHITE,
     fontSize: 12,
     fontWeight: '600',

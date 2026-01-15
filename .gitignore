@@ -56,3 +56,6 @@ app-example
 /android/app/src/main/java/com/anonymous/*
 !/android/app/src/main/java/com/anonymous/audioplayerreactnative
 !/android/gradle.properties
+
+# Maestro test artifacts
+maestro/screenshots/
