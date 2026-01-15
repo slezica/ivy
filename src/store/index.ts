@@ -76,8 +76,9 @@ export const useStore = create<AppState>((set, get) => {
       }))
 
       // Update file position in database
+      // Only if we have a file and valid position
       const { player } = get()
-      if (player.file) {
+      if (player.file && status.position >= 0 && status.duration > 0) {
         dbService.updateFilePosition(player.file.uri, status.position)
       }
     },
