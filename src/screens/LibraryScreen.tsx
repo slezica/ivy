@@ -14,20 +14,7 @@ import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import { Color } from '../theme'
 import type { AudioFile } from '../services/DatabaseService'
-import { formatTime } from '../utils'
-
-function formatDate(timestamp: number): string {
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return `${diffDays} days ago`
-
-  return date.toLocaleDateString()
-}
+import { formatTime, formatDate } from '../utils'
 
 export default function LibraryScreen() {
   const router = useRouter()
