@@ -1,29 +1,15 @@
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-} from 'react-native'
+import { View, Text, StyleSheet, Alert } from 'react-native'
 
 import { Color } from '../theme'
 import { useStore } from '../store'
 import TimelineBar from '../components/TimelineBar'
 import IconButton from '../components/shared/IconButton'
 import ScreenArea from '../components/shared/ScreenArea'
+import EmptyState from '../components/shared/EmptyState'
 
 
 export default function PlayerScreen() {
-  const { player, loadFileWithPicker, addClip, play, pause } = useStore()
-
-  const handleLoadFile = async () => {
-    try {
-      await loadFileWithPicker()
-    } catch (error) {
-      console.error(error)
-      Alert.alert('Error', 'Failed to load audio file')
-    }
-  }
+  const { player, addClip, play, pause } = useStore()
 
   const handleAddClip = async () => {
     try {
@@ -57,7 +43,7 @@ export default function PlayerScreen() {
               onPlayPause={handlePlayPause}
               onAddClip={handleAddClip}
             />
-          : <FileLoader onLoadFile={handleLoadFile} />
+          : <EmptyState title="Not playing" subtitle="Select a file from your library" />
         }
       </View>
     </ScreenArea>
@@ -91,23 +77,6 @@ function Player({ file, player, onPlayPause, onAddClip }: any) {
   )
 }
 
-function FileLoader({ onLoadFile }: any) {
-  return (
-    <View style={styles.emptyState}>
-      <Text style={styles.emptyText}>No audio file loaded</Text>
-
-      <TouchableOpacity
-        style={[styles.button, styles.loadButton]}
-        onPress={onLoadFile}
-      >
-        <Text style={[styles.buttonText, styles.loadButtonText]}>
-          Load Audio File
-        </Text>
-      </TouchableOpacity>
-    </View>
-  )
-}
-
 const styles = StyleSheet.create({
   content: {
     flex: 1,
@@ -134,34 +103,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 20,
     gap: 24,
-  },
-  button: {
-    backgroundColor: Color.GRAY_LIGHTER,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Color.GRAY_DARKER,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 20,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: Color.GRAY_DARK,
-  },
-  loadButton: {
-    backgroundColor: Color.PRIMARY,
-    paddingHorizontal: 30,
-  },
-  loadButtonText: {
-    color: Color.WHITE,
   },
 })
