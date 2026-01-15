@@ -1,53 +1,54 @@
+/**
+ * Audio Player Service
+ *
+ * Wraps expo-audio for playback control. Handles loading, play/pause,
+ * seeking, and status polling.
+ */
+
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio'
 import type { AudioPlayer } from 'expo-audio'
 
-type PlayerStatus = 'adding' | 'loading' | 'paused' | 'playing'
+// =============================================================================
+// Public Interface
+// =============================================================================
+
+export type PlayerStatus = 'adding' | 'loading' | 'paused' | 'playing'
 
 export interface PlaybackStatus {
   status: PlayerStatus
-  position: number
-  duration: number
+  position: number  // milliseconds
+  duration: number  // milliseconds
 }
 
-export interface AudioServiceListeners {
+export interface AudioPlayerListeners {
   onPlaybackStatusChange?: (status: PlaybackStatus) => void
 }
 
-export class AudioService {
+// =============================================================================
+// Service
+// =============================================================================
+
+export class AudioPlayerService {
   private player: AudioPlayer | null = null
-  private listeners: AudioServiceListeners
+  private listeners: AudioPlayerListeners
   private statusInterval: ReturnType<typeof setInterval> | null = null
   private currentDuration: number = 0
 
-  constructor(listeners: AudioServiceListeners = {}) {
+  constructor(listeners: AudioPlayerListeners = {}) {
     this.listeners = listeners
     this.initializeAudioMode()
-  }
-
-  private async initializeAudioMode(): Promise<void> {
-    try {
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        shouldPlayInBackground: true,
-      })
-    } catch (error) {
-      console.error('Failed to set audio mode:', error)
-    }
   }
 
   async load(uri: string): Promise<number> {
     await this.unload()
 
     this.player = createAudioPlayer(uri)
-
-    // Start polling for status updates
     this.startStatusPolling()
 
-    // Wait for player to be ready and get duration
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Failed to load audio file: timeout after 10 seconds'))
-      }, 10000) // 10 second timeout
+      }, 10000)
 
       const checkDuration = () => {
         if (!this.player) {
@@ -58,7 +59,7 @@ export class AudioService {
 
         if (this.player.duration > 0) {
           clearTimeout(timeout)
-          this.currentDuration = this.player.duration * 1000 // Convert to milliseconds
+          this.currentDuration = this.player.duration * 1000
           resolve(this.currentDuration)
         } else {
           setTimeout(checkDuration, 100)
@@ -68,34 +69,10 @@ export class AudioService {
     })
   }
 
-  private startStatusPolling(): void {
-    if (this.statusInterval) {
-      clearInterval(this.statusInterval)
-    }
-
-    this.statusInterval = setInterval(() => {
-      if (this.player && this.listeners.onPlaybackStatusChange) {
-        this.listeners.onPlaybackStatusChange({
-          status: this.player.playing ? 'playing' : 'paused',
-          position: this.player.currentTime * 1000, // Convert to milliseconds
-          duration: this.currentDuration,
-        })
-      }
-    }, 100) // Update every 100ms
-  }
-
-  private stopStatusPolling(): void {
-    if (this.statusInterval) {
-      clearInterval(this.statusInterval)
-      this.statusInterval = null
-    }
-  }
-
   async play(): Promise<void> {
     if (!this.player) {
       throw new Error('No audio loaded')
     }
-
     this.player.play()
   }
 
@@ -103,7 +80,6 @@ export class AudioService {
     if (!this.player) {
       throw new Error('No audio loaded')
     }
-
     this.player.pause()
   }
 
@@ -111,8 +87,7 @@ export class AudioService {
     if (!this.player) {
       throw new Error('No audio loaded')
     }
-
-    this.player.seekTo(positionMillis / 1000) // Convert to seconds
+    this.player.seekTo(positionMillis / 1000)
   }
 
   async skip(offsetMillis: number): Promise<void> {
@@ -122,7 +97,7 @@ export class AudioService {
 
     const currentPosition = this.player.currentTime * 1000
     const newPosition = Math.max(0, currentPosition + offsetMillis)
-    this.player.seekTo(newPosition / 1000) // Convert to seconds
+    this.player.seekTo(newPosition / 1000)
   }
 
   async getStatus(): Promise<PlaybackStatus | null> {
@@ -141,7 +116,6 @@ export class AudioService {
     this.stopStatusPolling()
 
     if (this.player) {
-      // Stop playback before removing player
       if (this.player.playing) {
         this.player.pause()
       }
@@ -151,4 +125,48 @@ export class AudioService {
 
     this.currentDuration = 0
   }
+
+  // ===========================================================================
+  // Private
+  // ===========================================================================
+
+  private async initializeAudioMode(): Promise<void> {
+    try {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+      })
+    } catch (error) {
+      console.error('Failed to set audio mode:', error)
+    }
+  }
+
+  private startStatusPolling(): void {
+    if (this.statusInterval) {
+      clearInterval(this.statusInterval)
+    }
+
+    this.statusInterval = setInterval(() => {
+      if (this.player && this.listeners.onPlaybackStatusChange) {
+        this.listeners.onPlaybackStatusChange({
+          status: this.player.playing ? 'playing' : 'paused',
+          position: this.player.currentTime * 1000,
+          duration: this.currentDuration,
+        })
+      }
+    }, 100)
+  }
+
+  private stopStatusPolling(): void {
+    if (this.statusInterval) {
+      clearInterval(this.statusInterval)
+      this.statusInterval = null
+    }
+  }
 }
+
+// =============================================================================
+// Singleton (for simple use cases without custom listeners)
+// =============================================================================
+
+export const audioPlayerService = new AudioPlayerService()

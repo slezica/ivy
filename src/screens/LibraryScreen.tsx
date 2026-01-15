@@ -13,7 +13,7 @@ import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import { Color } from '../theme'
-import type { AudioFile } from '../services/DatabaseService'
+import type { AudioFile } from '../services'
 import { formatTime, formatDate } from '../utils'
 
 export default function LibraryScreen() {

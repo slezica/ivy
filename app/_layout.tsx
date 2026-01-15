@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Stack } from 'expo-router'
 import LoadingModal from '../src/components/LoadingModal'
-import { transcriptionService } from '../src/services/TranscriptionService'
+import { transcriptionService } from '../src/services'
 
 export default function RootLayout() {
   useEffect(() => {

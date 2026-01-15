@@ -1,12 +1,19 @@
 import { create } from 'zustand'
-import { AudioService } from '../services/AudioService'
-import { DatabaseService } from '../services/DatabaseService'
-import { FileService, PickedFile } from '../services/FileService'
-import { FileStorageService } from '../services/FileStorageService'
-import { ClipSharingService } from '../services/ClipSharingService'
-import { MetadataService } from '../services/MetadataService'
-import { transcriptionService } from '../services/TranscriptionService'
-import type { Clip, ClipWithFile, AudioFile } from '../services/DatabaseService'
+
+import {
+  AudioPlayerService,
+  DatabaseService,
+  FilePickerService,
+  FileStorageService,
+  AudioMetadataService,
+  AudioSlicerService,
+  SharingService,
+  transcriptionService,
+  databaseService,
+  audioSlicerService,
+} from '../services'
+
+import type { PickedFile, Clip, ClipWithFile, AudioFile } from '../services'
 
 
 const SKIP_FORWARD_MS = 25 * 1000
@@ -53,17 +60,24 @@ interface AppState {
 
 
 export const useStore = create<AppState>((set, get) => {
+  // ---------------------------------------------------------------------------
   // Initialize services
-  const dbService = new DatabaseService()
+  // ---------------------------------------------------------------------------
 
-  const fileService = new FileService()
+  // Use shared singletons for services that need to be accessed from multiple places
+  const dbService = databaseService
+  const slicerService = audioSlicerService
 
+  // Create local instances for services only used by the store
+  const filePickerService = new FilePickerService()
   const fileStorageService = new FileStorageService()
+  const metadataService = new AudioMetadataService()
 
-  const clipSharingService = new ClipSharingService()
-  const metadataService = new MetadataService()
+  const sharingService = new SharingService({
+    slicer: slicerService,
+  })
 
-  const audioService = new AudioService({
+  const audioService = new AudioPlayerService({
     onPlaybackStatusChange: (status) => {
       set((state) => ({
         player: {
@@ -163,7 +177,7 @@ export const useStore = create<AppState>((set, get) => {
   }
 
   async function loadFileWithPicker() {
-    const pickedFile = await fileService.pickAudioFile()
+    const pickedFile = await filePickerService.pickAudioFile()
     if (pickedFile) {
       await get().loadFile(pickedFile)
     }
@@ -193,7 +207,11 @@ export const useStore = create<AppState>((set, get) => {
       }
 
       // Step 2: Read metadata (only for new files, during 'adding' phase)
-      let metadata = { title: null, artist: null, artwork: null }
+      let metadata: { title: string | null; artist: string | null; artwork: string | null } = {
+        title: null,
+        artist: null,
+        artwork: null,
+      }
       if (isNewFile) {
         console.log('Reading metadata from:', localUri)
         metadata = await metadataService.readMetadata(localUri)
@@ -427,7 +445,7 @@ export const useStore = create<AppState>((set, get) => {
     }
 
     // Extract and share the clip
-    await clipSharingService.shareClip(clip, player.file.uri, player.file.name)
+    await sharingService.shareClip(clip, player.file.uri, player.file.name)
   }
 
   async function __DEV_resetApp() {

@@ -27,7 +27,7 @@ import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
-import { ClipWithFile } from '../services/DatabaseService'
+import type { ClipWithFile } from '../services'
 import { formatTime } from '../utils'
 
 
