@@ -16,7 +16,7 @@ import TrackPlayer, {
 // Public Interface
 // =============================================================================
 
-export type PlayerStatus = 'adding' | 'loading' | 'paused' | 'playing'
+export type PlayerStatus = 'idle' | 'loading' | 'paused' | 'playing'
 
 export interface PlaybackStatus {
   status: PlayerStatus

@@ -3,8 +3,8 @@ import { useStore } from '../store'
 import { Color } from '../theme'
 
 export default function LoadingModal() {
-  const { player } = useStore()
-  const isVisible = player.status === 'adding'
+  const { library } = useStore()
+  const isVisible = library.status === 'adding'
 
   return (
     <Modal

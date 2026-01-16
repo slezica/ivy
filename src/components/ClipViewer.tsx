@@ -32,7 +32,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   const isFileLoaded = player.file?.uri === clip.source_uri
   const isOwner = player.ownerId === ownerId
   const isPlaying = isOwner && player.status === 'playing'
-  const isLoading = isOwner && (player.status === 'loading' || player.status === 'adding')
+  const isLoading = isOwner && player.status === 'loading'
 
   const handlePlayPause = async () => {
     try {

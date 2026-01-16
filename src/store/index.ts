@@ -22,7 +22,7 @@ const SKIP_BACKWARD_MS = 30 * 1000
 const DEFAULT_CLIP_DURATION_MS = 20 * 1000
 
 
-type PlayerStatus = 'idle' | 'adding' | 'loading' | 'paused' | 'playing'
+type PlayerStatus = 'idle' | 'loading' | 'paused' | 'playing'
 
 interface PlayerState {
   status: PlayerStatus
@@ -30,6 +30,12 @@ interface PlayerState {
   duration: number
   file: AudioFile | null
   ownerId: string | null  // ID of component that last took control
+}
+
+type LibraryStatus = 'loading' | 'idle' | 'adding'
+
+interface LibraryState {
+  status: LibraryStatus
 }
 
 /**
@@ -45,6 +51,7 @@ interface PlaybackContext {
 
 interface AppState {
   // State
+  library: LibraryState
   player: PlayerState
   clips: Record<number, ClipWithFile>
   files: Record<string, AudioFile>
@@ -95,7 +102,7 @@ export const useStore = create<AppState>((set, get) => {
         player: {
           ...state.player,
           // Only update status if not currently in a transitional state
-          status: (state.player.status === 'loading' || state.player.status === 'adding')
+          status: state.player.status === 'loading'
             ? state.player.status
             : status.status,
           position: status.position,
@@ -131,6 +138,9 @@ export const useStore = create<AppState>((set, get) => {
 
   return {
     // Initial state
+    library: {
+      status: 'loading',
+    },
     player: {
       status: 'idle',
       position: 0,
@@ -171,7 +181,7 @@ export const useStore = create<AppState>((set, get) => {
       return acc
     }, {} as Record<string, AudioFile>)
 
-    set({ files: filesMap })
+    set({ files: filesMap, library: { status: 'idle' } })
   }
 
   function fetchAllClips(): void {
@@ -211,9 +221,7 @@ export const useStore = create<AppState>((set, get) => {
       } else {
         // Need to copy file to app storage
         console.log('Copying file to app storage from:', pickedFile.uri)
-        set((state) => ({
-          player: { ...state.player, status: 'adding' },
-        }))
+        set({ library: { status: 'adding' } })
 
         localUri = await fileStorageService.copyToAppStorage(pickedFile.uri, pickedFile.name)
         console.log('File copied to:', localUri)
@@ -241,6 +249,7 @@ export const useStore = create<AppState>((set, get) => {
 
       // Step 3: Load audio from local URI
       set((state) => ({
+        library: { status: 'idle' },
         player: { ...state.player, status: 'loading' },
       }))
 
@@ -309,6 +318,7 @@ export const useStore = create<AppState>((set, get) => {
       console.error(error)
       // Reset loading state on error
       set((state) => ({
+        library: { status: 'idle' },
         player: { ...state.player, status: state.player.file ? 'paused' : 'idle' },
       }))
       throw error
@@ -445,7 +455,7 @@ export const useStore = create<AppState>((set, get) => {
     set((state) => ({
       player: {
         ...state.player,
-        status: (state.player.status === 'loading' || state.player.status === 'adding')
+        status: state.player.status === 'loading'
           ? state.player.status
           : status.status,
         position: status.position,
@@ -606,6 +616,9 @@ export const useStore = create<AppState>((set, get) => {
 
     // Reset store state
     set({
+      library: {
+        status: 'idle',
+      },
       player: {
         status: 'idle',
         position: 0,

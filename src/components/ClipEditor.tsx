@@ -39,7 +39,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   const isFileLoaded = player.file?.uri === clip.source_uri
   const isOwner = player.ownerId === ownerId
   const isPlaying = isOwner && player.status === 'playing'
-  const isLoading = isOwner && (player.status === 'loading' || player.status === 'adding')
+  const isLoading = isOwner && player.status === 'loading'
 
   // Display position: use global when we own playback, otherwise local
   const displayPosition = isOwner && isFileLoaded ? player.position : localPosition
