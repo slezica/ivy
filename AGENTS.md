@@ -99,12 +99,11 @@ This enables future "now playing" widgets to show context about who initiated pl
   │   ├── ClipViewer.tsx          # Read-only clip view (timeline, transcription, note)
   │   ├── ClipEditor.tsx          # Clip editing (selection timeline, note input)
   │   ├── LoadingModal.tsx        # "Adding..." / "Loading..." modal
-  │   ├── timeline/               # GPU-accelerated timeline components
+  │   ├── timeline/               # GPU-accelerated timeline component
+  │   │   ├── Timeline.tsx        # Unified timeline (playback + selection)
+  │   │   ├── useTimelinePhysics.ts # Scroll/momentum/selection hook
   │   │   ├── constants.ts        # Dimensions, physics, animation timing
   │   │   ├── utils.ts            # timeToX, xToTime, segment heights
-  │   │   ├── useScrollPhysics.ts # Scroll/momentum hook (shared)
-  │   │   ├── PlaybackTimeline.tsx # Center-fixed playhead, played/unplayed bars
-  │   │   ├── SelectionTimeline.tsx # Timeline with draggable selection handles
   │   │   └── index.ts            # Barrel exports
   │   └── shared/
   │       ├── Modal.tsx           # Reusable modal (overlay tap to close)
@@ -276,45 +275,82 @@ maestro test maestro/smoke-test.yaml
 - This is expected - files must be re-copied from local storage
 - Database `original_uri` is for reference only, don't use for playback
 
-## Timeline Components
+## Timeline Component
 
-GPU-accelerated Skia Canvas components in `src/components/timeline/`:
+Unified GPU-accelerated Skia Canvas component in `src/components/timeline/`.
 
-### Shared Architecture
-- Renders only visible segments (not all 14,400+ bars for long files)
-- Ref-based physics (not useState) for 60fps animation
-- Picture API: records drawing commands once, replays efficiently
+### Architecture
+- **Props-based**: Not store-connected; caller provides `duration`, `position`, `onSeek`, colors
+- **Stencil + paint layers**: Builds ONE path with all visible bars, draws it 2-3 times with clip regions
+- **Ref-based physics**: 60fps animation without React re-render overhead
+- **Visible culling**: Only renders bars currently on screen
 - Gestures: drag to scrub, flick with momentum, tap to seek
-- `showTime` prop: `'top'` | `'bottom'` | `'hidden'`
 
-### PlaybackTimeline
-Used in PlayerScreen for audio scrubbing:
-- Center-fixed playhead, content scrolls behind it
-- Bars colored gray (played) or primary (unplayed)
-- Split-colored bars when playhead crosses segment boundary
-- Auto-syncs scroll position to playback position when idle
+### Rendering Approach
 
-### SelectionTimeline
-Used in clip edit modal for adjusting clip bounds:
-- Center-fixed playhead (same behavior as PlaybackTimeline)
-- Two selection handles with draggable yellow circles at bottom
-- Bars colored primary (default) or yellow (within selection)
-- Handles enforce 1 second minimum gap, cannot cross each other
-- Scrolling = seeking (when component owns playback)
-- Auto-syncs to playback position when idle
+Instead of per-bar color logic, uses painter's algorithm with clip regions:
+1. Build single Path containing all visible bar shapes (the "stencil")
+2. Draw path with `leftColor`, clipped to left of playhead
+3. Draw path with `rightColor`, clipped to right of playhead
+4. Draw path with `selectionColor`, clipped to selection range (overwrites 1 & 2)
+
+This gives O(bars) path ops + 3 draw calls, vs O(bars × segments) with per-bar rendering.
+
+### Props
 
 ```typescript
-// SelectionTimeline props
-interface SelectionTimelineProps {
-  duration: number                    // Total file duration
-  position: number                    // Current playback position
-  selectionStart: number              // Selection start time (ms)
-  selectionEnd: number                // Selection end time (ms)
-  onSelectionChange: (start, end) => void
-  onSeek?: (position) => void
+interface TimelineProps {
+  // Core (required)
+  duration: number
+  position: number
+  onSeek: (position: number) => void
+
+  // Bar colors (required)
+  leftColor: string              // Bars/portions left of playhead
+  rightColor: string             // Bars/portions right of playhead
+
+  // Selection (optional - all four enable selection handles)
+  selectionColor?: string
+  selectionStart?: number
+  selectionEnd?: number
+  onSelectionChange?: (start: number, end: number) => void
+
+  // Display
   showTime?: 'top' | 'bottom' | 'hidden'
 }
 ```
+
+### Usage Examples
+
+```typescript
+// Playback mode (PlayerScreen, ClipViewer)
+<Timeline
+  duration={player.duration}
+  position={player.position}
+  onSeek={handleSeek}
+  leftColor={Color.GRAY}       // played
+  rightColor={Color.PRIMARY}   // unplayed
+/>
+
+// Selection mode (ClipEditor)
+<Timeline
+  duration={file.duration}
+  position={displayPosition}
+  onSeek={handleSeek}
+  leftColor={Color.PRIMARY}    // same = no playhead split
+  rightColor={Color.PRIMARY}
+  selectionColor={Color.SELECTION}
+  selectionStart={clipStart}
+  selectionEnd={clipEnd}
+  onSelectionChange={handleSelectionChange}
+/>
+```
+
+### Selection Handles
+- Appear only when all four selection props provided
+- Draggable circles at bottom of timeline
+- Minimum 1 second gap enforced
+- Handles cannot cross each other
 
 ## Shared Components
 
@@ -476,8 +512,6 @@ Uses `react-native-track-player` v5 for system-level playback integration:
 - Automatic clip transcription via on-device Whisper
 - Native AudioSlicer module for audio segment extraction
 - Clip sharing via native share sheet
-- Timeline components refactored into `timeline/` module with shared code
-- SelectionTimeline for clip length editing with draggable handles
 - **Context-based playback API**: `play()` and `seek()` require file/position context
 - **Playback ownership**: `player.ownerId` tracks which component controls playback
 - Components maintain local position state, sync from global only when they own playback
@@ -485,3 +519,5 @@ Uses `react-native-track-player` v5 for system-level playback integration:
 - **Persistent clip files**: Clips have own audio files (`uri`), sliced on create/update
 - **Clip schema**: `file_uri` renamed to `source_uri`, added `uri` for clip audio file
 - **ClipViewer/ClipEditor**: Extracted components for viewing and editing clips
+- **Unified Timeline component**: Replaced PlaybackTimeline + SelectionTimeline with single props-based Timeline
+- **Stencil + paint layers rendering**: Timeline uses clip regions instead of per-bar segment logic
