@@ -22,7 +22,7 @@ const SKIP_BACKWARD_MS = 30 * 1000
 const DEFAULT_CLIP_DURATION_MS = 20 * 1000
 
 
-type PlayerStatus = 'adding' | 'loading' | 'paused' | 'playing'
+type PlayerStatus = 'idle' | 'adding' | 'loading' | 'paused' | 'playing'
 
 interface PlayerState {
   status: PlayerStatus
@@ -132,7 +132,7 @@ export const useStore = create<AppState>((set, get) => {
   return {
     // Initial state
     player: {
-      status: 'paused',
+      status: 'idle',
       position: 0,
       duration: 0,
       file: null,
@@ -309,7 +309,7 @@ export const useStore = create<AppState>((set, get) => {
       console.error(error)
       // Reset loading state on error
       set((state) => ({
-        player: { ...state.player, status: 'paused' },
+        player: { ...state.player, status: state.player.file ? 'paused' : 'idle' },
       }))
       throw error
     }
@@ -380,7 +380,7 @@ export const useStore = create<AppState>((set, get) => {
     } catch (error) {
       console.error('Error playing audio:', error)
       set((state) => ({
-        player: { ...state.player, status: 'paused' },
+        player: { ...state.player, status: state.player.file ? 'paused' : 'idle' },
       }))
       throw error
     }
@@ -607,7 +607,7 @@ export const useStore = create<AppState>((set, get) => {
     // Reset store state
     set({
       player: {
-        status: 'paused',
+        status: 'idle',
         position: 0,
         duration: 0,
         file: null,

@@ -18,7 +18,8 @@ Everything internal is **milliseconds**. Convert to MM:SS only at display bounda
 Single Zustand store (`src/store/index.ts`) is the source of truth. Services are stateless.
 
 ### 4. **Player Status Enum**
-`'adding'` → `'loading'` → `'paused'` ⇄ `'playing'`
+`'idle'` → `'adding'` → `'loading'` → `'paused'` ⇄ `'playing'`
+- `idle`: No track loaded (initial state)
 - `adding`: Copying file to app storage
 - `loading`: Loading audio player
 - `paused`/`playing`: Playback states
@@ -170,7 +171,7 @@ updated_at INTEGER
 
 ```typescript
 player: {
-  status: 'adding' | 'loading' | 'paused' | 'playing'
+  status: 'idle' | 'adding' | 'loading' | 'paused' | 'playing'
   position: number              // milliseconds
   duration: number              // milliseconds
   file: AudioFile | null        // Includes uri + original_uri
@@ -466,7 +467,7 @@ On-device automatic clip transcription using Whisper:
 **Reset app data:** Tap "Reset" button in Library
 **Time format:** Always milliseconds internally
 **File playback:** Always use `audioFile.uri` (local path)
-**Status transitions:** `adding → loading → paused ⇄ playing`
+**Status transitions:** `idle → adding → loading → paused ⇄ playing`
 
 ## Custom ESLint Rules
 
