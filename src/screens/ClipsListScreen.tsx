@@ -161,25 +161,25 @@ export default function ClipsListScreen() {
         : <EmptyState title="No clips yet" subtitle="Add clips from the player screen" />
       }
 
-      <Modal visible={!!viewingClip} onClose={handleCloseViewClip}>
-        {viewingClip &&
+      {viewingClip && (
+        <Modal visible onClose={handleCloseViewClip}>
           <ClipViewer
             clip={viewingClip}
             onClose={handleCloseViewClip}
             onEdit={() => handleEditClip(viewingClip.id)}
           />
-        }
-      </Modal>
+        </Modal>
+      )}
 
-      <Modal visible={!!editingClip} onClose={handleCancelEditClip}>
-        {editingClip &&
+      {editingClip && (
+        <Modal visible onClose={handleCancelEditClip}>
           <ClipEditor
             clip={editingClip}
             onCancel={handleCancelEditClip}
             onSave={handleSaveClip}
           />
-        }
-      </Modal>
+        </Modal>
+      )}
 
       <ActionMenu
         visible={menuClipId !== null}
