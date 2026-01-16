@@ -286,6 +286,7 @@ function PlaybackTimeline({ showTime = 'bottom' }: PlaybackTimelineProps) {
       console.error('Error creating picture:', error)
       return null
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- scrollOffsetRef is stable, frame triggers updates
   }, [frame, containerWidth, totalSegments])
 
   // Calculate playhead top offset based on time indicator position

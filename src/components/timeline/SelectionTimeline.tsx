@@ -554,6 +554,7 @@ export function SelectionTimeline({
       console.error('Error creating picture:', error)
       return null
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- scrollOffsetRef is stable, frame triggers updates
   }, [frame, containerWidth, totalSegments, selectionStart, selectionEnd])
 
   const canvasHeight = TIMELINE_HEIGHT + HANDLE_CIRCLE_RADIUS * 2

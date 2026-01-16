@@ -149,7 +149,7 @@ export default function ClipsListScreen() {
 
       {editingClipId != null &&
         <EditClipModal
-          clip={clips[editingClipId]}
+          clip={editingClip}
           visible={true}
           onCancel={handleCancelEditClip}
           onSave={handleSaveClip}
@@ -194,7 +194,7 @@ function ClipList({ clips, onJumpToClip, onOpenMenu }: any) {
             </View>
             {item.transcription ? (
               <Text style={styles.clipTranscription} numberOfLines={2}>
-                "{item.transcription}"
+                &ldquo;{item.transcription}&rdquo;
               </Text>
             ) : null}
             {item.note && <Text style={styles.clipNote}>{item.note}</Text>}
