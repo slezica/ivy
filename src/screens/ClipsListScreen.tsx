@@ -113,8 +113,8 @@ export default function ClipsListScreen() {
     handleCloseMenu()
 
     switch (action) {
-      case 'edit':
-        handleEditClip(clipId)
+      case 'goToSource':
+        handleJumpToClip(clipId)
         break
       case 'share':
         handleShareClip(clipId)
@@ -126,9 +126,8 @@ export default function ClipsListScreen() {
   }
 
   const getMenuItems = (): ActionMenuItem[] => {
-    const clip = menuClipId !== null ? clips[menuClipId] : null
     return [
-      { key: 'edit', label: clip?.note ? 'Edit note' : 'Add note', icon: 'pencil' },
+      { key: 'goToSource', label: 'Go to source', icon: 'play-circle-outline' },
       { key: 'share', label: 'Share', icon: 'share-outline' },
       { key: 'delete', label: 'Delete', icon: 'trash-outline', destructive: true },
     ]
@@ -141,7 +140,7 @@ export default function ClipsListScreen() {
       {clipsArray.length > 0
         ? <ClipList
             clips={clipsArray}
-            onJumpToClip={handleJumpToClip}
+            onEditClip={handleEditClip}
             onOpenMenu={handleOpenMenu}
           />
         : <EmptyState title="No clips yet" subtitle="Add clips from the player screen" />
@@ -167,7 +166,7 @@ export default function ClipsListScreen() {
 }
 
 
-function ClipList({ clips, onJumpToClip, onOpenMenu }: any) {
+function ClipList({ clips, onEditClip, onOpenMenu }: any) {
   return (
     <FlatList
       data={clips}
@@ -176,7 +175,7 @@ function ClipList({ clips, onJumpToClip, onOpenMenu }: any) {
       renderItem={({ item }) => (
         <TouchableOpacity
           style={styles.clipItem}
-          onPress={() => onJumpToClip(item.id)}
+          onPress={() => onEditClip(item.id)}
           activeOpacity={0.7}
         >
           <View style={styles.clipContent}>
