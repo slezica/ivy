@@ -58,10 +58,13 @@ const isPlaying = isOwner && audio.status === 'playing'
 await play({ fileUri, position, ownerId })
 ```
 
-**Local state pattern:** Each player maintains its own `ownFile` and `ownPosition`:
-- When owner: sync position from `audio.position`
+**Local state pattern:** Each player maintains its own local state:
+- `ownPosition`: the position this player remembers (all players)
+- `ownFile`: the file this player is showing (PlayerScreen only - clips know their source)
+- When owner: sync `ownPosition` from `audio.position` via effect
 - When not owner: keep local position (allows seeking without affecting playback)
-- On play: claim ownership with local file/position
+- On play: claim ownership with `ownPosition`
+- On seek: always update `ownPosition`, only call `seek()` if owner
 
 ## Project Overview
 
@@ -113,8 +116,8 @@ await play({ fileUri, position, ownerId })
   │   ├── PlayerScreen.tsx        # Main player
   │   └── ClipsListScreen.tsx     # Clip management
   ├── components/
-  │   ├── ClipViewer.tsx          # Read-only clip view (timeline, transcription, note)
-  │   ├── ClipEditor.tsx          # Clip editing (selection timeline, note input)
+  │   ├── ClipViewer.tsx          # Clip playback (own position state, timeline, transcription)
+  │   ├── ClipEditor.tsx          # Clip editing (own position state, selection timeline, note)
   │   ├── LoadingModal.tsx        # "Adding..." / "Loading..." modal
   │   ├── timeline/               # GPU-accelerated timeline component
   │   │   ├── Timeline.tsx        # Unified timeline (playback + selection)
@@ -344,8 +347,8 @@ interface TimelineProps {
 ```typescript
 // Playback mode (PlayerScreen, ClipViewer)
 <Timeline
-  duration={audio.file.duration}
-  position={audio.position}
+  duration={ownFile.duration}  // or clip.file_duration
+  position={ownPosition}
   onSeek={handleSeek}
   leftColor={Color.GRAY}       // played
   rightColor={Color.PRIMARY}   // unplayed
@@ -353,14 +356,14 @@ interface TimelineProps {
 
 // Selection mode (ClipEditor)
 <Timeline
-  duration={file.duration}
-  position={displayPosition}
+  duration={clip.file_duration}
+  position={ownPosition}
   onSeek={handleSeek}
   leftColor={Color.PRIMARY}    // same = no playhead split
   rightColor={Color.PRIMARY}
   selectionColor={Color.SELECTION}
-  selectionStart={clipStart}
-  selectionEnd={clipEnd}
+  selectionStart={selectionStart}
+  selectionEnd={selectionEnd}
   onSelectionChange={handleSelectionChange}
 />
 ```
