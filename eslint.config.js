@@ -13,8 +13,8 @@ module.exports = defineConfig([
       ivy: ivyPlugin,
     },
     rules: {
-      'ivy/align-ternary-chain': 'error',
-      'ivy/align-ternary-single': 'error',
+      'ivy/jsx-align-ternary-chain': 'error',
+      'ivy/jsx-align-ternary-single': 'error',
       'ivy/jsx-newline-around-multiline': 'warn',
     },
   },

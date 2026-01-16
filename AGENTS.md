@@ -414,6 +414,14 @@ On-device automatic clip transcription using Whisper:
 **File playback:** Always use `audioFile.uri` (local path)
 **Status transitions:** `adding → loading → paused ⇄ playing`
 
+## Custom ESLint Rules
+
+Project-specific rules in `eslint/` directory, used as `ivy/<rule-name>`:
+
+- **jsx-align-ternary-single** - In JSX ternaries, `?` and `:` must be on aligned new lines
+- **jsx-align-ternary-chain** - Chained ternaries must have consistent alignment
+- **jsx-newline-around-multiline** - Blank line required between sibling JSX elements when either spans multiple lines
+
 ## System Media Controls
 
 Uses `react-native-track-player` v5 for system-level playback integration:
