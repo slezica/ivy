@@ -24,7 +24,7 @@ import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
-import Modal from '../components/shared/Modal'
+import Dialog from '../components/shared/Dialog'
 import ClipViewer from '../components/ClipViewer'
 import ClipEditor from '../components/ClipEditor'
 import { formatTime } from '../utils'
@@ -162,23 +162,23 @@ export default function ClipsListScreen() {
       }
 
       {viewingClip && (
-        <Modal visible onClose={handleCloseViewClip}>
+        <Dialog visible onClose={handleCloseViewClip}>
           <ClipViewer
             clip={viewingClip}
             onClose={handleCloseViewClip}
             onEdit={() => handleEditClip(viewingClip.id)}
           />
-        </Modal>
+        </Dialog>
       )}
 
       {editingClip && (
-        <Modal visible onClose={handleCancelEditClip}>
+        <Dialog visible onClose={handleCancelEditClip}>
           <ClipEditor
             clip={editingClip}
             onCancel={handleCancelEditClip}
             onSave={handleSaveClip}
           />
-        </Modal>
+        </Dialog>
       )}
 
       <ActionMenu

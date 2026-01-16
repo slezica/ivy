@@ -4,7 +4,7 @@
  * Reusable modal wrapper with overlay and centered content.
  */
 
-import { Modal as RNModal, View, Pressable, StyleSheet } from 'react-native'
+import { Modal, View, Pressable, StyleSheet } from 'react-native'
 import { Color } from '../../theme'
 
 
@@ -14,9 +14,9 @@ interface ModalProps {
   children: React.ReactNode
 }
 
-export default function Modal({ visible, onClose, children }: ModalProps) {
+export default function Dialog({ visible, onClose, children }: ModalProps) {
   return (
-    <RNModal
+    <Modal
       visible={visible}
       transparent
       animationType="fade"
@@ -27,7 +27,7 @@ export default function Modal({ visible, onClose, children }: ModalProps) {
           {children}
         </Pressable>
       </Pressable>
-    </RNModal>
+    </Modal>
   )
 }
 
