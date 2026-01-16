@@ -286,7 +286,7 @@ function ShowClipModal({ visible, clip, onClose, onEdit }: ShowClipModalProps) {
             noBorder
           />
 
-          {isFileLoaded && isOwner
+          {isFileLoaded
             ? <PlaybackTimeline showTime="hidden" />
             : <View style={styles.timelinePlaceholder} />
           }
