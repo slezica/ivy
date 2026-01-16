@@ -1,4 +1,4 @@
-appId: com.anonymous.audioplayerreactnative
+appId: com.salezica.ivy
 ---
 # Flow 1: Load test file and verify playback controls
 # Prerequisites: Test file pushed to /sdcard/Download/test-audio.mp3

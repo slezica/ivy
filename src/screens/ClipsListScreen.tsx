@@ -209,6 +209,7 @@ function ClipList({ clips, onViewClip, onOpenMenu }: any) {
           style={styles.clipItem}
           onPress={() => onViewClip(item.id)}
           activeOpacity={0.7}
+          testID="clip-card"
         >
           <View style={styles.clipContent}>
             <Text style={styles.clipFileLabel} numberOfLines={1}>

@@ -1,4 +1,4 @@
-appId: com.anonymous.audioplayerreactnative
+appId: com.salezica.ivy
 ---
 # Flow 2: Clip CRUD - Create, Read, Update, Delete
 # Tests clip creation, editing notes, and deletion
