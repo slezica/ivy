@@ -4,7 +4,7 @@
  * Read-only view of a clip with playback timeline, transcription, and note.
  */
 
-import { useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 
 import { useStore } from '../store'
@@ -25,6 +25,9 @@ interface ClipViewerProps {
 export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   const { audio, play, pause, seek } = useStore()
 
+  // Local state - the position this viewer remembers
+  const [ownPosition, setOwnPosition] = useState(clip.start)
+
   // Stable owner ID for this instance
   const ownerId = useRef(`clip-viewer-${clip.id}`).current
 
@@ -34,12 +37,20 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   const isPlaying = isOwner && audio.status === 'playing'
   const isLoading = isOwner && audio.status === 'loading'
 
+  // Sync position from audio when we own playback
+  useEffect(() => {
+    if (isOwner && isFileLoaded) {
+      setOwnPosition(audio.position)
+    }
+  }, [isOwner, isFileLoaded, audio.position])
+
   const handlePlayPause = async () => {
     try {
       if (isPlaying) {
         await pause()
       } else {
-        await play({ fileUri: clip.source_uri, position: clip.start, ownerId })
+        // Claim ownership and play from our remembered position
+        await play({ fileUri: clip.source_uri, position: ownPosition, ownerId })
       }
     } catch (error) {
       console.error('Error toggling playback:', error)
@@ -47,7 +58,11 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   }
 
   const handleSeek = (position: number) => {
-    if (isFileLoaded) {
+    // Always update local position
+    setOwnPosition(position)
+
+    // Only affect audio if we're the owner and file is loaded
+    if (isOwner && isFileLoaded) {
       seek({ fileUri: clip.source_uri, position })
     }
   }
@@ -60,17 +75,14 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
         noBorder
       />
 
-      {isFileLoaded && audio.file
-        ? <Timeline
-            duration={audio.file.duration}
-            position={audio.position}
-            onSeek={handleSeek}
-            leftColor={Color.GRAY}
-            rightColor={Color.PRIMARY}
-            showTime="hidden"
-          />
-        : <View style={styles.timelinePlaceholder} />
-      }
+      <Timeline
+        duration={clip.file_duration}
+        position={ownPosition}
+        onSeek={handleSeek}
+        leftColor={Color.GRAY}
+        rightColor={Color.PRIMARY}
+        showTime="hidden"
+      />
 
       <View style={styles.playButtonContainer}>
         <IconButton
@@ -116,12 +128,6 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
 
 
 const styles = StyleSheet.create({
-  timelinePlaceholder: {
-    height: 80,
-    marginHorizontal: 20,
-    backgroundColor: Color.GRAY_LIGHTER,
-    borderRadius: 8,
-  },
   playButtonContainer: {
     alignItems: 'center',
     paddingVertical: 12,
