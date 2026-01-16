@@ -51,7 +51,7 @@ export default function ClipsListScreen() {
   const handleJumpToClip = async (clipId: number) => {
     try {
       await jumpToClip(clipId)
-      router.back()
+      router.replace('/player')
     } catch (error) {
       console.error('Error jumping to clip:', error)
       Alert.alert('Error', 'Failed to jump to clip')
