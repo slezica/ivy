@@ -15,6 +15,7 @@ module.exports = defineConfig([
     rules: {
       'ivy/align-ternary-chain': 'error',
       'ivy/align-ternary-single': 'error',
+      'ivy/jsx-newline-around-multiline': 'warn',
     },
   },
 ]);

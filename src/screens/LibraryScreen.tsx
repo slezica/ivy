@@ -160,6 +160,7 @@ export default function LibraryScreen() {
                     </Text>
                   )}
                 </View>
+
                 <Text style={styles.fileDate}>
                   {formatDate(item.opened_at)}
                 </Text>

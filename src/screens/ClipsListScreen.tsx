@@ -338,6 +338,7 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
             >
               <Text style={styles.modalButtonText}>Cancel</Text>
             </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.modalButton, styles.modalSaveButton]}
               onPress={handleSave}

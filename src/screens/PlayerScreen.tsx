@@ -69,6 +69,7 @@ function Player({ file, player, onPlayPause, onAddClip }: any) {
   return (
     <View style={styles.playerContainer}>
       <View style={styles.spacerTop} />
+
       <View style={styles.fileInfo}>
         <Text style={styles.title} numberOfLines={2}>
           {file.title || file.name}
@@ -82,21 +83,22 @@ function Player({ file, player, onPlayPause, onAddClip }: any) {
 
       <PlaybackTimeline />
 
-    <View style={styles.playbackControls}>
-      <IconButton
-        size={72}
-        iconName={player.status === 'playing' ? 'pause' : 'play'}
-        onPress={onPlayPause}
-        testID="play-pause-button"
-      />
+      <View style={styles.playbackControls}>
+        <IconButton
+          size={72}
+          iconName={player.status === 'playing' ? 'pause' : 'play'}
+          onPress={onPlayPause}
+          testID="play-pause-button"
+        />
 
-      <IconButton
-        iconName="bookmark"
-        onPress={onAddClip}
-        testID="add-clip-button"
-        size={48}
-      />
-    </View>
+        <IconButton
+          iconName="bookmark"
+          onPress={onAddClip}
+          testID="add-clip-button"
+          size={48}
+        />
+      </View>
+
     <View style={styles.spacerBottom} />
   </View>
   )

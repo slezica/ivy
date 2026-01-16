@@ -41,6 +41,7 @@ export default function ActionMenu({ visible, onClose, onAction, items }: Action
                 size={20}
                 color={item.destructive ? Color.DESTRUCTIVE : Color.BLACK}
               />
+
               <Text style={[
                 styles.itemText,
                 item.destructive && styles.itemTextDestructive,
