@@ -4,7 +4,7 @@ import { useFocusEffect } from 'expo-router'
 
 import { Color } from '../theme'
 import { useStore } from '../store'
-import { PlaybackTimeline } from '../components/timeline'
+import { Timeline } from '../components/timeline'
 import IconButton from '../components/shared/IconButton'
 import ScreenArea from '../components/shared/ScreenArea'
 import EmptyState from '../components/shared/EmptyState'
@@ -12,7 +12,7 @@ import EmptyState from '../components/shared/EmptyState'
 const PLAYER_OWNER_ID = 'player-screen'
 
 export default function PlayerScreen() {
-  const { player, addClip, play, pause, syncPlaybackState } = useStore()
+  const { player, addClip, play, pause, seek, syncPlaybackState } = useStore()
 
   // Sync position immediately when screen comes into focus
   useFocusEffect(
@@ -48,6 +48,12 @@ export default function PlayerScreen() {
     }
   }
 
+  const handleSeek = useCallback((position: number) => {
+    if (player.file?.uri) {
+      seek({ fileUri: player.file.uri, position })
+    }
+  }, [player.file?.uri, seek])
+
   return (
     <ScreenArea>
       <View style={styles.content}>
@@ -57,6 +63,7 @@ export default function PlayerScreen() {
               player={player}
               onPlayPause={handlePlayPause}
               onAddClip={handleAddClip}
+              onSeek={handleSeek}
             />
           : <EmptyState title="Not playing" subtitle="Select a file from your library" />
         }
@@ -65,7 +72,7 @@ export default function PlayerScreen() {
   )
 }
 
-function Player({ file, player, onPlayPause, onAddClip }: any) {
+function Player({ file, player, onPlayPause, onAddClip, onSeek }: any) {
   return (
     <View style={styles.playerContainer}>
       <View style={styles.spacerTop} />
@@ -81,7 +88,13 @@ function Player({ file, player, onPlayPause, onAddClip }: any) {
         )}
       </View>
 
-      <PlaybackTimeline />
+      <Timeline
+        duration={player.duration}
+        position={player.position}
+        onSeek={onSeek}
+        leftColor={Color.GRAY}
+        rightColor={Color.PRIMARY}
+      />
 
       <View style={styles.playbackControls}>
         <IconButton
