@@ -96,6 +96,9 @@ This enables future "now playing" widgets to show context about who initiated pl
   │   ├── PlayerScreen.tsx        # Main player
   │   └── ClipsListScreen.tsx     # Clip management
   ├── components/
+  │   ├── ClipViewer.tsx          # Read-only clip view (timeline, transcription, note)
+  │   ├── ClipEditor.tsx          # Clip editing (selection timeline, note input)
+  │   ├── LoadingModal.tsx        # "Adding..." / "Loading..." modal
   │   ├── timeline/               # GPU-accelerated timeline components
   │   │   ├── constants.ts        # Dimensions, physics, animation timing
   │   │   ├── utils.ts            # timeToX, xToTime, segment heights
@@ -103,8 +106,8 @@ This enables future "now playing" widgets to show context about who initiated pl
   │   │   ├── PlaybackTimeline.tsx # Center-fixed playhead, played/unplayed bars
   │   │   ├── SelectionTimeline.tsx # Timeline with draggable selection handles
   │   │   └── index.ts            # Barrel exports
-  │   ├── LoadingModal.tsx        # "Adding..." / "Loading..." modal
   │   └── shared/
+  │       ├── Modal.tsx           # Reusable modal (overlay tap to close)
   │       ├── ScreenArea.tsx      # Safe area wrapper (react-native-safe-area-context)
   │       ├── Header.tsx          # Reusable header (title, subtitle, noBorder)
   │       ├── EmptyState.tsx      # Empty state display
@@ -342,13 +345,27 @@ Located in `android/app/src/main/java/com/salezica/ivy/`:
 - Wrapped by `services/audio/metadata.ts`
 - Interface: `extractMetadata(filePath) → Promise<{ title, artist, artwork }>`
 
+## Clip File Storage
+
+Clips have their own persistent audio files, stored separately from source files:
+
+**Storage Location:** `DocumentDirectoryPath/clips/{randomId}.mp3`
+
+**Lifecycle:**
+- **Create**: Audio sliced from source file, saved to clips directory
+- **Update**: If bounds change, new slice created, old file deleted
+- **Delete**: Clip audio file deleted
+- **Share**: Uses existing clip file directly (no temp file needed)
+
+**File Naming:** Random string via `(Math.random() + 1).toString(36).substring(2)`
+
 ## Transcription Architecture
 
 On-device automatic clip transcription using Whisper:
 
 **Flow:**
 1. Clip created → `transcriptionService.queueClip(clipId)`
-2. `audioSlicerService` extracts first 5s of clip audio to temp file
+2. `audioSlicerService` extracts first 10s from clip's audio file (`clip.uri`)
 3. `whisperService` transcribes the audio (using whisper.rn with ggml-tiny model)
 4. Result stored in `clips.transcription` column
 5. Callback notifies store to update UI
@@ -361,7 +378,7 @@ On-device automatic clip transcription using Whisper:
 - Model auto-downloads on first use (~75MB ggml-tiny.bin from HuggingFace)
 - Processing is sequential (one clip at a time) to avoid overload
 - Failed transcriptions retry on next app start (transcription stays null)
-- Transcription displayed in ClipsListScreen below the time
+- Transcription displayed in ClipViewer below the time
 - `note` and `transcription` are separate fields (user notes vs auto-generated)
 
 ## Adding Features
@@ -455,14 +472,16 @@ Uses `react-native-track-player` v5 for system-level playback integration:
 - Dev reset button in Library
 - New FileSystem API (Paths, Directory, File)
 - Database schema: `uri` (local) + `original_uri` (external)
-- Shared components extracted (ScreenArea, Header, EmptyState, ActionMenu, IconButton)
+- Shared components extracted (ScreenArea, Header, EmptyState, ActionMenu, IconButton, Modal)
 - Automatic clip transcription via on-device Whisper
 - Native AudioSlicer module for audio segment extraction
 - Clip sharing via native share sheet
 - Timeline components refactored into `timeline/` module with shared code
 - SelectionTimeline for clip length editing with draggable handles
-- Clip edit modal with playback preview
 - **Context-based playback API**: `play()` and `seek()` require file/position context
 - **Playback ownership**: `player.ownerId` tracks which component controls playback
 - Components maintain local position state, sync from global only when they own playback
 - **react-native-track-player v5**: Replaced expo-audio for system media controls
+- **Persistent clip files**: Clips have own audio files (`uri`), sliced on create/update
+- **Clip schema**: `file_uri` renamed to `source_uri`, added `uri` for clip audio file
+- **ClipViewer/ClipEditor**: Extracted components for viewing and editing clips
