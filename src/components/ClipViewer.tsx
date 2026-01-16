@@ -25,14 +25,20 @@ interface ClipViewerProps {
 export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   const { audio, play, pause, seek } = useStore()
 
+  // Determine playback source: use source file if available, otherwise clip's own file
+  const hasSourceFile = clip.file_uri !== null
+  const playbackUri = hasSourceFile ? clip.file_uri! : clip.uri
+  const playbackDuration = hasSourceFile ? clip.file_duration : clip.duration
+  const initialPosition = hasSourceFile ? clip.start : 0
+
   // Local state - the position this viewer remembers
-  const [ownPosition, setOwnPosition] = useState(clip.start)
+  const [ownPosition, setOwnPosition] = useState(initialPosition)
 
   // Stable owner ID for this instance
   const ownerId = useRef(`clip-viewer-${clip.id}`).current
 
   // Check ownership and file state from global audio
-  const isFileLoaded = audio.file?.uri === clip.source_uri
+  const isFileLoaded = audio.file?.uri === playbackUri
   const isOwner = audio.ownerId === ownerId
   const isPlaying = isOwner && audio.status === 'playing'
   const isLoading = isOwner && audio.status === 'loading'
@@ -50,7 +56,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
         await pause()
       } else {
         // Claim ownership and play from our remembered position
-        await play({ fileUri: clip.source_uri, position: ownPosition, ownerId })
+        await play({ fileUri: playbackUri, position: ownPosition, ownerId })
       }
     } catch (error) {
       console.error('Error toggling playback:', error)
@@ -63,7 +69,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
 
     // Only affect audio if we're the owner and file is loaded
     if (isOwner && isFileLoaded) {
-      seek({ fileUri: clip.source_uri, position })
+      seek({ fileUri: playbackUri, position })
     }
   }
 
@@ -76,7 +82,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
       />
 
       <Timeline
-        duration={clip.file_duration}
+        duration={playbackDuration}
         position={ownPosition}
         onSeek={handleSeek}
         leftColor={Color.GRAY}
@@ -116,10 +122,13 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.button, styles.primaryButton]}
+          style={[styles.button, hasSourceFile ? styles.primaryButton : styles.disabledButton]}
           onPress={onEdit}
+          disabled={!hasSourceFile}
         >
-          <Text style={[styles.buttonText, styles.primaryButtonText]}>Edit</Text>
+          <Text style={[styles.buttonText, hasSourceFile ? styles.primaryButtonText : styles.disabledButtonText]}>
+            Edit
+          </Text>
         </TouchableOpacity>
       </View>
     </>
@@ -167,6 +176,9 @@ const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: Color.PRIMARY,
   },
+  disabledButton: {
+    backgroundColor: Color.GRAY_LIGHT,
+  },
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
@@ -174,5 +186,8 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: Color.WHITE,
+  },
+  disabledButtonText: {
+    color: Color.GRAY,
   },
 })

@@ -54,7 +54,7 @@ interface AppState {
   library: LibraryState
   audio: AudioState
   clips: Record<number, ClipWithFile>
-  files: Record<string, AudioFile>
+  files: Record<number, AudioFile>
 
   // Actions
   loadFile: (pickedFile: PickedFile) => Promise<void>
@@ -113,7 +113,7 @@ export const useStore = create<AppState>((set, get) => {
       // Only if we have a file and valid position
       const { audio } = get()
       if (audio.file && status.position >= 0 && status.duration > 0) {
-        dbService.updateFilePosition(audio.file.uri, status.position)
+        dbService.updateFilePosition(audio.file.id, status.position)
       }
     },
   })
@@ -173,11 +173,11 @@ export const useStore = create<AppState>((set, get) => {
   function fetchFiles(): void {
     const allFiles = dbService.getAllFiles()
 
-    // Update files mapping in store
+    // Update files mapping in store (keyed by id)
     const filesMap = allFiles.reduce((acc, file) => {
-      acc[file.uri] = file
+      acc[file.id] = file
       return acc
-    }, {} as Record<string, AudioFile>)
+    }, {} as Record<number, AudioFile>)
 
     set({ files: filesMap, library: { status: 'idle' } })
   }
@@ -209,10 +209,10 @@ export const useStore = create<AppState>((set, get) => {
     try {
       // Step 1: Copy file to app storage if needed
       let localUri: string
-      let audioFile = dbService.getFile(pickedFile.uri)
+      let audioFile = dbService.getFileByUri(pickedFile.uri)
       let isNewFile = false
 
-      if (audioFile && await fileStorageService.fileExists(audioFile.uri)) {
+      if (audioFile?.uri && await fileStorageService.fileExists(audioFile.uri)) {
         // Already have a local copy - use it
         localUri = audioFile.uri
         console.log('Using existing local file:', localUri)
@@ -261,36 +261,16 @@ export const useStore = create<AppState>((set, get) => {
 
       // Step 4: Save/update file record in database
       // Save local URI as 'uri' (what we actually use) and original as 'original_uri'
-      if (!audioFile) {
-        dbService.upsertFile(
-          localUri,
-          pickedFile.name,
-          duration,
-          0,
-          pickedFile.uri,
-          metadata.title,
-          metadata.artist,
-          metadata.artwork
-        )
-        audioFile = dbService.getFile(localUri)
-      } else {
-        // Update existing record (preserve existing metadata if not reading new)
-        dbService.upsertFile(
-          localUri,
-          pickedFile.name,
-          duration,
-          audioFile.position,
-          pickedFile.uri,
-          isNewFile ? metadata.title : audioFile.title,
-          isNewFile ? metadata.artist : audioFile.artist,
-          isNewFile ? metadata.artwork : audioFile.artwork
-        )
-        audioFile = dbService.getFile(localUri)
-      }
-
-      if (!audioFile) {
-        throw new Error('Failed to create file record')
-      }
+      audioFile = dbService.upsertFile(
+        localUri,
+        pickedFile.name,
+        duration,
+        audioFile?.position ?? 0,
+        pickedFile.uri,
+        isNewFile ? metadata.title : audioFile?.title ?? null,
+        isNewFile ? metadata.artist : audioFile?.artist ?? null,
+        isNewFile ? metadata.artwork : audioFile?.artwork ?? null
+      )
 
       // Load all clips from all files
       fetchAllClips()
@@ -312,7 +292,7 @@ export const useStore = create<AppState>((set, get) => {
       // Auto-play after loading (this will set status to 'playing')
       // Target the main player so it adopts the file
       await get().play({
-        fileUri: audioFile.uri,
+        fileUri: audioFile.uri!, // We just set this to localUri above
         position: audioFile.position,
         ownerId: MAIN_PLAYER_OWNER_ID,
       })
@@ -336,7 +316,7 @@ export const useStore = create<AppState>((set, get) => {
 
         if (!isFileSame) {
           // Need to load a different file
-          const fileRecord = dbService.getFile(context.fileUri)
+          const fileRecord = dbService.getFileByUri(context.fileUri)
           if (!fileRecord) {
             throw new Error(`File not found in library: ${context.fileUri}`)
           }
@@ -466,7 +446,7 @@ export const useStore = create<AppState>((set, get) => {
 
   async function addClip(note: string) {
     const { audio } = get()
-    if (!audio.file) {
+    if (!audio.file?.uri) {
       throw new Error('No file loaded')
     }
 
@@ -486,7 +466,7 @@ export const useStore = create<AppState>((set, get) => {
     })
 
     const clip = dbService.createClip(
-      audio.file.uri,
+      audio.file.id,
       sliceResult.uri,
       audio.position,
       clipDuration,
@@ -511,8 +491,12 @@ export const useStore = create<AppState>((set, get) => {
 
     let newUri: string | undefined
 
-    // Re-slice if bounds changed
+    // Re-slice if bounds changed (only possible if source file exists)
     if (boundsChanged) {
+      if (!clip.file_uri) {
+        throw new Error('Cannot edit clip bounds: source file has been removed')
+      }
+
       const newStart = updates.start ?? clip.start
       const newDuration = updates.duration ?? clip.duration
 
@@ -520,7 +504,7 @@ export const useStore = create<AppState>((set, get) => {
       const filename = `${generateRandomString()}.mp3`
       await slicerService.ensureDir(CLIPS_DIR)
       const sliceResult = await slicerService.slice({
-        sourceUri: clip.source_uri,
+        sourceUri: clip.file_uri,
         startMs: newStart,
         endMs: newStart + newDuration,
         outputFilename: filename,
@@ -590,9 +574,12 @@ export const useStore = create<AppState>((set, get) => {
     if (!clip) {
       throw new Error('Clip not found')
     }
+    if (!clip.file_uri) {
+      throw new Error('Cannot jump to clip: source file has been removed')
+    }
 
     // Jump to clip includes loading the file if different
-    await get().play({ fileUri: clip.source_uri, position: clip.start })
+    await get().play({ fileUri: clip.file_uri, position: clip.start })
   }
 
   async function shareClip(clipId: number) {

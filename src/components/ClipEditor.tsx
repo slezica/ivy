@@ -25,6 +25,9 @@ interface ClipEditorProps {
 export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) {
   const { audio, play, pause, seek } = useStore()
 
+  // ClipEditor requires source file to exist (editing disabled otherwise)
+  const fileUri = clip.file_uri!
+
   const [note, setNote] = useState(clip.note)
   const [selectionStart, setSelectionStart] = useState(clip.start)
   const [selectionEnd, setSelectionEnd] = useState(clip.start + clip.duration)
@@ -36,7 +39,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   const ownerId = useRef(`clip-editor-${clip.id}`).current
 
   // Check ownership and file state from global audio
-  const isFileLoaded = audio.file?.uri === clip.source_uri
+  const isFileLoaded = audio.file?.uri === fileUri
   const isOwner = audio.ownerId === ownerId
   const isPlaying = isOwner && audio.status === 'playing'
   const isLoading = isOwner && audio.status === 'loading'
@@ -59,7 +62,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
 
     // Only affect audio if we're the owner and file is loaded
     if (isOwner && isFileLoaded) {
-      await seek({ fileUri: clip.source_uri, position: pos })
+      await seek({ fileUri, position: pos })
     }
   }
 
@@ -69,7 +72,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
         await pause()
       } else {
         // Claim ownership and play from our remembered position
-        await play({ fileUri: clip.source_uri, position: ownPosition, ownerId })
+        await play({ fileUri, position: ownPosition, ownerId })
       }
     } catch (error) {
       console.error('Error toggling playback:', error)

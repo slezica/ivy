@@ -165,20 +165,24 @@ await play({ fileUri, position, ownerId })
 
 **files table:**
 ```sql
-uri TEXT PRIMARY KEY           -- Local file:// path (used for playback)
+id INTEGER PRIMARY KEY         -- Auto-increment, stable identifier
+uri TEXT                       -- Local file:// path (NULL if file removed from storage)
 original_uri TEXT              -- External content:// URI (reference only)
 name TEXT
 duration INTEGER               -- milliseconds
 position INTEGER               -- milliseconds (resume position)
 opened_at INTEGER              -- timestamp
+title TEXT
+artist TEXT
+artwork TEXT                   -- base64 data URI
 ```
 
 **clips table:**
 ```sql
 id INTEGER PRIMARY KEY
-source_uri TEXT                -- References files.uri (parent file)
+source_id INTEGER              -- References files.id (parent file)
 uri TEXT                       -- Clip's own audio file
-start INTEGER                  -- milliseconds
+start INTEGER                  -- milliseconds (position in source file)
 duration INTEGER               -- milliseconds
 note TEXT
 transcription TEXT             -- Auto-generated from audio (Whisper)
@@ -195,16 +199,16 @@ library: {
 audio: {
   status: 'idle' | 'loading' | 'paused' | 'playing'
   position: number              // milliseconds
-  file: AudioFile | null        // Includes uri + original_uri + duration
+  file: AudioFile | null        // Includes id, uri (nullable), duration, metadata
   ownerId: string | null        // ID of component controlling playback
 }
-clips: Record<number, Clip>
-files: Record<string, AudioFile>  // Keyed by local URI
+clips: Record<number, ClipWithFile>  // Keyed by clip id
+files: Record<number, AudioFile>     // Keyed by file id
 
 // Key actions
 loadFile, loadFileWithUri, play, pause, seek, skipForward/Backward
 addClip, deleteClip, jumpToClip, shareClip
-updateClip(id, { note?, start?, duration? })  // Edit clip bounds and note
+updateClip(id, { note?, start?, duration? })  // Edit clip bounds and note (requires source file)
 updateClipTranscription         // Called by TranscriptionService
 __DEV_resetApp                  // Dev tool (clears all data)
 
@@ -218,8 +222,8 @@ pause()                                          // Pauses, preserves ownership
 
 1. **User picks file** → `pickedFile.uri` (external content: URI)
 2. **Check if already copied:**
-   - Lookup `dbService.getFile(pickedFile.uri)` - won't find it (searching by external URI)
-   - Need to track by local URI instead, so we always copy on first load
+   - Lookup `dbService.getFileByUri(pickedFile.uri)` - checks by local URI
+   - If found and file exists on disk → use existing local copy
 3. **Copy to app storage:**
    - `library.status = 'adding'` → Modal shows "Adding to library..."
    - `fileStorageService.copyToAppStorage()` → returns local `file://` URI
@@ -227,6 +231,7 @@ pause()                                          // Pauses, preserves ownership
    - `status = 'loading'` → Modal shows "Loading audio file..."
    - `audioService.load(localUri)` → 10s timeout if fails
 5. **Save to database:**
+   - `dbService.upsertFile()` returns the `AudioFile` with generated `id`
    - `uri = localUri` (local file:// path)
    - `original_uri = pickedFile.uri` (external content: URI)
 6. **Auto-play:**
@@ -234,9 +239,9 @@ pause()                                          // Pauses, preserves ownership
    - Navigate to player tab
 
 **On reload from library:**
-- Lookup file by `uri` (local path)
-- If local file exists → load directly (no copying)
-- If local file missing → re-copy from original_uri (if still valid)
+- File selected by `id` from store (indexed by id)
+- If `file.uri` exists on disk → load directly
+- If `file.uri` is null → file was removed, show alert
 
 ## Development Tools
 
@@ -412,11 +417,48 @@ Clips have their own persistent audio files, stored separately from source files
 
 **Lifecycle:**
 - **Create**: Audio sliced from source file, saved to clips directory
-- **Update**: If bounds change, new slice created, old file deleted
+- **Update**: If bounds change, new slice created, old file deleted (requires source file)
 - **Delete**: Clip audio file deleted
 - **Share**: Uses existing clip file directly (no temp file needed)
 
 **File Naming:** Random string via `(Math.random() + 1).toString(36).substring(2)`
+
+### Clip Independence from Source 🔥 IMPORTANT
+
+Clips can exist independently of their source file. The source file's `uri` can become `null` if the user removes the file from their library (future feature).
+
+**ClipWithFile interface:**
+```typescript
+interface ClipWithFile extends Clip {
+  file_uri: string | null    // Source file URI (null if removed)
+  file_name: string          // Preserved from when clip was created
+  file_title: string | null
+  file_artist: string | null
+  file_duration: number
+}
+```
+
+**When source file exists (`file_uri !== null`):**
+- ClipViewer plays from source file at `clip.start` position
+- ClipEditor can expand/contract clip bounds, re-slices from source
+- "Go to source" and "Edit" menu options available
+- Timeline shows full source file duration
+
+**When source file is removed (`file_uri === null`):**
+- ClipViewer plays from clip's own audio file (`clip.uri`) at position 0
+- ClipEditor is disabled (Edit button hidden)
+- "Go to source" and "Edit" menu options hidden
+- Timeline shows clip duration only
+- Clip metadata (file_name, file_title, etc.) preserved from when clip was created
+
+**Code pattern for handling source availability:**
+```typescript
+// Determine playback source
+const hasSourceFile = clip.file_uri !== null
+const playbackUri = hasSourceFile ? clip.file_uri! : clip.uri
+const playbackDuration = hasSourceFile ? clip.file_duration : clip.duration
+const initialPosition = hasSourceFile ? clip.start : 0
+```
 
 ## Transcription Architecture
 
@@ -472,6 +514,9 @@ On-device automatic clip transcription using Whisper:
 - Pass `{ fileUri, position, ownerId }` when calling `play()` from UI components
 - Maintain local position state in playback components
 - Check `audio.ownerId === myId` before syncing from global audio state
+- Check `clip.file_uri !== null` before enabling edit/jump-to-source features
+- Use `clip.file_uri` (source) when available, fall back to `clip.uri` (clip's own file) when not
+- Use `file.id` as the stable identifier for files (not `uri` which can be null)
 
 ❌ **Don't:**
 - Use external content: URIs for audio playback
@@ -480,6 +525,8 @@ On-device automatic clip transcription using Whisper:
 - Call `upsertFile` without both URIs (local and original)
 - Call `play()` or `seek()` without file context from UI components
 - Assume global `audio.position` is relevant to your component (check ownership first)
+- Assume `AudioFile.uri` is non-null (check before using for playback)
+- Attempt to re-slice clips when source file is unavailable (`file_uri === null`)
 
 ## Quick Reference
 
@@ -488,7 +535,9 @@ On-device automatic clip transcription using Whisper:
 **Load test file:** Tap "Sample" button in Library
 **Reset app data:** Tap "Reset" button in Library
 **Time format:** Always milliseconds internally
-**File playback:** Always use `audioFile.uri` (local path)
+**File playback:** Use `audioFile.uri` (local path) - check for null first!
+**File identifier:** Use `audioFile.id` (stable), not `uri` (can be null)
+**Clip source check:** `clip.file_uri !== null` means source file available
 **Library status:** `loading → idle ⇄ adding`
 **Audio status:** `idle → loading → paused ⇄ playing`
 
@@ -531,7 +580,6 @@ Uses `react-native-track-player` v5 for system-level playback integration:
 - LoadingModal with dual messages
 - Dev reset button in Library
 - New FileSystem API (Paths, Directory, File)
-- Database schema: `uri` (local) + `original_uri` (external)
 - Shared components extracted (ScreenArea, Header, EmptyState, ActionMenu, IconButton, Modal)
 - Automatic clip transcription via on-device Whisper
 - Native AudioSlicer module for audio segment extraction
@@ -541,7 +589,11 @@ Uses `react-native-track-player` v5 for system-level playback integration:
 - Components maintain local position state, sync from global only when they own playback
 - **react-native-track-player v5**: Replaced expo-audio for system media controls
 - **Persistent clip files**: Clips have own audio files (`uri`), sliced on create/update
-- **Clip schema**: `file_uri` renamed to `source_uri`, added `uri` for clip audio file
 - **ClipViewer/ClipEditor**: Extracted components for viewing and editing clips
 - **Unified Timeline component**: Replaced PlaybackTimeline + SelectionTimeline with single props-based Timeline
 - **Stencil + paint layers rendering**: Timeline uses clip regions instead of per-bar segment logic
+- **File ID as primary key**: `files.id` (auto-increment) is now the stable identifier, `uri` is nullable
+- **Clip source independence**: Clips reference `source_id` (file ID), work even if source file removed
+- **ClipWithFile.file_uri**: Nullable field to check source availability; when null, clips play from own file
+- **Store files indexed by id**: `files: Record<number, AudioFile>` instead of by uri
+- **Database methods renamed**: `getFileByUri()`, `getFileById()`, `createClip(sourceId, ...)`

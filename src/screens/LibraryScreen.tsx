@@ -41,6 +41,11 @@ export default function LibraryScreen() {
   }
 
   const handleFilePress = async (file: AudioFile) => {
+    if (!file.uri) {
+      Alert.alert('File Unavailable', 'This file has been removed from storage')
+      return
+    }
+
     try {
       await loadFileWithUri(file.uri, file.name)
       // Navigate to player tab
@@ -117,7 +122,7 @@ export default function LibraryScreen() {
       {filesArray.length > 0 ? (
         <FlatList
           data={filesArray}
-          keyExtractor={(item) => item.uri}
+          keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <TouchableOpacity

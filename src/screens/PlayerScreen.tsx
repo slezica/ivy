@@ -54,7 +54,7 @@ export default function PlayerScreen() {
   }
 
   const handlePlayPause = async () => {
-    if (!ownFile) return
+    if (!ownFile?.uri) return
 
     try {
       if (isOwner && audio.status === 'playing') {
@@ -78,7 +78,7 @@ export default function PlayerScreen() {
     setOwnPosition(position)
 
     // Only affect audio if we're the owner and file is loaded
-    if (isOwner && isFileLoaded && ownFile) {
+    if (isOwner && isFileLoaded && ownFile?.uri) {
       seek({ fileUri: ownFile.uri, position })
     }
   }, [isOwner, isFileLoaded, ownFile, seek])

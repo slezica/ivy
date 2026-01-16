@@ -140,9 +140,15 @@ export default function ClipsListScreen() {
   }
 
   const getMenuItems = (): ActionMenuItem[] => {
+    const clip = menuClipId ? clips[menuClipId] : null
+    const hasSourceFile = clip?.file_uri !== null
+
     return [
-      { key: 'edit', label: 'Edit', icon: 'pencil' },
-      { key: 'goToSource', label: 'Go to source', icon: 'play-circle-outline' },
+      // Edit and Go to source require source file
+      ...(hasSourceFile ? [
+        { key: 'edit', label: 'Edit', icon: 'pencil' } as ActionMenuItem,
+        { key: 'goToSource', label: 'Go to source', icon: 'play-circle-outline' } as ActionMenuItem,
+      ] : []),
       { key: 'share', label: 'Share', icon: 'share-outline' },
       { key: 'delete', label: 'Delete', icon: 'trash-outline', destructive: true },
     ]

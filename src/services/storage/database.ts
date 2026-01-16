@@ -12,7 +12,8 @@ import * as SQLite from 'expo-sqlite'
 // =============================================================================
 
 export interface AudioFile {
-  uri: string              // Local file:// path (used for playback)
+  id: number               // Auto-increment primary key
+  uri: string | null       // Local file:// path (null if file removed)
   original_uri: string | null  // External content:// URI (reference only)
   name: string
   duration: number         // milliseconds
@@ -25,7 +26,7 @@ export interface AudioFile {
 
 export interface Clip {
   id: number
-  source_uri: string       // References files.uri (parent file)
+  source_id: number        // References files.id (parent file)
   uri: string              // Clip's own audio file
   start: number            // milliseconds
   duration: number         // milliseconds
@@ -36,6 +37,7 @@ export interface Clip {
 }
 
 export interface ClipWithFile extends Clip {
+  file_uri: string | null    // Source file URI (null if removed)
   file_name: string
   file_title: string | null
   file_artist: string | null
@@ -67,10 +69,18 @@ export class DatabaseService {
   // Files
   // ---------------------------------------------------------------------------
 
-  getFile(uri: string): AudioFile | null {
+  getFileByUri(uri: string): AudioFile | null {
     const result = this.db.getFirstSync<AudioFile>(
       'SELECT * FROM files WHERE uri = ?',
       [uri]
+    )
+    return result || null
+  }
+
+  getFileById(id: number): AudioFile | null {
+    const result = this.db.getFirstSync<AudioFile>(
+      'SELECT * FROM files WHERE id = ?',
+      [id]
     )
     return result || null
   }
@@ -90,28 +100,30 @@ export class DatabaseService {
     title?: string | null,
     artist?: string | null,
     artwork?: string | null
-  ): void {
+  ): AudioFile {
     const now = Date.now()
-    const existing = this.getFile(uri)
+    const existing = this.getFileByUri(uri)
 
     if (existing) {
       this.db.runSync(
-        'UPDATE files SET name = ?, duration = ?, position = ?, opened_at = ?, original_uri = ?, title = ?, artist = ?, artwork = ? WHERE uri = ?',
-        [name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null, uri]
+        'UPDATE files SET name = ?, duration = ?, position = ?, opened_at = ?, original_uri = ?, title = ?, artist = ?, artwork = ? WHERE id = ?',
+        [name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null, existing.id]
       )
+      return this.getFileById(existing.id)!
     } else {
-      this.db.runSync(
+      const result = this.db.runSync(
         'INSERT INTO files (uri, name, duration, position, opened_at, original_uri, title, artist, artwork) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [uri, name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null]
       )
+      return this.getFileById(result.lastInsertRowId)!
     }
   }
 
-  updateFilePosition(uri: string, position: number): void {
+  updateFilePosition(id: number, position: number): void {
     try {
       this.db.runSync(
-        'UPDATE files SET position = ? WHERE uri = ?',
-        [position, uri]
+        'UPDATE files SET position = ? WHERE id = ?',
+        [position, id]
       )
     } catch (error) {
       // Silently ignore during app transitions/resets
@@ -131,10 +143,10 @@ export class DatabaseService {
     return result || null
   }
 
-  getClipsForFile(fileUri: string): Clip[] {
+  getClipsForFile(fileId: number): Clip[] {
     return this.db.getAllSync<Clip>(
-      'SELECT * FROM clips WHERE source_uri = ? ORDER BY start ASC',
-      [fileUri]
+      'SELECT * FROM clips WHERE source_id = ? ORDER BY start ASC',
+      [fileId]
     )
   }
 
@@ -142,26 +154,27 @@ export class DatabaseService {
     return this.db.getAllSync<ClipWithFile>(
       `SELECT
         clips.*,
+        files.uri as file_uri,
         files.name as file_name,
         files.title as file_title,
         files.artist as file_artist,
         files.duration as file_duration
       FROM clips
-      INNER JOIN files ON clips.source_uri = files.uri
+      INNER JOIN files ON clips.source_id = files.id
       ORDER BY clips.created_at DESC`
     )
   }
 
-  createClip(sourceUri: string, uri: string, start: number, duration: number, note: string): Clip {
+  createClip(sourceId: number, uri: string, start: number, duration: number, note: string): Clip {
     const now = Date.now()
     const result = this.db.runSync(
-      'INSERT INTO clips (source_uri, uri, start, duration, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [sourceUri, uri, start, duration, note, now, now]
+      'INSERT INTO clips (source_id, uri, start, duration, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [sourceId, uri, start, duration, note, now, now]
     )
 
     return {
       id: result.lastInsertRowId,
-      source_uri: sourceUri,
+      source_id: sourceId,
       uri,
       start,
       duration,
@@ -256,19 +269,37 @@ export class DatabaseService {
 
   private initialize(): void {
     this.db.execSync(`
+      CREATE TABLE IF NOT EXISTS files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uri TEXT,
+        original_uri TEXT,
+        name TEXT NOT NULL,
+        duration INTEGER,
+        position INTEGER NOT NULL DEFAULT 0,
+        opened_at INTEGER,
+        title TEXT,
+        artist TEXT,
+        artwork TEXT
+      );
+    `)
+
+    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_files_uri ON files(uri);`)
+
+    this.db.execSync(`
       CREATE TABLE IF NOT EXISTS clips (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        source_uri TEXT NOT NULL,
+        source_id INTEGER NOT NULL REFERENCES files(id),
         uri TEXT NOT NULL,
         start INTEGER NOT NULL,
         duration INTEGER NOT NULL,
         note TEXT NOT NULL,
+        transcription TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
     `)
 
-    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_clips_source_uri ON clips(source_uri);`)
+    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_clips_source_id ON clips(source_id);`)
 
     this.db.execSync(`
       CREATE TABLE IF NOT EXISTS sessions (
@@ -282,31 +313,6 @@ export class DatabaseService {
     `)
 
     this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_sessions_file_uri ON sessions(file_uri);`)
-
-    this.db.execSync(`
-      CREATE TABLE IF NOT EXISTS files (
-        uri TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        duration INTEGER,
-        position INTEGER NOT NULL DEFAULT 0,
-        opened_at INTEGER
-      );
-    `)
-
-    // Migrations
-    this.migrate('ALTER TABLE files ADD COLUMN original_uri TEXT')
-    this.migrate('ALTER TABLE files ADD COLUMN title TEXT')
-    this.migrate('ALTER TABLE files ADD COLUMN artist TEXT')
-    this.migrate('ALTER TABLE files ADD COLUMN artwork TEXT')
-    this.migrate('ALTER TABLE clips ADD COLUMN transcription TEXT')
-  }
-
-  private migrate(sql: string): void {
-    try {
-      this.db.execSync(sql)
-    } catch {
-      // Column already exists
-    }
   }
 }
 
