@@ -29,8 +29,8 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   const [selectionStart, setSelectionStart] = useState(clip.start)
   const [selectionEnd, setSelectionEnd] = useState(clip.start + clip.duration)
 
-  // Local position state - this is what the user is scrubbing to
-  const [localPosition, setLocalPosition] = useState(clip.start)
+  // Local state - the position this editor remembers
+  const [ownPosition, setOwnPosition] = useState(clip.start)
 
   // Stable owner ID for this instance
   const ownerId = useRef(`clip-editor-${clip.id}`).current
@@ -41,13 +41,10 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   const isPlaying = isOwner && audio.status === 'playing'
   const isLoading = isOwner && audio.status === 'loading'
 
-  // Display position: use global when we own playback, otherwise local
-  const displayPosition = isOwner && isFileLoaded ? audio.position : localPosition
-
-  // Sync local position from audio when we own playback
+  // Sync position from audio when we own playback
   useEffect(() => {
     if (isOwner && isFileLoaded) {
-      setLocalPosition(audio.position)
+      setOwnPosition(audio.position)
     }
   }, [isOwner, isFileLoaded, audio.position])
 
@@ -58,10 +55,10 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
 
   const handleSeek = async (pos: number) => {
     // Always update local position
-    setLocalPosition(pos)
+    setOwnPosition(pos)
 
-    // If our file is loaded and we own playback, also seek the global player
-    if (isFileLoaded && isOwner) {
+    // Only affect audio if we're the owner and file is loaded
+    if (isOwner && isFileLoaded) {
       await seek({ fileUri: clip.source_uri, position: pos })
     }
   }
@@ -71,8 +68,8 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
       if (isPlaying) {
         await pause()
       } else {
-        // Take ownership and play with our file and local position
-        await play({ fileUri: clip.source_uri, position: localPosition, ownerId })
+        // Claim ownership and play from our remembered position
+        await play({ fileUri: clip.source_uri, position: ownPosition, ownerId })
       }
     } catch (error) {
       console.error('Error toggling playback:', error)
@@ -98,7 +95,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
 
       <Timeline
         duration={clip.file_duration}
-        position={displayPosition}
+        position={ownPosition}
         onSeek={handleSeek}
         leftColor={Color.PRIMARY}
         rightColor={Color.PRIMARY}
