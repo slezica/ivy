@@ -13,6 +13,7 @@ import {
 } from '../services'
 
 import type { PickedFile, ClipWithFile, AudioFile } from '../services'
+import { MAIN_PLAYER_OWNER_ID } from '../utils'
 
 const CLIPS_DIR = `${RNFS.DocumentDirectoryPath}/clips`
 
@@ -309,7 +310,12 @@ export const useStore = create<AppState>((set, get) => {
       }
 
       // Auto-play after loading (this will set status to 'playing')
-      await get().play()
+      // Target the main player so it adopts the file
+      await get().play({
+        fileUri: audioFile.uri,
+        position: audioFile.position,
+        ownerId: MAIN_PLAYER_OWNER_ID,
+      })
     } catch (error) {
       console.error(error)
       // Reset loading state on error

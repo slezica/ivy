@@ -32,25 +32,36 @@ Single Zustand store (`src/store/index.ts`) is the source of truth. Services are
 Event callback preserves transitional state (`loading`) - only updates to `paused`/`playing` when not in transition.
 
 ### 6. **Playback Ownership** 🔥 IMPORTANT
-Multiple UI components can control playback (PlayerScreen, clip editor). To prevent conflicts:
+Multiple UI components can control playback (PlayerScreen, ClipViewer, ClipEditor). To prevent conflicts:
 - `audio.ownerId` tracks which component last took control
 - Components pass `ownerId` when calling `play()` to claim ownership
 - Ownership persists until another component calls `play()` with different `ownerId`
 - Components check `audio.ownerId === myId` to know if they're in control
 
+**Main Player ID:** `MAIN_PLAYER_OWNER_ID = 'main'` (exported from `utils/index.ts`)
+- Well-known ID for the main player tab
+- `loadFile()` uses this ID so PlayerScreen adopts newly loaded files
+- Any component can target the main player by using this ID
+
 ```typescript
-// Component generates stable ID
+// Main player checks for its well-known ID
+const isOwner = audio.ownerId === MAIN_PLAYER_OWNER_ID
+
+// Other components generate stable IDs
 const ownerId = useRef('clip-editor-123').current
+const isOwner = audio.ownerId === ownerId
 
 // Check ownership
-const isOwner = audio.ownerId === ownerId
 const isPlaying = isOwner && audio.status === 'playing'
 
 // Claim ownership when playing
 await play({ fileUri, position, ownerId })
 ```
 
-This enables future "now playing" widgets to show context about who initiated playback.
+**Local state pattern:** Each player maintains its own `ownFile` and `ownPosition`:
+- When owner: sync position from `audio.position`
+- When not owner: keep local position (allows seeking without affecting playback)
+- On play: claim ownership with local file/position
 
 ## Project Overview
 
@@ -372,6 +383,7 @@ interface TimelineProps {
 ## Utilities
 
 `src/utils/index.ts` exports:
+- `MAIN_PLAYER_OWNER_ID` - Well-known owner ID for the main player tab (`'main'`)
 - `formatTime(ms)` - Converts milliseconds to `MM:SS` or `H:MM:SS` format
 - `formatDate(timestamp)` - Formats timestamp as `MMM D, YYYY`
 
