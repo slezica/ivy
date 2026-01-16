@@ -12,12 +12,10 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
-  Modal,
-  TextInput,
   Pressable,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 
 import { useStore } from '../store'
@@ -26,9 +24,9 @@ import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
-import IconButton from '../components/shared/IconButton'
-import { PlaybackTimeline, SelectionTimeline } from '../components/timeline'
-import type { ClipWithFile } from '../services'
+import Modal from '../components/shared/Modal'
+import ClipViewer from '../components/ClipViewer'
+import ClipEditor from '../components/ClipEditor'
 import { formatTime } from '../utils'
 
 
@@ -163,23 +161,25 @@ export default function ClipsListScreen() {
         : <EmptyState title="No clips yet" subtitle="Add clips from the player screen" />
       }
 
-      {viewingClip &&
-        <ShowClipModal
-          clip={viewingClip}
-          visible={true}
-          onClose={handleCloseViewClip}
-          onEdit={() => handleEditClip(viewingClip.id)}
-        />
-      }
+      <Modal visible={!!viewingClip} onClose={handleCloseViewClip}>
+        {viewingClip &&
+          <ClipViewer
+            clip={viewingClip}
+            onClose={handleCloseViewClip}
+            onEdit={() => handleEditClip(viewingClip.id)}
+          />
+        }
+      </Modal>
 
-      {editingClip &&
-        <EditClipModal
-          clip={editingClip}
-          visible={true}
-          onCancel={handleCancelEditClip}
-          onSave={handleSaveClip}
-        />
-      }
+      <Modal visible={!!editingClip} onClose={handleCancelEditClip}>
+        {editingClip &&
+          <ClipEditor
+            clip={editingClip}
+            onCancel={handleCancelEditClip}
+            onSave={handleSaveClip}
+          />
+        }
+      </Modal>
 
       <ActionMenu
         visible={menuClipId !== null}
@@ -240,244 +240,6 @@ function ClipList({ clips, onViewClip, onOpenMenu }: any) {
 }
 
 
-interface ShowClipModalProps {
-  visible: boolean
-  clip: ClipWithFile
-  onClose: () => void
-  onEdit: () => void
-}
-
-function ShowClipModal({ visible, clip, onClose, onEdit }: ShowClipModalProps) {
-  const { player, play, pause } = useStore()
-
-  // Stable owner ID for this modal instance
-  const ownerId = useRef(`clip-viewer-${clip.id}`).current
-
-  // Check ownership and file state from global player
-  const isFileLoaded = player.file?.uri === clip.source_uri
-  const isOwner = player.ownerId === ownerId
-  const isPlaying = isOwner && player.status === 'playing'
-  const isLoading = isOwner && (player.status === 'loading' || player.status === 'adding')
-
-  const handlePlayPause = async () => {
-    try {
-      if (isPlaying) {
-        await pause()
-      } else {
-        await play({ fileUri: clip.source_uri, position: clip.start, ownerId })
-      }
-    } catch (error) {
-      console.error('Error toggling playback:', error)
-    }
-  }
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Header
-            title={clip.file_title || clip.file_name}
-            subtitle={`${formatTime(clip.start)} · ${formatTime(clip.duration)}`}
-            noBorder
-          />
-
-          {isFileLoaded
-            ? <PlaybackTimeline showTime="hidden" />
-            : <View style={styles.timelinePlaceholder} />
-          }
-
-          <View style={styles.playButtonContainer}>
-            <IconButton
-              iconName={isPlaying ? 'pause' : 'play'}
-              onPress={handlePlayPause}
-              size={48}
-              backgroundColor={isLoading ? Color.GRAY : Color.PRIMARY}
-            />
-          </View>
-
-          {clip.transcription && (
-            <View style={styles.clipInfoSection}>
-              <Text style={styles.clipInfoLabel}>Transcription</Text>
-              <Text style={styles.clipInfoText}>&ldquo;{clip.transcription}&rdquo;</Text>
-            </View>
-          )}
-
-          {clip.note && (
-            <View style={styles.clipInfoSection}>
-              <Text style={styles.clipInfoLabel}>Note</Text>
-              <Text style={styles.clipInfoText}>{clip.note}</Text>
-            </View>
-          )}
-
-          <View style={styles.modalButtons}>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalCancelButton]}
-              onPress={onClose}
-            >
-              <Text style={styles.modalButtonText}>Close</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalSaveButton]}
-              onPress={onEdit}
-            >
-              <Text style={[styles.modalButtonText, styles.modalSaveButtonText]}>
-                Edit
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  )
-}
-
-
-interface EditClipModalProps {
-  visible: boolean
-  clip: ClipWithFile
-  onCancel: () => void
-  onSave: (updates: { note?: string; start?: number; duration?: number }) => void
-}
-
-function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) {
-  const { player, play, pause, seek } = useStore()
-
-  const [note, setNote] = useState(clip.note)
-  const [selectionStart, setSelectionStart] = useState(clip.start)
-  const [selectionEnd, setSelectionEnd] = useState(clip.start + clip.duration)
-
-  // Local position state - this is what the user is scrubbing to
-  const [localPosition, setLocalPosition] = useState(clip.start)
-
-  // Stable owner ID for this modal instance
-  const ownerId = useRef(`clip-editor-${clip.id}`).current
-
-  // Check ownership and file state from global player
-  const isFileLoaded = player.file?.uri === clip.source_uri
-  const isOwner = player.ownerId === ownerId
-  const isPlaying = isOwner && player.status === 'playing'
-  const isLoading = isOwner && (player.status === 'loading' || player.status === 'adding')
-
-  // Display position: use global when we own playback, otherwise local
-  const displayPosition = isOwner && isFileLoaded ? player.position : localPosition
-
-  // Sync local position from player when we own playback
-  useEffect(() => {
-    if (isOwner && isFileLoaded) {
-      setLocalPosition(player.position)
-    }
-  }, [isOwner, isFileLoaded, player.position])
-
-  const handleSelectionChange = (start: number, end: number) => {
-    setSelectionStart(start)
-    setSelectionEnd(end)
-  }
-
-  const handleSeek = async (pos: number) => {
-    // Always update local position
-    setLocalPosition(pos)
-
-    // If our file is loaded and we own playback, also seek the global player
-    if (isFileLoaded && isOwner) {
-      await seek({ fileUri: clip.source_uri, position: pos })
-    }
-  }
-
-  const handlePlayPause = async () => {
-    try {
-      if (isPlaying) {
-        await pause()
-      } else {
-        // Take ownership and play with our file and local position
-        await play({ fileUri: clip.source_uri, position: localPosition, ownerId })
-      }
-    } catch (error) {
-      console.error('Error toggling playback:', error)
-    }
-  }
-
-  const handleSave = () => {
-    const newDuration = selectionEnd - selectionStart
-    onSave({
-      note,
-      start: selectionStart,
-      duration: newDuration,
-    })
-  }
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onCancel}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Header
-            title="Edit Clip"
-            subtitle={`${formatTime(selectionStart)} - ${formatTime(selectionEnd)}`}
-            noBorder
-          />
-
-          <SelectionTimeline
-            duration={clip.file_duration}
-            position={displayPosition}
-            selectionStart={selectionStart}
-            selectionEnd={selectionEnd}
-            onSelectionChange={handleSelectionChange}
-            onSeek={handleSeek}
-            showTime="hidden"
-          />
-
-          <View style={styles.playButtonContainer}>
-            <IconButton
-              iconName={isPlaying ? 'pause' : 'play'}
-              onPress={handlePlayPause}
-              size={48}
-              backgroundColor={isLoading ? Color.GRAY : Color.PRIMARY}
-            />
-          </View>
-
-          <TextInput
-            style={styles.modalInput}
-            placeholder="Add note (optional)"
-            placeholderTextColor={Color.GRAY}
-            value={note}
-            onChangeText={setNote}
-            multiline
-          />
-
-          <View style={styles.modalButtons}>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalCancelButton]}
-              onPress={onCancel}
-            >
-              <Text style={styles.modalButtonText}>Cancel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalSaveButton]}
-              onPress={handleSave}
-            >
-              <Text style={[styles.modalButtonText, styles.modalSaveButtonText]}>
-                Save
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  )
-}
-
-
 const styles = StyleSheet.create({
   listContent: {
     padding: 16,
@@ -529,84 +291,5 @@ const styles = StyleSheet.create({
   menuButton: {
     padding: 16,
     justifyContent: 'flex-start',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: Color.MODAL_OVERLAY,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: Color.WHITE,
-    borderRadius: 12,
-    width: '100%',
-    maxWidth: 400,
-    overflow: 'hidden',
-  },
-  playButtonContainer: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  modalInput: {
-    marginHorizontal: 20,
-    borderWidth: 1,
-    borderColor: Color.GRAY_BORDER,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    marginBottom: 20,
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 20,
-    paddingTop: 0,
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  modalCancelButton: {
-    backgroundColor: Color.GRAY_LIGHTER,
-  },
-  modalSaveButton: {
-    backgroundColor: Color.PRIMARY,
-  },
-  modalButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Color.GRAY_DARKER,
-  },
-  modalSaveButtonText: {
-    color: Color.WHITE,
-  },
-  timelinePlaceholder: {
-    height: 80,
-    marginHorizontal: 20,
-    backgroundColor: Color.GRAY_LIGHTER,
-    borderRadius: 8,
-  },
-  clipInfoSection: {
-    marginHorizontal: 20,
-    marginBottom: 16,
-  },
-  clipInfoLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Color.GRAY_DARK,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  clipInfoText: {
-    fontSize: 15,
-    color: Color.GRAY_DARKER,
-    lineHeight: 22,
   },
 })
