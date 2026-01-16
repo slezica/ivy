@@ -17,16 +17,21 @@ Everything internal is **milliseconds**. Convert to MM:SS only at display bounda
 ### 3. **State Management**
 Single Zustand store (`src/store/index.ts`) is the source of truth. Services are stateless.
 
-### 4. **Player Status Enum**
-`'idle'` → `'adding'` → `'loading'` → `'paused'` ⇄ `'playing'`
+### 4. **Library Status Enum**
+`'loading'` → `'idle'` ⇄ `'adding'`
+- `loading`: Initial state, fetching files from database
+- `idle`: Library ready
+- `adding`: Copying a new file to app storage
+
+### 5. **Player Status Enum**
+`'idle'` → `'loading'` → `'paused'` ⇄ `'playing'`
 - `idle`: No track loaded (initial state)
-- `adding`: Copying file to app storage
 - `loading`: Loading audio player
 - `paused`/`playing`: Playback states
 
-Event callback preserves transitional states (`adding`/`loading`) - only updates to `paused`/`playing` when not in transition.
+Event callback preserves transitional state (`loading`) - only updates to `paused`/`playing` when not in transition.
 
-### 5. **Playback Ownership** 🔥 IMPORTANT
+### 6. **Playback Ownership** 🔥 IMPORTANT
 Multiple UI components can control playback (PlayerScreen, clip editor). To prevent conflicts:
 - `player.ownerId` tracks which component last took control
 - Components pass `ownerId` when calling `play()` to claim ownership
@@ -170,8 +175,11 @@ updated_at INTEGER
 ## Store State Structure
 
 ```typescript
+library: {
+  status: 'loading' | 'idle' | 'adding'
+}
 player: {
-  status: 'idle' | 'adding' | 'loading' | 'paused' | 'playing'
+  status: 'idle' | 'loading' | 'paused' | 'playing'
   position: number              // milliseconds
   duration: number              // milliseconds
   file: AudioFile | null        // Includes uri + original_uri
@@ -200,7 +208,7 @@ pause()                                          // Pauses, preserves ownership
    - Lookup `dbService.getFile(pickedFile.uri)` - won't find it (searching by external URI)
    - Need to track by local URI instead, so we always copy on first load
 3. **Copy to app storage:**
-   - `status = 'adding'` → Modal shows "Adding to library..."
+   - `library.status = 'adding'` → Modal shows "Adding to library..."
    - `fileStorageService.copyToAppStorage()` → returns local `file://` URI
 4. **Load audio:**
    - `status = 'loading'` → Modal shows "Loading audio file..."
@@ -444,7 +452,7 @@ On-device automatic clip transcription using Whisper:
 - Import services from `services/` barrel export (e.g., `import { databaseService } from '../services'`)
 - Use dependency injection for services that depend on other services
 - Store all times in milliseconds internally
-- Set `status = 'adding'` when copying files, `'loading'` when loading player
+- Set `library.status = 'adding'` when copying files, `player.status = 'loading'` when loading player
 - Use local file:// URIs for all audio playback
 - Keep services stateless (state lives in store)
 - Pass `{ fileUri, position, ownerId }` when calling `play()` from UI components
@@ -467,7 +475,8 @@ On-device automatic clip transcription using Whisper:
 **Reset app data:** Tap "Reset" button in Library
 **Time format:** Always milliseconds internally
 **File playback:** Always use `audioFile.uri` (local path)
-**Status transitions:** `idle → adding → loading → paused ⇄ playing`
+**Library status:** `loading → idle ⇄ adding`
+**Player status:** `idle → loading → paused ⇄ playing`
 
 ## Custom ESLint Rules
 
