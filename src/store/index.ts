@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import RNFS from 'react-native-fs'
 
 import {
   AudioPlayerService,
@@ -12,6 +13,8 @@ import {
 } from '../services'
 
 import type { PickedFile, ClipWithFile, AudioFile } from '../services'
+
+const CLIPS_DIR = `${RNFS.DocumentDirectoryPath}/clips`
 
 
 const SKIP_FORWARD_MS = 25 * 1000
@@ -58,9 +61,9 @@ interface AppState {
   skipForward: () => Promise<void>
   skipBackward: () => Promise<void>
   addClip: (note: string) => Promise<void>
-  updateClip: (id: number, updates: { note?: string; start?: number; duration?: number }) => void
+  updateClip: (id: number, updates: { note?: string; start?: number; duration?: number }) => Promise<void>
   updateClipTranscription: (id: number, transcription: string) => void
-  deleteClip: (id: number) => void
+  deleteClip: (id: number) => Promise<void>
   jumpToClip: (clipId: number) => Promise<void>
   shareClip: (clipId: number) => Promise<void>
   syncPlaybackState: () => Promise<void>
@@ -84,9 +87,7 @@ export const useStore = create<AppState>((set, get) => {
   const fileStorageService = new FileStorageService()
   const metadataService = new AudioMetadataService()
 
-  const sharingService = new SharingService({
-    slicer: slicerService,
-  })
+  const sharingService = new SharingService()
 
   const audioService = new AudioPlayerService({
     onPlaybackStatusChange: (status) => {
@@ -463,8 +464,20 @@ export const useStore = create<AppState>((set, get) => {
     const remainingDuration = player.duration - player.position
     const clipDuration = Math.min(DEFAULT_CLIP_DURATION_MS, remainingDuration)
 
+    // Generate random filename and slice audio
+    const filename = `${generateRandomString()}.mp3`
+    await slicerService.ensureDir(CLIPS_DIR)
+    const sliceResult = await slicerService.slice({
+      sourceUri: player.file.uri,
+      startMs: player.position,
+      endMs: player.position + clipDuration,
+      outputFilename: filename,
+      outputDir: CLIPS_DIR,
+    })
+
     const clip = dbService.createClip(
       player.file.uri,
+      sliceResult.uri,
       player.position,
       clipDuration,
       note
@@ -477,15 +490,50 @@ export const useStore = create<AppState>((set, get) => {
     transcriptionService.queueClip(clip.id)
   }
 
-  function updateClip(id: number, updates: { note?: string; start?: number; duration?: number }) {
-    dbService.updateClip(id, updates)
+  async function updateClip(id: number, updates: { note?: string; start?: number; duration?: number }) {
+    const { clips } = get()
+    const clip = clips[id]
+    if (!clip) return
 
+    const boundsChanged =
+      (updates.start !== undefined && updates.start !== clip.start) ||
+      (updates.duration !== undefined && updates.duration !== clip.duration)
+
+    let newUri: string | undefined
+
+    // Re-slice if bounds changed
+    if (boundsChanged) {
+      const newStart = updates.start ?? clip.start
+      const newDuration = updates.duration ?? clip.duration
+
+      // Generate new slice
+      const filename = `${generateRandomString()}.mp3`
+      await slicerService.ensureDir(CLIPS_DIR)
+      const sliceResult = await slicerService.slice({
+        sourceUri: clip.source_uri,
+        startMs: newStart,
+        endMs: newStart + newDuration,
+        outputFilename: filename,
+        outputDir: CLIPS_DIR,
+      })
+
+      newUri = sliceResult.uri
+
+      // Delete old clip file
+      await slicerService.cleanup(clip.uri)
+    }
+
+    // Update database
+    dbService.updateClip(id, { ...updates, uri: newUri })
+
+    // Update store
     set((state) => ({
       clips: {
         ...state.clips,
         [id]: {
           ...state.clips[id],
           ...updates,
+          ...(newUri && { uri: newUri }),
           updated_at: Date.now(),
         },
       },
@@ -510,7 +558,15 @@ export const useStore = create<AppState>((set, get) => {
     })
   }
 
-  function deleteClip(id: number) {
+  async function deleteClip(id: number) {
+    const { clips } = get()
+    const clip = clips[id]
+
+    // Delete clip audio file
+    if (clip?.uri) {
+      await slicerService.cleanup(clip.uri)
+    }
+
     dbService.deleteClip(id)
 
     set((state) => {
@@ -526,23 +582,19 @@ export const useStore = create<AppState>((set, get) => {
     }
 
     // Jump to clip includes loading the file if different
-    await get().play({ fileUri: clip.file_uri, position: clip.start })
+    await get().play({ fileUri: clip.source_uri, position: clip.start })
   }
 
   async function shareClip(clipId: number) {
-    const { clips, player } = get()
+    const { clips } = get()
     const clip = clips[clipId]
 
     if (!clip) {
       throw new Error('Clip not found')
     }
 
-    if (!player.file) {
-      throw new Error('No file loaded')
-    }
-
-    // Extract and share the clip
-    await sharingService.shareClip(clip, player.file.uri, player.file.name)
+    // Share using the clip's existing audio file
+    await sharingService.shareClipFile(clip.uri, clip.note || clip.file_name)
   }
 
   async function __DEV_resetApp() {
@@ -568,3 +620,7 @@ export const useStore = create<AppState>((set, get) => {
     console.log('App reset complete')
   }
 })
+
+function generateRandomString(): string {
+  return (Math.random() + 1).toString(36).substring(2)
+}

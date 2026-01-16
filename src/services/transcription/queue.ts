@@ -141,14 +141,14 @@ export class TranscriptionQueueService {
 
     console.log('[Transcription] Extracting audio for transcription:', {
       clipId: clip.id,
-      startMs: clip.start,
       durationMs,
     })
 
+    // Use clip's own audio file as source, extract first N seconds
     const result = await this.slicer.slice({
-      sourceUri: clip.file_uri,
-      startMs: clip.start,
-      endMs: clip.start + durationMs,
+      sourceUri: clip.uri,
+      startMs: 0,
+      endMs: durationMs,
       outputFilename: `transcription_${clip.id}_${Date.now()}.mp3`,
     })
 

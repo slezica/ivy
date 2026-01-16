@@ -25,7 +25,8 @@ export interface AudioFile {
 
 export interface Clip {
   id: number
-  file_uri: string         // References files.uri (local path)
+  source_uri: string       // References files.uri (parent file)
+  uri: string              // Clip's own audio file
   start: number            // milliseconds
   duration: number         // milliseconds
   note: string
@@ -122,9 +123,17 @@ export class DatabaseService {
   // Clips
   // ---------------------------------------------------------------------------
 
+  getClip(id: number): Clip | null {
+    const result = this.db.getFirstSync<Clip>(
+      'SELECT * FROM clips WHERE id = ?',
+      [id]
+    )
+    return result || null
+  }
+
   getClipsForFile(fileUri: string): Clip[] {
     return this.db.getAllSync<Clip>(
-      'SELECT * FROM clips WHERE file_uri = ? ORDER BY start ASC',
+      'SELECT * FROM clips WHERE source_uri = ? ORDER BY start ASC',
       [fileUri]
     )
   }
@@ -138,21 +147,22 @@ export class DatabaseService {
         files.artist as file_artist,
         files.duration as file_duration
       FROM clips
-      INNER JOIN files ON clips.file_uri = files.uri
+      INNER JOIN files ON clips.source_uri = files.uri
       ORDER BY clips.created_at DESC`
     )
   }
 
-  createClip(fileUri: string, start: number, duration: number, note: string): Clip {
+  createClip(sourceUri: string, uri: string, start: number, duration: number, note: string): Clip {
     const now = Date.now()
     const result = this.db.runSync(
-      'INSERT INTO clips (file_uri, start, duration, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [fileUri, start, duration, note, now, now]
+      'INSERT INTO clips (source_uri, uri, start, duration, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [sourceUri, uri, start, duration, note, now, now]
     )
 
     return {
       id: result.lastInsertRowId,
-      file_uri: fileUri,
+      source_uri: sourceUri,
+      uri,
       start,
       duration,
       note,
@@ -162,7 +172,7 @@ export class DatabaseService {
     }
   }
 
-  updateClip(id: number, updates: { note?: string; start?: number; duration?: number }): void {
+  updateClip(id: number, updates: { note?: string; start?: number; duration?: number; uri?: string }): void {
     const now = Date.now()
     const setClauses: string[] = ['updated_at = ?']
     const values: (string | number)[] = [now]
@@ -178,6 +188,10 @@ export class DatabaseService {
     if (updates.duration !== undefined) {
       setClauses.push('duration = ?')
       values.push(updates.duration)
+    }
+    if (updates.uri !== undefined) {
+      setClauses.push('uri = ?')
+      values.push(updates.uri)
     }
 
     values.push(id)
@@ -244,7 +258,8 @@ export class DatabaseService {
     this.db.execSync(`
       CREATE TABLE IF NOT EXISTS clips (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_uri TEXT NOT NULL,
+        source_uri TEXT NOT NULL,
+        uri TEXT NOT NULL,
         start INTEGER NOT NULL,
         duration INTEGER NOT NULL,
         note TEXT NOT NULL,
@@ -253,7 +268,7 @@ export class DatabaseService {
       );
     `)
 
-    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_clips_file_uri ON clips(file_uri);`)
+    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_clips_source_uri ON clips(source_uri);`)
 
     this.db.execSync(`
       CREATE TABLE IF NOT EXISTS sessions (

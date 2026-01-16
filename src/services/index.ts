@@ -39,4 +39,3 @@ export type { TranscriptionCallback, TranscriptionQueueDeps } from './transcript
 // =============================================================================
 
 export { SharingService } from './system'
-export type { SharingServiceDeps } from './system'

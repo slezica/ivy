@@ -17,6 +17,7 @@ export interface SliceOptions {
   startMs: number
   endMs: number
   outputFilename?: string
+  outputDir?: string  // Defaults to CachesDirectoryPath
 }
 
 export interface SliceResult {
@@ -34,11 +35,12 @@ export class AudioSlicerService {
    * Caller is responsible for cleanup via `cleanup()`.
    */
   async slice(options: SliceOptions): Promise<SliceResult> {
-    const { sourceUri, startMs, endMs, outputFilename } = options
+    const { sourceUri, startMs, endMs, outputFilename, outputDir } = options
 
     const inputPath = uriToPath(sourceUri)
     const filename = outputFilename ?? `slice_${Date.now()}.mp3`
-    const outputPath = `${RNFS.CachesDirectoryPath}/${filename}`
+    const baseDir = outputDir ?? RNFS.CachesDirectoryPath
+    const outputPath = `${baseDir}/${filename}`
 
     console.log('[AudioSlicer] Slicing:', { inputPath, startMs, endMs, outputPath })
 
@@ -76,6 +78,16 @@ export class AudioSlicerService {
       }
     } catch (error) {
       console.warn('[AudioSlicer] Cleanup failed:', error)
+    }
+  }
+
+  /**
+   * Ensure a directory exists, creating it if necessary.
+   */
+  async ensureDir(dirPath: string): Promise<void> {
+    const exists = await RNFS.exists(dirPath)
+    if (!exists) {
+      await RNFS.mkdir(dirPath)
     }
   }
 }

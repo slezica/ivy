@@ -154,7 +154,8 @@ opened_at INTEGER              -- timestamp
 **clips table:**
 ```sql
 id INTEGER PRIMARY KEY
-file_uri TEXT                  -- References files.uri (local path)
+source_uri TEXT                -- References files.uri (parent file)
+uri TEXT                       -- Clip's own audio file
 start INTEGER                  -- milliseconds
 duration INTEGER               -- milliseconds
 note TEXT

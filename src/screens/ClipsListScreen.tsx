@@ -147,7 +147,7 @@ export default function ClipsListScreen() {
         : <EmptyState title="No clips yet" subtitle="Add clips from the player screen" />
       }
 
-      {editingClipId != null &&
+      {editingClip &&
         <EditClipModal
           clip={editingClip}
           visible={true}
@@ -236,7 +236,7 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
   const ownerId = useRef(`clip-editor-${clip.id}`).current
 
   // Check ownership and file state from global player
-  const isFileLoaded = player.file?.uri === clip.file_uri
+  const isFileLoaded = player.file?.uri === clip.source_uri
   const isOwner = player.ownerId === ownerId
   const isPlaying = isOwner && player.status === 'playing'
   const isLoading = isOwner && (player.status === 'loading' || player.status === 'adding')
@@ -262,7 +262,7 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
 
     // If our file is loaded and we own playback, also seek the global player
     if (isFileLoaded && isOwner) {
-      await seek({ fileUri: clip.file_uri, position: pos })
+      await seek({ fileUri: clip.source_uri, position: pos })
     }
   }
 
@@ -272,7 +272,7 @@ function EditClipModal({ visible, clip, onCancel, onSave }: EditClipModalProps) 
         await pause()
       } else {
         // Take ownership and play with our file and local position
-        await play({ fileUri: clip.file_uri, position: localPosition, ownerId })
+        await play({ fileUri: clip.source_uri, position: localPosition, ownerId })
       }
     } catch (error) {
       console.error('Error toggling playback:', error)
