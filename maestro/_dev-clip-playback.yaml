@@ -1,0 +1,37 @@
+appId: com.salezica.ivy
+---
+# DEV: Minimal clip playback test
+# Starting state: file loaded, clips tab active, one clip exists
+# Delete this file when done iterating
+
+# Tap clip card to open ClipViewer
+- tapOn:
+    id: "clip-card"
+
+# Verify ClipViewer opened (Close button visible)
+- assertVisible: "Close"
+- assertVisible: "Edit"
+- takeScreenshot: screenshots/dev-clip-01-viewer-open
+
+# Tap play button
+- tapOn:
+    id: "clip-viewer-play-button"
+
+# Wait for playback to start
+- waitForAnimationToEnd
+
+# Take screenshot of playing state
+- takeScreenshot: screenshots/dev-clip-02-playing
+
+# Tap again to pause
+- tapOn:
+    id: "clip-viewer-play-button"
+- takeScreenshot: screenshots/dev-clip-03-paused
+
+# Close the viewer
+- tapOn: "Close"
+
+# Verify we're back to clips list
+- assertVisible:
+    id: "clip-card"
+- takeScreenshot: screenshots/dev-clip-04-closed
