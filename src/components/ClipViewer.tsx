@@ -23,16 +23,16 @@ interface ClipViewerProps {
 }
 
 export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
-  const { player, play, pause, seek } = useStore()
+  const { audio, play, pause, seek } = useStore()
 
   // Stable owner ID for this instance
   const ownerId = useRef(`clip-viewer-${clip.id}`).current
 
-  // Check ownership and file state from global player
-  const isFileLoaded = player.file?.uri === clip.source_uri
-  const isOwner = player.ownerId === ownerId
-  const isPlaying = isOwner && player.status === 'playing'
-  const isLoading = isOwner && player.status === 'loading'
+  // Check ownership and file state from global audio
+  const isFileLoaded = audio.file?.uri === clip.source_uri
+  const isOwner = audio.ownerId === ownerId
+  const isPlaying = isOwner && audio.status === 'playing'
+  const isLoading = isOwner && audio.status === 'loading'
 
   const handlePlayPause = async () => {
     try {
@@ -60,10 +60,10 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
         noBorder
       />
 
-      {isFileLoaded
+      {isFileLoaded && audio.file
         ? <Timeline
-            duration={player.duration}
-            position={player.position}
+            duration={audio.file.duration}
+            position={audio.position}
             onSeek={handleSeek}
             leftColor={Color.GRAY}
             rightColor={Color.PRIMARY}

@@ -23,7 +23,7 @@ Single Zustand store (`src/store/index.ts`) is the source of truth. Services are
 - `idle`: Library ready
 - `adding`: Copying a new file to app storage
 
-### 5. **Player Status Enum**
+### 5. **Audio Status Enum**
 `'idle'` → `'loading'` → `'paused'` ⇄ `'playing'`
 - `idle`: No track loaded (initial state)
 - `loading`: Loading audio player
@@ -33,18 +33,18 @@ Event callback preserves transitional state (`loading`) - only updates to `pause
 
 ### 6. **Playback Ownership** 🔥 IMPORTANT
 Multiple UI components can control playback (PlayerScreen, clip editor). To prevent conflicts:
-- `player.ownerId` tracks which component last took control
+- `audio.ownerId` tracks which component last took control
 - Components pass `ownerId` when calling `play()` to claim ownership
 - Ownership persists until another component calls `play()` with different `ownerId`
-- Components check `player.ownerId === myId` to know if they're in control
+- Components check `audio.ownerId === myId` to know if they're in control
 
 ```typescript
 // Component generates stable ID
 const ownerId = useRef('clip-editor-123').current
 
 // Check ownership
-const isOwner = player.ownerId === ownerId
-const isPlaying = isOwner && player.status === 'playing'
+const isOwner = audio.ownerId === ownerId
+const isPlaying = isOwner && audio.status === 'playing'
 
 // Claim ownership when playing
 await play({ fileUri, position, ownerId })
@@ -178,11 +178,10 @@ updated_at INTEGER
 library: {
   status: 'loading' | 'idle' | 'adding'
 }
-player: {
+audio: {
   status: 'idle' | 'loading' | 'paused' | 'playing'
   position: number              // milliseconds
-  duration: number              // milliseconds
-  file: AudioFile | null        // Includes uri + original_uri
+  file: AudioFile | null        // Includes uri + original_uri + duration
   ownerId: string | null        // ID of component controlling playback
 }
 clips: Record<number, Clip>
@@ -334,8 +333,8 @@ interface TimelineProps {
 ```typescript
 // Playback mode (PlayerScreen, ClipViewer)
 <Timeline
-  duration={player.duration}
-  position={player.position}
+  duration={audio.file.duration}
+  position={audio.position}
   onSeek={handleSeek}
   leftColor={Color.GRAY}       // played
   rightColor={Color.PRIMARY}   // unplayed
@@ -431,7 +430,7 @@ On-device automatic clip transcription using Whisper:
 ### New Playback Control
 1. Add action to `src/store/index.ts`
 2. Call `AudioPlayerService` method (from `services/audio/player.ts`)
-3. Update `player.status` if needed
+3. Update `audio.status` if needed
 4. Add UI in `PlayerScreen.tsx`
 
 ### New Database Field
@@ -452,12 +451,12 @@ On-device automatic clip transcription using Whisper:
 - Import services from `services/` barrel export (e.g., `import { databaseService } from '../services'`)
 - Use dependency injection for services that depend on other services
 - Store all times in milliseconds internally
-- Set `library.status = 'adding'` when copying files, `player.status = 'loading'` when loading player
+- Set `library.status = 'adding'` when copying files, `audio.status = 'loading'` when loading player
 - Use local file:// URIs for all audio playback
 - Keep services stateless (state lives in store)
 - Pass `{ fileUri, position, ownerId }` when calling `play()` from UI components
 - Maintain local position state in playback components
-- Check `player.ownerId === myId` before syncing from global player state
+- Check `audio.ownerId === myId` before syncing from global audio state
 
 ❌ **Don't:**
 - Use external content: URIs for audio playback
@@ -465,7 +464,7 @@ On-device automatic clip transcription using Whisper:
 - Modify `status` from polling callback when in transitional state
 - Call `upsertFile` without both URIs (local and original)
 - Call `play()` or `seek()` without file context from UI components
-- Assume global `player.position` is relevant to your component (check ownership first)
+- Assume global `audio.position` is relevant to your component (check ownership first)
 
 ## Quick Reference
 
@@ -476,7 +475,7 @@ On-device automatic clip transcription using Whisper:
 **Time format:** Always milliseconds internally
 **File playback:** Always use `audioFile.uri` (local path)
 **Library status:** `loading → idle ⇄ adding`
-**Player status:** `idle → loading → paused ⇄ playing`
+**Audio status:** `idle → loading → paused ⇄ playing`
 
 ## Custom ESLint Rules
 
@@ -523,7 +522,7 @@ Uses `react-native-track-player` v5 for system-level playback integration:
 - Native AudioSlicer module for audio segment extraction
 - Clip sharing via native share sheet
 - **Context-based playback API**: `play()` and `seek()` require file/position context
-- **Playback ownership**: `player.ownerId` tracks which component controls playback
+- **Playback ownership**: `audio.ownerId` tracks which component controls playback
 - Components maintain local position state, sync from global only when they own playback
 - **react-native-track-player v5**: Replaced expo-audio for system media controls
 - **Persistent clip files**: Clips have own audio files (`uri`), sliced on create/update

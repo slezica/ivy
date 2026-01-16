@@ -12,7 +12,7 @@ import EmptyState from '../components/shared/EmptyState'
 const PLAYER_OWNER_ID = 'player-screen'
 
 export default function PlayerScreen() {
-  const { player, addClip, play, pause, seek, syncPlaybackState } = useStore()
+  const { audio, addClip, play, pause, seek, syncPlaybackState } = useStore()
 
   // Sync position immediately when screen comes into focus
   useFocusEffect(
@@ -32,13 +32,13 @@ export default function PlayerScreen() {
 
   const handlePlayPause = async () => {
     try {
-      if (player.status === 'playing') {
+      if (audio.status === 'playing') {
         await pause()
-      } else if (player.file) {
+      } else if (audio.file) {
         // Claim ownership when playing from main player
         await play({
-          fileUri: player.file.uri,
-          position: player.position,
+          fileUri: audio.file.uri,
+          position: audio.position,
           ownerId: PLAYER_OWNER_ID,
         })
       }
@@ -49,18 +49,18 @@ export default function PlayerScreen() {
   }
 
   const handleSeek = useCallback((position: number) => {
-    if (player.file?.uri) {
-      seek({ fileUri: player.file.uri, position })
+    if (audio.file?.uri) {
+      seek({ fileUri: audio.file.uri, position })
     }
-  }, [player.file?.uri, seek])
+  }, [audio.file?.uri, seek])
 
   return (
     <ScreenArea>
       <View style={styles.content}>
-        {player.file
+        {audio.file
           ? <Player
-              file={player.file}
-              player={player}
+              file={audio.file}
+              audio={audio}
               onPlayPause={handlePlayPause}
               onAddClip={handleAddClip}
               onSeek={handleSeek}
@@ -72,7 +72,7 @@ export default function PlayerScreen() {
   )
 }
 
-function Player({ file, player, onPlayPause, onAddClip, onSeek }: any) {
+function Player({ file, audio, onPlayPause, onAddClip, onSeek }: any) {
   return (
     <View style={styles.playerContainer}>
       <View style={styles.spacerTop} />
@@ -89,8 +89,8 @@ function Player({ file, player, onPlayPause, onAddClip, onSeek }: any) {
       </View>
 
       <Timeline
-        duration={player.duration}
-        position={player.position}
+        duration={file.duration}
+        position={audio.position}
         onSeek={onSeek}
         leftColor={Color.GRAY}
         rightColor={Color.PRIMARY}
@@ -99,7 +99,7 @@ function Player({ file, player, onPlayPause, onAddClip, onSeek }: any) {
       <View style={styles.playbackControls}>
         <IconButton
           size={72}
-          iconName={player.status === 'playing' ? 'pause' : 'play'}
+          iconName={audio.status === 'playing' ? 'pause' : 'play'}
           onPress={onPlayPause}
           testID="play-pause-button"
         />
