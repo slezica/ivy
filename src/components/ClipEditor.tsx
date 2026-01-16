@@ -12,7 +12,7 @@ import { Color } from '../theme'
 import { formatTime } from '../utils'
 import Header from './shared/Header'
 import IconButton from './shared/IconButton'
-import { SelectionTimeline } from './timeline'
+import { Timeline } from './timeline'
 import type { ClipWithFile } from '../services'
 
 
@@ -96,13 +96,16 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
         noBorder
       />
 
-      <SelectionTimeline
+      <Timeline
         duration={clip.file_duration}
         position={displayPosition}
+        onSeek={handleSeek}
+        leftColor={Color.PRIMARY}
+        rightColor={Color.PRIMARY}
+        selectionColor={Color.SELECTION}
         selectionStart={selectionStart}
         selectionEnd={selectionEnd}
         onSelectionChange={handleSelectionChange}
-        onSeek={handleSeek}
         showTime="hidden"
       />
 
