@@ -29,8 +29,6 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "FOREGROUND_SERVICE",
-        "WAKE_LOCK",
-        "FOREGROUND_SERVICE",
         "WAKE_LOCK"
       ],
       "package": "com.salezica.ivy"
