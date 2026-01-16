@@ -26,7 +26,7 @@ export interface TranscriptionQueueDeps {
 // Constants
 // =============================================================================
 
-const MAX_TRANSCRIPTION_DURATION_MS = 5000  // First 5 seconds of clip
+const MAX_TRANSCRIPTION_DURATION_MS = 10000  // First 5 seconds of clip
 
 // =============================================================================
 // Service
