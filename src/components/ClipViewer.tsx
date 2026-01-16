@@ -12,7 +12,7 @@ import { Color } from '../theme'
 import { formatTime } from '../utils'
 import Header from './shared/Header'
 import IconButton from './shared/IconButton'
-import { PlaybackTimeline } from './timeline'
+import { Timeline } from './timeline'
 import type { ClipWithFile } from '../services'
 
 
@@ -23,7 +23,7 @@ interface ClipViewerProps {
 }
 
 export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
-  const { player, play, pause } = useStore()
+  const { player, play, pause, seek } = useStore()
 
   // Stable owner ID for this instance
   const ownerId = useRef(`clip-viewer-${clip.id}`).current
@@ -46,6 +46,12 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
     }
   }
 
+  const handleSeek = (position: number) => {
+    if (isFileLoaded) {
+      seek({ fileUri: clip.source_uri, position })
+    }
+  }
+
   return (
     <>
       <Header
@@ -55,7 +61,14 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
       />
 
       {isFileLoaded
-        ? <PlaybackTimeline showTime="hidden" />
+        ? <Timeline
+            duration={player.duration}
+            position={player.position}
+            onSeek={handleSeek}
+            leftColor={Color.GRAY}
+            rightColor={Color.PRIMARY}
+            showTime="hidden"
+          />
         : <View style={styles.timelinePlaceholder} />
       }
 

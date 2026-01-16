@@ -341,6 +341,11 @@ export function Timeline({
     ? TIME_INDICATORS_HEIGHT + TIME_INDICATORS_MARGIN
     : 0
 
+  // Playhead height: align with bottom of handle circles when selection is enabled
+  const playheadHeight = hasSelection
+    ? TIMELINE_HEIGHT - 10 + HANDLE_CIRCLE_RADIUS * 2  // Bottom of handle circles
+    : TIMELINE_HEIGHT
+
   return (
     <GestureHandlerRootView style={styles.container}>
       {showTime === 'top' && (
@@ -353,7 +358,7 @@ export function Timeline({
 
       {/* Playhead indicator at center */}
       <View
-        style={[styles.playheadContainer, { top: playheadTop, height: canvasHeight }]}
+        style={[styles.playheadContainer, { top: playheadTop, height: playheadHeight }]}
         pointerEvents="none"
       >
         <View style={styles.playhead} />
