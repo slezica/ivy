@@ -33,9 +33,9 @@ import { formatTime } from '../utils'
 export default function ClipsListScreen() {
   const router = useRouter()
   const { clips, jumpToClip, deleteClip, updateClip, shareClip, fetchAllClips } = useStore()
-  const [viewingClipId, setViewingClipId] = useState<number | null>(null)
-  const [editingClipId, setEditingClipId] = useState<number | null>(null)
-  const [menuClipId, setMenuClipId] = useState<number | null>(null)
+  const [viewingClipId, setViewingClipId] = useState<string | null>(null)
+  const [editingClipId, setEditingClipId] = useState<string | null>(null)
+  const [menuClipId, setMenuClipId] = useState<string | null>(null)
 
   // Fetch all clips when screen is focused
   useFocusEffect(
@@ -48,7 +48,7 @@ export default function ClipsListScreen() {
   const viewingClip = viewingClipId ? clips[viewingClipId] : null
   const editingClip = editingClipId ? clips[editingClipId] : null
 
-  const handleJumpToClip = async (clipId: number) => {
+  const handleJumpToClip = async (clipId: string) => {
     router.replace('/player')
     try {
       await jumpToClip(clipId)
@@ -58,7 +58,7 @@ export default function ClipsListScreen() {
     }
   }
 
-  const handleDeleteClip = (clipId: number) => {
+  const handleDeleteClip = (clipId: string) => {
     Alert.alert(
       'Delete Clip',
       'Are you sure you want to delete this clip?',
@@ -73,7 +73,7 @@ export default function ClipsListScreen() {
     )
   }
 
-  const handleViewClip = (clipId: number) => {
+  const handleViewClip = (clipId: string) => {
     if (clipId in clips) {
       setViewingClipId(clipId)
     }
@@ -83,7 +83,7 @@ export default function ClipsListScreen() {
     setViewingClipId(null)
   }
 
-  const handleEditClip = (clipId: number) => {
+  const handleEditClip = (clipId: string) => {
     if (clipId in clips) {
       setViewingClipId(null)
       setEditingClipId(clipId)
@@ -101,7 +101,7 @@ export default function ClipsListScreen() {
     setEditingClipId(null)
   }
 
-  const handleShareClip = async (clipId: number) => {
+  const handleShareClip = async (clipId: string) => {
     try {
       await shareClip(clipId)
     } catch (error) {
@@ -110,7 +110,7 @@ export default function ClipsListScreen() {
     }
   }
 
-  const handleOpenMenu = (clipId: number) => {
+  const handleOpenMenu = (clipId: string) => {
     setMenuClipId(clipId)
   }
 
@@ -202,7 +202,7 @@ function ClipList({ clips, onViewClip, onOpenMenu }: any) {
   return (
     <FlatList
       data={clips}
-      keyExtractor={(item) => item.id.toString()}
+      keyExtractor={(item) => item.id}
       contentContainerStyle={styles.listContent}
       renderItem={({ item }) => (
         <TouchableOpacity

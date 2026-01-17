@@ -13,7 +13,7 @@ import {
 } from '../services'
 
 import type { PickedFile, ClipWithFile, Book } from '../services'
-import { MAIN_PLAYER_OWNER_ID } from '../utils'
+import { MAIN_PLAYER_OWNER_ID, generateId } from '../utils'
 
 const CLIPS_DIR = `${RNFS.DocumentDirectoryPath}/clips`
 
@@ -54,27 +54,27 @@ interface AppState {
   // State
   library: LibraryState
   audio: AudioState
-  clips: Record<number, ClipWithFile>
-  books: Record<number, Book>
+  clips: Record<string, ClipWithFile>
+  books: Record<string, Book>
 
   // Actions
   loadFile: (pickedFile: PickedFile) => Promise<void>
   loadFileWithUri: (uri: string, name: string) => Promise<void>
   loadFileWithPicker: () => Promise<void>
   fetchBooks: () => void
-  archiveBook: (bookId: number) => Promise<void>
+  archiveBook: (bookId: string) => Promise<void>
   fetchAllClips: () => void
   play: (context?: PlaybackContext) => Promise<void>
   pause: () => Promise<void>
   seek: (context: PlaybackContext) => Promise<void>
   skipForward: () => Promise<void>
   skipBackward: () => Promise<void>
-  addClip: (bookId: number, position: number) => Promise<void>
-  updateClip: (id: number, updates: { note?: string; start?: number; duration?: number }) => Promise<void>
-  updateClipTranscription: (id: number, transcription: string) => void
-  deleteClip: (id: number) => Promise<void>
-  jumpToClip: (clipId: number) => Promise<void>
-  shareClip: (clipId: number) => Promise<void>
+  addClip: (bookId: string, position: number) => Promise<void>
+  updateClip: (id: string, updates: { note?: string; start?: number; duration?: number }) => Promise<void>
+  updateClipTranscription: (id: string, transcription: string) => void
+  deleteClip: (id: string) => Promise<void>
+  jumpToClip: (clipId: string) => Promise<void>
+  shareClip: (clipId: string) => Promise<void>
   syncPlaybackState: () => Promise<void>
 
   // Dev tools
@@ -184,12 +184,12 @@ export const useStore = create<AppState>((set, get) => {
     const booksMap = allBooks.reduce((acc, book) => {
       acc[book.id] = book
       return acc
-    }, {} as Record<number, Book>)
+    }, {} as Record<string, Book>)
 
     set({ books: booksMap, library: { status: 'idle' } })
   }
 
-  async function archiveBook(bookId: number): Promise<void> {
+  async function archiveBook(bookId: string): Promise<void> {
     const { books } = get()
     const book = books[bookId]
 
@@ -236,7 +236,7 @@ export const useStore = create<AppState>((set, get) => {
     const clipsMap = allClips.reduce((acc, clip) => {
       acc[clip.id] = clip
       return acc
-    }, {} as Record<number, ClipWithFile>)
+    }, {} as Record<string, ClipWithFile>)
 
     set({ clips: clipsMap })
   }
@@ -515,7 +515,7 @@ export const useStore = create<AppState>((set, get) => {
     }))
   }
 
-  async function addClip(bookId: number, position: number) {
+  async function addClip(bookId: string, position: number) {
     const { books } = get()
     const book = books[bookId]
 
@@ -530,8 +530,9 @@ export const useStore = create<AppState>((set, get) => {
     const remainingDuration = book.duration - position
     const clipDuration = Math.min(DEFAULT_CLIP_DURATION_MS, remainingDuration)
 
-    // Generate random filename and slice audio
-    const filename = `${generateRandomString()}.mp3`
+    // Generate clip ID upfront and use it for filename
+    const clipId = generateId()
+    const filename = `${clipId}.mp3`
     await slicerService.ensureDir(CLIPS_DIR)
     const sliceResult = await slicerService.slice({
       sourceUri: book.uri,
@@ -542,6 +543,7 @@ export const useStore = create<AppState>((set, get) => {
     })
 
     const clip = dbService.createClip(
+      clipId,
       bookId,
       sliceResult.uri,
       position,
@@ -556,7 +558,7 @@ export const useStore = create<AppState>((set, get) => {
     transcriptionService.queueClip(clip.id)
   }
 
-  async function updateClip(id: number, updates: { note?: string; start?: number; duration?: number }) {
+  async function updateClip(id: string, updates: { note?: string; start?: number; duration?: number }) {
     const { clips } = get()
     const clip = clips[id]
     if (!clip) return
@@ -576,8 +578,8 @@ export const useStore = create<AppState>((set, get) => {
       const newStart = updates.start ?? clip.start
       const newDuration = updates.duration ?? clip.duration
 
-      // Generate new slice
-      const filename = `${generateRandomString()}.mp3`
+      // Re-slice using clip's UUID as filename
+      const filename = `${id}.mp3`
       await slicerService.ensureDir(CLIPS_DIR)
       const sliceResult = await slicerService.slice({
         sourceUri: clip.file_uri,
@@ -610,7 +612,7 @@ export const useStore = create<AppState>((set, get) => {
     }))
   }
 
-  function updateClipTranscription(id: number, transcription: string) {
+  function updateClipTranscription(id: string, transcription: string) {
     set((state) => {
       const clip = state.clips[id]
       if (!clip) return state
@@ -628,7 +630,7 @@ export const useStore = create<AppState>((set, get) => {
     })
   }
 
-  async function deleteClip(id: number) {
+  async function deleteClip(id: string) {
     const { clips } = get()
     const clip = clips[id]
 
@@ -645,7 +647,7 @@ export const useStore = create<AppState>((set, get) => {
     })
   }
 
-  async function jumpToClip(clipId: number) {
+  async function jumpToClip(clipId: string) {
     const clip = get().clips[clipId]
     if (!clip) {
       throw new Error('Clip not found')
@@ -658,7 +660,7 @@ export const useStore = create<AppState>((set, get) => {
     await get().play({ fileUri: clip.file_uri, position: clip.start })
   }
 
-  async function shareClip(clipId: number) {
+  async function shareClip(clipId: string) {
     const { clips } = get()
     const clip = clips[clipId]
 
@@ -696,7 +698,3 @@ export const useStore = create<AppState>((set, get) => {
     console.log('App reset complete')
   }
 })
-
-function generateRandomString(): string {
-  return (Math.random() + 1).toString(36).substring(2)
-}

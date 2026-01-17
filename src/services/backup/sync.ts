@@ -14,7 +14,7 @@ import { googleDriveService, DriveFile } from './drive'
 // ---------------------------------------------------------------------------
 
 export interface BookBackup {
-  id: number
+  id: string
   name: string
   duration: number
   position: number
@@ -27,8 +27,8 @@ export interface BookBackup {
 }
 
 export interface ClipBackup {
-  id: number
-  source_id: number
+  id: string
+  source_id: string
   start: number
   duration: number
   note: string
@@ -44,13 +44,13 @@ export interface SyncResult {
   errors: string[]
 }
 
-// Filename format: {type}{id}_{timestamp}.{ext}
-// e.g., book1_1705432800000.json, clip4_1705432800000.json, clip4_1705432800000.mp3
-const FILENAME_REGEX = /^(book|clip)(\d+)_(\d+)\.(json|mp3)$/
+// Filename format: {type}_{id}_{timestamp}.{ext}
+// e.g., book_abc123_1705432800000.json, clip_def456_1705432800000.mp3
+const FILENAME_REGEX = /^(book|clip)_([a-f0-9-]+)_(\d+)\.(json|mp3)$/
 
 interface ParsedFilename {
   type: 'book' | 'clip'
-  id: number
+  id: string
   timestamp: number
   extension: 'json' | 'mp3'
 }
@@ -149,7 +149,7 @@ class BackupSyncService {
       fingerprint: uint8ArrayToBase64(book.fingerprint),
     }
 
-    const filename = `book${book.id}_${book.updated_at}.json`
+    const filename = `book_${book.id}_${book.updated_at}.json`
     const content = JSON.stringify(backup, null, 2)
 
     await googleDriveService.uploadFile('books', filename, content)
@@ -259,8 +259,8 @@ class BackupSyncService {
     }
 
     const timestamp = clip.updated_at
-    const jsonFilename = `clip${clip.id}_${timestamp}.json`
-    const mp3Filename = `clip${clip.id}_${timestamp}.mp3`
+    const jsonFilename = `clip_${clip.id}_${timestamp}.json`
+    const mp3Filename = `clip_${clip.id}_${timestamp}.mp3`
 
     // Upload JSON
     const jsonContent = JSON.stringify(backup, null, 2)
@@ -285,7 +285,7 @@ class BackupSyncService {
     const backup: ClipBackup = JSON.parse(jsonContent)
 
     // Find and download MP3
-    const mp3Filename = `clip${backup.id}_${timestamp}.mp3`
+    const mp3Filename = `clip_${backup.id}_${timestamp}.mp3`
     const mp3File = allFiles.find(f => f.name === mp3Filename)
 
     if (!mp3File) {
@@ -323,7 +323,7 @@ class BackupSyncService {
   }
 
   private async deleteClipFiles(
-    clipId: number,
+    clipId: string,
     timestamp: number,
     allFiles: DriveFile[]
   ): Promise<void> {
@@ -344,8 +344,8 @@ class BackupSyncService {
   private groupByLatest(
     files: DriveFile[],
     type: 'book' | 'clip'
-  ): Map<number, { file: DriveFile; timestamp: number }> {
-    const grouped = new Map<number, { file: DriveFile; timestamp: number }>()
+  ): Map<string, { file: DriveFile; timestamp: number }> {
+    const grouped = new Map<string, { file: DriveFile; timestamp: number }>()
 
     for (const file of files) {
       const parsed = parseFilename(file.name)
@@ -362,7 +362,7 @@ class BackupSyncService {
 
   private async cleanupOldVersions(files: DriveFile[], type: 'book' | 'clip'): Promise<void> {
     // Group all files by ID
-    const byId = new Map<number, DriveFile[]>()
+    const byId = new Map<string, DriveFile[]>()
 
     for (const file of files) {
       const parsed = parseFilename(file.name)
@@ -405,7 +405,7 @@ function parseFilename(name: string): ParsedFilename | null {
 
   return {
     type: match[1] as 'book' | 'clip',
-    id: parseInt(match[2], 10),
+    id: match[2],
     timestamp: parseInt(match[3], 10),
     extension: match[4] as 'json' | 'mp3',
   }

@@ -1,5 +1,9 @@
 export const MAIN_PLAYER_OWNER_ID = 'main'
 
+export function generateId(): string {
+  return crypto.randomUUID()
+}
+
 export function formatTime(milliseconds: number): string {
   const totalSeconds = Math.floor(milliseconds / 1000)
   const hours = Math.floor(totalSeconds / 3600)

@@ -204,7 +204,7 @@ await archiveBook(bookId)
 
 **files table (stores `Book` entities):**
 ```sql
-id INTEGER PRIMARY KEY         -- Auto-increment, stable identifier
+id TEXT PRIMARY KEY            -- UUID, stable identifier
 uri TEXT                       -- Local file:// path (NULL if archived)
 name TEXT
 duration INTEGER               -- milliseconds
@@ -219,8 +219,8 @@ fingerprint BLOB               -- First 4KB of file (for exact matching)
 
 **clips table:**
 ```sql
-id INTEGER PRIMARY KEY
-source_id INTEGER              -- References files.id (parent book)
+id TEXT PRIMARY KEY            -- UUID
+source_id TEXT                 -- References files.id (parent book)
 uri TEXT                       -- Clip's own audio file
 start INTEGER                  -- milliseconds (position in source file)
 duration INTEGER               -- milliseconds
@@ -243,8 +243,8 @@ audio: {
   duration: number              // Duration of loaded audio (hardware state)
   ownerId: string | null        // ID of component controlling playback
 }
-clips: Record<number, ClipWithFile>  // Keyed by clip id
-books: Record<number, Book>          // Keyed by book id
+clips: Record<string, ClipWithFile>  // Keyed by clip id (UUID)
+books: Record<string, Book>          // Keyed by book id (UUID)
 
 // Key actions
 loadFile, loadFileWithUri, play, pause, seek, skipForward/Backward
@@ -358,9 +358,12 @@ maestro test maestro/smoke-test.yaml
 ## Utilities
 
 `src/utils/index.ts` exports:
+- `generateId()` - Generates a UUID for new database entities (uses `crypto.randomUUID()`)
 - `MAIN_PLAYER_OWNER_ID` - Well-known owner ID for the main player tab (`'main'`)
 - `formatTime(ms)` - Converts milliseconds to `MM:SS` or `H:MM:SS` format
 - `formatDate(timestamp)` - Formats timestamp as `MMM D, YYYY`
+
+**Note:** `react-native-get-random-values` polyfill is imported in `index.js` to enable `crypto.randomUUID()`.
 
 ## Native Modules
 
@@ -380,15 +383,15 @@ Located in `android/app/src/main/java/com/salezica/ivy/`:
 
 Clips have their own persistent audio files, stored separately from source files:
 
-**Storage Location:** `DocumentDirectoryPath/clips/{randomId}.mp3`
+**Storage Location:** `DocumentDirectoryPath/clips/{uuid}.mp3`
 
 **Lifecycle:**
-- **Create**: Audio sliced from source file, saved to clips directory
-- **Update**: If bounds change, new slice created, old file deleted (requires source file)
+- **Create**: Audio sliced from source file, saved to clips directory using clip's UUID as filename
+- **Update**: If bounds change, new slice replaces old file (same UUID filename, requires source file)
 - **Delete**: Clip audio file deleted
 - **Share**: Uses existing clip file directly (no temp file needed)
 
-**File Naming:** Random string via `(Math.random() + 1).toString(36).substring(2)`
+**File Naming:** Clip's UUID (e.g., `a1b2c3d4-e5f6-7890-abcd-ef1234567890.mp3`)
 
 ### Clip Independence from Source 🔥 IMPORTANT
 
@@ -464,14 +467,14 @@ Cloud backup for books and clips to prevent data loss when switching phones.
 ```
 Ivy/
   books/
-    book1_1705432800000.json
-    book2_1705432900000.json
+    book_abc123-def456_1705432800000.json
+    book_789xyz-012abc_1705432900000.json
   clips/
-    clip4_1705433000000.json
-    clip4_1705433000000.mp3
+    clip_def456-789xyz_1705433000000.json
+    clip_def456-789xyz_1705433000000.mp3
 ```
 
-Files named: `{type}{id}_{updated_at}.{ext}`. Multiple versions can coexist; sync takes the latest.
+Files named: `{type}_{uuid}_{updated_at}.{ext}`. Multiple versions can coexist; sync takes the latest.
 
 **Services** (`services/backup/`):
 - `auth.ts` - Google OAuth via `@react-native-google-signin/google-signin`
@@ -534,7 +537,8 @@ Files named: `{type}{id}_{updated_at}.{ext}`. Multiple versions can coexist; syn
 - Check `audio.ownerId === myId` before syncing from global audio state
 - Check `clip.file_uri !== null` before enabling edit/jump-to-source features
 - Use `clip.file_uri` (source) when available, fall back to `clip.uri` (clip's own file) when not
-- Use `book.id` as the stable identifier for books (not `uri` which can be null)
+- Use `book.id` (UUID) as the stable identifier for books (not `uri` which can be null)
+- Use `generateId()` from utils when creating new database entities
 - Look up `Book` metadata from `books` map using URI when needed (audio state only has uri/duration)
 
 ❌ **Don't:**
@@ -556,8 +560,9 @@ Files named: `{type}{id}_{updated_at}.{ext}`. Multiple versions can coexist; syn
 **Reset app data:** Tap "Reset" button in Library
 **Sync to Drive:** Tap "Sync" button in Library (requires Google OAuth setup)
 **Time format:** Always milliseconds internally
+**ID format:** UUIDs (string) for all entities - use `generateId()` from utils
 **Book playback:** Use `book.uri` (local path) - check for null first (null = archived)
-**Book identifier:** Use `book.id` (stable), not `uri` (can be null)
+**Book identifier:** Use `book.id` (UUID, stable), not `uri` (can be null)
 **Clip source check:** `clip.file_uri !== null` means source book available
 **Archive check:** `book.uri === null` means book is archived
 **Library status:** `loading → idle ⇄ adding`

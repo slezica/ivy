@@ -23,7 +23,7 @@ import { formatTime, formatDate } from '../utils'
 export default function LibraryScreen() {
   const router = useRouter()
   const { loadFileWithPicker, fetchBooks, loadFileWithUri, books, archiveBook, __DEV_resetApp } = useStore()
-  const [menuBookId, setMenuBookId] = useState<number | null>(null)
+  const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
 
   // Refresh book list when screen comes into focus
@@ -142,7 +142,7 @@ export default function LibraryScreen() {
     }
   }
 
-  const handleOpenMenu = (bookId: number) => {
+  const handleOpenMenu = (bookId: string) => {
     setMenuBookId(bookId)
   }
 
@@ -150,7 +150,7 @@ export default function LibraryScreen() {
     setMenuBookId(null)
   }
 
-  const handleArchiveBook = (bookId: number) => {
+  const handleArchiveBook = (bookId: string) => {
     const book = books[bookId]
     Alert.alert(
       'Archive Book',
@@ -235,7 +235,7 @@ export default function LibraryScreen() {
       {booksArray.length > 0 ? (
         <SectionList
           sections={sections}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           renderSectionHeader={({ section }) => (
             section.title

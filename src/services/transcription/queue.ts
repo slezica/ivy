@@ -14,7 +14,7 @@ import type { Clip } from '../storage/database'
 // Public Interface
 // =============================================================================
 
-export type TranscriptionCallback = (clipId: number, transcription: string) => void
+export type TranscriptionCallback = (clipId: string, transcription: string) => void
 
 export interface TranscriptionQueueDeps {
   database: DatabaseService
@@ -37,7 +37,7 @@ export class TranscriptionQueueService {
   private whisper: WhisperService
   private slicer: AudioSlicerService
 
-  private queue: number[] = []
+  private queue: string[] = []
   private processing = false
   private onTranscriptionComplete: TranscriptionCallback | null = null
 
@@ -71,7 +71,7 @@ export class TranscriptionQueueService {
     this.processQueue()
   }
 
-  queueClip(clipId: number): void {
+  queueClip(clipId: string): void {
     console.log('[Transcription] Queueing clip:', clipId)
     this.queue.push(clipId)
     this.processQueue()
@@ -101,7 +101,7 @@ export class TranscriptionQueueService {
     this.processing = false
   }
 
-  private async processClip(clipId: number): Promise<void> {
+  private async processClip(clipId: string): Promise<void> {
     console.log('[Transcription] Processing clip:', clipId)
 
     const clips = this.database.getClipsNeedingTranscription()

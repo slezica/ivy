@@ -7,12 +7,14 @@
 
 import * as SQLite from 'expo-sqlite'
 
+import { generateId } from '../../utils'
+
 // =============================================================================
 // Public Interface
 // =============================================================================
 
 export interface Book {
-  id: number               // Auto-increment primary key
+  id: string               // UUID primary key
   uri: string | null       // Local file:// path (null if archived)
   name: string
   duration: number         // milliseconds
@@ -26,8 +28,8 @@ export interface Book {
 }
 
 export interface Clip {
-  id: number
-  source_id: number        // References files.id (parent file)
+  id: string
+  source_id: string        // References files.id (parent file)
   uri: string              // Clip's own audio file
   start: number            // milliseconds
   duration: number         // milliseconds
@@ -46,7 +48,7 @@ export interface ClipWithFile extends Clip {
 }
 
 export interface Session {
-  id: number
+  id: string
   file_uri: string
   start: number
   duration: number
@@ -78,7 +80,7 @@ export class DatabaseService {
     return result || null
   }
 
-  getBookById(id: number): Book | null {
+  getBookById(id: string): Book | null {
     const result = this.db.getFirstSync<Book>(
       'SELECT * FROM files WHERE id = ?',
       [id]
@@ -140,11 +142,12 @@ export class DatabaseService {
       )
       return this.getBookById(existing.id)!
     } else {
-      const result = this.db.runSync(
-        'INSERT INTO files (uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [uri, name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null]
+      const id = generateId()
+      this.db.runSync(
+        'INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, uri, name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null]
       )
-      return this.getBookById(result.lastInsertRowId)!
+      return this.getBookById(id)!
     }
   }
 
@@ -153,7 +156,7 @@ export class DatabaseService {
    * Preserves position, updates uri and metadata, refreshes updated_at.
    */
   restoreBook(
-    id: number,
+    id: string,
     uri: string,
     name: string,
     duration: number,
@@ -172,7 +175,7 @@ export class DatabaseService {
   /**
    * Touch an existing book to update updated_at timestamp.
    */
-  touchBook(id: number): void {
+  touchBook(id: string): void {
     const now = Date.now()
     this.db.runSync(
       'UPDATE files SET updated_at = ? WHERE id = ?',
@@ -180,7 +183,7 @@ export class DatabaseService {
     )
   }
 
-  updateBookPosition(id: number, position: number): void {
+  updateBookPosition(id: string, position: number): void {
     try {
       const now = Date.now()
       this.db.runSync(
@@ -193,7 +196,7 @@ export class DatabaseService {
     }
   }
 
-  archiveBook(id: number): void {
+  archiveBook(id: string): void {
     this.db.runSync(
       'UPDATE files SET uri = NULL WHERE id = ?',
       [id]
@@ -204,7 +207,7 @@ export class DatabaseService {
   // Clips
   // ---------------------------------------------------------------------------
 
-  getClip(id: number): Clip | null {
+  getClip(id: string): Clip | null {
     const result = this.db.getFirstSync<Clip>(
       'SELECT * FROM clips WHERE id = ?',
       [id]
@@ -212,7 +215,7 @@ export class DatabaseService {
     return result || null
   }
 
-  getClipsForBook(bookId: number): Clip[] {
+  getClipsForBook(bookId: string): Clip[] {
     return this.db.getAllSync<Clip>(
       'SELECT * FROM clips WHERE source_id = ? ORDER BY start ASC',
       [bookId]
@@ -234,15 +237,15 @@ export class DatabaseService {
     )
   }
 
-  createClip(sourceId: number, uri: string, start: number, duration: number, note: string): Clip {
+  createClip(id: string, sourceId: string, uri: string, start: number, duration: number, note: string): Clip {
     const now = Date.now()
-    const result = this.db.runSync(
-      'INSERT INTO clips (source_id, uri, start, duration, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [sourceId, uri, start, duration, note, now, now]
+    this.db.runSync(
+      'INSERT INTO clips (id, source_id, uri, start, duration, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, sourceId, uri, start, duration, note, now, now]
     )
 
     return {
-      id: result.lastInsertRowId,
+      id,
       source_id: sourceId,
       uri,
       start,
@@ -254,7 +257,7 @@ export class DatabaseService {
     }
   }
 
-  updateClip(id: number, updates: { note?: string; start?: number; duration?: number; uri?: string }): void {
+  updateClip(id: string, updates: { note?: string; start?: number; duration?: number; uri?: string }): void {
     const now = Date.now()
     const setClauses: string[] = ['updated_at = ?']
     const values: (string | number)[] = [now]
@@ -283,7 +286,7 @@ export class DatabaseService {
     )
   }
 
-  updateClipTranscription(id: number, transcription: string): void {
+  updateClipTranscription(id: string, transcription: string): void {
     const now = Date.now()
     this.db.runSync(
       'UPDATE clips SET transcription = ?, updated_at = ? WHERE id = ?',
@@ -297,7 +300,7 @@ export class DatabaseService {
     )
   }
 
-  deleteClip(id: number): void {
+  deleteClip(id: string): void {
     this.db.runSync('DELETE FROM clips WHERE id = ?', [id])
   }
 
@@ -310,7 +313,7 @@ export class DatabaseService {
    * Does not set uri (file path) - caller must handle file restoration separately.
    */
   restoreBookFromBackup(
-    id: number,
+    id: string,
     name: string,
     duration: number,
     position: number,
@@ -347,8 +350,8 @@ export class DatabaseService {
    * Restore a clip from backup. Inserts if new, updates if exists and newer.
    */
   restoreClipFromBackup(
-    id: number,
-    sourceId: number,
+    id: string,
+    sourceId: string,
     uri: string,
     start: number,
     duration: number,
@@ -382,8 +385,8 @@ export class DatabaseService {
   /**
    * Get all clip IDs currently in the database.
    */
-  getAllClipIds(): number[] {
-    const results = this.db.getAllSync<{ id: number }>('SELECT id FROM clips')
+  getAllClipIds(): string[] {
+    const results = this.db.getAllSync<{ id: string }>('SELECT id FROM clips')
     return results.map(r => r.id)
   }
 
@@ -393,13 +396,14 @@ export class DatabaseService {
 
   createSession(fileUri: string, start: number, duration: number): Session {
     const now = Date.now()
-    const result = this.db.runSync(
-      'INSERT INTO sessions (file_uri, start, duration, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-      [fileUri, start, duration, now, now]
+    const id = generateId()
+    this.db.runSync(
+      'INSERT INTO sessions (id, file_uri, start, duration, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, fileUri, start, duration, now, now]
     )
 
     return {
-      id: result.lastInsertRowId,
+      id,
       file_uri: fileUri,
       start,
       duration,
@@ -425,7 +429,7 @@ export class DatabaseService {
   private initialize(): void {
     this.db.execSync(`
       CREATE TABLE IF NOT EXISTS files (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT PRIMARY KEY,
         uri TEXT,
         name TEXT NOT NULL,
         duration INTEGER,
@@ -444,8 +448,8 @@ export class DatabaseService {
 
     this.db.execSync(`
       CREATE TABLE IF NOT EXISTS clips (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        source_id INTEGER NOT NULL REFERENCES files(id),
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES files(id),
         uri TEXT NOT NULL,
         start INTEGER NOT NULL,
         duration INTEGER NOT NULL,
@@ -460,7 +464,7 @@ export class DatabaseService {
 
     this.db.execSync(`
       CREATE TABLE IF NOT EXISTS sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT PRIMARY KEY,
         file_uri TEXT NOT NULL,
         start INTEGER NOT NULL,
         duration INTEGER NOT NULL,
