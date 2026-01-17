@@ -84,7 +84,9 @@ export interface TimelineProps {
   leftColor: string
   rightColor: string
 
-  // Selection (optional - all four must be provided to enable selection)
+  // Selection (optional)
+  // - Provide color + start + end to paint selection (view-only)
+  // - Also provide onChange to enable editable handles
   selectionColor?: string
   selectionStart?: number
   selectionEnd?: number
@@ -250,13 +252,15 @@ export function Timeline({
 }: TimelineProps) {
   const [containerWidth, setContainerWidth] = useState(0)
 
-  // Selection is enabled only when all four props are provided
-  const hasSelection = !!(
+  // Visual selection: paint selection color when color and bounds are provided
+  const hasVisualSelection = !!(
     selectionColor &&
     selectionStart != null &&
-    selectionEnd != null &&
-    onSelectionChange
+    selectionEnd != null
   )
+
+  // Editable selection: show handles when onChange callback is also provided
+  const hasEditableSelection = hasVisualSelection && !!onSelectionChange
 
   const totalSegments = Math.ceil(duration / SEGMENT_DURATION)
   const maxScrollOffset = timeToX(duration)
@@ -267,7 +271,7 @@ export function Timeline({
     duration,
     externalPosition: position,
     onSeek,
-    selection: hasSelection
+    selection: hasEditableSelection
       ? { start: selectionStart!, end: selectionEnd!, onChange: onSelectionChange! }
       : undefined,
   })
@@ -285,7 +289,7 @@ export function Timeline({
   }), [leftColor, rightColor, selectionColor])
 
   // Canvas height increases when selection handles are shown
-  const canvasHeight = hasSelection
+  const canvasHeight = hasEditableSelection
     ? TIMELINE_HEIGHT + HANDLE_CIRCLE_RADIUS * 2
     : TIMELINE_HEIGHT
 
@@ -297,8 +301,8 @@ export function Timeline({
     const scrollOffset = scrollOffsetRef.current
     const playheadX = scrollOffset // Playhead is always at scroll position (center-fixed)
 
-    const selStartX = hasSelection ? timeToX(selectionStart!) : null
-    const selEndX = hasSelection ? timeToX(selectionEnd!) : null
+    const selStartX = hasVisualSelection ? timeToX(selectionStart!) : null
+    const selEndX = hasVisualSelection ? timeToX(selectionEnd!) : null
 
     try {
       return createPicture(
@@ -321,7 +325,7 @@ export function Timeline({
             paints.placeholder
           )
 
-          if (hasSelection && selStartX !== null && selEndX !== null) {
+          if (hasEditableSelection && selStartX !== null && selEndX !== null) {
             drawSelectionHandles(canvas, selStartX, selEndX, paints.selection!)
           }
 
@@ -334,15 +338,15 @@ export function Timeline({
       return null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frame, containerWidth, totalSegments, hasSelection, selectionStart, selectionEnd, paints, canvasHeight])
+  }, [frame, containerWidth, totalSegments, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
 
   // Calculate playhead position based on time indicator placement
   const playheadTop = showTime === 'top'
     ? TIME_INDICATORS_HEIGHT + TIME_INDICATORS_MARGIN
     : 0
 
-  // Playhead height: align with bottom of handle circles when selection is enabled
-  const playheadHeight = hasSelection
+  // Playhead height: align with bottom of handle circles when editable selection is enabled
+  const playheadHeight = hasEditableSelection
     ? TIMELINE_HEIGHT - 10 + HANDLE_CIRCLE_RADIUS * 2  // Bottom of handle circles
     : TIMELINE_HEIGHT
 
