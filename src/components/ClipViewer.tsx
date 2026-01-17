@@ -85,8 +85,11 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
         duration={playbackDuration}
         position={ownPosition}
         onSeek={handleSeek}
-        leftColor={Color.GRAY}
+        leftColor={Color.PRIMARY}
         rightColor={Color.PRIMARY}
+        selectionColor={Color.SELECTION}
+        selectionStart={hasSourceFile ? clip.start : 0}
+        selectionEnd={hasSourceFile ? clip.start + clip.duration : clip.duration}
         showTime="hidden"
       />
 
