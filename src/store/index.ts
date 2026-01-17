@@ -306,7 +306,6 @@ export const useStore = create<AppState>((set, get) => {
             localUri,
             pickedFile.name,
             duration,
-            pickedFile.uri,
             metadata.title,
             metadata.artist,
             metadata.artwork
@@ -333,7 +332,6 @@ export const useStore = create<AppState>((set, get) => {
           pickedFile.name,
           duration,
           0,
-          pickedFile.uri,
           metadata.title,
           metadata.artist,
           metadata.artwork,

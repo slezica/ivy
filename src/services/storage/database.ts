@@ -14,11 +14,10 @@ import * as SQLite from 'expo-sqlite'
 export interface Book {
   id: number               // Auto-increment primary key
   uri: string | null       // Local file:// path (null if archived)
-  original_uri: string | null  // External content:// URI (reference only)
   name: string
   duration: number         // milliseconds
   position: number         // milliseconds (resume position)
-  opened_at: number        // timestamp
+  updated_at: number       // timestamp (last position update or modification)
   title: string | null
   artist: string | null
   artwork: string | null   // base64 data URI
@@ -97,7 +96,7 @@ export class DatabaseService {
 
   getAllBooks(): Book[] {
     return this.db.getAllSync<Book>(
-      'SELECT * FROM files ORDER BY opened_at DESC'
+      'SELECT * FROM files ORDER BY updated_at DESC'
     )
   }
 
@@ -106,7 +105,6 @@ export class DatabaseService {
     name: string,
     duration: number | null,
     position: number,
-    originalUri?: string | null,
     title?: string | null,
     artist?: string | null,
     artwork?: string | null,
@@ -118,14 +116,14 @@ export class DatabaseService {
 
     if (existing) {
       this.db.runSync(
-        'UPDATE files SET name = ?, duration = ?, position = ?, opened_at = ?, original_uri = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ? WHERE id = ?',
-        [name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null, existing.id]
+        'UPDATE files SET name = ?, duration = ?, position = ?, updated_at = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ? WHERE id = ?',
+        [name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null, existing.id]
       )
       return this.getBookById(existing.id)!
     } else {
       const result = this.db.runSync(
-        'INSERT INTO files (uri, name, duration, position, opened_at, original_uri, title, artist, artwork, file_size, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [uri, name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null]
+        'INSERT INTO files (uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [uri, name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null]
       )
       return this.getBookById(result.lastInsertRowId)!
     }
@@ -133,42 +131,42 @@ export class DatabaseService {
 
   /**
    * Restore an archived book by attaching a new file.
-   * Preserves position, updates uri and metadata, refreshes opened_at.
+   * Preserves position, updates uri and metadata, refreshes updated_at.
    */
   restoreBook(
     id: number,
     uri: string,
     name: string,
     duration: number,
-    originalUri: string | null,
     title: string | null,
     artist: string | null,
     artwork: string | null
   ): Book {
     const now = Date.now()
     this.db.runSync(
-      'UPDATE files SET uri = ?, name = ?, duration = ?, opened_at = ?, original_uri = ?, title = ?, artist = ?, artwork = ? WHERE id = ?',
-      [uri, name, duration, now, originalUri, title, artist, artwork, id]
+      'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, title = ?, artist = ?, artwork = ? WHERE id = ?',
+      [uri, name, duration, now, title, artist, artwork, id]
     )
     return this.getBookById(id)!
   }
 
   /**
-   * Touch an existing book to update opened_at timestamp.
+   * Touch an existing book to update updated_at timestamp.
    */
   touchBook(id: number): void {
     const now = Date.now()
     this.db.runSync(
-      'UPDATE files SET opened_at = ? WHERE id = ?',
+      'UPDATE files SET updated_at = ? WHERE id = ?',
       [now, id]
     )
   }
 
   updateBookPosition(id: number, position: number): void {
     try {
+      const now = Date.now()
       this.db.runSync(
-        'UPDATE files SET position = ? WHERE id = ?',
-        [position, id]
+        'UPDATE files SET position = ?, updated_at = ? WHERE id = ?',
+        [position, now, id]
       )
     } catch (error) {
       // Silently ignore during app transitions/resets
@@ -285,6 +283,92 @@ export class DatabaseService {
   }
 
   // ---------------------------------------------------------------------------
+  // Backup / Restore
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Restore a book from backup. Inserts if new, updates if exists and newer.
+   * Does not set uri (file path) - caller must handle file restoration separately.
+   */
+  restoreBookFromBackup(
+    id: number,
+    name: string,
+    duration: number,
+    position: number,
+    updated_at: number,
+    title: string | null,
+    artist: string | null,
+    artwork: string | null,
+    fileSize: number,
+    fingerprint: Uint8Array
+  ): void {
+    const existing = this.getBookById(id)
+
+    if (existing) {
+      // Only update if backup is newer
+      if (updated_at > existing.updated_at) {
+        this.db.runSync(
+          `UPDATE files SET name = ?, duration = ?, position = ?, updated_at = ?,
+           title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ?
+           WHERE id = ?`,
+          [name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint, id]
+        )
+      }
+    } else {
+      // Insert with specific ID (SQLite allows this even with AUTOINCREMENT)
+      this.db.runSync(
+        `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint]
+      )
+    }
+  }
+
+  /**
+   * Restore a clip from backup. Inserts if new, updates if exists and newer.
+   */
+  restoreClipFromBackup(
+    id: number,
+    sourceId: number,
+    uri: string,
+    start: number,
+    duration: number,
+    note: string,
+    transcription: string | null,
+    created_at: number,
+    updated_at: number
+  ): void {
+    const existing = this.getClip(id)
+
+    if (existing) {
+      // Only update if backup is newer
+      if (updated_at > existing.updated_at) {
+        this.db.runSync(
+          `UPDATE clips SET source_id = ?, uri = ?, start = ?, duration = ?,
+           note = ?, transcription = ?, updated_at = ?
+           WHERE id = ?`,
+          [sourceId, uri, start, duration, note, transcription, updated_at, id]
+        )
+      }
+    } else {
+      // Insert with specific ID
+      this.db.runSync(
+        `INSERT INTO clips (id, source_id, uri, start, duration, note, transcription, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, sourceId, uri, start, duration, note, transcription, created_at, updated_at]
+      )
+    }
+  }
+
+  /**
+   * Get all clip IDs currently in the database.
+   */
+  getAllClipIds(): number[] {
+    const results = this.db.getAllSync<{ id: number }>('SELECT id FROM clips')
+    return results.map(r => r.id)
+  }
+
+  // ---------------------------------------------------------------------------
   // Sessions
   // ---------------------------------------------------------------------------
 
@@ -324,11 +408,10 @@ export class DatabaseService {
       CREATE TABLE IF NOT EXISTS files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         uri TEXT,
-        original_uri TEXT,
         name TEXT NOT NULL,
         duration INTEGER,
         position INTEGER NOT NULL DEFAULT 0,
-        opened_at INTEGER,
+        updated_at INTEGER,
         title TEXT,
         artist TEXT,
         artwork TEXT,

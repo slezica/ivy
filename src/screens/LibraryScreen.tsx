@@ -17,12 +17,14 @@ import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import { Color } from '../theme'
 import type { Book } from '../services'
+import { googleAuthService, backupSyncService } from '../services'
 import { formatTime, formatDate } from '../utils'
 
 export default function LibraryScreen() {
   const router = useRouter()
   const { loadFileWithPicker, fetchBooks, loadFileWithUri, books, archiveBook, __DEV_resetApp } = useStore()
   const [menuBookId, setMenuBookId] = useState<number | null>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
 
   // Refresh book list when screen comes into focus
   useFocusEffect(
@@ -100,6 +102,46 @@ export default function LibraryScreen() {
     )
   }
 
+  const handleSync = async () => {
+    if (isSyncing) return
+
+    setIsSyncing(true)
+    try {
+      // Initialize auth service
+      await googleAuthService.initialize()
+
+      // Sign in if not authenticated
+      if (!googleAuthService.isAuthenticated()) {
+        const signedIn = await googleAuthService.signIn()
+        if (!signedIn) {
+          Alert.alert('Auth Failed', 'Could not sign in to Google')
+          return
+        }
+      }
+
+      // Run sync
+      const result = await backupSyncService.sync()
+
+      // Show result
+      const summary = [
+        `Uploaded: ${result.uploaded.books} books, ${result.uploaded.clips} clips`,
+        `Downloaded: ${result.downloaded.books} books, ${result.downloaded.clips} clips`,
+        result.deleted.clips > 0 ? `Deleted: ${result.deleted.clips} clips` : null,
+        result.errors.length > 0 ? `Errors: ${result.errors.length}` : null,
+      ].filter(Boolean).join('\n')
+
+      Alert.alert('Sync Complete', summary)
+
+      // Refresh books after sync
+      fetchBooks()
+    } catch (error) {
+      console.error('Sync failed:', error)
+      Alert.alert('Sync Failed', `${error}`)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
   const handleOpenMenu = (bookId: number) => {
     setMenuBookId(bookId)
   }
@@ -172,6 +214,15 @@ export default function LibraryScreen() {
               <Text style={styles.devButtonText}>Sample</Text>
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity
+            style={[styles.devButton, styles.devSyncButton]}
+            onPress={handleSync}
+            disabled={isSyncing}
+          >
+            <Text style={styles.devButtonText}>{isSyncing ? 'Syncing...' : 'Sync'}</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.devButton, styles.devResetButton]}
             onPress={handleDevReset}
@@ -236,7 +287,7 @@ export default function LibraryScreen() {
                   </View>
 
                   <Text style={[styles.bookDate, isArchived && styles.textArchived]}>
-                    {formatDate(item.opened_at)}
+                    {formatDate(item.updated_at)}
                   </Text>
                 </View>
 
@@ -295,6 +346,9 @@ const styles = StyleSheet.create({
   },
   devResetButton: {
     backgroundColor: Color.DESTRUCTIVE,
+  },
+  devSyncButton: {
+    backgroundColor: Color.PRIMARY,
   },
   devButtonText: {
     color: Color.WHITE,
