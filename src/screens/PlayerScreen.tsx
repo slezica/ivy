@@ -172,6 +172,7 @@ const styles = StyleSheet.create({
   playerContainer: {
     flex: 1,
     gap: 24,
+    paddingHorizontal: 12
   },
   spacerTop: {
     flex: 8,
