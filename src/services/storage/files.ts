@@ -8,8 +8,8 @@
 import { Paths, Directory } from 'expo-file-system'
 import RNFS from 'react-native-fs'
 
-// How many bytes to read for hash computation
-const HASH_BYTES = 4096
+// How many bytes to read for fingerprint
+const FINGERPRINT_BYTES = 4096
 
 // =============================================================================
 // Service
@@ -67,21 +67,19 @@ export class FileStorageService {
   }
 
   /**
-   * Compute a hash for file identity.
-   * Uses file size + first N bytes to create a unique fingerprint.
+   * Read file fingerprint for identity matching.
+   * Returns file size and first N bytes as Uint8Array.
    */
-  async computeFileHash(uri: string): Promise<string> {
+  async readFileFingerprint(uri: string): Promise<{ fileSize: number; fingerprint: Uint8Array }> {
     const path = uriToPath(uri)
     const stat = await RNFS.stat(path)
     const fileSize = stat.size
 
-    // Read first N bytes as base64
-    const headBase64 = await RNFS.read(path, HASH_BYTES, 0, 'base64')
+    // Read first N bytes as base64, then decode to Uint8Array
+    const headBase64 = await RNFS.read(path, FINGERPRINT_BYTES, 0, 'base64')
+    const fingerprint = base64ToUint8Array(headBase64)
 
-    // Combine size and content into hash input
-    const hashInput = `${fileSize}:${headBase64}`
-
-    return fnv1aHash(hashInput)
+    return { fileSize, fingerprint }
   }
 
   // ---------------------------------------------------------------------------
@@ -124,17 +122,13 @@ function createUniqueFilename(filename: string): string {
 }
 
 /**
- * FNV-1a hash function.
- * Simple, fast, non-cryptographic hash suitable for identity checks.
+ * Convert base64 string to Uint8Array.
  */
-function fnv1aHash(str: string): string {
-  let hash = 2166136261 // FNV offset basis (32-bit)
-
-  for (let i = 0; i < str.length; i++) {
-    hash ^= str.charCodeAt(i)
-    // FNV prime (32-bit): multiply and keep lower 32 bits
-    hash = Math.imul(hash, 16777619) >>> 0
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binaryString = atob(base64)
+  const bytes = new Uint8Array(binaryString.length)
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
   }
-
-  return hash.toString(16).padStart(8, '0')
+  return bytes
 }

@@ -69,7 +69,7 @@ await play({ fileUri, position, ownerId })
 ### 7. **Books and Archiving** 🔥 IMPORTANT
 The domain entity is called `Book` (not AudioFile). A Book represents an audiobook/podcast in the library.
 
-**File Identity Hash:** Each book has a `hash` field (unique index) computed from file size + first 4KB. This enables:
+**File Fingerprint:** Each book stores `file_size` + `fingerprint` (first 4KB as BLOB). This enables:
 - **Duplicate detection:** Adding the same file twice reuses the existing book record
 - **Automatic restore:** Adding a file that matches an archived book restores it with preserved position and clips
 
@@ -86,9 +86,9 @@ The domain entity is called `Book` (not AudioFile). A Book represents an audiobo
 
 **Restore flow (automatic on file add):**
 1. File copied to app storage
-2. Hash computed from local file
-3. If hash matches archived book → restore: update `uri`, replace metadata, preserve position
-4. If hash matches active book → delete duplicate file, touch `opened_at`
+2. Fingerprint read (file size + first 4KB)
+3. If fingerprint matches archived book → restore: update `uri`, replace metadata, preserve position
+4. If fingerprint matches active book → delete duplicate file, touch `opened_at`
 5. If no match → create new book record
 
 ```typescript
@@ -210,7 +210,8 @@ opened_at INTEGER              -- timestamp
 title TEXT
 artist TEXT
 artwork TEXT                   -- base64 data URI
-hash TEXT UNIQUE               -- File identity hash (size + first 4KB, FNV-1a)
+file_size INTEGER              -- File size in bytes (indexed for fast lookup)
+fingerprint BLOB               -- First 4KB of file (for exact matching)
 ```
 
 **clips table:**
@@ -644,6 +645,6 @@ Uses `react-native-track-player` v5 for system-level playback integration:
 - **AudioState is hardware-only**: `audio` has `uri` + `duration` (not full Book object)
 - **Book archiving**: `archiveBook(id)` sets `uri = null`, deletes file, preserves clips
 - **Library sections**: Active books and archived books shown in separate SectionList sections
-- **Database methods**: `getBookByUri()`, `getBookById()`, `getBookByHash()`, `upsertBook()`, `archiveBook()`, `restoreBook()`, `touchBook()`, `createClip(bookId, ...)`
+- **Database methods**: `getBookByUri()`, `getBookById()`, `getBookByFingerprint()`, `upsertBook()`, `archiveBook()`, `restoreBook()`, `touchBook()`, `createClip(bookId, ...)`
 - **addClip takes explicit params**: `addClip(bookId, position)` instead of reading from audio state
-- **File identity hash**: `files.hash` (unique index) enables duplicate detection and automatic restore of archived books
+- **File fingerprint**: `file_size` + `fingerprint` (first 4KB BLOB) enables duplicate detection and automatic restore of archived books

@@ -266,12 +266,12 @@ export const useStore = create<AppState>((set, get) => {
       const metadata = await metadataService.readMetadata(localUri)
       console.log('Metadata read:', metadata)
 
-      // Step 3: Compute file hash
-      const hash = await fileStorageService.computeFileHash(localUri)
-      console.log('File hash:', hash)
+      // Step 3: Read file fingerprint
+      const { fileSize, fingerprint } = await fileStorageService.readFileFingerprint(localUri)
+      console.log('File fingerprint:', fileSize, 'bytes,', fingerprint.length, 'byte sample')
 
-      // Step 4: Check for existing book with same hash
-      const existingBook = dbService.getBookByHash(hash)
+      // Step 4: Check for existing book with same fingerprint
+      const existingBook = dbService.getBookByFingerprint(fileSize, fingerprint)
 
       // Verify file exists before loading
       const exists = await fileStorageService.fileExists(localUri)
@@ -309,8 +309,7 @@ export const useStore = create<AppState>((set, get) => {
             pickedFile.uri,
             metadata.title,
             metadata.artist,
-            metadata.artwork,
-            hash
+            metadata.artwork
           )
         } else {
           // Case B: Active book - delete duplicate file, use existing
@@ -338,7 +337,8 @@ export const useStore = create<AppState>((set, get) => {
           metadata.title,
           metadata.artist,
           metadata.artwork,
-          hash
+          fileSize,
+          fingerprint
         )
       }
 
