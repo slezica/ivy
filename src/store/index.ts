@@ -62,6 +62,7 @@ interface AppState {
   loadFileWithUri: (uri: string, name: string) => Promise<void>
   loadFileWithPicker: () => Promise<void>
   fetchBooks: () => void
+  archiveBook: (bookId: number) => Promise<void>
   fetchAllClips: () => void
   play: (context?: PlaybackContext) => Promise<void>
   pause: () => Promise<void>
@@ -159,6 +160,7 @@ export const useStore = create<AppState>((set, get) => {
     loadFile,
     loadFileWithUri,
     fetchBooks,
+    archiveBook,
     fetchAllClips,
     play,
     pause,
@@ -185,6 +187,46 @@ export const useStore = create<AppState>((set, get) => {
     }, {} as Record<number, Book>)
 
     set({ books: booksMap, library: { status: 'idle' } })
+  }
+
+  async function archiveBook(bookId: number): Promise<void> {
+    const { books } = get()
+    const book = books[bookId]
+
+    if (!book) {
+      throw new Error('Book not found')
+    }
+
+    const previousUri = book.uri
+
+    // 1. Optimistic store update
+    set((state) => ({
+      books: {
+        ...state.books,
+        [bookId]: { ...state.books[bookId], uri: null },
+      },
+    }))
+
+    // 2. Database update (with rollback on fail)
+    try {
+      dbService.archiveBook(bookId)
+    } catch (error) {
+      // Rollback store
+      set((state) => ({
+        books: {
+          ...state.books,
+          [bookId]: { ...state.books[bookId], uri: previousUri },
+        },
+      }))
+      throw error
+    }
+
+    // 3. Async file deletion (fire and forget - file is orphaned if this fails)
+    if (previousUri) {
+      fileStorageService.deleteFile(previousUri).catch((error) => {
+        console.error('Failed to delete archived book file (non-critical):', error)
+      })
+    }
   }
 
   function fetchAllClips(): void {

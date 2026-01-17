@@ -131,6 +131,13 @@ export class DatabaseService {
     }
   }
 
+  archiveBook(id: number): void {
+    this.db.runSync(
+      'UPDATE files SET uri = NULL WHERE id = ?',
+      [id]
+    )
+  }
+
   // ---------------------------------------------------------------------------
   // Clips
   // ---------------------------------------------------------------------------

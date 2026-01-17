@@ -1,24 +1,28 @@
 /**
  * LibraryScreen
  *
- * Shows a list of previously opened audio files for quick access.
+ * Shows a list of books (audio files) for quick access.
+ * Active books are shown first, archived books in a separate section.
  */
 
-import { View, Text, StyleSheet, Alert, FlatList, TouchableOpacity, Image } from 'react-native'
-import { useCallback } from 'react'
+import { View, Text, StyleSheet, Alert, SectionList, TouchableOpacity, Image, Pressable } from 'react-native'
+import { useState, useCallback } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store'
 import IconButton from '../components/shared/IconButton'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
+import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import { Color } from '../theme'
 import type { Book } from '../services'
 import { formatTime, formatDate } from '../utils'
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, loadFileWithUri, books, __DEV_resetApp } = useStore()
+  const { loadFileWithPicker, fetchBooks, loadFileWithUri, books, archiveBook, __DEV_resetApp } = useStore()
+  const [menuBookId, setMenuBookId] = useState<number | null>(null)
 
   // Refresh book list when screen comes into focus
   useFocusEffect(
@@ -96,7 +100,65 @@ export default function LibraryScreen() {
     )
   }
 
+  const handleOpenMenu = (bookId: number) => {
+    setMenuBookId(bookId)
+  }
+
+  const handleCloseMenu = () => {
+    setMenuBookId(null)
+  }
+
+  const handleArchiveBook = (bookId: number) => {
+    const book = books[bookId]
+    Alert.alert(
+      'Archive Book',
+      `Archive "${book?.title || book?.name}"? The audio file will be deleted but your clips will be preserved.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Archive',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await archiveBook(bookId)
+            } catch (error) {
+              console.error('Error archiving book:', error)
+              Alert.alert('Error', 'Failed to archive book')
+            }
+          },
+        },
+      ]
+    )
+  }
+
+  const handleMenuAction = (action: string) => {
+    if (menuBookId === null) return
+    const bookId = menuBookId
+    handleCloseMenu()
+
+    switch (action) {
+      case 'archive':
+        handleArchiveBook(bookId)
+        break
+    }
+  }
+
+  const getMenuItems = (): ActionMenuItem[] => {
+    return [
+      { key: 'archive', label: 'Archive', icon: 'archive-outline', destructive: true },
+    ]
+  }
+
+  // Split books into active and archived
   const booksArray = Object.values(books)
+  const activeBooks = booksArray.filter(book => book.uri !== null)
+  const archivedBooks = booksArray.filter(book => book.uri === null)
+
+  // Build sections for SectionList
+  const sections = [
+    ...(activeBooks.length > 0 ? [{ title: null, data: activeBooks }] : []),
+    ...(archivedBooks.length > 0 ? [{ title: 'Archived', data: archivedBooks }] : []),
+  ]
 
   return (
     <ScreenArea>
@@ -120,58 +182,77 @@ export default function LibraryScreen() {
       </Header>
 
       {booksArray.length > 0 ? (
-        <FlatList
-          data={booksArray}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.fileItem}
-              onPress={() => handleBookPress(item)}
-              activeOpacity={0.7}
-            >
-              {/* Artwork */}
-              {item.artwork ? (
-                <Image
-                  source={{ uri: item.artwork }}
-                  style={styles.artwork}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.artworkPlaceholder}>
-                  <Text style={styles.artworkPlaceholderIcon}>🎵</Text>
-                </View>
-              )}
-
-              {/* File Info */}
-              <View style={styles.fileInfo}>
-                <Text style={styles.fileName} numberOfLines={1}>
-                  {item.title || item.name}
-                </Text>
-                {item.artist && (
-                  <Text style={styles.fileArtist} numberOfLines={1}>
-                    {item.artist}
-                  </Text>
-                )}
-                <View style={styles.fileMetadata}>
-                  {item.duration > 0 && (
-                    <Text style={styles.fileDuration}>
-                      {formatTime(item.duration)}
-                    </Text>
-                  )}
-                  {item.position > 0 && (
-                    <Text style={styles.fileProgress}>
-                      • {Math.round((item.position / item.duration) * 100)}% played
-                    </Text>
-                  )}
-                </View>
-
-                <Text style={styles.fileDate}>
-                  {formatDate(item.opened_at)}
-                </Text>
-              </View>
-            </TouchableOpacity>
+          renderSectionHeader={({ section }) => (
+            section.title
+              ? <Text style={styles.sectionHeader}>{section.title}</Text>
+              : null
           )}
+          renderItem={({ item }) => {
+            const isArchived = item.uri === null
+            return (
+              <TouchableOpacity
+                style={[styles.bookItem, isArchived && styles.bookItemArchived]}
+                onPress={() => handleBookPress(item)}
+                activeOpacity={0.7}
+              >
+                {/* Artwork */}
+                {item.artwork ? (
+                  <Image
+                    source={{ uri: item.artwork }}
+                    style={[styles.artwork, isArchived && styles.artworkArchived]}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.artworkPlaceholder, isArchived && styles.artworkArchived]}>
+                    <Text style={styles.artworkPlaceholderIcon}>🎵</Text>
+                  </View>
+                )}
+
+                {/* Book Info */}
+                <View style={styles.bookInfo}>
+                  <Text style={[styles.bookName, isArchived && styles.textArchived]} numberOfLines={1}>
+                    {item.title || item.name}
+                  </Text>
+                  {item.artist && (
+                    <Text style={[styles.bookArtist, isArchived && styles.textArchived]} numberOfLines={1}>
+                      {item.artist}
+                    </Text>
+                  )}
+                  <View style={styles.bookMetadata}>
+                    {item.duration > 0 && (
+                      <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>
+                        {formatTime(item.duration)}
+                      </Text>
+                    )}
+                    {!isArchived && item.position > 0 && (
+                      <Text style={styles.bookProgress}>
+                        • {Math.round((item.position / item.duration) * 100)}% played
+                      </Text>
+                    )}
+                  </View>
+
+                  <Text style={[styles.bookDate, isArchived && styles.textArchived]}>
+                    {formatDate(item.opened_at)}
+                  </Text>
+                </View>
+
+                {/* Menu button - only for active books */}
+                {!isArchived && (
+                  <Pressable
+                    style={styles.menuButton}
+                    onPress={() => handleOpenMenu(item.id)}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="ellipsis-vertical" size={20} color={Color.GRAY_DARK} />
+                  </Pressable>
+                )}
+              </TouchableOpacity>
+            )
+          }}
         />
       ) : (
         <EmptyState
@@ -179,6 +260,13 @@ export default function LibraryScreen() {
           subtitle="Open an audio file to add it to your library"
         />
       )}
+
+      <ActionMenu
+        visible={menuBookId !== null}
+        onClose={handleCloseMenu}
+        onAction={handleMenuAction}
+        items={getMenuItems()}
+      />
 
       {/* FAB */}
       <View style={styles.fabContainer} pointerEvents="box-none">
@@ -217,13 +305,25 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 80, // Space for FAB
   },
-  fileItem: {
+  sectionHeader: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Color.GRAY_DARK,
+    marginTop: 16,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  bookItem: {
     flexDirection: 'row',
     backgroundColor: Color.GRAY_LIGHTER,
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
     gap: 12,
+  },
+  bookItemArchived: {
+    opacity: 0.6,
   },
   artwork: {
     width: 60,
@@ -241,37 +341,47 @@ const styles = StyleSheet.create({
   artworkPlaceholderIcon: {
     fontSize: 24,
   },
-  fileInfo: {
+  artworkArchived: {
+    opacity: 0.7,
+  },
+  bookInfo: {
     flex: 1,
     gap: 4,
   },
-  fileName: {
+  bookName: {
     fontSize: 16,
     fontWeight: '600',
     color: Color.BLACK,
   },
-  fileArtist: {
+  bookArtist: {
     fontSize: 14,
     color: Color.GRAY_DARK,
     fontWeight: '500',
   },
-  fileMetadata: {
+  bookMetadata: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  fileDuration: {
+  bookDuration: {
     fontSize: 14,
     color: Color.GRAY_DARK,
   },
-  fileProgress: {
+  bookProgress: {
     fontSize: 14,
     color: Color.PRIMARY,
   },
-  fileDate: {
+  bookDate: {
     fontSize: 12,
     color: Color.GRAY_MEDIUM,
     marginTop: 2,
+  },
+  textArchived: {
+    color: Color.GRAY,
+  },
+  menuButton: {
+    padding: 4,
+    justifyContent: 'flex-start',
   },
   fabContainer: {
     position: 'absolute',
