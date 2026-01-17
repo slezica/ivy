@@ -11,9 +11,9 @@ import * as SQLite from 'expo-sqlite'
 // Public Interface
 // =============================================================================
 
-export interface AudioFile {
+export interface Book {
   id: number               // Auto-increment primary key
-  uri: string | null       // Local file:// path (null if file removed)
+  uri: string | null       // Local file:// path (null if archived)
   original_uri: string | null  // External content:// URI (reference only)
   name: string
   duration: number         // milliseconds
@@ -66,32 +66,32 @@ export class DatabaseService {
   }
 
   // ---------------------------------------------------------------------------
-  // Files
+  // Books
   // ---------------------------------------------------------------------------
 
-  getFileByUri(uri: string): AudioFile | null {
-    const result = this.db.getFirstSync<AudioFile>(
+  getBookByUri(uri: string): Book | null {
+    const result = this.db.getFirstSync<Book>(
       'SELECT * FROM files WHERE uri = ?',
       [uri]
     )
     return result || null
   }
 
-  getFileById(id: number): AudioFile | null {
-    const result = this.db.getFirstSync<AudioFile>(
+  getBookById(id: number): Book | null {
+    const result = this.db.getFirstSync<Book>(
       'SELECT * FROM files WHERE id = ?',
       [id]
     )
     return result || null
   }
 
-  getAllFiles(): AudioFile[] {
-    return this.db.getAllSync<AudioFile>(
+  getAllBooks(): Book[] {
+    return this.db.getAllSync<Book>(
       'SELECT * FROM files ORDER BY opened_at DESC'
     )
   }
 
-  upsertFile(
+  upsertBook(
     uri: string,
     name: string,
     duration: number | null,
@@ -100,26 +100,26 @@ export class DatabaseService {
     title?: string | null,
     artist?: string | null,
     artwork?: string | null
-  ): AudioFile {
+  ): Book {
     const now = Date.now()
-    const existing = this.getFileByUri(uri)
+    const existing = this.getBookByUri(uri)
 
     if (existing) {
       this.db.runSync(
         'UPDATE files SET name = ?, duration = ?, position = ?, opened_at = ?, original_uri = ?, title = ?, artist = ?, artwork = ? WHERE id = ?',
         [name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null, existing.id]
       )
-      return this.getFileById(existing.id)!
+      return this.getBookById(existing.id)!
     } else {
       const result = this.db.runSync(
         'INSERT INTO files (uri, name, duration, position, opened_at, original_uri, title, artist, artwork) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [uri, name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null]
       )
-      return this.getFileById(result.lastInsertRowId)!
+      return this.getBookById(result.lastInsertRowId)!
     }
   }
 
-  updateFilePosition(id: number, position: number): void {
+  updateBookPosition(id: number, position: number): void {
     try {
       this.db.runSync(
         'UPDATE files SET position = ? WHERE id = ?',
@@ -127,7 +127,7 @@ export class DatabaseService {
       )
     } catch (error) {
       // Silently ignore during app transitions/resets
-      console.debug('Failed to update file position (non-critical):', error)
+      console.debug('Failed to update book position (non-critical):', error)
     }
   }
 
@@ -143,10 +143,10 @@ export class DatabaseService {
     return result || null
   }
 
-  getClipsForFile(fileId: number): Clip[] {
+  getClipsForBook(bookId: number): Clip[] {
     return this.db.getAllSync<Clip>(
       'SELECT * FROM clips WHERE source_id = ? ORDER BY start ASC',
-      [fileId]
+      [bookId]
     )
   }
 

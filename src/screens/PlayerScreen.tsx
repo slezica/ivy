@@ -9,30 +9,30 @@ import IconButton from '../components/shared/IconButton'
 import ScreenArea from '../components/shared/ScreenArea'
 import EmptyState from '../components/shared/EmptyState'
 import { MAIN_PLAYER_OWNER_ID } from '../utils'
-import type { AudioFile } from '../services'
+import type { Book } from '../services'
 
 export default function PlayerScreen() {
-  const { audio, files, addClip, play, pause, seek, syncPlaybackState } = useStore()
+  const { audio, books, addClip, play, pause, seek, syncPlaybackState } = useStore()
 
   // Local state - what the main player "remembers"
-  const [ownFile, setOwnFile] = useState<AudioFile | null>(null)
+  const [ownBook, setOwnBook] = useState<Book | null>(null)
   const [ownPosition, setOwnPosition] = useState(0)
 
   // Ownership check
   const isOwner = audio.ownerId === MAIN_PLAYER_OWNER_ID
-  const isFileLoaded = audio.uri === ownFile?.uri
+  const isFileLoaded = audio.uri === ownBook?.uri
 
-  // Adopt file when audio targets the main player
+  // Adopt book when audio targets the main player
   useEffect(() => {
-    if (isOwner && audio.uri && audio.uri !== ownFile?.uri) {
-      // Look up full file record from files map
-      const file = Object.values(files).find(f => f.uri === audio.uri)
-      if (file) {
-        setOwnFile(file)
+    if (isOwner && audio.uri && audio.uri !== ownBook?.uri) {
+      // Look up full book record from books map
+      const book = Object.values(books).find(b => b.uri === audio.uri)
+      if (book) {
+        setOwnBook(book)
         setOwnPosition(audio.position)
       }
     }
-  }, [isOwner, audio.uri, audio.position, ownFile?.uri, files])
+  }, [isOwner, audio.uri, audio.position, ownBook?.uri, books])
 
   // Sync position from audio when we own playback
   useEffect(() => {
@@ -49,10 +49,10 @@ export default function PlayerScreen() {
   )
 
   const handleAddClip = async () => {
-    if (!ownFile) return
+    if (!ownBook) return
 
     try {
-      await addClip(ownFile.id, ownPosition)
+      await addClip(ownBook.id, ownPosition)
     } catch (error) {
       console.error('Error adding clip:', error)
       Alert.alert('Error', 'Failed to add clip')
@@ -60,7 +60,7 @@ export default function PlayerScreen() {
   }
 
   const handlePlayPause = async () => {
-    if (!ownFile?.uri) return
+    if (!ownBook?.uri) return
 
     try {
       if (isOwner && audio.status === 'playing') {
@@ -68,7 +68,7 @@ export default function PlayerScreen() {
       } else {
         // Claim ownership and play from our remembered position
         await play({
-          fileUri: ownFile.uri,
+          fileUri: ownBook.uri,
           position: ownPosition,
           ownerId: MAIN_PLAYER_OWNER_ID,
         })
@@ -84,10 +84,10 @@ export default function PlayerScreen() {
     setOwnPosition(position)
 
     // Only affect audio if we're the owner and file is loaded
-    if (isOwner && isFileLoaded && ownFile?.uri) {
-      seek({ fileUri: ownFile.uri, position })
+    if (isOwner && isFileLoaded && ownBook?.uri) {
+      seek({ fileUri: ownBook.uri, position })
     }
-  }, [isOwner, isFileLoaded, ownFile, seek])
+  }, [isOwner, isFileLoaded, ownBook, seek])
 
   // Show play button unless we're owner AND playing
   const isPlaying = isOwner && audio.status === 'playing'
@@ -95,16 +95,16 @@ export default function PlayerScreen() {
   return (
     <ScreenArea>
       <View style={styles.content}>
-        {ownFile
+        {ownBook
           ? <Player
-              file={ownFile}
+              book={ownBook}
               position={ownPosition}
               isPlaying={isPlaying}
               onPlayPause={handlePlayPause}
               onAddClip={handleAddClip}
               onSeek={handleSeek}
             />
-          : <EmptyState title="Not playing" subtitle="Select a file from your library" />
+          : <EmptyState title="Not playing" subtitle="Select a book from your library" />
         }
       </View>
     </ScreenArea>
@@ -112,7 +112,7 @@ export default function PlayerScreen() {
 }
 
 interface PlayerProps {
-  file: AudioFile
+  book: Book
   position: number
   isPlaying: boolean
   onPlayPause: () => void
@@ -120,24 +120,24 @@ interface PlayerProps {
   onSeek: (position: number) => void
 }
 
-function Player({ file, position, isPlaying, onPlayPause, onAddClip, onSeek }: PlayerProps) {
+function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek }: PlayerProps) {
   return (
     <View style={styles.playerContainer}>
       <View style={styles.spacerTop} />
 
-      <View style={styles.fileInfo}>
+      <View style={styles.bookInfo}>
         <Text style={styles.title} numberOfLines={2}>
-          {file.title || file.name}
+          {book.title || book.name}
         </Text>
-        {file.artist && (
+        {book.artist && (
           <Text style={styles.artist} numberOfLines={1}>
-            {file.artist}
+            {book.artist}
           </Text>
         )}
       </View>
 
       <Timeline
-        duration={file.duration}
+        duration={book.duration}
         position={position}
         onSeek={onSeek}
         leftColor={Color.GRAY}
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   spacerBottom: {
     flex: 2,
   },
-  fileInfo: {
+  bookInfo: {
     paddingHorizontal: 32,
     alignItems: 'center',
     gap: 8,

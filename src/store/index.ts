@@ -12,7 +12,7 @@ import {
   audioSlicerService,
 } from '../services'
 
-import type { PickedFile, ClipWithFile, AudioFile } from '../services'
+import type { PickedFile, ClipWithFile, Book } from '../services'
 import { MAIN_PLAYER_OWNER_ID } from '../utils'
 
 const CLIPS_DIR = `${RNFS.DocumentDirectoryPath}/clips`
@@ -55,20 +55,20 @@ interface AppState {
   library: LibraryState
   audio: AudioState
   clips: Record<number, ClipWithFile>
-  files: Record<number, AudioFile>
+  books: Record<number, Book>
 
   // Actions
   loadFile: (pickedFile: PickedFile) => Promise<void>
   loadFileWithUri: (uri: string, name: string) => Promise<void>
   loadFileWithPicker: () => Promise<void>
-  fetchFiles: () => void
+  fetchBooks: () => void
   fetchAllClips: () => void
   play: (context?: PlaybackContext) => Promise<void>
   pause: () => Promise<void>
   seek: (context: PlaybackContext) => Promise<void>
   skipForward: () => Promise<void>
   skipBackward: () => Promise<void>
-  addClip: (fileId: number, position: number) => Promise<void>
+  addClip: (bookId: number, position: number) => Promise<void>
   updateClip: (id: number, updates: { note?: string; start?: number; duration?: number }) => Promise<void>
   updateClipTranscription: (id: number, transcription: string) => void
   deleteClip: (id: number) => Promise<void>
@@ -110,13 +110,13 @@ export const useStore = create<AppState>((set, get) => {
         },
       }))
 
-      // Update file position in database
+      // Update book position in database
       // Only if we have a file loaded and valid position
-      const { audio, files } = get()
+      const { audio, books } = get()
       if (audio.uri && status.position >= 0 && status.duration > 0) {
-        const file = Object.values(files).find(f => f.uri === audio.uri)
-        if (file) {
-          dbService.updateFilePosition(file.id, status.position)
+        const book = Object.values(books).find(b => b.uri === audio.uri)
+        if (book) {
+          dbService.updateBookPosition(book.id, status.position)
         }
       }
     },
@@ -152,13 +152,13 @@ export const useStore = create<AppState>((set, get) => {
       ownerId: null,
     },
     clips: {},
-    files: {},
+    books: {},
 
     // Actions (below)
     loadFileWithPicker,
     loadFile,
     loadFileWithUri,
-    fetchFiles,
+    fetchBooks,
     fetchAllClips,
     play,
     pause,
@@ -175,16 +175,16 @@ export const useStore = create<AppState>((set, get) => {
     __DEV_resetApp
   }
 
-  function fetchFiles(): void {
-    const allFiles = dbService.getAllFiles()
+  function fetchBooks(): void {
+    const allBooks = dbService.getAllBooks()
 
-    // Update files mapping in store (keyed by id)
-    const filesMap = allFiles.reduce((acc, file) => {
-      acc[file.id] = file
+    // Update books mapping in store (keyed by id)
+    const booksMap = allBooks.reduce((acc, book) => {
+      acc[book.id] = book
       return acc
-    }, {} as Record<number, AudioFile>)
+    }, {} as Record<number, Book>)
 
-    set({ files: filesMap, library: { status: 'idle' } })
+    set({ books: booksMap, library: { status: 'idle' } })
   }
 
   function fetchAllClips(): void {
@@ -214,12 +214,12 @@ export const useStore = create<AppState>((set, get) => {
     try {
       // Step 1: Copy file to app storage if needed
       let localUri: string
-      let audioFile = dbService.getFileByUri(pickedFile.uri)
-      let isNewFile = false
+      let book = dbService.getBookByUri(pickedFile.uri)
+      let isNewBook = false
 
-      if (audioFile?.uri && await fileStorageService.fileExists(audioFile.uri)) {
+      if (book?.uri && await fileStorageService.fileExists(book.uri)) {
         // Already have a local copy - use it
-        localUri = audioFile.uri
+        localUri = book.uri
         console.log('Using existing local file:', localUri)
       } else {
         // Need to copy file to app storage
@@ -228,16 +228,16 @@ export const useStore = create<AppState>((set, get) => {
 
         localUri = await fileStorageService.copyToAppStorage(pickedFile.uri, pickedFile.name)
         console.log('File copied to:', localUri)
-        isNewFile = true
+        isNewBook = true
       }
 
-      // Step 2: Read metadata (only for new files, during 'adding' phase)
+      // Step 2: Read metadata (only for new books, during 'adding' phase)
       let metadata: { title: string | null; artist: string | null; artwork: string | null } = {
         title: null,
         artist: null,
         artwork: null,
       }
-      if (isNewFile) {
+      if (isNewBook) {
         console.log('Reading metadata from:', localUri)
         metadata = await metadataService.readMetadata(localUri)
         console.log('Metadata read:', metadata)
@@ -258,48 +258,48 @@ export const useStore = create<AppState>((set, get) => {
 
       console.log('Loading audio from:', localUri)
       const duration = await audioService.load(localUri, {
-        title: isNewFile ? metadata.title : audioFile?.title,
-        artist: isNewFile ? metadata.artist : audioFile?.artist,
-        artwork: isNewFile ? metadata.artwork : audioFile?.artwork,
+        title: isNewBook ? metadata.title : book?.title,
+        artist: isNewBook ? metadata.artist : book?.artist,
+        artwork: isNewBook ? metadata.artwork : book?.artwork,
       })
       console.log('Audio loaded successfully, duration:', duration)
 
-      // Step 4: Save/update file record in database
+      // Step 4: Save/update book record in database
       // Save local URI as 'uri' (what we actually use) and original as 'original_uri'
-      audioFile = dbService.upsertFile(
+      book = dbService.upsertBook(
         localUri,
         pickedFile.name,
         duration,
-        audioFile?.position ?? 0,
+        book?.position ?? 0,
         pickedFile.uri,
-        isNewFile ? metadata.title : audioFile?.title ?? null,
-        isNewFile ? metadata.artist : audioFile?.artist ?? null,
-        isNewFile ? metadata.artwork : audioFile?.artwork ?? null
+        isNewBook ? metadata.title : book?.title ?? null,
+        isNewBook ? metadata.artist : book?.artist ?? null,
+        isNewBook ? metadata.artwork : book?.artwork ?? null
       )
 
-      // Load all clips from all files
+      // Load all clips
       fetchAllClips()
 
       // Update state (keep status as 'loading' until play starts)
       set((state) => ({
         audio: {
           ...state.audio,
-          position: audioFile.position,
+          position: book.position,
           uri: localUri,
           duration: duration,
         },
       }))
 
       // Seek to saved position
-      if (audioFile.position > 0) {
-        await audioService.seek(audioFile.position)
+      if (book.position > 0) {
+        await audioService.seek(book.position)
       }
 
       // Auto-play after loading (this will set status to 'playing')
-      // Target the main player so it adopts the file
+      // Target the main player so it adopts the book
       await get().play({
-        fileUri: audioFile.uri!, // We just set this to localUri above
-        position: audioFile.position,
+        fileUri: book.uri!, // We just set this to localUri above
+        position: book.position,
         ownerId: MAIN_PLAYER_OWNER_ID,
       })
     } catch (error) {
@@ -322,9 +322,9 @@ export const useStore = create<AppState>((set, get) => {
 
         if (!isFileSame) {
           // Need to load a different file
-          const fileRecord = dbService.getFileByUri(context.fileUri)
-          if (!fileRecord) {
-            throw new Error(`File not found in library: ${context.fileUri}`)
+          const bookRecord = dbService.getBookByUri(context.fileUri)
+          if (!bookRecord) {
+            throw new Error(`Book not found in library: ${context.fileUri}`)
           }
 
           set((state) => ({
@@ -336,9 +336,9 @@ export const useStore = create<AppState>((set, get) => {
           }))
 
           const duration = await audioService.load(context.fileUri, {
-            title: fileRecord.title,
-            artist: fileRecord.artist,
-            artwork: fileRecord.artwork,
+            title: bookRecord.title,
+            artist: bookRecord.artist,
+            artwork: bookRecord.artwork,
           })
 
           set((state) => ({
@@ -451,26 +451,26 @@ export const useStore = create<AppState>((set, get) => {
     }))
   }
 
-  async function addClip(fileId: number, position: number) {
-    const { files } = get()
-    const file = files[fileId]
+  async function addClip(bookId: number, position: number) {
+    const { books } = get()
+    const book = books[bookId]
 
-    if (!file) {
-      throw new Error('File not found')
+    if (!book) {
+      throw new Error('Book not found')
     }
-    if (!file.uri) {
-      throw new Error('File has been archived')
+    if (!book.uri) {
+      throw new Error('Book has been archived')
     }
 
     // Cap clip duration to not exceed remaining audio length
-    const remainingDuration = file.duration - position
+    const remainingDuration = book.duration - position
     const clipDuration = Math.min(DEFAULT_CLIP_DURATION_MS, remainingDuration)
 
     // Generate random filename and slice audio
     const filename = `${generateRandomString()}.mp3`
     await slicerService.ensureDir(CLIPS_DIR)
     const sliceResult = await slicerService.slice({
-      sourceUri: file.uri,
+      sourceUri: book.uri,
       startMs: position,
       endMs: position + clipDuration,
       outputFilename: filename,
@@ -478,7 +478,7 @@ export const useStore = create<AppState>((set, get) => {
     })
 
     const clip = dbService.createClip(
-      fileId,
+      bookId,
       sliceResult.uri,
       position,
       clipDuration,
@@ -626,7 +626,7 @@ export const useStore = create<AppState>((set, get) => {
         ownerId: null,
       },
       clips: {},
-      files: {},
+      books: {},
     })
 
     console.log('App reset complete')

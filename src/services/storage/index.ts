@@ -1,5 +1,5 @@
 export { DatabaseService, databaseService } from './database'
-export type { AudioFile, Clip, ClipWithFile, Session } from './database'
+export type { Book, Clip, ClipWithFile, Session } from './database'
 
 export { FileStorageService, fileStorageService } from './files'
 

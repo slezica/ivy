@@ -13,25 +13,25 @@ import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import { Color } from '../theme'
-import type { AudioFile } from '../services'
+import type { Book } from '../services'
 import { formatTime, formatDate } from '../utils'
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchFiles, loadFileWithUri, files, __DEV_resetApp } = useStore()
+  const { loadFileWithPicker, fetchBooks, loadFileWithUri, books, __DEV_resetApp } = useStore()
 
-  // Refresh file list when screen comes into focus
+  // Refresh book list when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      fetchFiles()
-    }, [fetchFiles])
+      fetchBooks()
+    }, [fetchBooks])
   )
 
   const handleLoadFile = async () => {
     try {
       await loadFileWithPicker()
       // Refresh list
-      fetchFiles()
+      fetchBooks()
       // Navigate to player tab
       router.push('/player')
     } catch (error) {
@@ -40,19 +40,19 @@ export default function LibraryScreen() {
     }
   }
 
-  const handleFilePress = async (file: AudioFile) => {
-    if (!file.uri) {
-      Alert.alert('File Unavailable', 'This file has been removed from storage')
+  const handleBookPress = async (book: Book) => {
+    if (!book.uri) {
+      Alert.alert('Book Unavailable', 'This book has been archived')
       return
     }
 
     try {
-      await loadFileWithUri(file.uri, file.name)
+      await loadFileWithUri(book.uri, book.name)
       // Navigate to player tab
       router.push('/player')
     } catch (error) {
-      console.error('Error loading file:', error)
-      Alert.alert('Error', 'Failed to load audio file')
+      console.error('Error loading book:', error)
+      Alert.alert('Error', 'Failed to load book')
     }
   }
 
@@ -65,7 +65,7 @@ export default function LibraryScreen() {
           await asset.downloadAsync()
           if (!asset.localUri) throw new Error('Failed to download test asset')
           await loadFileWithUri(asset.localUri, 'test-audio.mp3')
-          fetchFiles()
+          fetchBooks()
           router.push('/player')
         } catch (error) {
           console.error('Error loading test file:', error)
@@ -96,7 +96,7 @@ export default function LibraryScreen() {
     )
   }
 
-  const filesArray = Object.values(files)
+  const booksArray = Object.values(books)
 
   return (
     <ScreenArea>
@@ -119,15 +119,15 @@ export default function LibraryScreen() {
         </View>
       </Header>
 
-      {filesArray.length > 0 ? (
+      {booksArray.length > 0 ? (
         <FlatList
-          data={filesArray}
+          data={booksArray}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.fileItem}
-              onPress={() => handleFilePress(item)}
+              onPress={() => handleBookPress(item)}
               activeOpacity={0.7}
             >
               {/* Artwork */}
@@ -175,7 +175,7 @@ export default function LibraryScreen() {
         />
       ) : (
         <EmptyState
-          title="No files yet"
+          title="No books yet"
           subtitle="Open an audio file to add it to your library"
         />
       )}
