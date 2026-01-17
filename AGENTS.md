@@ -40,7 +40,7 @@ Multiple UI components can control playback (PlayerScreen, ClipViewer, ClipEdito
 
 **Main Player ID:** `MAIN_PLAYER_OWNER_ID = 'main'` (exported from `utils/index.ts`)
 - Well-known ID for the main player tab
-- `loadFile()` uses this ID so PlayerScreen adopts newly loaded files
+- `loadFile()` uses this ID so PlayerScreen adopts newly loaded books
 - Any component can target the main player by using this ID
 
 ```typescript
@@ -60,11 +60,33 @@ await play({ fileUri, position, ownerId })
 
 **Local state pattern:** Each player maintains its own local state:
 - `ownPosition`: the position this player remembers (all players)
-- `ownFile`: the file this player is showing (PlayerScreen only - clips know their source)
+- `ownBook`: the book this player is showing (PlayerScreen only - clips know their source)
 - When owner: sync `ownPosition` from `audio.position` via effect
 - When not owner: keep local position (allows seeking without affecting playback)
 - On play: claim ownership with `ownPosition`
 - On seek: always update `ownPosition`, only call `seek()` if owner
+
+### 7. **Books and Archiving** 🔥 IMPORTANT
+The domain entity is called `Book` (not AudioFile). A Book represents an audiobook/podcast in the library.
+
+**Archiving:** Users can archive books to free storage while preserving clips:
+- `book.uri === null` means the book is archived
+- Archiving deletes the underlying audio file but keeps the database record
+- Clips continue to work (they have their own audio files)
+- Archived books appear in a separate "Archived" section in LibraryScreen
+
+**Archive action flow:**
+1. Optimistic store update (set `uri: null`)
+2. Database update (with rollback on failure)
+3. Async file deletion (fire-and-forget)
+
+```typescript
+// Check if book is archived
+const isArchived = book.uri === null
+
+// Archive a book
+await archiveBook(bookId)
+```
 
 ## Project Overview
 
@@ -112,7 +134,7 @@ await play({ fileUri, position, ownerId })
   │   └── system/
   │       └── sharing.ts          # Share clips via native share sheet
   ├── screens/
-  │   ├── LibraryScreen.tsx       # History + 🔧 Reset button
+  │   ├── LibraryScreen.tsx       # Book list (active + archived sections) with archive action
   │   ├── PlayerScreen.tsx        # Main player
   │   └── ClipsListScreen.tsx     # Clip management
   ├── components/
@@ -163,10 +185,10 @@ await play({ fileUri, position, ownerId })
 
 ## Database Schema
 
-**files table:**
+**files table (stores `Book` entities):**
 ```sql
 id INTEGER PRIMARY KEY         -- Auto-increment, stable identifier
-uri TEXT                       -- Local file:// path (NULL if file removed from storage)
+uri TEXT                       -- Local file:// path (NULL if archived)
 original_uri TEXT              -- External content:// URI (reference only)
 name TEXT
 duration INTEGER               -- milliseconds
@@ -180,7 +202,7 @@ artwork TEXT                   -- base64 data URI
 **clips table:**
 ```sql
 id INTEGER PRIMARY KEY
-source_id INTEGER              -- References files.id (parent file)
+source_id INTEGER              -- References files.id (parent book)
 uri TEXT                       -- Clip's own audio file
 start INTEGER                  -- milliseconds (position in source file)
 duration INTEGER               -- milliseconds
@@ -199,15 +221,17 @@ library: {
 audio: {
   status: 'idle' | 'loading' | 'paused' | 'playing'
   position: number              // milliseconds
-  file: AudioFile | null        // Includes id, uri (nullable), duration, metadata
+  uri: string | null            // URI currently loaded in player (hardware state)
+  duration: number              // Duration of loaded audio (hardware state)
   ownerId: string | null        // ID of component controlling playback
 }
 clips: Record<number, ClipWithFile>  // Keyed by clip id
-files: Record<number, AudioFile>     // Keyed by file id
+books: Record<number, Book>          // Keyed by book id
 
 // Key actions
 loadFile, loadFileWithUri, play, pause, seek, skipForward/Backward
-addClip, deleteClip, jumpToClip, shareClip
+fetchBooks, archiveBook
+addClip(bookId, position), deleteClip, jumpToClip, shareClip
 updateClip(id, { note?, start?, duration? })  // Edit clip bounds and note (requires source file)
 updateClipTranscription         // Called by TranscriptionService
 __DEV_resetApp                  // Dev tool (clears all data)
@@ -218,11 +242,13 @@ seek(context: { fileUri, position })             // Only seeks if fileUri matche
 pause()                                          // Pauses, preserves ownership
 ```
 
+**AudioState is hardware-only:** The `audio` object reflects what's loaded in the player, not domain state. Components look up `Book` metadata from the `books` map using the URI when needed.
+
 ## File Loading Flow (Critical)
 
 1. **User picks file** → `pickedFile.uri` (external content: URI)
 2. **Check if already copied:**
-   - Lookup `dbService.getFileByUri(pickedFile.uri)` - checks by local URI
+   - Lookup `dbService.getBookByUri(pickedFile.uri)` - checks by local URI
    - If found and file exists on disk → use existing local copy
 3. **Copy to app storage:**
    - `library.status = 'adding'` → Modal shows "Adding to library..."
@@ -231,7 +257,7 @@ pause()                                          // Pauses, preserves ownership
    - `status = 'loading'` → Modal shows "Loading audio file..."
    - `audioService.load(localUri)` → 10s timeout if fails
 5. **Save to database:**
-   - `dbService.upsertFile()` returns the `AudioFile` with generated `id`
+   - `dbService.upsertBook()` returns the `Book` with generated `id`
    - `uri = localUri` (local file:// path)
    - `original_uri = pickedFile.uri` (external content: URI)
 6. **Auto-play:**
@@ -239,9 +265,9 @@ pause()                                          // Pauses, preserves ownership
    - Navigate to player tab
 
 **On reload from library:**
-- File selected by `id` from store (indexed by id)
-- If `file.uri` exists on disk → load directly
-- If `file.uri` is null → file was removed, show alert
+- Book selected by `id` from store (indexed by id)
+- If `book.uri` exists on disk → load directly
+- If `book.uri` is null → book is archived, show alert
 
 ## Development Tools
 
@@ -425,12 +451,12 @@ Clips have their own persistent audio files, stored separately from source files
 
 ### Clip Independence from Source 🔥 IMPORTANT
 
-Clips can exist independently of their source file. The source file's `uri` can become `null` if the user removes the file from their library (future feature).
+Clips can exist independently of their source book. The source book's `uri` becomes `null` when archived.
 
 **ClipWithFile interface:**
 ```typescript
 interface ClipWithFile extends Clip {
-  file_uri: string | null    // Source file URI (null if removed)
+  file_uri: string | null    // Source book URI (null if archived)
   file_name: string          // Preserved from when clip was created
   file_title: string | null
   file_artist: string | null
@@ -438,13 +464,13 @@ interface ClipWithFile extends Clip {
 }
 ```
 
-**When source file exists (`file_uri !== null`):**
-- ClipViewer plays from source file at `clip.start` position
+**When source book exists (`file_uri !== null`):**
+- ClipViewer plays from source book at `clip.start` position
 - ClipEditor can expand/contract clip bounds, re-slices from source
 - "Go to source" and "Edit" menu options available
-- Timeline shows full source file duration
+- Timeline shows full source book duration
 
-**When source file is removed (`file_uri === null`):**
+**When source book is archived (`file_uri === null`):**
 - ClipViewer plays from clip's own audio file (`clip.uri`) at position 0
 - ClipEditor is disabled (Edit button hidden)
 - "Go to source" and "Edit" menu options hidden
@@ -516,17 +542,19 @@ On-device automatic clip transcription using Whisper:
 - Check `audio.ownerId === myId` before syncing from global audio state
 - Check `clip.file_uri !== null` before enabling edit/jump-to-source features
 - Use `clip.file_uri` (source) when available, fall back to `clip.uri` (clip's own file) when not
-- Use `file.id` as the stable identifier for files (not `uri` which can be null)
+- Use `book.id` as the stable identifier for books (not `uri` which can be null)
+- Look up `Book` metadata from `books` map using URI when needed (audio state only has uri/duration)
 
 ❌ **Don't:**
 - Use external content: URIs for audio playback
 - Trigger React re-renders during TimelineBar animation (use refs)
 - Modify `status` from polling callback when in transitional state
-- Call `upsertFile` without both URIs (local and original)
+- Call `upsertBook` without both URIs (local and original)
 - Call `play()` or `seek()` without file context from UI components
 - Assume global `audio.position` is relevant to your component (check ownership first)
-- Assume `AudioFile.uri` is non-null (check before using for playback)
-- Attempt to re-slice clips when source file is unavailable (`file_uri === null`)
+- Assume `Book.uri` is non-null (check before using for playback - null means archived)
+- Attempt to re-slice clips when source book is archived (`file_uri === null`)
+- Read book metadata from `audio` state (it only has hardware state: uri, duration)
 
 ## Quick Reference
 
@@ -535,11 +563,13 @@ On-device automatic clip transcription using Whisper:
 **Load test file:** Tap "Sample" button in Library
 **Reset app data:** Tap "Reset" button in Library
 **Time format:** Always milliseconds internally
-**File playback:** Use `audioFile.uri` (local path) - check for null first!
-**File identifier:** Use `audioFile.id` (stable), not `uri` (can be null)
-**Clip source check:** `clip.file_uri !== null` means source file available
+**Book playback:** Use `book.uri` (local path) - check for null first (null = archived)
+**Book identifier:** Use `book.id` (stable), not `uri` (can be null)
+**Clip source check:** `clip.file_uri !== null` means source book available
+**Archive check:** `book.uri === null` means book is archived
 **Library status:** `loading → idle ⇄ adding`
 **Audio status:** `idle → loading → paused ⇄ playing`
+**Audio state:** Hardware-only (uri, duration, position, status, ownerId) - no Book metadata
 
 ## Custom ESLint Rules
 
@@ -592,8 +622,13 @@ Uses `react-native-track-player` v5 for system-level playback integration:
 - **ClipViewer/ClipEditor**: Extracted components for viewing and editing clips
 - **Unified Timeline component**: Replaced PlaybackTimeline + SelectionTimeline with single props-based Timeline
 - **Stencil + paint layers rendering**: Timeline uses clip regions instead of per-bar segment logic
-- **File ID as primary key**: `files.id` (auto-increment) is now the stable identifier, `uri` is nullable
-- **Clip source independence**: Clips reference `source_id` (file ID), work even if source file removed
+- **Book ID as primary key**: `files.id` (auto-increment) is now the stable identifier, `uri` is nullable
+- **Clip source independence**: Clips reference `source_id` (book ID), work even if source book archived
 - **ClipWithFile.file_uri**: Nullable field to check source availability; when null, clips play from own file
-- **Store files indexed by id**: `files: Record<number, AudioFile>` instead of by uri
-- **Database methods renamed**: `getFileByUri()`, `getFileById()`, `createClip(sourceId, ...)`
+- **Store books indexed by id**: `books: Record<number, Book>` instead of by uri
+- **Renamed AudioFile to Book**: Domain entity representing audiobooks/podcasts
+- **AudioState is hardware-only**: `audio` has `uri` + `duration` (not full Book object)
+- **Book archiving**: `archiveBook(id)` sets `uri = null`, deletes file, preserves clips
+- **Library sections**: Active books and archived books shown in separate SectionList sections
+- **Database methods**: `getBookByUri()`, `getBookById()`, `upsertBook()`, `archiveBook()`, `createClip(bookId, ...)`
+- **addClip takes explicit params**: `addClip(bookId, position)` instead of reading from audio state
