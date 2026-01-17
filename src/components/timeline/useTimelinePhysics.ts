@@ -21,6 +21,7 @@ import { timeToX, xToTime, clamp } from './utils'
 
 const HANDLE_CIRCLE_RADIUS = 12
 const HANDLE_TOUCH_RADIUS = 24
+const DISPLAY_UPDATE_INTERVAL = 100 // Throttle time display updates to reduce re-renders
 
 export interface SelectionConfig {
   start: number
@@ -76,6 +77,16 @@ export function useTimelinePhysics({
   // Track if we stopped momentum on this touch
   const stoppedMomentumRef = useRef(false)
 
+  // Throttle time display updates to reduce React re-renders
+  const lastDisplayUpdateRef = useRef(0)
+  const updateDisplayPosition = useCallback((position: number, force = false) => {
+    const now = performance.now()
+    if (force || now - lastDisplayUpdateRef.current >= DISPLAY_UPDATE_INTERVAL) {
+      lastDisplayUpdateRef.current = now
+      setDisplayPosition(position)
+    }
+  }, [])
+
   const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3)
 
   const stopAnimation = useCallback(() => {
@@ -111,7 +122,7 @@ export function useTimelinePhysics({
       const { startOffset, targetOffset } = animationRef.current
       scrollOffsetRef.current = startOffset + (targetOffset - startOffset) * easedProgress
 
-      setDisplayPosition(xToTime(scrollOffsetRef.current))
+      updateDisplayPosition(xToTime(scrollOffsetRef.current))
       setFrame(f => f + 1)
 
       if (progress < 1) {
@@ -119,12 +130,13 @@ export function useTimelinePhysics({
       } else {
         animationRef.current = null
         rafIdRef.current = null
+        updateDisplayPosition(xToTime(scrollOffsetRef.current), true) // Force final update
         onSeek(xToTime(scrollOffsetRef.current))
       }
     }
 
     rafIdRef.current = requestAnimationFrame(tick)
-  }, [maxScrollOffset, onSeek, stopAnimation])
+  }, [maxScrollOffset, onSeek, stopAnimation, updateDisplayPosition])
 
   // Momentum loop
   const startMomentumLoop = useCallback(() => {
@@ -142,12 +154,13 @@ export function useTimelinePhysics({
         )
         velocityRef.current *= DECELERATION
 
-        setDisplayPosition(xToTime(scrollOffsetRef.current))
+        updateDisplayPosition(xToTime(scrollOffsetRef.current))
         setFrame(f => f + 1)
         rafIdRef.current = requestAnimationFrame(tick)
       } else {
         velocityRef.current = 0
         rafIdRef.current = null
+        updateDisplayPosition(xToTime(scrollOffsetRef.current), true) // Force final update
         onSeek(xToTime(scrollOffsetRef.current))
       }
     }
@@ -157,16 +170,16 @@ export function useTimelinePhysics({
     }
     animationRef.current = null
     rafIdRef.current = requestAnimationFrame(tick)
-  }, [maxScrollOffset, onSeek])
+  }, [maxScrollOffset, onSeek, updateDisplayPosition])
 
   // Sync to external position when idle
   useEffect(() => {
     if (!isDraggingRef.current && rafIdRef.current === null && !draggingHandleRef.current) {
       scrollOffsetRef.current = timeToX(externalPosition)
-      setDisplayPosition(externalPosition)
+      updateDisplayPosition(externalPosition, true) // Always sync when idle
       setFrame(f => f + 1)
     }
-  }, [externalPosition])
+  }, [externalPosition, updateDisplayPosition])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -293,9 +306,9 @@ export function useTimelinePhysics({
       0,
       maxScrollOffset
     )
-    setDisplayPosition(xToTime(scrollOffsetRef.current))
+    updateDisplayPosition(xToTime(scrollOffsetRef.current))
     setFrame(f => f + 1)
-  }, [selection, duration, maxScrollOffset])
+  }, [selection, duration, maxScrollOffset, updateDisplayPosition])
 
   const onPanEnd = useCallback((velocityX: number) => {
     if (draggingHandleRef.current) {
