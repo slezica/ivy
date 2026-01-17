@@ -1,5 +1,7 @@
 # Google Drive Backup
 
+**Status: V0 Complete** ✓
+
 ## Overview
 
 Automatic cloud backup to prevent data loss when switching phones. Users authenticate once with Google, then changes sync to a visible Drive folder.
@@ -51,8 +53,8 @@ The `updated_at` field updates on position changes, making it suitable for sync 
 ```
 src/services/backup/
   ├── index.ts     # Barrel exports
-  ├── auth.ts      # Google OAuth (expo-auth-session)
-  ├── drive.ts     # Drive REST API wrapper
+  ├── auth.ts      # Google OAuth (@react-native-google-signin)
+  ├── drive.ts     # Drive REST API wrapper (resumable uploads)
   └── sync.ts      # Diff + upload/download orchestration
 ```
 

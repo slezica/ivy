@@ -7,7 +7,7 @@
 ### 1. **File Storage Strategy** 🔥 MOST IMPORTANT
 External content: URIs (like Google Drive) become invalid after app restart. **Solution:**
 - **All files are copied to app-owned storage** on first load
-- Database stores: `uri` (local file:// path for playback) + `original_uri` (external source)
+- Database stores: `uri` (local file:// path for playback)
 - `FileStorageService` manages copying to `Paths.document/audio/`
 - Audio playback **only uses local file:// URIs**
 
@@ -88,7 +88,7 @@ The domain entity is called `Book` (not AudioFile). A Book represents an audiobo
 1. File copied to app storage
 2. Fingerprint read (file size + first 4KB)
 3. If fingerprint matches archived book → restore: update `uri`, replace metadata, preserve position
-4. If fingerprint matches active book → delete duplicate file, touch `opened_at`
+4. If fingerprint matches active book → delete duplicate file, touch `updated_at`
 5. If no match → create new book record
 
 ```typescript
@@ -144,6 +144,10 @@ await archiveBook(bookId)
   │   ├── transcription/
   │   │   ├── queue.ts            # Background transcription queue
   │   │   └── whisper.ts          # On-device speech-to-text (whisper.rn)
+  │   ├── backup/
+  │   │   ├── auth.ts             # Google OAuth (expo-auth-session)
+  │   │   ├── drive.ts            # Google Drive REST API wrapper
+  │   │   └── sync.ts             # Backup sync orchestration
   │   └── system/
   │       └── sharing.ts          # Share clips via native share sheet
   ├── screens/
@@ -202,11 +206,10 @@ await archiveBook(bookId)
 ```sql
 id INTEGER PRIMARY KEY         -- Auto-increment, stable identifier
 uri TEXT                       -- Local file:// path (NULL if archived)
-original_uri TEXT              -- External content:// URI (reference only)
 name TEXT
 duration INTEGER               -- milliseconds
 position INTEGER               -- milliseconds (resume position)
-opened_at INTEGER              -- timestamp
+updated_at INTEGER             -- timestamp (last modification)
 title TEXT
 artist TEXT
 artwork TEXT                   -- base64 data URI
@@ -274,7 +277,6 @@ pause()                                          // Pauses, preserves ownership
 5. **Save to database:**
    - `dbService.upsertBook()` returns the `Book` with generated `id`
    - `uri = localUri` (local file:// path)
-   - `original_uri = pickedFile.uri` (external content: URI)
 6. **Auto-play:**
    - `status = 'playing'`
    - Navigate to player tab
@@ -341,7 +343,7 @@ maestro test maestro/smoke-test.yaml
 ### Content URI Issues
 - External URIs (Google Drive, etc.) **will fail** after app restart
 - This is expected - files must be re-copied from local storage
-- Database `original_uri` is for reference only, don't use for playback
+- Only local `file://` URIs should be used for playback
 
 
 ## Shared Components
@@ -447,6 +449,57 @@ On-device automatic clip transcription using Whisper:
 - Transcription displayed in ClipViewer below the time
 - `note` and `transcription` are separate fields (user notes vs auto-generated)
 
+## Google Drive Backup
+
+Cloud backup for books and clips to prevent data loss when switching phones.
+
+**What gets backed up:**
+- Book metadata (positions, timestamps) as JSON files
+- Clip metadata + audio as JSON + MP3 pairs
+
+**What doesn't get backed up:**
+- Full audiobook files (too large, user can re-add from source)
+
+**File structure in Drive:**
+```
+Ivy/
+  books/
+    book1_1705432800000.json
+    book2_1705432900000.json
+  clips/
+    clip4_1705433000000.json
+    clip4_1705433000000.mp3
+```
+
+Files named: `{type}{id}_{updated_at}.{ext}`. Multiple versions can coexist; sync takes the latest.
+
+**Services** (`services/backup/`):
+- `auth.ts` - Google OAuth via `@react-native-google-signin/google-signin`
+- `drive.ts` - Drive REST API wrapper (resumable uploads, list, download, delete)
+- `sync.ts` - Bidirectional sync: diff local vs Drive, upload/download as needed
+
+**Sync logic:**
+- Last-write-wins via `updated_at` timestamp
+- Books: archived books remain in backup (still in local DB)
+- Clips: deleted clips are removed from Drive
+- Clip JSON + MP3 are atomic pairs (same timestamp)
+
+**Google Cloud Setup:**
+1. Create project in Google Cloud Console
+2. Enable **Google Drive API** (APIs & Services → Library)
+3. Create **Android** OAuth client:
+   - Package name: `com.salezica.ivy`
+   - SHA-1: from `cd android && ./gradlew signingReport`
+4. Create **Web application** OAuth client:
+   - No redirect URIs needed
+   - Copy client ID to `auth.ts` (`WEB_CLIENT_ID`)
+
+**Key Points:**
+- Native library handles token refresh automatically
+- Public Drive folder (visible to user in their Drive)
+- Dev button "Sync" in Library header triggers full sync
+- Both Android + Web OAuth clients required (Android for verification, Web for token exchange)
+
 ## Adding Features
 
 ### New Playback Control
@@ -488,7 +541,7 @@ On-device automatic clip transcription using Whisper:
 - Use external content: URIs for audio playback
 - Trigger React re-renders during TimelineBar animation (use refs)
 - Modify `status` from polling callback when in transitional state
-- Call `upsertBook` without both URIs (local and original)
+- Call `upsertBook` without a local URI
 - Call `play()` or `seek()` without file context from UI components
 - Assume global `audio.position` is relevant to your component (check ownership first)
 - Assume `Book.uri` is non-null (check before using for playback - null means archived)
@@ -501,6 +554,7 @@ On-device automatic clip transcription using Whisper:
 **Run e2e tests:** `maestro test maestro/`
 **Load test file:** Tap "Sample" button in Library
 **Reset app data:** Tap "Reset" button in Library
+**Sync to Drive:** Tap "Sync" button in Library (requires Google OAuth setup)
 **Time format:** Always milliseconds internally
 **Book playback:** Use `book.uri` (local path) - check for null first (null = archived)
 **Book identifier:** Use `book.id` (stable), not `uri` (can be null)
