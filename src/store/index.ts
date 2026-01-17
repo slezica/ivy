@@ -385,10 +385,10 @@ export const useStore = create<AppState>((set, get) => {
         const isFileSame = audio.uri === context.fileUri
 
         if (!isFileSame) {
-          // Need to load a different file
-          const bookRecord = dbService.getBookByUri(context.fileUri)
+          // Need to load a different file (could be book or clip audio)
+          const bookRecord = dbService.getBookByAnyUri(context.fileUri)
           if (!bookRecord) {
-            throw new Error(`Book not found in library: ${context.fileUri}`)
+            throw new Error(`No book or clip found for: ${context.fileUri}`)
           }
 
           set((state) => ({

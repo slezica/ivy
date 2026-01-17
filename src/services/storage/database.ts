@@ -94,6 +94,25 @@ export class DatabaseService {
     return result || null
   }
 
+  /**
+   * Find a Book by URI - either the book's own URI or one of its clip URIs.
+   * Useful for playback where the URI could be a book or a clip's audio file.
+   */
+  getBookByAnyUri(uri: string): Book | null {
+    // First try direct book lookup
+    const book = this.getBookByUri(uri)
+    if (book) return book
+
+    // Try to find a clip with this URI and return its source book
+    const result = this.db.getFirstSync<Book>(
+      `SELECT files.* FROM files
+       INNER JOIN clips ON clips.source_id = files.id
+       WHERE clips.uri = ?`,
+      [uri]
+    )
+    return result || null
+  }
+
   getAllBooks(): Book[] {
     return this.db.getAllSync<Book>(
       'SELECT * FROM files ORDER BY updated_at DESC'
