@@ -22,6 +22,7 @@ export interface Book {
   title: string | null
   artist: string | null
   artwork: string | null   // base64 data URI
+  hash: string | null      // File identity hash (size + first bytes)
 }
 
 export interface Clip {
@@ -85,6 +86,14 @@ export class DatabaseService {
     return result || null
   }
 
+  getBookByHash(hash: string): Book | null {
+    const result = this.db.getFirstSync<Book>(
+      'SELECT * FROM files WHERE hash = ?',
+      [hash]
+    )
+    return result || null
+  }
+
   getAllBooks(): Book[] {
     return this.db.getAllSync<Book>(
       'SELECT * FROM files ORDER BY opened_at DESC'
@@ -99,24 +108,59 @@ export class DatabaseService {
     originalUri?: string | null,
     title?: string | null,
     artist?: string | null,
-    artwork?: string | null
+    artwork?: string | null,
+    hash?: string | null
   ): Book {
     const now = Date.now()
     const existing = this.getBookByUri(uri)
 
     if (existing) {
       this.db.runSync(
-        'UPDATE files SET name = ?, duration = ?, position = ?, opened_at = ?, original_uri = ?, title = ?, artist = ?, artwork = ? WHERE id = ?',
-        [name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null, existing.id]
+        'UPDATE files SET name = ?, duration = ?, position = ?, opened_at = ?, original_uri = ?, title = ?, artist = ?, artwork = ?, hash = ? WHERE id = ?',
+        [name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null, hash ?? null, existing.id]
       )
       return this.getBookById(existing.id)!
     } else {
       const result = this.db.runSync(
-        'INSERT INTO files (uri, name, duration, position, opened_at, original_uri, title, artist, artwork) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [uri, name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null]
+        'INSERT INTO files (uri, name, duration, position, opened_at, original_uri, title, artist, artwork, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [uri, name, duration, position, now, originalUri ?? null, title ?? null, artist ?? null, artwork ?? null, hash ?? null]
       )
       return this.getBookById(result.lastInsertRowId)!
     }
+  }
+
+  /**
+   * Restore an archived book by attaching a new file.
+   * Preserves position, updates uri and metadata, refreshes opened_at.
+   */
+  restoreBook(
+    id: number,
+    uri: string,
+    name: string,
+    duration: number,
+    originalUri: string | null,
+    title: string | null,
+    artist: string | null,
+    artwork: string | null,
+    hash: string
+  ): Book {
+    const now = Date.now()
+    this.db.runSync(
+      'UPDATE files SET uri = ?, name = ?, duration = ?, opened_at = ?, original_uri = ?, title = ?, artist = ?, artwork = ?, hash = ? WHERE id = ?',
+      [uri, name, duration, now, originalUri, title, artist, artwork, hash, id]
+    )
+    return this.getBookById(id)!
+  }
+
+  /**
+   * Touch an existing book to update opened_at timestamp.
+   */
+  touchBook(id: number): void {
+    const now = Date.now()
+    this.db.runSync(
+      'UPDATE files SET opened_at = ? WHERE id = ?',
+      [now, id]
+    )
   }
 
   updateBookPosition(id: number, position: number): void {
@@ -291,6 +335,14 @@ export class DatabaseService {
     `)
 
     this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_files_uri ON files(uri);`)
+
+    // Migration: Add hash column
+    try {
+      this.db.execSync(`ALTER TABLE files ADD COLUMN hash TEXT;`)
+    } catch {
+      // Column already exists
+    }
+    this.db.execSync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_files_hash ON files(hash);`)
 
     this.db.execSync(`
       CREATE TABLE IF NOT EXISTS clips (

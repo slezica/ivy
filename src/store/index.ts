@@ -254,36 +254,24 @@ export const useStore = create<AppState>((set, get) => {
 
   async function loadFile(pickedFile: PickedFile) {
     try {
-      // Step 1: Copy file to app storage if needed
-      let localUri: string
-      let book = dbService.getBookByUri(pickedFile.uri)
-      let isNewBook = false
+      // Step 1: Copy file to app storage
+      console.log('Copying file to app storage from:', pickedFile.uri)
+      set({ library: { status: 'adding' } })
 
-      if (book?.uri && await fileStorageService.fileExists(book.uri)) {
-        // Already have a local copy - use it
-        localUri = book.uri
-        console.log('Using existing local file:', localUri)
-      } else {
-        // Need to copy file to app storage
-        console.log('Copying file to app storage from:', pickedFile.uri)
-        set({ library: { status: 'adding' } })
+      const localUri = await fileStorageService.copyToAppStorage(pickedFile.uri, pickedFile.name)
+      console.log('File copied to:', localUri)
 
-        localUri = await fileStorageService.copyToAppStorage(pickedFile.uri, pickedFile.name)
-        console.log('File copied to:', localUri)
-        isNewBook = true
-      }
+      // Step 2: Read metadata
+      console.log('Reading metadata from:', localUri)
+      const metadata = await metadataService.readMetadata(localUri)
+      console.log('Metadata read:', metadata)
 
-      // Step 2: Read metadata (only for new books, during 'adding' phase)
-      let metadata: { title: string | null; artist: string | null; artwork: string | null } = {
-        title: null,
-        artist: null,
-        artwork: null,
-      }
-      if (isNewBook) {
-        console.log('Reading metadata from:', localUri)
-        metadata = await metadataService.readMetadata(localUri)
-        console.log('Metadata read:', metadata)
-      }
+      // Step 3: Compute file hash
+      const hash = await fileStorageService.computeFileHash(localUri)
+      console.log('File hash:', hash)
+
+      // Step 4: Check for existing book with same hash
+      const existingBook = dbService.getBookByHash(hash)
 
       // Verify file exists before loading
       const exists = await fileStorageService.fileExists(localUri)
@@ -292,7 +280,7 @@ export const useStore = create<AppState>((set, get) => {
         throw new Error(`Local file does not exist: ${localUri}`)
       }
 
-      // Step 3: Load audio from local URI
+      // Step 5: Load audio from local URI
       set((state) => ({
         library: { status: 'idle' },
         audio: { ...state.audio, status: 'loading' },
@@ -300,26 +288,62 @@ export const useStore = create<AppState>((set, get) => {
 
       console.log('Loading audio from:', localUri)
       const duration = await audioService.load(localUri, {
-        title: isNewBook ? metadata.title : book?.title,
-        artist: isNewBook ? metadata.artist : book?.artist,
-        artwork: isNewBook ? metadata.artwork : book?.artwork,
+        title: metadata.title,
+        artist: metadata.artist,
+        artwork: metadata.artwork,
       })
       console.log('Audio loaded successfully, duration:', duration)
 
-      // Step 4: Save/update book record in database
-      // Save local URI as 'uri' (what we actually use) and original as 'original_uri'
-      book = dbService.upsertBook(
-        localUri,
-        pickedFile.name,
-        duration,
-        book?.position ?? 0,
-        pickedFile.uri,
-        isNewBook ? metadata.title : book?.title ?? null,
-        isNewBook ? metadata.artist : book?.artist ?? null,
-        isNewBook ? metadata.artwork : book?.artwork ?? null
-      )
+      // Step 6: Determine which book record to use
+      let book: Book
 
-      // Load all clips
+      if (existingBook) {
+        if (existingBook.uri === null) {
+          // Case A: Archived book - restore it with new file
+          console.log('Restoring archived book:', existingBook.id)
+          book = dbService.restoreBook(
+            existingBook.id,
+            localUri,
+            pickedFile.name,
+            duration,
+            pickedFile.uri,
+            metadata.title,
+            metadata.artist,
+            metadata.artwork,
+            hash
+          )
+        } else {
+          // Case B: Active book - delete duplicate file, use existing
+          console.log('File already exists in library, removing duplicate:', localUri)
+          await fileStorageService.deleteFile(localUri)
+          dbService.touchBook(existingBook.id)
+          book = dbService.getBookById(existingBook.id)!
+
+          // Reload audio from existing file
+          await audioService.load(book.uri!, {
+            title: book.title,
+            artist: book.artist,
+            artwork: book.artwork,
+          })
+        }
+      } else {
+        // Case C: New book - create record
+        console.log('Creating new book record')
+        book = dbService.upsertBook(
+          localUri,
+          pickedFile.name,
+          duration,
+          0,
+          pickedFile.uri,
+          metadata.title,
+          metadata.artist,
+          metadata.artwork,
+          hash
+        )
+      }
+
+      // Refresh books and clips in store
+      fetchBooks()
       fetchAllClips()
 
       // Update state (keep status as 'loading' until play starts)
@@ -327,7 +351,7 @@ export const useStore = create<AppState>((set, get) => {
         audio: {
           ...state.audio,
           position: book.position,
-          uri: localUri,
+          uri: book.uri!,
           duration: duration,
         },
       }))
@@ -340,7 +364,7 @@ export const useStore = create<AppState>((set, get) => {
       // Auto-play after loading (this will set status to 'playing')
       // Target the main player so it adopts the book
       await get().play({
-        fileUri: book.uri!, // We just set this to localUri above
+        fileUri: book.uri!,
         position: book.position,
         ownerId: MAIN_PLAYER_OWNER_ID,
       })

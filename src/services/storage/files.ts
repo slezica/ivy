@@ -8,6 +8,9 @@
 import { Paths, Directory } from 'expo-file-system'
 import RNFS from 'react-native-fs'
 
+// How many bytes to read for hash computation
+const HASH_BYTES = 4096
+
 // =============================================================================
 // Service
 // =============================================================================
@@ -63,6 +66,24 @@ export class FileStorageService {
     }
   }
 
+  /**
+   * Compute a hash for file identity.
+   * Uses file size + first N bytes to create a unique fingerprint.
+   */
+  async computeFileHash(uri: string): Promise<string> {
+    const path = uriToPath(uri)
+    const stat = await RNFS.stat(path)
+    const fileSize = stat.size
+
+    // Read first N bytes as base64
+    const headBase64 = await RNFS.read(path, HASH_BYTES, 0, 'base64')
+
+    // Combine size and content into hash input
+    const hashInput = `${fileSize}:${headBase64}`
+
+    return fnv1aHash(hashInput)
+  }
+
   // ---------------------------------------------------------------------------
   // Private
   // ---------------------------------------------------------------------------
@@ -100,4 +121,20 @@ function createUniqueFilename(filename: string): string {
   const nameWithoutExt = sanitized.substring(0, dotIndex)
   const extension = sanitized.substring(dotIndex)
   return `${nameWithoutExt}_${timestamp}${extension}`
+}
+
+/**
+ * FNV-1a hash function.
+ * Simple, fast, non-cryptographic hash suitable for identity checks.
+ */
+function fnv1aHash(str: string): string {
+  let hash = 2166136261 // FNV offset basis (32-bit)
+
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i)
+    // FNV prime (32-bit): multiply and keep lower 32 bits
+    hash = Math.imul(hash, 16777619) >>> 0
+  }
+
+  return hash.toString(16).padStart(8, '0')
 }
