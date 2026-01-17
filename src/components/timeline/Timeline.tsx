@@ -105,6 +105,7 @@ function drawTimeline(
   scrollOffset: number,
   containerWidth: number,
   totalSegments: number,
+  duration: number,
   playheadX: number,
   selectionStartX: number | null,
   selectionEndX: number | null,
@@ -117,9 +118,14 @@ function drawTimeline(
   const visibleStartX = scrollOffset - halfWidth
   const visibleEndX = scrollOffset + halfWidth
 
-  // Timeline boundaries
+  // Timeline boundaries - use exact duration for end
   const timelineStartX = 0
-  const timelineEndX = totalSegments * SEGMENT_STEP
+  const timelineEndX = timeToX(duration)
+
+  // Last segment may have proportional width
+  const lastSegmentIndex = totalSegments - 1
+  const lastBarStartX = lastSegmentIndex * SEGMENT_STEP
+  const lastBarWidth = Math.min(SEGMENT_WIDTH, timelineEndX - lastBarStartX)
 
   // Calculate visible segment range (with small buffer)
   const startSegment = Math.max(0, Math.floor(visibleStartX / SEGMENT_STEP) - 2)
@@ -131,8 +137,9 @@ function drawTimeline(
     const x = i * SEGMENT_STEP
     const height = getSegmentHeight(i)
     const y = (TIMELINE_HEIGHT - height) / 2
+    const width = i === lastSegmentIndex ? lastBarWidth : SEGMENT_WIDTH
     barsPath.addRRect(
-      Skia.RRectXY(Skia.XYWHRect(x, y, SEGMENT_WIDTH, height), 2, 2)
+      Skia.RRectXY(Skia.XYWHRect(x, y, width, height), 2, 2)
     )
   }
 
@@ -316,6 +323,7 @@ export function Timeline({
             scrollOffset,
             containerWidth,
             totalSegments,
+            duration,
             playheadX,
             selStartX,
             selEndX,
@@ -338,7 +346,7 @@ export function Timeline({
       return null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frame, containerWidth, totalSegments, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
+  }, [frame, containerWidth, totalSegments, duration, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
 
   // Calculate playhead position based on time indicator placement
   const playheadTop = showTime === 'top'
