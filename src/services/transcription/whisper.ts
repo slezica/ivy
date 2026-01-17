@@ -16,8 +16,8 @@ import RNFS from 'react-native-fs'
 // Constants
 // =============================================================================
 
-const MODEL_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin'
-const MODEL_FILENAME = 'ggml-tiny.bin'
+const MODEL_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin'
+const MODEL_FILENAME = 'ggml-small.bin'
 
 // Whisper requires 16kHz mono 16-bit PCM WAV
 const WHISPER_SAMPLE_RATE = 16000
