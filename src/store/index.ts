@@ -28,8 +28,9 @@ type AudioStatus = 'idle' | 'loading' | 'paused' | 'playing'
 interface AudioState {
   status: AudioStatus
   position: number
-  file: AudioFile | null
-  ownerId: string | null  // ID of component that last took control
+  uri: string | null       // URI currently loaded in player (hardware state)
+  duration: number         // Duration of loaded audio (hardware state)
+  ownerId: string | null   // ID of component that last took control
 }
 
 type LibraryStatus = 'loading' | 'idle' | 'adding'
@@ -67,7 +68,7 @@ interface AppState {
   seek: (context: PlaybackContext) => Promise<void>
   skipForward: () => Promise<void>
   skipBackward: () => Promise<void>
-  addClip: (note: string) => Promise<void>
+  addClip: (fileId: number, position: number) => Promise<void>
   updateClip: (id: number, updates: { note?: string; start?: number; duration?: number }) => Promise<void>
   updateClipTranscription: (id: number, transcription: string) => void
   deleteClip: (id: number) => Promise<void>
@@ -110,10 +111,13 @@ export const useStore = create<AppState>((set, get) => {
       }))
 
       // Update file position in database
-      // Only if we have a file and valid position
-      const { audio } = get()
-      if (audio.file && status.position >= 0 && status.duration > 0) {
-        dbService.updateFilePosition(audio.file.id, status.position)
+      // Only if we have a file loaded and valid position
+      const { audio, files } = get()
+      if (audio.uri && status.position >= 0 && status.duration > 0) {
+        const file = Object.values(files).find(f => f.uri === audio.uri)
+        if (file) {
+          dbService.updateFilePosition(file.id, status.position)
+        }
       }
     },
   })
@@ -143,7 +147,8 @@ export const useStore = create<AppState>((set, get) => {
     audio: {
       status: 'idle',
       position: 0,
-      file: null,
+      uri: null,
+      duration: 0,
       ownerId: null,
     },
     clips: {},
@@ -280,7 +285,8 @@ export const useStore = create<AppState>((set, get) => {
         audio: {
           ...state.audio,
           position: audioFile.position,
-          file: audioFile,
+          uri: localUri,
+          duration: duration,
         },
       }))
 
@@ -301,7 +307,7 @@ export const useStore = create<AppState>((set, get) => {
       // Reset loading state on error
       set((state) => ({
         library: { status: 'idle' },
-        audio: { ...state.audio, status: state.audio.file ? 'paused' : 'idle' },
+        audio: { ...state.audio, status: state.audio.uri ? 'paused' : 'idle' },
       }))
       throw error
     }
@@ -312,7 +318,7 @@ export const useStore = create<AppState>((set, get) => {
       // If context provided, may need to load file and seek first
       if (context) {
         const { audio } = get()
-        const isFileSame = audio.file?.uri === context.fileUri
+        const isFileSame = audio.uri === context.fileUri
 
         if (!isFileSame) {
           // Need to load a different file
@@ -329,7 +335,7 @@ export const useStore = create<AppState>((set, get) => {
             },
           }))
 
-          await audioService.load(context.fileUri, {
+          const duration = await audioService.load(context.fileUri, {
             title: fileRecord.title,
             artist: fileRecord.artist,
             artwork: fileRecord.artwork,
@@ -338,7 +344,8 @@ export const useStore = create<AppState>((set, get) => {
           set((state) => ({
             audio: {
               ...state.audio,
-              file: fileRecord,
+              uri: context.fileUri,
+              duration: duration,
               position: context.position,
             },
           }))
@@ -371,7 +378,7 @@ export const useStore = create<AppState>((set, get) => {
     } catch (error) {
       console.error('Error playing audio:', error)
       set((state) => ({
-        audio: { ...state.audio, status: state.audio.file ? 'paused' : 'idle' },
+        audio: { ...state.audio, status: state.audio.uri ? 'paused' : 'idle' },
       }))
       throw error
     }
@@ -394,7 +401,7 @@ export const useStore = create<AppState>((set, get) => {
     const { audio } = get()
 
     // Only seek if the requested file is currently loaded
-    if (audio.file?.uri !== context.fileUri) {
+    if (audio.uri !== context.fileUri) {
       console.log('Seek ignored: file not loaded', context.fileUri)
       return
     }
@@ -444,33 +451,38 @@ export const useStore = create<AppState>((set, get) => {
     }))
   }
 
-  async function addClip(note: string) {
-    const { audio } = get()
-    if (!audio.file?.uri) {
-      throw new Error('No file loaded')
+  async function addClip(fileId: number, position: number) {
+    const { files } = get()
+    const file = files[fileId]
+
+    if (!file) {
+      throw new Error('File not found')
+    }
+    if (!file.uri) {
+      throw new Error('File has been archived')
     }
 
     // Cap clip duration to not exceed remaining audio length
-    const remainingDuration = audio.file.duration - audio.position
+    const remainingDuration = file.duration - position
     const clipDuration = Math.min(DEFAULT_CLIP_DURATION_MS, remainingDuration)
 
     // Generate random filename and slice audio
     const filename = `${generateRandomString()}.mp3`
     await slicerService.ensureDir(CLIPS_DIR)
     const sliceResult = await slicerService.slice({
-      sourceUri: audio.file.uri,
-      startMs: audio.position,
-      endMs: audio.position + clipDuration,
+      sourceUri: file.uri,
+      startMs: position,
+      endMs: position + clipDuration,
       outputFilename: filename,
       outputDir: CLIPS_DIR,
     })
 
     const clip = dbService.createClip(
-      audio.file.id,
+      fileId,
       sliceResult.uri,
-      audio.position,
+      position,
       clipDuration,
-      note
+      '' // Default empty note
     )
 
     // Reload all clips to include file information
@@ -609,7 +621,8 @@ export const useStore = create<AppState>((set, get) => {
       audio: {
         status: 'idle',
         position: 0,
-        file: null,
+        uri: null,
+        duration: 0,
         ownerId: null,
       },
       clips: {},

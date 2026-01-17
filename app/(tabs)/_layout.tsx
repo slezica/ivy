@@ -6,7 +6,7 @@ import { Color } from '../../src/theme'
 
 export default function TabsLayout() {
   const { audio } = useStore()
-  const hasFile = !!audio.file
+  const hasFile = !!audio.uri
 
   return (
     <Tabs

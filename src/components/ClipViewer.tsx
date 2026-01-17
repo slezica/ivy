@@ -38,7 +38,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   const ownerId = useRef(`clip-viewer-${clip.id}`).current
 
   // Check ownership and file state from global audio
-  const isFileLoaded = audio.file?.uri === playbackUri
+  const isFileLoaded = audio.uri === playbackUri
   const isOwner = audio.ownerId === ownerId
   const isPlaying = isOwner && audio.status === 'playing'
   const isLoading = isOwner && audio.status === 'loading'

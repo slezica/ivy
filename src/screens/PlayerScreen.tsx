@@ -12,7 +12,7 @@ import { MAIN_PLAYER_OWNER_ID } from '../utils'
 import type { AudioFile } from '../services'
 
 export default function PlayerScreen() {
-  const { audio, addClip, play, pause, seek, syncPlaybackState } = useStore()
+  const { audio, files, addClip, play, pause, seek, syncPlaybackState } = useStore()
 
   // Local state - what the main player "remembers"
   const [ownFile, setOwnFile] = useState<AudioFile | null>(null)
@@ -20,15 +20,19 @@ export default function PlayerScreen() {
 
   // Ownership check
   const isOwner = audio.ownerId === MAIN_PLAYER_OWNER_ID
-  const isFileLoaded = audio.file?.uri === ownFile?.uri
+  const isFileLoaded = audio.uri === ownFile?.uri
 
   // Adopt file when audio targets the main player
   useEffect(() => {
-    if (isOwner && audio.file && audio.file.uri !== ownFile?.uri) {
-      setOwnFile(audio.file)
-      setOwnPosition(audio.position)
+    if (isOwner && audio.uri && audio.uri !== ownFile?.uri) {
+      // Look up full file record from files map
+      const file = Object.values(files).find(f => f.uri === audio.uri)
+      if (file) {
+        setOwnFile(file)
+        setOwnPosition(audio.position)
+      }
     }
-  }, [isOwner, audio.file, audio.position, ownFile?.uri])
+  }, [isOwner, audio.uri, audio.position, ownFile?.uri, files])
 
   // Sync position from audio when we own playback
   useEffect(() => {
@@ -45,8 +49,10 @@ export default function PlayerScreen() {
   )
 
   const handleAddClip = async () => {
+    if (!ownFile) return
+
     try {
-      await addClip('')
+      await addClip(ownFile.id, ownPosition)
     } catch (error) {
       console.error('Error adding clip:', error)
       Alert.alert('Error', 'Failed to add clip')
