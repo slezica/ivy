@@ -17,17 +17,16 @@ import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import { Color } from '../theme'
 import type { Book } from '../services'
-import { googleAuthService, backupSyncService, offlineQueueService, databaseService } from '../services'
+import { databaseService, offlineQueueService } from '../services'
 import { formatTime, formatDate } from '../utils'
 
 const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, fetchAllClips, loadFileWithUri, books, archiveBook, settings, __DEV_resetApp } = useStore()
+  const { loadFileWithPicker, fetchBooks, loadFileWithUri, books, archiveBook, sync, autoSync, __DEV_resetApp } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [headerMenuVisible, setHeaderMenuVisible] = useState(false)
-  const [isSyncing, setIsSyncing] = useState(false)
   const lastSyncRef = useRef<number>(0)
 
   useFocusEffect(
@@ -36,7 +35,7 @@ export default function LibraryScreen() {
     }, [fetchBooks])
   )
 
-  // Auto-sync when app returns to foreground (if authenticated)
+  // Auto-sync when app returns to foreground
   useEffect(() => {
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
@@ -44,60 +43,21 @@ export default function LibraryScreen() {
         const timeSinceLastSync = now - lastSyncRef.current
         const lastSyncTime = databaseService.getLastSyncTime()
 
-        // Only auto-sync if:
-        // 1. Sync is enabled in settings
-        // 2. Authenticated
-        // 3. Not currently syncing
-        // 4. At least 5 minutes since last sync
-        // 5. There are pending changes OR we haven't synced in a while
-        const shouldAutoSync =
-          settings.sync_enabled &&
-          googleAuthService.isAuthenticated() &&
-          !isSyncing &&
+        // Throttle: at least 5 minutes since last sync attempt
+        const shouldAttempt =
           timeSinceLastSync > AUTO_SYNC_MIN_INTERVAL_MS &&
           (offlineQueueService.getCount() > 0 || !lastSyncTime || now - lastSyncTime > AUTO_SYNC_MIN_INTERVAL_MS)
 
-        if (shouldAutoSync) {
-          console.log('Auto-syncing on foreground')
-          await performSilentSync()
+        if (shouldAttempt) {
+          lastSyncRef.current = now
+          await autoSync()
         }
       }
     }
 
     const subscription = AppState.addEventListener('change', handleAppStateChange)
     return () => subscription.remove()
-  }, [isSyncing, settings.sync_enabled])
-
-  // Silent sync (no alerts unless errors/conflicts)
-  const performSilentSync = async () => {
-    if (isSyncing) return
-
-    setIsSyncing(true)
-    lastSyncRef.current = Date.now()
-
-    try {
-      await googleAuthService.initialize()
-      if (!googleAuthService.isAuthenticated()) return
-
-      const result = await backupSyncService.sync()
-
-      // Refresh data
-      fetchBooks()
-      fetchAllClips()
-
-      // Log conflicts and errors
-      if (result.conflicts.length > 0) {
-        console.log('Sync conflicts resolved:', result.conflicts)
-      }
-      if (result.errors.length > 0) {
-        console.warn('Sync errors:', result.errors)
-      }
-    } catch (error) {
-      console.error('Silent sync failed:', error)
-    } finally {
-      setIsSyncing(false)
-    }
-  }
+  }, [autoSync])
 
   const handleLoadFile = async () => {
     try {

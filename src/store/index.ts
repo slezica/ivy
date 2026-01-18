@@ -12,6 +12,7 @@ import {
   audioSlicerService,
   offlineQueueService,
   backupSyncService,
+  googleAuthService,
 } from '../services'
 
 import type { PickedFile, ClipWithFile, Book, Settings } from '../services'
@@ -42,6 +43,11 @@ interface LibraryState {
   status: LibraryStatus
 }
 
+interface SyncState {
+  isSyncing: boolean
+  pendingCount: number
+}
+
 /**
  * Context for playback actions. Components must specify which file
  * and position they want to play/seek. This prevents "accidents" where
@@ -57,6 +63,7 @@ interface AppState {
   // State
   library: LibraryState
   audio: AudioState
+  sync: SyncState
   clips: Record<string, ClipWithFile>
   books: Record<string, Book>
   settings: Settings
@@ -81,6 +88,9 @@ interface AppState {
   shareClip: (clipId: string) => Promise<void>
   syncPlaybackState: () => Promise<void>
   updateSettings: (settings: Settings) => void
+  syncNow: () => Promise<{ success: boolean; error?: string }>
+  autoSync: () => Promise<void>
+  refreshSyncStatus: () => void
 
   // Dev tools
   __DEV_resetApp: () => Promise<void>
@@ -177,6 +187,10 @@ export const useStore = create<AppState>((set, get) => {
       duration: 0,
       ownerId: null,
     },
+    sync: {
+      isSyncing: false,
+      pendingCount: offlineQueueService.getCount(),
+    },
     clips: {},
     books: {},
     settings: dbService.getSettings(),
@@ -201,6 +215,9 @@ export const useStore = create<AppState>((set, get) => {
     shareClip,
     syncPlaybackState,
     updateSettings,
+    syncNow,
+    autoSync,
+    refreshSyncStatus,
     __DEV_resetApp
   }
 
@@ -717,6 +734,100 @@ export const useStore = create<AppState>((set, get) => {
     set({ settings })
   }
 
+  function refreshSyncStatus() {
+    set((state) => ({
+      sync: { ...state.sync, pendingCount: offlineQueueService.getCount() },
+    }))
+  }
+
+  async function syncNow(): Promise<{ success: boolean; error?: string }> {
+    const { sync } = get()
+    if (sync.isSyncing) {
+      return { success: false, error: 'Sync already in progress' }
+    }
+
+    set((state) => ({
+      sync: { ...state.sync, isSyncing: true },
+    }))
+
+    try {
+      await googleAuthService.initialize()
+
+      if (!googleAuthService.isAuthenticated()) {
+        const signedIn = await googleAuthService.signIn()
+        if (!signedIn) {
+          return { success: false, error: 'Could not sign in to Google' }
+        }
+      }
+
+      const result = await backupSyncService.sync()
+
+      fetchBooks()
+      fetchAllClips()
+
+      console.log('Sync complete:', {
+        uploaded: result.uploaded,
+        downloaded: result.downloaded,
+        deleted: result.deleted,
+        conflicts: result.conflicts.length,
+        errors: result.errors.length,
+      })
+
+      if (result.errors.length > 0) {
+        return { success: false, error: `${result.errors.length} error(s) occurred during sync` }
+      }
+
+      return { success: true }
+    } catch (error) {
+      console.error('Sync failed:', error)
+      return { success: false, error: String(error) }
+    } finally {
+      set((state) => ({
+        sync: {
+          isSyncing: false,
+          pendingCount: offlineQueueService.getCount(),
+        },
+      }))
+    }
+  }
+
+  async function autoSync(): Promise<void> {
+    const { sync, settings } = get()
+
+    // Skip if sync disabled, already syncing, or not authenticated
+    if (!settings.sync_enabled || sync.isSyncing) return
+
+    await googleAuthService.initialize()
+    if (!googleAuthService.isAuthenticated()) return
+
+    set((state) => ({
+      sync: { ...state.sync, isSyncing: true },
+    }))
+
+    try {
+      const result = await backupSyncService.sync()
+
+      fetchBooks()
+      fetchAllClips()
+
+      if (result.conflicts.length > 0) {
+        console.log('Auto-sync conflicts resolved:', result.conflicts)
+      }
+      if (result.errors.length > 0) {
+        console.warn('Auto-sync errors:', result.errors)
+      }
+    } catch (error) {
+      console.error('Auto-sync failed:', error)
+    } finally {
+      set((state) => ({
+        sync: {
+          isSyncing: false,
+          pendingCount: offlineQueueService.getCount(),
+        },
+      }))
+    }
+  }
+
   async function __DEV_resetApp() {
     // Unload current player
     await audioService.unload()
@@ -735,6 +846,10 @@ export const useStore = create<AppState>((set, get) => {
         uri: null,
         duration: 0,
         ownerId: null,
+      },
+      sync: {
+        isSyncing: false,
+        pendingCount: 0,
       },
       clips: {},
       books: {},

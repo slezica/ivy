@@ -1,65 +1,28 @@
 import { View, Text, StyleSheet, Switch, TouchableOpacity, Alert } from 'react-native'
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
 import { useFocusEffect } from 'expo-router'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import { Color } from '../theme'
-import { googleAuthService, backupSyncService, offlineQueueService } from '../services'
 import { useStore } from '../store'
 
 export default function SettingsScreen() {
-  const { fetchBooks, fetchAllClips, settings, updateSettings } = useStore()
-  const [isSyncing, setIsSyncing] = useState(false)
-  const [pendingCount, setPendingCount] = useState(0)
+  const { settings, updateSettings, sync, syncNow, refreshSyncStatus } = useStore()
 
   useFocusEffect(
     useCallback(() => {
-      setPendingCount(offlineQueueService.getCount())
-    }, [])
+      refreshSyncStatus()
+    }, [refreshSyncStatus])
   )
 
   const handleSyncNow = async () => {
-    if (isSyncing) return
-
-    setIsSyncing(true)
-
-    try {
-      await googleAuthService.initialize()
-
-      if (!googleAuthService.isAuthenticated()) {
-        const signedIn = await googleAuthService.signIn()
-        if (!signedIn) {
-          Alert.alert('Auth Failed', 'Could not sign in to Google')
-          return
-        }
-      }
-
-      const result = await backupSyncService.sync()
-
-      fetchBooks()
-      fetchAllClips()
-      setPendingCount(offlineQueueService.getCount())
-
-      console.log('Sync complete:', {
-        uploaded: result.uploaded,
-        downloaded: result.downloaded,
-        deleted: result.deleted,
-        conflicts: result.conflicts.length,
-        errors: result.errors.length,
-      })
-
-      if (result.errors.length > 0) {
-        Alert.alert('Sync Errors', `${result.errors.length} error(s) occurred during sync`)
-      }
-    } catch (error) {
-      console.error('Sync failed:', error)
-      Alert.alert('Sync Failed', `${error}`)
-    } finally {
-      setIsSyncing(false)
+    const result = await syncNow()
+    if (!result.success && result.error) {
+      Alert.alert('Sync Failed', result.error)
     }
   }
 
-  const pendingLabel = pendingCount === 1 ? '1 item pending' : `${pendingCount} items pending`
+  const pendingLabel = sync.pendingCount === 1 ? '1 item pending' : `${sync.pendingCount} items pending`
 
   return (
     <ScreenArea>
@@ -79,14 +42,14 @@ export default function SettingsScreen() {
 
         <View style={styles.settingSecondary}>
           <Text style={styles.secondaryText}>
-            {pendingCount > 0 ? pendingLabel : 'Up to date'}
+            {sync.pendingCount > 0 ? pendingLabel : 'Up to date'}
           </Text>
 
           <Text style={styles.secondaryText}> · </Text>
 
-          <TouchableOpacity onPress={handleSyncNow} disabled={isSyncing}>
+          <TouchableOpacity onPress={handleSyncNow} disabled={sync.isSyncing}>
             <Text style={styles.linkText}>
-              {isSyncing ? 'Syncing...' : 'Sync now'}
+              {sync.isSyncing ? 'Syncing...' : 'Sync now'}
             </Text>
           </TouchableOpacity>
         </View>
