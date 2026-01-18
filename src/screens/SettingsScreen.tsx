@@ -8,8 +8,7 @@ import { googleAuthService, backupSyncService, offlineQueueService } from '../se
 import { useStore } from '../store'
 
 export default function SettingsScreen() {
-  const { fetchBooks, fetchAllClips } = useStore()
-  const [syncEnabled, setSyncEnabled] = useState(false)
+  const { fetchBooks, fetchAllClips, settings, updateSettings } = useStore()
   const [isSyncing, setIsSyncing] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
 
@@ -71,8 +70,8 @@ export default function SettingsScreen() {
           <Text style={styles.settingLabel}>Sync</Text>
 
           <Switch
-            value={syncEnabled}
-            onValueChange={setSyncEnabled}
+            value={settings.sync_enabled}
+            onValueChange={(value) => updateSettings({ ...settings, sync_enabled: value })}
             trackColor={{ false: Color.GRAY, true: Color.PRIMARY }}
             thumbColor={Color.BLACK}
           />
