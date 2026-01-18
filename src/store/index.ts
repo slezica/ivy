@@ -14,7 +14,7 @@ import {
   backupSyncService,
 } from '../services'
 
-import type { PickedFile, ClipWithFile, Book } from '../services'
+import type { PickedFile, ClipWithFile, Book, Settings } from '../services'
 import { MAIN_PLAYER_OWNER_ID, generateId } from '../utils'
 
 const CLIPS_DIR = `${RNFS.DocumentDirectoryPath}/clips`
@@ -59,6 +59,7 @@ interface AppState {
   audio: AudioState
   clips: Record<string, ClipWithFile>
   books: Record<string, Book>
+  settings: Settings
 
   // Actions
   loadFile: (pickedFile: PickedFile) => Promise<void>
@@ -79,6 +80,7 @@ interface AppState {
   jumpToClip: (clipId: string) => Promise<void>
   shareClip: (clipId: string) => Promise<void>
   syncPlaybackState: () => Promise<void>
+  updateSettings: (settings: Settings) => void
 
   // Dev tools
   __DEV_resetApp: () => Promise<void>
@@ -177,6 +179,7 @@ export const useStore = create<AppState>((set, get) => {
     },
     clips: {},
     books: {},
+    settings: dbService.getSettings(),
 
     // Actions (below)
     loadFileWithPicker,
@@ -197,6 +200,7 @@ export const useStore = create<AppState>((set, get) => {
     jumpToClip,
     shareClip,
     syncPlaybackState,
+    updateSettings,
     __DEV_resetApp
   }
 
@@ -708,6 +712,11 @@ export const useStore = create<AppState>((set, get) => {
     await sharingService.shareClipFile(clip.uri, clip.note || clip.file_name)
   }
 
+  function updateSettings(settings: Settings) {
+    dbService.setSettings(settings)
+    set({ settings })
+  }
+
   async function __DEV_resetApp() {
     // Unload current player
     await audioService.unload()
@@ -729,6 +738,7 @@ export const useStore = create<AppState>((set, get) => {
       },
       clips: {},
       books: {},
+      settings: { sync_enabled: false },
     })
 
     console.log('App reset complete')
