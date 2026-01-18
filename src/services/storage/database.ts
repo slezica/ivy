@@ -56,6 +56,10 @@ export interface Session {
   updated_at: number
 }
 
+export interface Settings {
+  sync_enabled: boolean
+}
+
 // Sync-related interfaces
 export type SyncEntityType = 'book' | 'clip'
 export type SyncOperation = 'upsert' | 'delete'
@@ -437,6 +441,26 @@ export class DatabaseService {
   }
 
   // ---------------------------------------------------------------------------
+  // Settings
+  // ---------------------------------------------------------------------------
+
+  getSettings(): Settings {
+    const row = this.db.getFirstSync<{ sync_enabled: number }>(
+      'SELECT sync_enabled FROM settings WHERE id = 1'
+    )
+    return {
+      sync_enabled: row?.sync_enabled === 1,
+    }
+  }
+
+  setSettings(settings: Settings): void {
+    this.db.runSync(
+      'UPDATE settings SET sync_enabled = ? WHERE id = 1',
+      [settings.sync_enabled ? 1 : 0]
+    )
+  }
+
+  // ---------------------------------------------------------------------------
   // Development
   // ---------------------------------------------------------------------------
 
@@ -447,6 +471,7 @@ export class DatabaseService {
     this.db.runSync('DELETE FROM sync_manifest')
     this.db.runSync('DELETE FROM sync_queue')
     this.db.runSync('DELETE FROM sync_metadata')
+    this.db.runSync('UPDATE settings SET sync_enabled = 0 WHERE id = 1')
   }
 
   // ---------------------------------------------------------------------------
@@ -535,6 +560,18 @@ export class DatabaseService {
         value TEXT NOT NULL
       );
     `)
+
+    this.db.execSync(`
+      CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        sync_enabled INTEGER NOT NULL DEFAULT 0
+      );
+    `)
+
+    // Ensure settings row exists
+    this.db.runSync(
+      'INSERT OR IGNORE INTO settings (id, sync_enabled) VALUES (1, 0)'
+    )
   }
 
   // ---------------------------------------------------------------------------
