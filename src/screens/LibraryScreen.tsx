@@ -24,7 +24,7 @@ const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, fetchAllClips, loadFileWithUri, books, archiveBook, __DEV_resetApp } = useStore()
+  const { loadFileWithPicker, fetchBooks, fetchAllClips, loadFileWithUri, books, archiveBook, settings, __DEV_resetApp } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [headerMenuVisible, setHeaderMenuVisible] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
@@ -45,11 +45,13 @@ export default function LibraryScreen() {
         const lastSyncTime = databaseService.getLastSyncTime()
 
         // Only auto-sync if:
-        // 1. Authenticated
-        // 2. Not currently syncing
-        // 3. At least 5 minutes since last sync
-        // 4. There are pending changes OR we haven't synced in a while
+        // 1. Sync is enabled in settings
+        // 2. Authenticated
+        // 3. Not currently syncing
+        // 4. At least 5 minutes since last sync
+        // 5. There are pending changes OR we haven't synced in a while
         const shouldAutoSync =
+          settings.sync_enabled &&
           googleAuthService.isAuthenticated() &&
           !isSyncing &&
           timeSinceLastSync > AUTO_SYNC_MIN_INTERVAL_MS &&
@@ -64,7 +66,7 @@ export default function LibraryScreen() {
 
     const subscription = AppState.addEventListener('change', handleAppStateChange)
     return () => subscription.remove()
-  }, [isSyncing])
+  }, [isSyncing, settings.sync_enabled])
 
   // Silent sync (no alerts unless errors/conflicts)
   const performSilentSync = async () => {
