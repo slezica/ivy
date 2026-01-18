@@ -56,6 +56,30 @@ export interface Session {
   updated_at: number
 }
 
+// Sync-related interfaces
+export type SyncEntityType = 'book' | 'clip'
+export type SyncOperation = 'upsert' | 'delete'
+
+export interface SyncManifestEntry {
+  entity_type: SyncEntityType
+  entity_id: string
+  local_updated_at: number | null   // Local timestamp at last sync
+  remote_updated_at: number | null  // Remote timestamp at last sync
+  remote_file_id: string | null     // Drive file ID (JSON)
+  remote_mp3_file_id: string | null // Drive file ID (MP3, clips only)
+  synced_at: number
+}
+
+export interface SyncQueueItem {
+  id: string
+  entity_type: SyncEntityType
+  entity_id: string
+  operation: SyncOperation
+  queued_at: number
+  attempts: number
+  last_error: string | null
+}
+
 // =============================================================================
 // Service
 // =============================================================================
@@ -420,6 +444,9 @@ export class DatabaseService {
     this.db.runSync('DELETE FROM clips')
     this.db.runSync('DELETE FROM files')
     this.db.runSync('DELETE FROM sessions')
+    this.db.runSync('DELETE FROM sync_manifest')
+    this.db.runSync('DELETE FROM sync_queue')
+    this.db.runSync('DELETE FROM sync_metadata')
   }
 
   // ---------------------------------------------------------------------------
@@ -474,6 +501,188 @@ export class DatabaseService {
     `)
 
     this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_sessions_file_uri ON sessions(file_uri);`)
+
+    // Sync tables
+    this.db.execSync(`
+      CREATE TABLE IF NOT EXISTS sync_manifest (
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        local_updated_at INTEGER,
+        remote_updated_at INTEGER,
+        remote_file_id TEXT,
+        remote_mp3_file_id TEXT,
+        synced_at INTEGER NOT NULL,
+        PRIMARY KEY (entity_type, entity_id)
+      );
+    `)
+
+    this.db.execSync(`
+      CREATE TABLE IF NOT EXISTS sync_queue (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        queued_at INTEGER NOT NULL,
+        attempts INTEGER DEFAULT 0,
+        last_error TEXT,
+        UNIQUE(entity_type, entity_id)
+      );
+    `)
+
+    this.db.execSync(`
+      CREATE TABLE IF NOT EXISTS sync_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sync Manifest
+  // ---------------------------------------------------------------------------
+
+  getManifestEntry(entityType: SyncEntityType, entityId: string): SyncManifestEntry | null {
+    const result = this.db.getFirstSync<SyncManifestEntry>(
+      'SELECT * FROM sync_manifest WHERE entity_type = ? AND entity_id = ?',
+      [entityType, entityId]
+    )
+    return result || null
+  }
+
+  getAllManifestEntries(entityType?: SyncEntityType): SyncManifestEntry[] {
+    if (entityType) {
+      return this.db.getAllSync<SyncManifestEntry>(
+        'SELECT * FROM sync_manifest WHERE entity_type = ?',
+        [entityType]
+      )
+    }
+    return this.db.getAllSync<SyncManifestEntry>('SELECT * FROM sync_manifest')
+  }
+
+  upsertManifestEntry(entry: Omit<SyncManifestEntry, 'synced_at'>): void {
+    const now = Date.now()
+    this.db.runSync(
+      `INSERT INTO sync_manifest (entity_type, entity_id, local_updated_at, remote_updated_at, remote_file_id, remote_mp3_file_id, synced_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+         local_updated_at = excluded.local_updated_at,
+         remote_updated_at = excluded.remote_updated_at,
+         remote_file_id = excluded.remote_file_id,
+         remote_mp3_file_id = excluded.remote_mp3_file_id,
+         synced_at = excluded.synced_at`,
+      [entry.entity_type, entry.entity_id, entry.local_updated_at, entry.remote_updated_at, entry.remote_file_id, entry.remote_mp3_file_id ?? null, now]
+    )
+  }
+
+  deleteManifestEntry(entityType: SyncEntityType, entityId: string): void {
+    this.db.runSync(
+      'DELETE FROM sync_manifest WHERE entity_type = ? AND entity_id = ?',
+      [entityType, entityId]
+    )
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sync Queue
+  // ---------------------------------------------------------------------------
+
+  getQueueItem(entityType: SyncEntityType, entityId: string): SyncQueueItem | null {
+    const result = this.db.getFirstSync<SyncQueueItem>(
+      'SELECT * FROM sync_queue WHERE entity_type = ? AND entity_id = ?',
+      [entityType, entityId]
+    )
+    return result || null
+  }
+
+  getAllQueueItems(): SyncQueueItem[] {
+    return this.db.getAllSync<SyncQueueItem>(
+      'SELECT * FROM sync_queue ORDER BY queued_at ASC'
+    )
+  }
+
+  getPendingQueueItems(maxAttempts: number = 3): SyncQueueItem[] {
+    return this.db.getAllSync<SyncQueueItem>(
+      'SELECT * FROM sync_queue WHERE attempts < ? ORDER BY queued_at ASC',
+      [maxAttempts]
+    )
+  }
+
+  queueChange(entityType: SyncEntityType, entityId: string, operation: SyncOperation): void {
+    const now = Date.now()
+    const id = generateId()
+    this.db.runSync(
+      `INSERT INTO sync_queue (id, entity_type, entity_id, operation, queued_at, attempts, last_error)
+       VALUES (?, ?, ?, ?, ?, 0, NULL)
+       ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+         operation = excluded.operation,
+         queued_at = excluded.queued_at,
+         attempts = 0,
+         last_error = NULL`,
+      [id, entityType, entityId, operation, now]
+    )
+  }
+
+  updateQueueItemAttempt(entityType: SyncEntityType, entityId: string, error: string | null): void {
+    this.db.runSync(
+      'UPDATE sync_queue SET attempts = attempts + 1, last_error = ? WHERE entity_type = ? AND entity_id = ?',
+      [error, entityType, entityId]
+    )
+  }
+
+  removeFromQueue(entityType: SyncEntityType, entityId: string): void {
+    this.db.runSync(
+      'DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ?',
+      [entityType, entityId]
+    )
+  }
+
+  clearQueue(): void {
+    this.db.runSync('DELETE FROM sync_queue')
+  }
+
+  getQueueCount(): number {
+    const result = this.db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM sync_queue')
+    return result?.count ?? 0
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sync Metadata
+  // ---------------------------------------------------------------------------
+
+  getSyncMetadata(key: string): string | null {
+    const result = this.db.getFirstSync<{ value: string }>(
+      'SELECT value FROM sync_metadata WHERE key = ?',
+      [key]
+    )
+    return result?.value ?? null
+  }
+
+  setSyncMetadata(key: string, value: string): void {
+    this.db.runSync(
+      `INSERT INTO sync_metadata (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [key, value]
+    )
+  }
+
+  deleteSyncMetadata(key: string): void {
+    this.db.runSync('DELETE FROM sync_metadata WHERE key = ?', [key])
+  }
+
+  getLastSyncTime(): number | null {
+    const value = this.getSyncMetadata('lastSyncTime')
+    return value ? parseInt(value, 10) : null
+  }
+
+  setLastSyncTime(timestamp: number): void {
+    this.setSyncMetadata('lastSyncTime', timestamp.toString())
+  }
+
+  getDeviceId(): string | null {
+    return this.getSyncMetadata('deviceId')
+  }
+
+  setDeviceId(deviceId: string): void {
+    this.setSyncMetadata('deviceId', deviceId)
   }
 }
 

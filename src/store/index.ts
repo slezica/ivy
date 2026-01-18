@@ -10,6 +10,8 @@ import {
   transcriptionService,
   databaseService,
   audioSlicerService,
+  offlineQueueService,
+  backupSyncService,
 } from '../services'
 
 import type { PickedFile, ClipWithFile, Book } from '../services'
@@ -118,9 +120,20 @@ export const useStore = create<AppState>((set, get) => {
         const book = Object.values(books).find(b => b.uri === audio.uri)
         if (book) {
           dbService.updateBookPosition(book.id, status.position)
+          offlineQueueService.queueChange('book', book.id, 'upsert')
         }
       }
     },
+  })
+
+  // Register sync notification callback to refresh store when external changes arrive
+  backupSyncService.setNotificationCallback((notification) => {
+    if (notification.booksChanged.length > 0) {
+      fetchBooks()
+    }
+    if (notification.clipsChanged.length > 0) {
+      fetchAllClips()
+    }
   })
 
   // Set up transcription callback to update store when transcription completes
@@ -210,6 +223,7 @@ export const useStore = create<AppState>((set, get) => {
     // 2. Database update (with rollback on fail)
     try {
       dbService.archiveBook(bookId)
+      offlineQueueService.queueChange('book', bookId, 'upsert')
     } catch (error) {
       // Rollback store
       set((state) => ({
@@ -310,12 +324,14 @@ export const useStore = create<AppState>((set, get) => {
             metadata.artist,
             metadata.artwork
           )
+          offlineQueueService.queueChange('book', book.id, 'upsert')
         } else {
           // Case B: Active book - delete duplicate file, use existing
           console.log('File already exists in library, removing duplicate:', localUri)
           await fileStorageService.deleteFile(localUri)
           dbService.touchBook(existingBook.id)
           book = dbService.getBookById(existingBook.id)!
+          offlineQueueService.queueChange('book', book.id, 'upsert')
 
           // Reload audio from existing file
           await audioService.load(book.uri!, {
@@ -338,6 +354,7 @@ export const useStore = create<AppState>((set, get) => {
           fileSize,
           fingerprint
         )
+        offlineQueueService.queueChange('book', book.id, 'upsert')
       }
 
       // Refresh books and clips in store
@@ -551,6 +568,9 @@ export const useStore = create<AppState>((set, get) => {
       '' // Default empty note
     )
 
+    // Queue for sync
+    offlineQueueService.queueChange('clip', clip.id, 'upsert')
+
     // Reload all clips to include file information
     fetchAllClips()
 
@@ -598,6 +618,9 @@ export const useStore = create<AppState>((set, get) => {
     // Update database
     dbService.updateClip(id, { ...updates, uri: newUri })
 
+    // Queue for sync
+    offlineQueueService.queueChange('clip', id, 'upsert')
+
     // Update store
     set((state) => ({
       clips: {
@@ -640,6 +663,9 @@ export const useStore = create<AppState>((set, get) => {
     }
 
     dbService.deleteClip(id)
+
+    // Queue for sync (delete operation)
+    offlineQueueService.queueChange('clip', id, 'delete')
 
     set((state) => {
       const { [id]: removed, ...rest } = state.clips

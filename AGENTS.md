@@ -147,7 +147,8 @@ await archiveBook(bookId)
   │   ├── backup/
   │   │   ├── auth.ts             # Google OAuth (expo-auth-session)
   │   │   ├── drive.ts            # Google Drive REST API wrapper
-  │   │   └── sync.ts             # Backup sync orchestration
+  │   │   ├── queue.ts            # Offline change queue (persists pending sync ops)
+  │   │   └── sync.ts             # Incremental sync with conflict resolution
   │   └── system/
   │       └── sharing.ts          # Share clips via native share sheet
   ├── screens/
@@ -228,6 +229,36 @@ note TEXT
 transcription TEXT             -- Auto-generated from audio (Whisper)
 created_at INTEGER
 updated_at INTEGER
+```
+
+**sync_manifest table** (tracks last-synced state per entity):
+```sql
+entity_type TEXT NOT NULL      -- 'book' | 'clip'
+entity_id TEXT NOT NULL
+local_updated_at INTEGER       -- Local timestamp at last sync
+remote_updated_at INTEGER      -- Remote timestamp at last sync
+remote_file_id TEXT            -- Drive file ID (JSON)
+remote_mp3_file_id TEXT        -- Drive file ID (MP3, clips only)
+synced_at INTEGER NOT NULL
+PRIMARY KEY (entity_type, entity_id)
+```
+
+**sync_queue table** (offline operation queue):
+```sql
+id TEXT PRIMARY KEY
+entity_type TEXT NOT NULL      -- 'book' | 'clip'
+entity_id TEXT NOT NULL
+operation TEXT NOT NULL        -- 'upsert' | 'delete'
+queued_at INTEGER NOT NULL
+attempts INTEGER DEFAULT 0     -- Retry count (max 3)
+last_error TEXT
+UNIQUE(entity_type, entity_id) -- One pending op per entity
+```
+
+**sync_metadata table** (key-value sync state):
+```sql
+key TEXT PRIMARY KEY           -- 'lastSyncTime', 'deviceId'
+value TEXT NOT NULL
 ```
 
 ## Store State Structure
@@ -452,42 +483,117 @@ On-device automatic clip transcription using Whisper:
 - Transcription displayed in ClipViewer below the time
 - `note` and `transcription` are separate fields (user notes vs auto-generated)
 
-## Google Drive Backup
+## Google Drive Sync 🔥 IMPORTANT
 
-Cloud backup for books and clips to prevent data loss when switching phones.
+Multi-device sync system using Google Drive as cloud backend. Works offline-first: changes queue locally and sync when connectivity returns.
 
-**What gets backed up:**
+**What gets synced:**
 - Book metadata (positions, timestamps) as JSON files
 - Clip metadata + audio as JSON + MP3 pairs
 
-**What doesn't get backed up:**
+**What doesn't get synced:**
 - Full audiobook files (too large, user can re-add from source)
 
 **File structure in Drive:**
 ```
 Ivy/
   books/
-    book_abc123-def456_1705432800000.json
-    book_789xyz-012abc_1705432900000.json
+    book_abc123-def456.json
   clips/
-    clip_def456-789xyz_1705433000000.json
-    clip_def456-789xyz_1705433000000.mp3
+    clip_def456-789xyz.json
+    clip_def456-789xyz.mp3
 ```
 
-Files named: `{type}_{uuid}_{updated_at}.{ext}`. Multiple versions can coexist; sync takes the latest.
+Files named: `{type}_{uuid}.{ext}`. One file per entity (overwritten on update).
+
+### Architecture
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Zustand Store │────▶│  Offline Queue   │────▶│  Google Drive   │
+│  (books, clips) │     │  (sync_queue)    │     │  (Ivy/ folder)  │
+└────────┬────────┘     └──────────────────┘     └────────┬────────┘
+         │                                                │
+         │              ┌──────────────────┐              │
+         └─────────────▶│   Sync Manifest  │◀─────────────┘
+                        │ (sync_manifest)  │
+                        └──────────────────┘
+```
 
 **Services** (`services/backup/`):
 - `auth.ts` - Google OAuth via `@react-native-google-signin/google-signin`
 - `drive.ts` - Drive REST API wrapper (resumable uploads, list, download, delete)
-- `sync.ts` - Bidirectional sync: diff local vs Drive, upload/download as needed
+- `queue.ts` - Offline queue (persists changes for later sync)
+- `sync.ts` - Incremental sync with manifest-based change detection and conflict resolution
 
-**Sync logic:**
-- Last-write-wins via `updated_at` timestamp
-- Books: archived books remain in backup (still in local DB)
-- Clips: deleted clips are removed from Drive
-- Clip JSON + MP3 are atomic pairs (same timestamp)
+### Offline Queue
 
-**Google Cloud Setup:**
+Store actions automatically queue changes for sync:
+- `updateBookPosition` → queues book upsert
+- `archiveBook` → queues book upsert
+- `addClip`, `updateClip` → queues clip upsert
+- `deleteClip` → queues clip delete
+
+Queue persists to SQLite, survives app restarts. Processed on next sync with retry logic (max 3 attempts).
+
+### Sync Manifest
+
+Tracks last-synced state per entity to enable incremental sync:
+- `local_updated_at` - What was the entity's timestamp when we last synced?
+- `remote_updated_at` - What was the remote timestamp when we last synced?
+
+Change detection: `entity.updated_at > manifest.local_updated_at` means changed locally since sync.
+
+### Sync Flow
+
+1. **Process queue** - Push all queued local changes first
+2. **Push phase** - Upload any remaining local changes, handle conflicts
+3. **Pull phase** - Download remote changes not present locally
+4. **Notify store** - Callback triggers `fetchBooks()`/`fetchAllClips()` to refresh UI
+
+### Conflict Resolution
+
+Conflicts occur when same entity modified on two devices before syncing:
+
+**Books:**
+| Field | Strategy |
+|-------|----------|
+| `position` | **Max value wins** (user progressed further) |
+| `title`, `artist`, `artwork` | Last-write-wins |
+
+**Clips:**
+| Field | Strategy |
+|-------|----------|
+| `note` | **Concatenate with conflict marker** |
+| `start`, `duration` | Last-write-wins |
+| `transcription` | Prefer non-null |
+
+Note conflict example:
+```
+My original note
+
+--- Conflict (Jan 18, 2026) ---
+Edit from other device
+```
+
+### Auto-Sync
+
+App auto-syncs when returning to foreground:
+- Must be authenticated
+- At least 5 minutes since last sync
+- Silent unless conflicts/errors occur
+
+### Edge Case: Delete vs Modify
+
+If Device A deletes a clip while Device B modifies it (later timestamp), then both sync:
+- Device A's delete removes clip from Drive
+- Device B's modification re-uploads clip
+- Device A downloads the "resurrected" clip
+
+**Result:** Modification wins (last-write-wins semantics). No tombstones implemented.
+
+### Google Cloud Setup
+
 1. Create project in Google Cloud Console
 2. Enable **Google Drive API** (APIs & Services → Library)
 3. Create **Android** OAuth client:
@@ -500,8 +606,10 @@ Files named: `{type}_{uuid}_{updated_at}.{ext}`. Multiple versions can coexist; 
 **Key Points:**
 - Native library handles token refresh automatically
 - Public Drive folder (visible to user in their Drive)
-- Dev button "Sync" in Library header triggers full sync
-- Both Android + Web OAuth clients required (Android for verification, Web for token exchange)
+- "Sync" button in Library header shows pending count badge
+- Both Android + Web OAuth clients required
+
+**Documentation:** See `docs/sync_system.md` for full educational walkthrough.
 
 ## Adding Features
 
@@ -540,6 +648,8 @@ Files named: `{type}_{uuid}_{updated_at}.{ext}`. Multiple versions can coexist; 
 - Use `book.id` (UUID) as the stable identifier for books (not `uri` which can be null)
 - Use `generateId()` from utils when creating new database entities
 - Look up `Book` metadata from `books` map using URI when needed (audio state only has uri/duration)
+- Queue changes via `offlineQueueService.queueChange()` when modifying synced entities
+- Use manifest comparison for sync change detection (not just timestamp comparison)
 
 ❌ **Don't:**
 - Use external content: URIs for audio playback
@@ -551,6 +661,8 @@ Files named: `{type}_{uuid}_{updated_at}.{ext}`. Multiple versions can coexist; 
 - Assume `Book.uri` is non-null (check before using for playback - null means archived)
 - Attempt to re-slice clips when source book is archived (`file_uri === null`)
 - Read book metadata from `audio` state (it only has hardware state: uri, duration)
+- Modify books/clips without queueing for sync (changes will be lost on other devices)
+- Delete manifest entries manually (sync service manages them)
 
 ## Quick Reference
 
@@ -558,7 +670,7 @@ Files named: `{type}_{uuid}_{updated_at}.{ext}`. Multiple versions can coexist; 
 **Run e2e tests:** `maestro test maestro/`
 **Load test file:** Tap "Sample" button in Library
 **Reset app data:** Tap "Reset" button in Library
-**Sync to Drive:** Tap "Sync" button in Library (requires Google OAuth setup)
+**Sync to Drive:** Tap "Sync" button in Library (badge shows pending changes count)
 **Time format:** Always milliseconds internally
 **ID format:** UUIDs (string) for all entities - use `generateId()` from utils
 **Book playback:** Use `book.uri` (local path) - check for null first (null = archived)
@@ -568,6 +680,7 @@ Files named: `{type}_{uuid}_{updated_at}.{ext}`. Multiple versions can coexist; 
 **Library status:** `loading → idle ⇄ adding`
 **Audio status:** `idle → loading → paused ⇄ playing`
 **Audio state:** Hardware-only (uri, duration, position, status, ownerId) - no Book metadata
+**Sync docs:** `docs/sync_system.md` - full educational walkthrough of sync architecture
 
 ## Custom ESLint Rules
 

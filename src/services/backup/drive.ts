@@ -22,6 +22,7 @@ export interface DriveFile {
   id: string
   name: string
   mimeType: string
+  modifiedTime?: string  // ISO 8601 timestamp from Drive
 }
 
 class GoogleDriveService {
@@ -39,7 +40,7 @@ class GoogleDriveService {
     const token = await this.getToken()
 
     const query = `'${folderId}' in parents and trashed = false`
-    const fields = 'files(id, name, mimeType)'
+    const fields = 'files(id, name, mimeType, modifiedTime)'
     const url = `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}`
 
     const response = await fetch(url, {

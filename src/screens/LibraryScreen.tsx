@@ -5,8 +5,8 @@
  * Active books are shown first, archived books in a separate section.
  */
 
-import { View, Text, StyleSheet, Alert, SectionList, TouchableOpacity, Image, Pressable } from 'react-native'
-import { useState, useCallback } from 'react'
+import { View, Text, StyleSheet, Alert, SectionList, TouchableOpacity, Image, Pressable, AppState, AppStateStatus } from 'react-native'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store'
@@ -17,21 +17,93 @@ import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import { Color } from '../theme'
 import type { Book } from '../services'
-import { googleAuthService, backupSyncService } from '../services'
+import { googleAuthService, backupSyncService, offlineQueueService, databaseService } from '../services'
 import { formatTime, formatDate } from '../utils'
+
+const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, loadFileWithUri, books, archiveBook, __DEV_resetApp } = useStore()
+  const { loadFileWithPicker, fetchBooks, fetchAllClips, loadFileWithUri, books, archiveBook, __DEV_resetApp } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
+  const lastSyncRef = useRef<number>(0)
 
-  // Refresh book list when screen comes into focus
+  // Update pending count when screen focuses
   useFocusEffect(
     useCallback(() => {
       fetchBooks()
+      setPendingCount(offlineQueueService.getCount())
     }, [fetchBooks])
   )
+
+  // Auto-sync when app returns to foreground (if authenticated)
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        const now = Date.now()
+        const timeSinceLastSync = now - lastSyncRef.current
+        const lastSyncTime = databaseService.getLastSyncTime()
+
+        // Only auto-sync if:
+        // 1. Authenticated
+        // 2. Not currently syncing
+        // 3. At least 5 minutes since last sync
+        // 4. There are pending changes OR we haven't synced in a while
+        const shouldAutoSync =
+          googleAuthService.isAuthenticated() &&
+          !isSyncing &&
+          timeSinceLastSync > AUTO_SYNC_MIN_INTERVAL_MS &&
+          (offlineQueueService.getCount() > 0 || !lastSyncTime || now - lastSyncTime > AUTO_SYNC_MIN_INTERVAL_MS)
+
+        if (shouldAutoSync) {
+          console.log('Auto-syncing on foreground')
+          await performSilentSync()
+        }
+      }
+    }
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange)
+    return () => subscription.remove()
+  }, [isSyncing])
+
+  // Silent sync (no alerts unless errors/conflicts)
+  const performSilentSync = async () => {
+    if (isSyncing) return
+
+    setIsSyncing(true)
+    lastSyncRef.current = Date.now()
+
+    try {
+      await googleAuthService.initialize()
+      if (!googleAuthService.isAuthenticated()) return
+
+      const result = await backupSyncService.sync()
+
+      // Refresh data
+      fetchBooks()
+      fetchAllClips()
+      setPendingCount(offlineQueueService.getCount())
+
+      // Only show alert if there were conflicts
+      if (result.conflicts.length > 0) {
+        const conflictSummary = result.conflicts
+          .map(c => `${c.entityType} ${c.entityId.slice(0, 8)}: ${c.resolution}`)
+          .join('\n')
+        Alert.alert('Sync Conflicts Resolved', conflictSummary)
+      }
+
+      // Show errors if any
+      if (result.errors.length > 0) {
+        console.warn('Sync errors:', result.errors)
+      }
+    } catch (error) {
+      console.error('Silent sync failed:', error)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   const handleLoadFile = async () => {
     try {
@@ -106,6 +178,8 @@ export default function LibraryScreen() {
     if (isSyncing) return
 
     setIsSyncing(true)
+    lastSyncRef.current = Date.now()
+
     try {
       // Initialize auth service
       await googleAuthService.initialize()
@@ -122,18 +196,33 @@ export default function LibraryScreen() {
       // Run sync
       const result = await backupSyncService.sync()
 
-      // Show result
-      const summary = [
+      // Refresh data
+      fetchBooks()
+      fetchAllClips()
+      setPendingCount(offlineQueueService.getCount())
+
+      // Build summary
+      const summaryLines = [
         `Uploaded: ${result.uploaded.books} books, ${result.uploaded.clips} clips`,
         `Downloaded: ${result.downloaded.books} books, ${result.downloaded.clips} clips`,
-        result.deleted.clips > 0 ? `Deleted: ${result.deleted.clips} clips` : null,
-        result.errors.length > 0 ? `Errors: ${result.errors.length}` : null,
-      ].filter(Boolean).join('\n')
+      ]
 
-      Alert.alert('Sync Complete', summary)
+      if (result.deleted.clips > 0) {
+        summaryLines.push(`Deleted: ${result.deleted.clips} clips`)
+      }
 
-      // Refresh books after sync
-      fetchBooks()
+      if (result.conflicts.length > 0) {
+        summaryLines.push(`\nConflicts resolved: ${result.conflicts.length}`)
+        result.conflicts.forEach(c => {
+          summaryLines.push(`• ${c.entityType}: ${c.resolution}`)
+        })
+      }
+
+      if (result.errors.length > 0) {
+        summaryLines.push(`\nErrors: ${result.errors.length}`)
+      }
+
+      Alert.alert('Sync Complete', summaryLines.join('\n'))
     } catch (error) {
       console.error('Sync failed:', error)
       Alert.alert('Sync Failed', `${error}`)
@@ -221,6 +310,11 @@ export default function LibraryScreen() {
             disabled={isSyncing}
           >
             <Text style={styles.devButtonText}>{isSyncing ? 'Syncing...' : 'Sync'}</Text>
+            {pendingCount > 0 && !isSyncing && (
+              <View style={styles.pendingBadge}>
+                <Text style={styles.pendingBadgeText}>{pendingCount > 99 ? '99+' : pendingCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -349,6 +443,23 @@ const styles = StyleSheet.create({
   },
   devSyncButton: {
     backgroundColor: Color.PRIMARY,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  pendingBadge: {
+    backgroundColor: Color.DESTRUCTIVE,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  pendingBadgeText: {
+    color: Color.WHITE,
+    fontSize: 10,
+    fontWeight: '700',
   },
   devButtonText: {
     color: Color.WHITE,
