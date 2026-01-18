@@ -300,7 +300,7 @@ class BackupSyncService {
       await RNFS.mkdir(clipsDir)
     }
 
-    const localMp3Path = `${clipsDir}/${generateClipFilename()}.mp3`
+    const localMp3Path = `${clipsDir}/${backup.id}.mp3`
     const mp3Base64 = uint8ArrayToBase64(mp3Bytes)
     await RNFS.writeFile(localMp3Path, mp3Base64, 'base64')
 
@@ -409,10 +409,6 @@ function parseFilename(name: string): ParsedFilename | null {
     timestamp: parseInt(match[3], 10),
     extension: match[4] as 'json' | 'mp3',
   }
-}
-
-function generateClipFilename(): string {
-  return (Math.random() + 1).toString(36).substring(2)
 }
 
 // ---------------------------------------------------------------------------
