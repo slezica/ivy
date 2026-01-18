@@ -86,15 +86,10 @@ export default function LibraryScreen() {
       fetchAllClips()
       setPendingCount(offlineQueueService.getCount())
 
-      // Only show alert if there were conflicts
+      // Log conflicts and errors
       if (result.conflicts.length > 0) {
-        const conflictSummary = result.conflicts
-          .map(c => `${c.entityType} ${c.entityId.slice(0, 8)}: ${c.resolution}`)
-          .join('\n')
-        Alert.alert('Sync Conflicts Resolved', conflictSummary)
+        console.log('Sync conflicts resolved:', result.conflicts)
       }
-
-      // Show errors if any
       if (result.errors.length > 0) {
         console.warn('Sync errors:', result.errors)
       }
@@ -201,28 +196,19 @@ export default function LibraryScreen() {
       fetchAllClips()
       setPendingCount(offlineQueueService.getCount())
 
-      // Build summary
-      const summaryLines = [
-        `Uploaded: ${result.uploaded.books} books, ${result.uploaded.clips} clips`,
-        `Downloaded: ${result.downloaded.books} books, ${result.downloaded.clips} clips`,
-      ]
+      // Log sync results
+      console.log('Sync complete:', {
+        uploaded: result.uploaded,
+        downloaded: result.downloaded,
+        deleted: result.deleted,
+        conflicts: result.conflicts.length,
+        errors: result.errors.length,
+      })
 
-      if (result.deleted.clips > 0) {
-        summaryLines.push(`Deleted: ${result.deleted.clips} clips`)
-      }
-
-      if (result.conflicts.length > 0) {
-        summaryLines.push(`\nConflicts resolved: ${result.conflicts.length}`)
-        result.conflicts.forEach(c => {
-          summaryLines.push(`• ${c.entityType}: ${c.resolution}`)
-        })
-      }
-
+      // Only alert on errors
       if (result.errors.length > 0) {
-        summaryLines.push(`\nErrors: ${result.errors.length}`)
+        Alert.alert('Sync Errors', `${result.errors.length} error(s) occurred during sync`)
       }
-
-      Alert.alert('Sync Complete', summaryLines.join('\n'))
     } catch (error) {
       console.error('Sync failed:', error)
       Alert.alert('Sync Failed', `${error}`)
