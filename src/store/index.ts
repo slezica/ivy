@@ -23,6 +23,7 @@ const CLIPS_DIR = `${RNFS.DocumentDirectoryPath}/clips`
 const SKIP_FORWARD_MS = 25 * 1000
 const SKIP_BACKWARD_MS = 30 * 1000
 const DEFAULT_CLIP_DURATION_MS = 20 * 1000
+const POSITION_SYNC_THROTTLE_MS = 30 * 1000  // Only queue position sync every 30s
 
 
 type AudioStatus = 'idle' | 'loading' | 'paused' | 'playing'
@@ -93,6 +94,9 @@ export const useStore = create<AppState>((set, get) => {
   const dbService = databaseService
   const slicerService = audioSlicerService
 
+  // Track last queue time for position updates (throttling)
+  let lastPositionQueueTime = 0
+
   // Create local instances for services only used by the store
   const filePickerService = new FilePickerService()
   const fileStorageService = new FileStorageService()
@@ -120,7 +124,13 @@ export const useStore = create<AppState>((set, get) => {
         const book = Object.values(books).find(b => b.uri === audio.uri)
         if (book) {
           dbService.updateBookPosition(book.id, status.position)
-          offlineQueueService.queueChange('book', book.id, 'upsert')
+
+          // Throttle queue updates - only sync position every 30 seconds
+          const now = Date.now()
+          if (now - lastPositionQueueTime > POSITION_SYNC_THROTTLE_MS) {
+            lastPositionQueueTime = now
+            offlineQueueService.queueChange('book', book.id, 'upsert')
+          }
         }
       }
     },

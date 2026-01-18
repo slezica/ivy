@@ -38,7 +38,6 @@ class OfflineQueueService {
    */
   queueChange(entityType: SyncEntityType, entityId: string, operation: SyncOperation): void {
     databaseService.queueChange(entityType, entityId, operation)
-    console.log(`Queued ${operation} for ${entityType}:${entityId}`)
   }
 
   /**

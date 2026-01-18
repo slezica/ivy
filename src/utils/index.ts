@@ -1,7 +1,9 @@
+import * as Crypto from 'expo-crypto'
+
 export const MAIN_PLAYER_OWNER_ID = 'main'
 
 export function generateId(): string {
-  return crypto.randomUUID()
+  return Crypto.randomUUID()
 }
 
 export function formatTime(milliseconds: number): string {
