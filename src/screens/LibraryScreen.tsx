@@ -26,15 +26,13 @@ export default function LibraryScreen() {
   const router = useRouter()
   const { loadFileWithPicker, fetchBooks, fetchAllClips, loadFileWithUri, books, archiveBook, __DEV_resetApp } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
+  const [headerMenuVisible, setHeaderMenuVisible] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
-  const [pendingCount, setPendingCount] = useState(0)
   const lastSyncRef = useRef<number>(0)
 
-  // Update pending count when screen focuses
   useFocusEffect(
     useCallback(() => {
       fetchBooks()
-      setPendingCount(offlineQueueService.getCount())
     }, [fetchBooks])
   )
 
@@ -84,7 +82,6 @@ export default function LibraryScreen() {
       // Refresh data
       fetchBooks()
       fetchAllClips()
-      setPendingCount(offlineQueueService.getCount())
 
       // Log conflicts and errors
       if (result.conflicts.length > 0) {
@@ -194,7 +191,6 @@ export default function LibraryScreen() {
       // Refresh data
       fetchBooks()
       fetchAllClips()
-      setPendingCount(offlineQueueService.getCount())
 
       // Log sync results
       console.log('Sync complete:', {
@@ -266,6 +262,41 @@ export default function LibraryScreen() {
     ]
   }
 
+  const getHeaderMenuItems = (): ActionMenuItem[] => {
+    const items: ActionMenuItem[] = [
+      { key: 'sync', label: 'Sync', icon: 'cloud-outline' },
+      { key: 'settings', label: 'Settings', icon: 'settings-outline' },
+    ]
+
+    if (__DEV__) {
+      items.push(
+        { key: 'sample', label: 'Load Sample', icon: 'musical-notes-outline' },
+        { key: 'reset', label: 'Reset App', icon: 'trash-outline', destructive: true },
+      )
+    }
+
+    return items
+  }
+
+  const handleHeaderMenuAction = (action: string) => {
+    setHeaderMenuVisible(false)
+
+    switch (action) {
+      case 'sync':
+        handleSync()
+        break
+      case 'settings':
+        router.push('/settings')
+        break
+      case 'sample':
+        handleLoadTestFile?.()
+        break
+      case 'reset':
+        handleDevReset()
+        break
+    }
+  }
+
   // Split books into active and archived
   const booksArray = Object.values(books)
   const activeBooks = booksArray.filter(book => book.uri !== null)
@@ -280,36 +311,13 @@ export default function LibraryScreen() {
   return (
     <ScreenArea>
       <Header title="Library">
-        <View style={styles.devButtons}>
-          {__DEV__ && handleLoadTestFile && (
-            <TouchableOpacity
-              style={styles.devButton}
-              onPress={handleLoadTestFile}
-            >
-              <Text style={styles.devButtonText}>Sample</Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={[styles.devButton, styles.devSyncButton]}
-            onPress={handleSync}
-            disabled={isSyncing}
-          >
-            <Text style={styles.devButtonText}>{isSyncing ? 'Syncing...' : 'Sync'}</Text>
-            {pendingCount > 0 && !isSyncing && (
-              <View style={styles.pendingBadge}>
-                <Text style={styles.pendingBadgeText}>{pendingCount > 99 ? '99+' : pendingCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.devButton, styles.devResetButton]}
-            onPress={handleDevReset}
-          >
-            <Text style={styles.devButtonText}>Reset</Text>
-          </TouchableOpacity>
-        </View>
+        <Pressable
+          style={styles.headerMenuButton}
+          onPress={() => setHeaderMenuVisible(true)}
+          hitSlop={8}
+        >
+          <Ionicons name="ellipsis-vertical" size={24} color={Color.BLACK} />
+        </Pressable>
       </Header>
 
       {booksArray.length > 0 ? (
@@ -399,6 +407,13 @@ export default function LibraryScreen() {
         items={getMenuItems()}
       />
 
+      <ActionMenu
+        visible={headerMenuVisible}
+        onClose={() => setHeaderMenuVisible(false)}
+        onAction={handleHeaderMenuAction}
+        items={getHeaderMenuItems()}
+      />
+
       {/* FAB */}
       <View style={styles.fabContainer} pointerEvents="box-none">
         <IconButton
@@ -414,43 +429,8 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
-  devButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  devButton: {
-    backgroundColor: Color.GRAY_DARK,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  devResetButton: {
-    backgroundColor: Color.DESTRUCTIVE,
-  },
-  devSyncButton: {
-    backgroundColor: Color.PRIMARY,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  pendingBadge: {
-    backgroundColor: Color.DESTRUCTIVE,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  pendingBadgeText: {
-    color: Color.WHITE,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  devButtonText: {
-    color: Color.WHITE,
-    fontSize: 12,
-    fontWeight: '600',
+  headerMenuButton: {
+    padding: 4,
   },
   listContent: {
     padding: 16,
@@ -469,7 +449,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: Color.GRAY_LIGHTER,
     borderRadius: 8,
-    padding: 12,
+    padding: 10,
     marginBottom: 12,
     gap: 12,
   },
@@ -531,7 +511,7 @@ const styles = StyleSheet.create({
     color: Color.GRAY,
   },
   menuButton: {
-    padding: 4,
+    padding: 0,
     justifyContent: 'flex-start',
   },
   fabContainer: {
