@@ -166,53 +166,6 @@ export default function LibraryScreen() {
     )
   }
 
-  const handleSync = async () => {
-    if (isSyncing) return
-
-    setIsSyncing(true)
-    lastSyncRef.current = Date.now()
-
-    try {
-      // Initialize auth service
-      await googleAuthService.initialize()
-
-      // Sign in if not authenticated
-      if (!googleAuthService.isAuthenticated()) {
-        const signedIn = await googleAuthService.signIn()
-        if (!signedIn) {
-          Alert.alert('Auth Failed', 'Could not sign in to Google')
-          return
-        }
-      }
-
-      // Run sync
-      const result = await backupSyncService.sync()
-
-      // Refresh data
-      fetchBooks()
-      fetchAllClips()
-
-      // Log sync results
-      console.log('Sync complete:', {
-        uploaded: result.uploaded,
-        downloaded: result.downloaded,
-        deleted: result.deleted,
-        conflicts: result.conflicts.length,
-        errors: result.errors.length,
-      })
-
-      // Only alert on errors
-      if (result.errors.length > 0) {
-        Alert.alert('Sync Errors', `${result.errors.length} error(s) occurred during sync`)
-      }
-    } catch (error) {
-      console.error('Sync failed:', error)
-      Alert.alert('Sync Failed', `${error}`)
-    } finally {
-      setIsSyncing(false)
-    }
-  }
-
   const handleOpenMenu = (bookId: string) => {
     setMenuBookId(bookId)
   }
@@ -264,7 +217,6 @@ export default function LibraryScreen() {
 
   const getHeaderMenuItems = (): ActionMenuItem[] => {
     const items: ActionMenuItem[] = [
-      { key: 'sync', label: 'Sync', icon: 'cloud-outline' },
       { key: 'settings', label: 'Settings', icon: 'settings-outline' },
     ]
 
@@ -282,9 +234,6 @@ export default function LibraryScreen() {
     setHeaderMenuVisible(false)
 
     switch (action) {
-      case 'sync':
-        handleSync()
-        break
       case 'settings':
         router.push('/settings')
         break
