@@ -45,6 +45,7 @@ interface LibraryState {
 interface SyncState {
   isSyncing: boolean
   pendingCount: number
+  error: string | null
 }
 
 /**
@@ -87,7 +88,7 @@ interface AppState {
   shareClip: (clipId: string) => Promise<void>
   syncPlaybackState: () => Promise<void>
   updateSettings: (settings: Settings) => void
-  syncNow: () => Promise<{ success: boolean; error?: string }>
+  syncNow: () => void
   autoSync: () => Promise<void>
   refreshSyncStatus: () => void
 
@@ -194,6 +195,7 @@ export const useStore = create<AppState>((set, get) => {
     sync: {
       isSyncing: false,
       pendingCount: backupSyncService.getPendingCount(),
+      error: null,
     },
     clips: {},
     books: {},
@@ -744,9 +746,8 @@ export const useStore = create<AppState>((set, get) => {
     }))
   }
 
-  async function syncNow(): Promise<{ success: boolean; error?: string }> {
-    const error = await backupSyncService.syncNow()
-    return error ? { success: false, error } : { success: true }
+  function syncNow(): void {
+    backupSyncService.syncNow()
   }
 
   async function autoSync(): Promise<void> {
@@ -777,6 +778,7 @@ export const useStore = create<AppState>((set, get) => {
       sync: {
         isSyncing: false,
         pendingCount: 0,
+        error: null,
       },
       clips: {},
       books: {},

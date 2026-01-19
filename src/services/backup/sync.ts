@@ -67,6 +67,7 @@ export interface SyncNotification {
 export interface SyncStatus {
   isSyncing: boolean
   pendingCount: number
+  error: string | null
 }
 
 export interface SyncListeners {
@@ -108,14 +109,12 @@ class BackupSyncService {
 
   /**
    * Manual sync with user authentication prompts if needed.
-   * Returns error message if failed, undefined if successful.
+   * Fire-and-forget - status updates via listeners.
    */
-  async syncNow(): Promise<string | undefined> {
-    if (this.isSyncing) {
-      return 'Sync already in progress'
-    }
+  async syncNow(): Promise<void> {
+    if (this.isSyncing) return
 
-    this.setSyncing(true)
+    this.setStatus(true, null)
 
     try {
       await googleAuthService.initialize()
@@ -123,22 +122,21 @@ class BackupSyncService {
       if (!googleAuthService.isAuthenticated()) {
         const signedIn = await googleAuthService.signIn()
         if (!signedIn) {
-          return 'Could not sign in to Google'
+          this.setStatus(false, 'Could not sign in to Google')
+          return
         }
       }
 
       const result = await this.performSync()
 
       if (result.errors.length > 0) {
-        return `${result.errors.length} error(s) occurred during sync`
+        this.setStatus(false, `${result.errors.length} error(s) occurred during sync`)
+      } else {
+        this.setStatus(false, null)
       }
-
-      return undefined
     } catch (error) {
       console.error('Sync failed:', error)
-      return String(error)
-    } finally {
-      this.setSyncing(false)
+      this.setStatus(false, String(error))
     }
   }
 
@@ -152,7 +150,7 @@ class BackupSyncService {
     await googleAuthService.initialize()
     if (!googleAuthService.isAuthenticated()) return
 
-    this.setSyncing(true)
+    this.setStatus(true, null)
 
     try {
       const result = await this.performSync()
@@ -162,19 +160,22 @@ class BackupSyncService {
       }
       if (result.errors.length > 0) {
         console.warn('Auto-sync errors:', result.errors)
+        this.setStatus(false, `${result.errors.length} error(s) occurred`)
+      } else {
+        this.setStatus(false, null)
       }
     } catch (error) {
       console.error('Auto-sync failed:', error)
-    } finally {
-      this.setSyncing(false)
+      this.setStatus(false, String(error))
     }
   }
 
-  private setSyncing(isSyncing: boolean): void {
+  private setStatus(isSyncing: boolean, error: string | null): void {
     this.isSyncing = isSyncing
     this.listeners.onStatusChange?.({
       isSyncing,
       pendingCount: this.getPendingCount(),
+      error,
     })
   }
 

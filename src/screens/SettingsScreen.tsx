@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Alert } from 'react-native'
+import { View, Text, StyleSheet, Switch, TouchableOpacity } from 'react-native'
 import { useCallback } from 'react'
 import { useFocusEffect } from 'expo-router'
 import ScreenArea from '../components/shared/ScreenArea'
@@ -14,13 +14,6 @@ export default function SettingsScreen() {
       refreshSyncStatus()
     }, [refreshSyncStatus])
   )
-
-  const handleSyncNow = async () => {
-    const result = await syncNow()
-    if (!result.success && result.error) {
-      Alert.alert('Sync Failed', result.error)
-    }
-  }
 
   const pendingLabel = sync.pendingCount === 1 ? '1 item pending' : `${sync.pendingCount} items pending`
 
@@ -45,9 +38,16 @@ export default function SettingsScreen() {
             {sync.pendingCount > 0 ? pendingLabel : 'Up to date'}
           </Text>
 
+          {sync.error && (
+            <>
+              <Text style={styles.secondaryText}> · </Text>
+              <Text style={styles.errorText}>Failed</Text>
+            </>
+          )}
+
           <Text style={styles.secondaryText}> · </Text>
 
-          <TouchableOpacity onPress={handleSyncNow} disabled={sync.isSyncing}>
+          <TouchableOpacity onPress={syncNow} disabled={sync.isSyncing}>
             <Text style={styles.linkText}>
               {sync.isSyncing ? 'Syncing...' : 'Sync now'}
             </Text>
@@ -80,6 +80,10 @@ const styles = StyleSheet.create({
   secondaryText: {
     fontSize: 14,
     color: Color.GRAY_MEDIUM,
+  },
+  errorText: {
+    fontSize: 14,
+    color: Color.DESTRUCTIVE,
   },
   linkText: {
     fontSize: 14,
