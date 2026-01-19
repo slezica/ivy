@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Switch, TouchableOpacity } from 'react-native'
+import { View, Text, StyleSheet, Switch, TouchableOpacity, Alert } from 'react-native'
 import { useCallback } from 'react'
 import { useFocusEffect, useRouter } from 'expo-router'
 import ScreenArea from '../components/shared/ScreenArea'
@@ -8,7 +8,7 @@ import { useStore } from '../store'
 
 export default function SettingsScreen() {
   const router = useRouter()
-  const { settings, updateSettings, sync, syncNow, refreshSyncStatus } = useStore()
+  const { settings, updateSettings, sync, syncNow, refreshSyncStatus, loadFileWithUri, fetchBooks, __DEV_resetApp } = useStore()
 
   useFocusEffect(
     useCallback(() => {
@@ -24,6 +24,43 @@ export default function SettingsScreen() {
     if (enabled && sync.pendingCount > 0) {
       syncNow()
     }
+  }
+
+  async function handleLoadSample() {
+    try {
+      const { Asset } = await import('expo-asset')
+      const asset = Asset.fromModule(require('../../assets/test/test-audio.mp3'))
+      await asset.downloadAsync()
+      if (!asset.localUri) throw new Error('Failed to download test asset')
+      await loadFileWithUri(asset.localUri, 'test-audio.mp3')
+      fetchBooks()
+      router.replace('/player')
+    } catch (error) {
+      console.error('Error loading test file:', error)
+      Alert.alert('Error', 'Failed to load test file')
+    }
+  }
+
+  function handleReset() {
+    Alert.alert(
+      'Reset App',
+      'This will clear all files, clips, and playback data. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await __DEV_resetApp()
+            } catch (error) {
+              console.error('Error resetting app:', error)
+              Alert.alert('Error', 'Failed to reset app')
+            }
+          },
+        },
+      ]
+    )
   }
 
   return (
@@ -62,6 +99,20 @@ export default function SettingsScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {__DEV__ && (
+          <>
+            <Text style={styles.sectionHeader}>Developer</Text>
+
+            <TouchableOpacity style={styles.devButton} onPress={handleLoadSample}>
+              <Text style={styles.devButtonText}>Load Sample</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.devButton} onPress={handleReset}>
+              <Text style={styles.devButtonDestructive}>Reset App</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </ScreenArea>
   )
@@ -97,5 +148,25 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 14,
     color: Color.PRIMARY,
+  },
+  sectionHeader: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Color.GRAY_DARK,
+    marginTop: 32,
+    marginBottom: 16,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  devButton: {
+    paddingVertical: 12,
+  },
+  devButtonText: {
+    fontSize: 16,
+    color: Color.PRIMARY,
+  },
+  devButtonDestructive: {
+    fontSize: 16,
+    color: Color.DESTRUCTIVE,
   },
 })

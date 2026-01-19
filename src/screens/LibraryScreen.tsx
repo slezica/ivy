@@ -24,7 +24,7 @@ const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, loadFileWithUri, books, archiveBook, sync, autoSync, __DEV_resetApp } = useStore()
+  const { loadFileWithPicker, fetchBooks, loadFileWithUri, books, archiveBook, sync, autoSync } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -83,46 +83,6 @@ export default function LibraryScreen() {
       console.error('Error loading book:', error)
       Alert.alert('Error', 'Failed to load book')
     }
-  }
-
-  // Dev-only: Long-press FAB to load test file (for Maestro tests)
-  const handleLoadTestFile = __DEV__
-    ? async () => {
-        try {
-          const { Asset } = await import('expo-asset')
-          const asset = Asset.fromModule(require('../../assets/test/test-audio.mp3'))
-          await asset.downloadAsync()
-          if (!asset.localUri) throw new Error('Failed to download test asset')
-          await loadFileWithUri(asset.localUri, 'test-audio.mp3')
-          fetchBooks()
-          router.push('/player')
-        } catch (error) {
-          console.error('Error loading test file:', error)
-          Alert.alert('Error', 'Failed to load test file')
-        }
-      }
-    : undefined
-
-  const handleDevReset = () => {
-    Alert.alert(
-      'Reset App',
-      'This will clear all files, clips, and playback data. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await __DEV_resetApp()
-            } catch (error) {
-              console.error('Error resetting app:', error)
-              Alert.alert('Error', 'Failed to reset app')
-            }
-          },
-        },
-      ]
-    )
   }
 
   const handleOpenMenu = (bookId: string) => {
