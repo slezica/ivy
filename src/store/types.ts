@@ -11,19 +11,10 @@ import type { ClipWithFile, Book, Settings } from '../services'
 // AppState - The Complete Store
 // =============================================================================
 
-export interface AppState extends ClipSlice, PlaybackSlice {
+export interface AppState extends LibrarySlice, PlaybackSlice, ClipSlice {
   // State
-  library: LibraryState
   sync: SyncState
-  books: Record<string, Book>
   settings: Settings
-
-  // Library actions
-  loadFile: (pickedFile: { uri: string; name: string }) => Promise<void>
-  loadFileWithUri: (uri: string, name: string) => Promise<void>
-  loadFileWithPicker: () => Promise<void>
-  fetchBooks: () => void
-  archiveBook: (bookId: string) => Promise<void>
 
   // Settings actions
   updateSettings: (settings: Settings) => void
@@ -40,6 +31,16 @@ export interface AppState extends ClipSlice, PlaybackSlice {
 // =============================================================================
 // Slices
 // =============================================================================
+
+export interface LibrarySlice {
+  library: LibraryState
+  books: Record<string, Book>
+  fetchBooks: () => void
+  loadFile: (pickedFile: { uri: string; name: string }) => Promise<void>
+  loadFileWithUri: (uri: string, name: string) => Promise<void>
+  loadFileWithPicker: () => Promise<void>
+  archiveBook: (bookId: string) => Promise<void>
+}
 
 export interface PlaybackSlice {
   playback: PlaybackState
