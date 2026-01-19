@@ -1,17 +1,17 @@
 import type { ClipWithFile, Book, Settings } from '../services'
 
-// =============================================================================
-// AppState - The Complete Store
-// =============================================================================
 
-export interface AppState extends LibrarySlice, PlaybackSlice, ClipSlice, SyncSlice, SettingsSlice {
-  // Dev tools
-  __DEV_resetApp: () => Promise<void>
+export interface AppState extends
+  LibrarySlice,
+  PlaybackSlice,
+  ClipSlice,
+  SyncSlice,
+  SettingsSlice,
+  DevSlice {
+
+  // Each slice adds data and actions. All slices have access to the full state.
 }
 
-// =============================================================================
-// Slices
-// =============================================================================
 
 export interface LibrarySlice {
   library: {
@@ -76,13 +76,14 @@ export interface SettingsSlice {
   updateSettings: (settings: Settings) => void
 }
 
-// =============================================================================
-// Shared Types
-// =============================================================================
+
+export interface DevSlice {
+  __DEV_resetApp: () => Promise<void>
+}
+
 
 /**
- * Context for playback actions. Components must specify which file
- * and position they want to play/seek.
+ * Context for playback actions. Components must specify file and position they want to play/seek.
  */
 export interface PlaybackContext {
   fileUri: string
@@ -90,18 +91,6 @@ export interface PlaybackContext {
   ownerId?: string
 }
 
-// =============================================================================
-// Zustand Helpers
-// =============================================================================
-
-/**
- * SetState with immer support.
- * Can be called two ways:
- * - `set({ key: value })` - partial update (merged)
- * - `set((state) => { state.key = value })` - immer draft mutation (no return needed)
- */
-export type SetState = (
-  partial: Partial<AppState> | ((state: AppState) => void)
-) => void
 
 export type GetState = () => AppState
+export type SetState = (partial: Partial<AppState> | ((state: AppState) => void)) => void

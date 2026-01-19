@@ -1,9 +1,3 @@
-/**
- * Clip Slice
- *
- * State and actions for managing audio clips.
- */
-
 import RNFS from 'react-native-fs'
 import type {
   DatabaseService,

@@ -29,10 +29,9 @@ const POSITION_SYNC_THROTTLE_MS = 30 * 1000  // Only queue position sync every 3
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
-  // Track last queue time for position updates (throttling)
-  let lastPositionQueueTime = 0
 
-  // === Foundation Layer (no dependencies) ===
+  // Services -------------------------------------------------------------------------------------- 
+
   const db = new DatabaseService()
   const files = new FileStorageService()
   const picker = new FilePickerService()
@@ -41,10 +40,8 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const whisper = new WhisperService()
   const sharing = new SharingService()
 
-  // === Auth Layer ===
   const auth = new GoogleAuthService()
 
-  // === Services with dependencies ===
   const drive = new GoogleDriveService(auth)
   const queue = new OfflineQueueService(db)
 
@@ -67,7 +64,8 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   const audio = new AudioPlayerService({ onPlaybackStatusChange })
 
-  // === Slices ===
+  // Slices ----------------------------------------------------------------------------------------
+
   const librarySlice = createLibrarySlice({ db, files, picker, metadata, audio, queue })
   const playbackSlice = createPlaybackSlice({ audio, db })
   const clipSlice = createClipSlice({ db, slicer, queue, transcription, sharing })
@@ -83,9 +81,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     __DEV_resetApp,
   }
 
-  // ---------------------------------------------------------------------------
-  // Listeners
-  // ---------------------------------------------------------------------------
+  // Listeners -------------------------------------------------------------------------------------
 
   function onSyncStatusChange(status: { isSyncing: boolean; pendingCount: number; error: string | null }) {
     set((state) => {
@@ -110,6 +106,9 @@ export const useStore = create<AppState>()(immer((set, get) => {
   function onTranscriptionComplete(clipId: string, transcription: string) {
     get().updateClip(clipId, { transcription })
   }
+
+  // Track last queue time for position updates (throttling)
+  let lastPositionQueueTime = 0
 
   function onPlaybackStatusChange(status: PlaybackStatus) {
     set((state) => {
@@ -136,6 +135,8 @@ export const useStore = create<AppState>()(immer((set, get) => {
       queue.queueChange('book', book.id, 'upsert')
     }
   }
+
+  // Development -----------------------------------------------------------------------------------
 
   async function __DEV_resetApp() {
     await audio.unload()
