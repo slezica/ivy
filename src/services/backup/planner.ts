@@ -107,14 +107,11 @@ function planBookSync(state: SyncState): SyncPlan['books'] {
   const merges: BookMerge[] = []
 
   const localBooksMap = new Map(state.local.books.map(b => [b.id, b]))
-  const processedIds = new Set<string>()
 
-  // PUSH: Check each local book
+  // PUSH: Check each local book for uploads/merges
   for (const book of state.local.books) {
     const manifest = state.manifests.get(`book:${book.id}`)
     const remote = state.remote.books.get(book.id)
-
-    processedIds.add(book.id)
 
     if (!manifest) {
       // New locally → upload
@@ -131,10 +128,8 @@ function planBookSync(state: SyncState): SyncPlan['books'] {
     }
   }
 
-  // PULL: Check each remote book
+  // PULL: Check each remote book for downloads
   for (const [bookId, remote] of state.remote.books) {
-    if (processedIds.has(bookId)) continue // Already handled in push phase
-
     const manifest = state.manifests.get(`book:${bookId}`)
     const localBook = localBooksMap.get(bookId)
 
@@ -147,7 +142,7 @@ function planBookSync(state: SyncState): SyncPlan['books'] {
         // Not changed locally → download
         downloads.push({ remote })
       }
-      // If both changed, conflict was handled in push phase
+      // If both changed, it's handled as a merge in push phase
     }
   }
 
@@ -162,14 +157,11 @@ function planClipSync(state: SyncState): SyncPlan['clips'] {
 
   const localClipsMap = new Map(state.local.clips.map(c => [c.id, c]))
   const localClipIds = new Set(state.local.clips.map(c => c.id))
-  const processedIds = new Set<string>()
 
-  // PUSH: Check each local clip
+  // PUSH: Check each local clip for uploads/merges
   for (const clip of state.local.clips) {
     const manifest = state.manifests.get(`clip:${clip.id}`)
     const remote = state.remote.clips.get(clip.id)
-
-    processedIds.add(clip.id)
 
     if (!manifest) {
       // New locally → upload
@@ -186,10 +178,8 @@ function planClipSync(state: SyncState): SyncPlan['clips'] {
     }
   }
 
-  // PULL: Check each remote clip
+  // PULL: Check each remote clip for downloads
   for (const [clipId, remote] of state.remote.clips) {
-    if (processedIds.has(clipId)) continue // Already handled in push phase
-
     const manifest = state.manifests.get(`clip:${clipId}`)
     const localClip = localClipsMap.get(clipId)
 
@@ -202,7 +192,7 @@ function planClipSync(state: SyncState): SyncPlan['clips'] {
         // Not changed locally → download
         downloads.push({ remote })
       }
-      // If both changed, conflict was handled in push phase
+      // If both changed, it's handled as a merge in push phase
     }
   }
 
