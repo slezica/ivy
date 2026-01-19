@@ -13,6 +13,7 @@ import { useStore } from '../store'
 import IconButton from '../components/shared/IconButton'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
+import InputHeader from '../components/shared/InputHeader'
 import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import { Color } from '../theme'
@@ -25,7 +26,8 @@ export default function LibraryScreen() {
   const router = useRouter()
   const { loadFileWithPicker, fetchBooks, loadFileWithUri, books, archiveBook, sync, autoSync, __DEV_resetApp } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
-  const [headerMenuVisible, setHeaderMenuVisible] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const lastSyncRef = useRef<number>(0)
 
   useFocusEffect(
@@ -172,39 +174,25 @@ export default function LibraryScreen() {
     ]
   }
 
-  const getHeaderMenuItems = (): ActionMenuItem[] => {
-    const items: ActionMenuItem[] = [
-      { key: 'settings', label: 'Settings', icon: 'settings-outline' },
-    ]
-
-    if (__DEV__) {
-      items.push(
-        { key: 'sample', label: 'Load Sample', icon: 'musical-notes-outline' },
-        { key: 'reset', label: 'Reset App', icon: 'trash-outline', destructive: true },
-      )
-    }
-
-    return items
+  const handleOpenSearch = () => {
+    setIsSearching(true)
   }
 
-  const handleHeaderMenuAction = (action: string) => {
-    setHeaderMenuVisible(false)
-
-    switch (action) {
-      case 'settings':
-        router.push('/settings')
-        break
-      case 'sample':
-        handleLoadTestFile?.()
-        break
-      case 'reset':
-        handleDevReset()
-        break
-    }
+  const handleCloseSearch = () => {
+    setIsSearching(false)
+    setSearchQuery('')
   }
 
-  // Split books into active and archived
-  const booksArray = Object.values(books)
+  // Filter and split books into active and archived
+  const booksArray = Object.values(books).filter((book) => {
+    if (!searchQuery) return true
+    const query = searchQuery.toLowerCase()
+    return (
+      book.title?.toLowerCase().includes(query) ||
+      book.name.toLowerCase().includes(query) ||
+      book.artist?.toLowerCase().includes(query)
+    )
+  })
   const activeBooks = booksArray.filter(book => book.uri !== null)
   const archivedBooks = booksArray.filter(book => book.uri === null)
 
@@ -216,15 +204,25 @@ export default function LibraryScreen() {
 
   return (
     <ScreenArea>
-      <Header title="Library">
-        <Pressable
-          style={styles.headerMenuButton}
-          onPress={() => setHeaderMenuVisible(true)}
-          hitSlop={8}
-        >
-          <Ionicons name="ellipsis-vertical" size={24} color={Color.BLACK} />
-        </Pressable>
-      </Header>
+      {isSearching
+        ? <InputHeader
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onClose={handleCloseSearch}
+          />
+
+        : <Header title="Library">
+            <View style={styles.headerButtons}>
+              <TouchableOpacity onPress={() => router.push('/settings')}>
+                <Ionicons name="settings-outline" size={24} color={Color.BLACK} />
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={handleOpenSearch}>
+                <Ionicons name="search" size={24} color={Color.BLACK} />
+              </TouchableOpacity>
+            </View>
+          </Header>
+      }
 
       {booksArray.length > 0 ? (
         <SectionList
@@ -299,6 +297,11 @@ export default function LibraryScreen() {
             )
           }}
         />
+      ) : searchQuery ? (
+        <EmptyState
+          title="No books found"
+          subtitle="Nothing matches your search"
+        />
       ) : (
         <EmptyState
           title="No books yet"
@@ -313,12 +316,6 @@ export default function LibraryScreen() {
         items={getMenuItems()}
       />
 
-      <ActionMenu
-        visible={headerMenuVisible}
-        onClose={() => setHeaderMenuVisible(false)}
-        onAction={handleHeaderMenuAction}
-        items={getHeaderMenuItems()}
-      />
 
       {/* FAB */}
       <View style={styles.fabContainer} pointerEvents="box-none">
@@ -335,8 +332,9 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerMenuButton: {
-    padding: 4,
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 16,
   },
   listContent: {
     padding: 16,
