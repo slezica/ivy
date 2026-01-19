@@ -60,10 +60,7 @@ export default function LibraryScreen() {
   const handleLoadFile = async () => {
     try {
       await loadFileWithPicker()
-      // Refresh list
       fetchBooks()
-      // Navigate to player tab
-      router.push('/player')
     } catch (error) {
       console.error(error)
       Alert.alert('Error', 'Failed to load audio file')

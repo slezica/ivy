@@ -199,12 +199,10 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
           await audio.seek(book.position)
         }
 
-        // Auto-play after loading (this will set status to 'playing')
-        // Target the main player so it adopts the book
-        await get().play({
-          fileUri: book.uri!,
-          position: book.position,
-          ownerId: MAIN_PLAYER_OWNER_ID,
+        // Set playback to paused (ready to play)
+        set((state) => {
+          state.playback.status = 'paused'
+          state.playback.ownerId = MAIN_PLAYER_OWNER_ID
         })
 
       } catch (error) {
