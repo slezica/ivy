@@ -45,8 +45,7 @@ export interface ClipSlice {
   clips: Record<string, ClipWithFile>
   fetchClips: () => void
   addClip: (bookId: string, position: number) => Promise<void>
-  updateClip: (id: string, updates: { note?: string; start?: number; duration?: number }) => Promise<void>
-  updateClipTranscription: (id: string, transcription: string) => void
+  updateClip: (id: string, updates: { note?: string; start?: number; duration?: number; transcription?: string }) => Promise<void>
   deleteClip: (id: string) => Promise<void>
   shareClip: (clipId: string) => Promise<void>
 }

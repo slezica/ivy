@@ -117,7 +117,7 @@ export class TranscriptionQueueService {
 
       const transcription = await this.whisper.transcribe(audioPath)
 
-      this.database.updateClipTranscription(clipId, transcription)
+      this.database.updateClip(clipId, { transcription })
 
       if (this.onTranscriptionComplete) {
         this.onTranscriptionComplete(clipId, transcription)

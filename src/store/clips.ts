@@ -119,7 +119,7 @@ export function createClipSlice(deps: ClipSliceDeps) {
 
     async function updateClip(
       id: string,
-      updates: { note?: string; start?: number; duration?: number }
+      updates: { note?: string; start?: number; duration?: number; transcription?: string }
     ): Promise<void> {
       const { clips } = get()
       const clip = clips[id]
@@ -169,17 +169,8 @@ export function createClipSlice(deps: ClipSliceDeps) {
         if (updates.note !== undefined) clip.note = updates.note
         if (updates.start !== undefined) clip.start = updates.start
         if (updates.duration !== undefined) clip.duration = updates.duration
+        if (updates.transcription !== undefined) clip.transcription = updates.transcription
         if (newUri) clip.uri = newUri
-        clip.updated_at = Date.now()
-      })
-    }
-
-    function updateClipTranscription(id: string, transcription: string): void {
-      set((state) => {
-        const clip = state.clips[id]
-        if (!clip) return
-
-        clip.transcription = transcription
         clip.updated_at = Date.now()
       })
     }
@@ -227,7 +218,6 @@ export function createClipSlice(deps: ClipSliceDeps) {
       fetchClips,
       addClip,
       updateClip,
-      updateClipTranscription,
       deleteClip,
       shareClip,
     }

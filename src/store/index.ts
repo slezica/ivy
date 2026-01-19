@@ -90,13 +90,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     whisper: whisperService,
     slicer: slicerService,
     onTranscriptionComplete: (clipId, transcription) => {
-      const { clips } = get()
-      if (clips[clipId]) {
-        set((state) => {
-          state.clips[clipId].transcription = transcription
-          state.clips[clipId].updated_at = Date.now()
-        })
-      }
+      get().updateClip(clipId, { transcription })
     },
   })
 

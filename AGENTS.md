@@ -320,7 +320,7 @@ play, pause, seek, seekClip, skipForward, skipBackward, syncPlaybackState
 
 // ClipSlice
 clips: Record<string, ClipWithFile>
-fetchClips, addClip, updateClip, updateClipTranscription, deleteClip, shareClip
+fetchClips, addClip, updateClip, deleteClip, shareClip
 
 // SyncSlice
 sync: {

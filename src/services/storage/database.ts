@@ -285,7 +285,7 @@ export class DatabaseService {
     }
   }
 
-  updateClip(id: string, updates: { note?: string; start?: number; duration?: number; uri?: string }): void {
+  updateClip(id: string, updates: { note?: string; start?: number; duration?: number; uri?: string; transcription?: string }): void {
     const now = Date.now()
     const setClauses: string[] = ['updated_at = ?']
     const values: (string | number)[] = [now]
@@ -306,19 +306,15 @@ export class DatabaseService {
       setClauses.push('uri = ?')
       values.push(updates.uri)
     }
+    if (updates.transcription !== undefined) {
+      setClauses.push('transcription = ?')
+      values.push(updates.transcription)
+    }
 
     values.push(id)
     this.db.runSync(
       `UPDATE clips SET ${setClauses.join(', ')} WHERE id = ?`,
       values
-    )
-  }
-
-  updateClipTranscription(id: string, transcription: string): void {
-    const now = Date.now()
-    this.db.runSync(
-      'UPDATE clips SET transcription = ?, updated_at = ? WHERE id = ?',
-      [transcription, now, id]
     )
   }
 
