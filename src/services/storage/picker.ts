@@ -23,7 +23,11 @@ export class FilePickerService {
   async pickAudioFile(): Promise<PickedFile | null> {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'audio/*',
+        type: [
+          'audio/*',
+          'video/mp4',        // m4b files often registered as mp4 video
+          'application/x-m4b', // some systems use this
+        ],
         copyToCacheDirectory: false,
       })
 
