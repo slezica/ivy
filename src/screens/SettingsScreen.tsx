@@ -69,7 +69,7 @@ export default function SettingsScreen() {
 
       <View style={styles.content}>
         <View style={styles.settingRow}>
-          <Text style={styles.settingLabel}>Sync</Text>
+          <Text style={styles.settingLabel}>Sync to Google Drive</Text>
 
           <Switch
             value={settings.sync_enabled}
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   settingLabel: {
-    fontSize: 16,
+    fontSize: 18,
     color: Color.BLACK,
   },
   settingSecondary: {
