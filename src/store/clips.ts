@@ -16,18 +16,11 @@ import type {
 import { generateId } from '../utils'
 import type { ClipSlice, SetState, GetState } from './types'
 
-// =============================================================================
-// Constants
-// =============================================================================
 
 const CLIPS_DIR = `${RNFS.DocumentDirectoryPath}/clips`
 const DEFAULT_CLIP_DURATION_MS = 20 * 1000
 
-// =============================================================================
-// Types
-// =============================================================================
 
-/** Dependencies required by this slice */
 export interface ClipSliceDeps {
   db: DatabaseService
   slicer: AudioSlicerService
@@ -36,39 +29,28 @@ export interface ClipSliceDeps {
   sharing: SharingService
 }
 
-// =============================================================================
-// Slice Creator
-// =============================================================================
 
-/**
- * Creates the clip slice with injected dependencies.
- *
- * Usage:
- * ```
- * const clipSlice = createClipSlice({
- *   db: dbService,
- *   slicer: slicerService,
- *   ...
- * })(set, get)
- * ```
- */
 export function createClipSlice(deps: ClipSliceDeps) {
   const { db, slicer, queue, transcription, sharing } = deps
 
   return (set: SetState, get: GetState): ClipSlice => {
-    // -----------------------------------------------------------------
-    // Actions
-    // -----------------------------------------------------------------
+    return {
+      clips: {},
+
+      fetchClips,
+      addClip,
+      updateClip,
+      deleteClip,
+      shareClip,
+    }
 
     function fetchClips(): void {
-      const allClips = db.getAllClips()
+      const clips: Record<string, ClipWithFile> = {}
+      for (const clip of db.getAllClips()) {
+        clips[clip.id] = clip
+      }
 
-      const clipsMap = allClips.reduce((acc, clip) => {
-        acc[clip.id] = clip
-        return acc
-      }, {} as Record<string, ClipWithFile>)
-
-      set({ clips: clipsMap })
+      set({ clips })
     }
 
     async function addClip(bookId: string, position: number): Promise<void> {
@@ -204,22 +186,6 @@ export function createClipSlice(deps: ClipSliceDeps) {
 
       // Share using the clip's existing audio file
       await sharing.shareClipFile(clip.uri, clip.note || clip.file_name)
-    }
-
-    // -----------------------------------------------------------------
-    // Return slice
-    // -----------------------------------------------------------------
-
-    return {
-      // Initial state
-      clips: {},
-
-      // Actions
-      fetchClips,
-      addClip,
-      updateClip,
-      deleteClip,
-      shareClip,
     }
   }
 }

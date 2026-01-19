@@ -1,10 +1,3 @@
-/**
- * Store Types
- *
- * Central type definitions for the entire store.
- * Read top-down to understand the full store shape.
- */
-
 import type { ClipWithFile, Book, Settings } from '../services'
 
 // =============================================================================
@@ -21,8 +14,11 @@ export interface AppState extends LibrarySlice, PlaybackSlice, ClipSlice, SyncSl
 // =============================================================================
 
 export interface LibrarySlice {
-  library: LibraryState
+  library: {
+    status: 'loading' | 'idle' | 'adding'
+  }
   books: Record<string, Book>
+
   fetchBooks: () => void
   loadFile: (pickedFile: { uri: string; name: string }) => Promise<void>
   loadFileWithUri: (uri: string, name: string) => Promise<void>
@@ -30,8 +26,16 @@ export interface LibrarySlice {
   archiveBook: (bookId: string) => Promise<void>
 }
 
+
 export interface PlaybackSlice {
-  playback: PlaybackState
+  playback: {
+    status: 'idle' | 'loading' | 'paused' | 'playing'
+    position: number
+    uri: string | null       // URI currently loaded in player
+    duration: number         // Duration of loaded audio
+    ownerId: string | null   // ID of component that last took control
+  }
+
   play: (context?: PlaybackContext) => Promise<void>
   pause: () => Promise<void>
   seek: (context: PlaybackContext) => Promise<void>
@@ -41,8 +45,10 @@ export interface PlaybackSlice {
   syncPlaybackState: () => Promise<void>
 }
 
+
 export interface ClipSlice {
   clips: Record<string, ClipWithFile>
+
   fetchClips: () => void
   addClip: (bookId: string, position: number) => Promise<void>
   updateClip: (id: string, updates: { note?: string; start?: number; duration?: number; transcription?: string }) => Promise<void>
@@ -50,12 +56,20 @@ export interface ClipSlice {
   shareClip: (clipId: string) => Promise<void>
 }
 
+
 export interface SyncSlice {
-  sync: SyncState
+  sync: {
+    isSyncing: boolean
+    pendingCount: number
+    lastSyncTime: number | null
+    error: string | null
+  }
+
   syncNow: () => void
   autoSync: () => Promise<void>
   refreshSyncStatus: () => void
 }
+
 
 export interface SettingsSlice {
   settings: Settings
@@ -63,31 +77,8 @@ export interface SettingsSlice {
 }
 
 // =============================================================================
-// State Types
+// Shared Types
 // =============================================================================
-
-export interface LibraryState {
-  status: LibraryStatus
-}
-
-export type LibraryStatus = 'loading' | 'idle' | 'adding'
-
-export interface PlaybackState {
-  status: PlaybackStatus
-  position: number
-  uri: string | null       // URI currently loaded in player
-  duration: number         // Duration of loaded audio
-  ownerId: string | null   // ID of component that last took control
-}
-
-export type PlaybackStatus = 'idle' | 'loading' | 'paused' | 'playing'
-
-export interface SyncState {
-  isSyncing: boolean
-  pendingCount: number
-  lastSyncTime: number | null
-  error: string | null
-}
 
 /**
  * Context for playback actions. Components must specify which file

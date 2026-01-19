@@ -1,43 +1,41 @@
-/**
- * Playback Slice
- *
- * State and actions for audio playback control.
- */
-
 import type {
   AudioPlayerService,
   DatabaseService,
 } from '../services'
 import type { PlaybackSlice, PlaybackContext, SetState, GetState } from './types'
 
-// =============================================================================
-// Constants
-// =============================================================================
 
 const SKIP_FORWARD_MS = 25 * 1000
 const SKIP_BACKWARD_MS = 30 * 1000
 
-// =============================================================================
-// Types
-// =============================================================================
 
-/** Dependencies required by this slice */
 export interface PlaybackSliceDeps {
   audio: AudioPlayerService
   db: DatabaseService
 }
 
-// =============================================================================
-// Slice Creator
-// =============================================================================
 
 export function createPlaybackSlice(deps: PlaybackSliceDeps) {
   const { audio: audioService, db: dbService } = deps
 
   return (set: SetState, get: GetState): PlaybackSlice => {
-    // -----------------------------------------------------------------
-    // Actions
-    // -----------------------------------------------------------------
+    return {
+      playback: {
+        status: 'idle',
+        position: 0,
+        uri: null,
+        duration: 0,
+        ownerId: null,
+      },
+
+      play,
+      pause,
+      seek,
+      seekClip,
+      skipForward,
+      skipBackward,
+      syncPlaybackState,
+    }
 
     async function play(context?: PlaybackContext): Promise<void> {
       try {
@@ -180,30 +178,6 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
         }
         state.playback.position = status.position
       })
-    }
-
-    // -----------------------------------------------------------------
-    // Return slice
-    // -----------------------------------------------------------------
-
-    return {
-      // Initial state
-      playback: {
-        status: 'idle',
-        position: 0,
-        uri: null,
-        duration: 0,
-        ownerId: null,
-      },
-
-      // Actions
-      play,
-      pause,
-      seek,
-      seekClip,
-      skipForward,
-      skipBackward,
-      syncPlaybackState,
     }
   }
 }

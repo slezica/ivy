@@ -1,9 +1,3 @@
-/**
- * Library Slice
- *
- * State and actions for managing the book library.
- */
-
 import type {
   DatabaseService,
   FileStorageService,
@@ -16,11 +10,7 @@ import type {
 import { MAIN_PLAYER_OWNER_ID } from '../utils'
 import type { LibrarySlice, SetState, GetState } from './types'
 
-// =============================================================================
-// Types
-// =============================================================================
 
-/** Dependencies required by this slice */
 export interface LibrarySliceDeps {
   db: DatabaseService
   files: FileStorageService
@@ -30,27 +20,31 @@ export interface LibrarySliceDeps {
   queue: OfflineQueueService
 }
 
-// =============================================================================
-// Slice Creator
-// =============================================================================
 
 export function createLibrarySlice(deps: LibrarySliceDeps) {
   const { db, files, picker, metadata, audio, queue } = deps
 
   return (set: SetState, get: GetState): LibrarySlice => {
-    // -----------------------------------------------------------------
-    // Actions
-    // -----------------------------------------------------------------
+    return {
+      library: {
+        status: 'loading',
+      },
+      books: {},
+
+      fetchBooks,
+      loadFile,
+      loadFileWithUri,
+      loadFileWithPicker,
+      archiveBook,
+    }
 
     function fetchBooks(): void {
-      const allBooks = db.getAllBooks()
+      const books: Record<string, Book> = {}
+      for (const book of db.getAllBooks()) {
+        books[book.id] = book
+      }
 
-      const booksMap = allBooks.reduce((acc, book) => {
-        acc[book.id] = book
-        return acc
-      }, {} as Record<string, Book>)
-
-      set({ books: booksMap, library: { status: 'idle' } })
+      set({ books, library: { status: 'idle' } })
     }
 
     async function archiveBook(bookId: string): Promise<void> {
@@ -213,6 +207,7 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
           position: book.position,
           ownerId: MAIN_PLAYER_OWNER_ID,
         })
+
       } catch (error) {
         console.error(error)
         // Reset loading state on error
@@ -222,25 +217,6 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
         })
         throw error
       }
-    }
-
-    // -----------------------------------------------------------------
-    // Return slice
-    // -----------------------------------------------------------------
-
-    return {
-      // Initial state
-      library: {
-        status: 'loading',
-      },
-      books: {},
-
-      // Actions
-      fetchBooks,
-      loadFile,
-      loadFileWithUri,
-      loadFileWithPicker,
-      archiveBook,
     }
   }
 }
