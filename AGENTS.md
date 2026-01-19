@@ -177,7 +177,11 @@ await archiveBook(bookId)
   │   │   ├── auth.ts             # Google OAuth (expo-auth-session)
   │   │   ├── drive.ts            # Google Drive REST API wrapper
   │   │   ├── queue.ts            # Offline change queue (persists pending sync ops)
-  │   │   └── sync.ts             # Incremental sync with conflict resolution
+  │   │   ├── sync.ts             # Sync orchestrator (state → plan → execute)
+  │   │   ├── planner.ts          # Pure sync planning (what ops are needed)
+  │   │   ├── merge.ts            # Pure conflict resolution (book/clip merge)
+  │   │   ├── types.ts            # Shared backup types
+  │   │   └── __tests__/          # Unit tests for planner and merge
   │   └── system/
   │       └── sharing.ts          # Share clips via native share sheet
   ├── screens/
@@ -409,6 +413,15 @@ maestro test maestro/smoke-test.yaml
 **Ad-hoc testing:** During development, you can write quick one-off Maestro flows to test specific interactions without committing them. Useful for debugging or verifying fixes.
 
 **Test file:** A bundled test audio file (`assets/test/test-audio.mp3`) is available. The Sample button loads it without needing the file picker.
+
+## Unit Testing (Jest)
+
+Run with `npm test` (or `npm test:watch` for watch mode).
+
+Tests are colocated in `__tests__/` directories next to the code they test.
+
+**Current coverage:**
+- `services/backup/__tests__/` - Sync planning (`planner.test.ts`) and conflict resolution (`merge.test.ts`)
 
 ## Common Issues & Solutions
 
