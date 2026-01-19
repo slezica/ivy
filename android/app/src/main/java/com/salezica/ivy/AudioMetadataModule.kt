@@ -2,6 +2,8 @@ package com.salezica.ivy
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.util.Base64
 import com.facebook.react.bridge.Promise
@@ -37,8 +39,13 @@ class AudioMetadataModule(reactContext: ReactApplicationContext) :
             result.putString("artist", artist)
 
             // Extract duration (in milliseconds)
+            // Try metadata first, fall back to MediaExtractor for m4b and other formats
             val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            val duration = durationStr?.toLongOrNull() ?: 0L
+            var duration = durationStr?.toLongOrNull() ?: 0L
+
+            if (duration == 0L) {
+                duration = extractDurationWithMediaExtractor(filePath)
+            }
             result.putDouble("duration", duration.toDouble())
 
             // Extract artwork (embedded album art)
@@ -68,6 +75,28 @@ class AudioMetadataModule(reactContext: ReactApplicationContext) :
             promise.resolve(result)
         } catch (e: Exception) {
             promise.reject("METADATA_EXTRACTION_ERROR", "Failed to extract metadata: ${e.message}", e)
+        }
+    }
+
+    private fun extractDurationWithMediaExtractor(filePath: String): Long {
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(filePath)
+
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+
+                if (mime.startsWith("audio/")) {
+                    val durationUs = format.getLong(MediaFormat.KEY_DURATION)
+                    return durationUs / 1000  // Convert microseconds to milliseconds
+                }
+            }
+            return 0L
+        } catch (e: Exception) {
+            return 0L
+        } finally {
+            extractor.release()
         }
     }
 }
