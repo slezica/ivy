@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { immer } from 'zustand/middleware/immer'
 
 import {
   // Service classes
@@ -27,7 +28,7 @@ import type { AppState, PlaybackContext } from './types'
 const POSITION_SYNC_THROTTLE_MS = 30 * 1000  // Only queue position sync every 30s
 
 
-export const useStore = create<AppState>((set, get) => {
+export const useStore = create<AppState>()(immer((set, get) => {
   // ---------------------------------------------------------------------------
   // Service Wiring
   //
@@ -64,14 +65,14 @@ export const useStore = create<AppState>((set, get) => {
     queueService,
     {
       onStatusChange: (status) => {
-        set((state) => ({
-          sync: {
+        set((state) => {
+          state.sync = {
             ...status,
             // Preserve lastSyncTime from our state (service doesn't track it)
             // Refresh it from DB when sync completes
             lastSyncTime: status.isSyncing ? state.sync.lastSyncTime : dbService.getLastSyncTime(),
-          },
-        }))
+          }
+        })
       },
       onDataChange: (notification) => {
         if (notification.booksChanged.length > 0) {
@@ -91,16 +92,10 @@ export const useStore = create<AppState>((set, get) => {
     onTranscriptionComplete: (clipId, transcription) => {
       const { clips } = get()
       if (clips[clipId]) {
-        set((state) => ({
-          clips: {
-            ...state.clips,
-            [clipId]: {
-              ...state.clips[clipId],
-              transcription,
-              updated_at: Date.now(),
-            },
-          },
-        }))
+        set((state) => {
+          state.clips[clipId].transcription = transcription
+          state.clips[clipId].updated_at = Date.now()
+        })
       }
     },
   })
@@ -110,16 +105,13 @@ export const useStore = create<AppState>((set, get) => {
 
   const audioService = new AudioPlayerService({
     onPlaybackStatusChange: (status) => {
-      set((state) => ({
-        playback: {
-          ...state.playback,
-          // Only update status if not currently in a transitional state
-          status: state.playback.status === 'loading'
-            ? state.playback.status
-            : status.status,
-          position: status.position,
-        },
-      }))
+      set((state) => {
+        // Only update status if not currently in a transitional state
+        if (state.playback.status !== 'loading') {
+          state.playback.status = status.status
+        }
+        state.playback.position = status.position
+      })
 
       // Update book position in database
       // Only if we have a file loaded and valid position
@@ -219,7 +211,7 @@ export const useStore = create<AppState>((set, get) => {
 
     console.log('App reset complete')
   }
-})
+}))
 
 // Re-export types for consumers
 export type { AppState, PlaybackContext } from './types'

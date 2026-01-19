@@ -43,13 +43,10 @@ export function createSyncSlice(deps: SyncSliceDeps) {
     }
 
     function refreshSyncStatus(): void {
-      set((state) => ({
-        sync: {
-          ...state.sync,
-          pendingCount: syncService.getPendingCount(),
-          lastSyncTime: db.getLastSyncTime(),
-        },
-      }))
+      set((state) => {
+        state.sync.pendingCount = syncService.getPendingCount()
+        state.sync.lastSyncTime = db.getLastSyncTime()
+      })
     }
 
     // -----------------------------------------------------------------

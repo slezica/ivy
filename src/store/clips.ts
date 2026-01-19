@@ -164,36 +164,23 @@ export function createClipSlice(deps: ClipSliceDeps) {
       queue.queueChange('clip', id, 'upsert')
 
       // Update store
-      set((state) => ({
-        ...state,
-        clips: {
-          ...state.clips,
-          [id]: {
-            ...state.clips[id],
-            ...updates,
-            ...(newUri && { uri: newUri }),
-            updated_at: Date.now(),
-          },
-        },
-      }))
+      set((state) => {
+        const clip = state.clips[id]
+        if (updates.note !== undefined) clip.note = updates.note
+        if (updates.start !== undefined) clip.start = updates.start
+        if (updates.duration !== undefined) clip.duration = updates.duration
+        if (newUri) clip.uri = newUri
+        clip.updated_at = Date.now()
+      })
     }
 
     function updateClipTranscription(id: string, transcription: string): void {
       set((state) => {
         const clip = state.clips[id]
-        if (!clip) return state
+        if (!clip) return
 
-        return {
-          ...state,
-          clips: {
-            ...state.clips,
-            [id]: {
-              ...clip,
-              transcription,
-              updated_at: Date.now(),
-            },
-          },
-        }
+        clip.transcription = transcription
+        clip.updated_at = Date.now()
       })
     }
 
@@ -212,8 +199,7 @@ export function createClipSlice(deps: ClipSliceDeps) {
       queue.queueChange('clip', id, 'delete')
 
       set((state) => {
-        const { [id]: removed, ...rest } = state.clips
-        return { ...state, clips: rest }
+        delete state.clips[id]
       })
     }
 

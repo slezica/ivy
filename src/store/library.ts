@@ -64,12 +64,9 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
       const previousUri = book.uri
 
       // 1. Optimistic store update
-      set((state) => ({
-        books: {
-          ...state.books,
-          [bookId]: { ...state.books[bookId], uri: null },
-        },
-      }))
+      set((state) => {
+        state.books[bookId].uri = null
+      })
 
       // 2. Database update (with rollback on fail)
       try {
@@ -77,12 +74,9 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
         queue.queueChange('book', bookId, 'upsert')
       } catch (error) {
         // Rollback store
-        set((state) => ({
-          books: {
-            ...state.books,
-            [bookId]: { ...state.books[bookId], uri: previousUri },
-          },
-        }))
+        set((state) => {
+          state.books[bookId].uri = previousUri
+        })
         throw error
       }
 
@@ -134,10 +128,10 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
         }
 
         // Step 5: Load audio from local URI
-        set((state) => ({
-          library: { status: 'idle' },
-          playback: { ...state.playback, status: 'loading' },
-        }))
+        set((state) => {
+          state.library.status = 'idle'
+          state.playback.status = 'loading'
+        })
 
         console.log('Loading audio from:', localUri)
         const duration = await audio.load(localUri, {
@@ -201,14 +195,11 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
         get().fetchClips()
 
         // Update state (keep status as 'loading' until play starts)
-        set((state) => ({
-          playback: {
-            ...state.playback,
-            position: book.position,
-            uri: book.uri!,
-            duration: duration,
-          },
-        }))
+        set((state) => {
+          state.playback.position = book.position
+          state.playback.uri = book.uri!
+          state.playback.duration = duration
+        })
 
         // Seek to saved position
         if (book.position > 0) {
@@ -225,10 +216,10 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
       } catch (error) {
         console.error(error)
         // Reset loading state on error
-        set((state) => ({
-          library: { status: 'idle' },
-          playback: { ...state.playback, status: state.playback.uri ? 'paused' : 'idle' },
-        }))
+        set((state) => {
+          state.library.status = 'idle'
+          state.playback.status = state.playback.uri ? 'paused' : 'idle'
+        })
         throw error
       }
     }

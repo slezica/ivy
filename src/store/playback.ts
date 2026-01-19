@@ -53,13 +53,12 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
               throw new Error(`No book or clip found for: ${context.fileUri}`)
             }
 
-            set((state) => ({
-              playback: {
-                ...state.playback,
-                status: 'loading',
-                ...(context.ownerId !== undefined && { ownerId: context.ownerId }),
-              },
-            }))
+            set((state) => {
+              state.playback.status = 'loading'
+              if (context.ownerId !== undefined) {
+                state.playback.ownerId = context.ownerId
+              }
+            })
 
             const duration = await audioService.load(context.fileUri, {
               title: bookRecord.title,
@@ -67,53 +66,49 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
               artwork: bookRecord.artwork,
             })
 
-            set((state) => ({
-              playback: {
-                ...state.playback,
-                uri: context.fileUri,
-                duration: duration,
-                position: context.position,
-              },
-            }))
+            set((state) => {
+              state.playback.uri = context.fileUri
+              state.playback.duration = duration
+              state.playback.position = context.position
+            })
 
             await audioService.seek(context.position)
           } else if (playback.position !== context.position) {
             // Same file, different position - just seek
             await audioService.seek(context.position)
-            set((state) => ({
-              playback: { ...state.playback, position: context.position },
-            }))
+            set((state) => {
+              state.playback.position = context.position
+            })
           }
 
           // Set status to playing, and owner if provided
-          set((state) => ({
-            playback: {
-              ...state.playback,
-              status: 'playing',
-              ...(context.ownerId !== undefined && { ownerId: context.ownerId }),
-            },
-          }))
+          set((state) => {
+            state.playback.status = 'playing'
+            if (context.ownerId !== undefined) {
+              state.playback.ownerId = context.ownerId
+            }
+          })
         } else {
           // No context - just resume, keep existing owner
-          set((state) => ({
-            playback: { ...state.playback, status: 'playing' },
-          }))
+          set((state) => {
+            state.playback.status = 'playing'
+          })
         }
 
         await audioService.play()
       } catch (error) {
         console.error('Error playing audio:', error)
-        set((state) => ({
-          playback: { ...state.playback, status: state.playback.uri ? 'paused' : 'idle' },
-        }))
+        set((state) => {
+          state.playback.status = state.playback.uri ? 'paused' : 'idle'
+        })
         throw error
       }
     }
 
     async function pause(): Promise<void> {
-      set((state) => ({
-        playback: { ...state.playback, status: 'paused' },
-      }))
+      set((state) => {
+        state.playback.status = 'paused'
+      })
 
       try {
         await audioService.pause()
@@ -132,9 +127,9 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
         return
       }
 
-      set((state) => ({
-        playback: { ...state.playback, position: context.position },
-      }))
+      set((state) => {
+        state.playback.position = context.position
+      })
 
       try {
         await audioService.seek(context.position)
@@ -179,15 +174,12 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
       const status = await audioService.getStatus()
       if (!status) return
 
-      set((state) => ({
-        playback: {
-          ...state.playback,
-          status: state.playback.status === 'loading'
-            ? state.playback.status
-            : status.status,
-          position: status.position,
-        },
-      }))
+      set((state) => {
+        if (state.playback.status !== 'loading') {
+          state.playback.status = status.status
+        }
+        state.playback.position = status.position
+      })
     }
 
     // -----------------------------------------------------------------

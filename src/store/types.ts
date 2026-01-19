@@ -104,8 +104,14 @@ export interface PlaybackContext {
 // Zustand Helpers
 // =============================================================================
 
+/**
+ * SetState with immer support.
+ * Can be called two ways:
+ * - `set({ key: value })` - partial update (merged)
+ * - `set((state) => { state.key = value })` - immer draft mutation (no return needed)
+ */
 export type SetState = (
-  partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)
+  partial: Partial<AppState> | ((state: AppState) => void)
 ) => void
 
 export type GetState = () => AppState
