@@ -226,7 +226,7 @@ function ClipList({ clips, onViewClip, onOpenMenu }: any) {
             </View>
             {item.transcription ? (
               <Text style={styles.clipTranscription} numberOfLines={2}>
-                &ldquo;{item.transcription}&rdquo;
+                &ldquo;{item.transcription} ...&rdquo;
               </Text>
             ) : null}
             {item.note && <Text style={styles.clipNote}>{item.note}</Text>}
