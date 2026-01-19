@@ -22,6 +22,7 @@ import { useStore } from '../store'
 import { Color } from '../theme'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
+import InputHeader from '../components/shared/InputHeader'
 import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import Dialog from '../components/shared/Dialog'
@@ -36,6 +37,8 @@ export default function ClipsListScreen() {
   const [viewingClipId, setViewingClipId] = useState<string | null>(null)
   const [editingClipId, setEditingClipId] = useState<string | null>(null)
   const [menuClipId, setMenuClipId] = useState<string | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Fetch all clips when screen is focused
   useFocusEffect(
@@ -44,7 +47,18 @@ export default function ClipsListScreen() {
     }, [fetchClips])
   )
 
-  const clipsArray = Object.values(clips).sort((a, b) => b.created_at - a.created_at)
+  const clipsArray = Object.values(clips)
+    .filter((clip) => {
+      if (!searchQuery) return true
+      const query = searchQuery.toLowerCase()
+      return (
+        clip.file_title?.toLowerCase().includes(query) ||
+        clip.file_name.toLowerCase().includes(query) ||
+        clip.transcription?.toLowerCase().includes(query) ||
+        clip.note?.toLowerCase().includes(query)
+      )
+    })
+    .sort((a, b) => b.created_at - a.created_at)
   const viewingClip = viewingClipId ? clips[viewingClipId] : null
   const editingClip = editingClipId ? clips[editingClipId] : null
 
@@ -118,6 +132,15 @@ export default function ClipsListScreen() {
     setMenuClipId(null)
   }
 
+  const handleOpenSearch = () => {
+    setIsSearching(true)
+  }
+
+  const handleCloseSearch = () => {
+    setIsSearching(false)
+    setSearchQuery('')
+  }
+
   const handleMenuAction = (action: string) => {
     if (menuClipId === null) return
     const clipId = menuClipId
@@ -156,7 +179,19 @@ export default function ClipsListScreen() {
 
   return (
     <ScreenArea>
-      <Header title="Clips" />
+      {isSearching
+        ? <InputHeader
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onClose={handleCloseSearch}
+          />
+
+        : <Header title="Clips">
+            <TouchableOpacity onPress={handleOpenSearch}>
+              <Ionicons name="search" size={24} color={Color.BLACK} />
+            </TouchableOpacity>
+          </Header>
+      }
 
       {clipsArray.length > 0
         ? <ClipList
@@ -164,7 +199,10 @@ export default function ClipsListScreen() {
             onViewClip={handleViewClip}
             onOpenMenu={handleOpenMenu}
           />
-        : <EmptyState title="No clips yet" subtitle="Add clips from the player screen" />
+
+        : searchQuery
+          ? <EmptyState title="No clips found" subtitle="Nothing matches your search" />
+          : <EmptyState title="No clips yet" subtitle="Add clips from the player screen" />
       }
 
       {viewingClip && (
