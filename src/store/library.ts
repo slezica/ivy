@@ -3,11 +3,9 @@ import type {
   FileStorageService,
   FilePickerService,
   AudioMetadataService,
-  AudioPlayerService,
   OfflineQueueService,
   Book,
 } from '../services'
-import { MAIN_PLAYER_OWNER_ID } from '../utils'
 import type { LibrarySlice, SetState, GetState } from './types'
 
 
@@ -16,13 +14,12 @@ export interface LibrarySliceDeps {
   files: FileStorageService
   picker: FilePickerService
   metadata: AudioMetadataService
-  audio: AudioPlayerService
   queue: OfflineQueueService
 }
 
 
 export function createLibrarySlice(deps: LibrarySliceDeps) {
-  const { db, files, picker, metadata, audio, queue } = deps
+  const { db, files, picker, metadata, queue } = deps
 
   return (set: SetState, get: GetState): LibrarySlice => {
     return {
@@ -113,28 +110,10 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
         // Step 4: Check for existing book with same fingerprint
         const existingBook = db.getBookByFingerprint(fileSize, fingerprint)
 
-        // Verify file exists before loading
-        const exists = await files.fileExists(localUri)
-        console.log('Local file exists check:', exists, localUri)
-        if (!exists) {
-          throw new Error(`Local file does not exist: ${localUri}`)
-        }
+        const duration = fileMeta.duration
+        console.log('Duration from metadata:', duration)
 
-        // Step 5: Load audio from local URI
-        set((state) => {
-          state.library.status = 'idle'
-          state.playback.status = 'loading'
-        })
-
-        console.log('Loading audio from:', localUri)
-        const duration = await audio.load(localUri, {
-          title: fileMeta.title,
-          artist: fileMeta.artist,
-          artwork: fileMeta.artwork,
-        })
-        console.log('Audio loaded successfully, duration:', duration)
-
-        // Step 6: Determine which book record to use
+        // Step 5: Determine which book record to use
         let book: Book
 
         if (existingBook) {
@@ -158,13 +137,6 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
             db.touchBook(existingBook.id)
             book = db.getBookById(existingBook.id)!
             queue.queueChange('book', book.id, 'upsert')
-
-            // Reload audio from existing file
-            await audio.load(book.uri!, {
-              title: book.title,
-              artist: book.artist,
-              artwork: book.artwork,
-            })
           }
         } else {
           // Case C: New book - create record
@@ -187,31 +159,10 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
         fetchBooks()
         get().fetchClips()
 
-        // Update state (keep status as 'loading' until play starts)
-        set((state) => {
-          state.playback.position = book.position
-          state.playback.uri = book.uri!
-          state.playback.duration = duration
-        })
-
-        // Seek to saved position
-        if (book.position > 0) {
-          await audio.seek(book.position)
-        }
-
-        // Set playback to paused (ready to play)
-        set((state) => {
-          state.playback.status = 'paused'
-          state.playback.ownerId = MAIN_PLAYER_OWNER_ID
-        })
-
+        set({ library: { status: 'idle' } })
       } catch (error) {
         console.error(error)
-        // Reset loading state on error
-        set((state) => {
-          state.library.status = 'idle'
-          state.playback.status = state.playback.uri ? 'paused' : 'idle'
-        })
+        set({ library: { status: 'idle' } })
         throw error
       }
     }

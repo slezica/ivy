@@ -17,6 +17,7 @@ export interface AudioMetadata {
   title: string | null
   artist: string | null
   artwork: string | null  // base64 data URI
+  duration: number        // milliseconds
 }
 
 // =============================================================================
@@ -33,12 +34,14 @@ export class AudioMetadataService {
         title: metadata.title,
         artist: metadata.artist,
         hasArtwork: !!metadata.artwork,
+        duration: metadata.duration,
       })
 
       return {
         title: metadata.title || null,
         artist: metadata.artist || null,
         artwork: metadata.artwork || null,
+        duration: metadata.duration || 0,
       }
     } catch (error) {
       console.error('Failed to read metadata:', error)
@@ -46,6 +49,7 @@ export class AudioMetadataService {
         title: null,
         artist: null,
         artwork: null,
+        duration: 0,
       }
     }
   }
@@ -61,6 +65,7 @@ interface AudioMetadataModuleInterface {
     title?: string
     artist?: string
     artwork?: string
+    duration?: number
   }>
 }
 

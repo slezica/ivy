@@ -66,7 +66,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   // Slices ----------------------------------------------------------------------------------------
 
-  const librarySlice = createLibrarySlice({ db, files, picker, metadata, audio, queue })
+  const librarySlice = createLibrarySlice({ db, files, picker, metadata, queue })
   const playbackSlice = createPlaybackSlice({ audio, db })
   const clipSlice = createClipSlice({ db, slicer, queue, transcription, sharing })
   const syncSlice = createSyncSlice({ db, sync })

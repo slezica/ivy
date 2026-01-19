@@ -36,6 +36,11 @@ class AudioMetadataModule(reactContext: ReactApplicationContext) :
                 ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
             result.putString("artist", artist)
 
+            // Extract duration (in milliseconds)
+            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val duration = durationStr?.toLongOrNull() ?: 0L
+            result.putDouble("duration", duration.toDouble())
+
             // Extract artwork (embedded album art)
             val artworkBytes = retriever.embeddedPicture
             if (artworkBytes != null) {
