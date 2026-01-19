@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { Color } from '../../theme'
 
 interface HeaderProps {
@@ -6,11 +7,19 @@ interface HeaderProps {
   subtitle?: string
   children?: React.ReactNode
   noBorder?: boolean
+  icon?: keyof typeof Ionicons.glyphMap
+  onIconPress?: () => void
 }
 
-export default function Header({ title, subtitle, children, noBorder }: HeaderProps) {
+export default function Header({ title, subtitle, children, noBorder, icon, onIconPress }: HeaderProps) {
   return (
     <View style={[styles.container, noBorder && styles.noBorder]}>
+      {icon && (
+        <TouchableOpacity onPress={onIconPress} style={styles.iconButton}>
+          <Ionicons name={icon} size={24} color={Color.BLACK} />
+        </TouchableOpacity>
+      )}
+
       <View style={styles.titleArea}>
         <Text style={styles.title}>{title}</Text>
         {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
@@ -46,5 +55,9 @@ const styles = StyleSheet.create({
   },
   noBorder: {
     borderBottomWidth: 0,
+  },
+  iconButton: {
+    marginRight: 12,
+    marginLeft: -4,
   },
 })

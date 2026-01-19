@@ -1,12 +1,13 @@
 import { View, Text, StyleSheet, Switch, TouchableOpacity } from 'react-native'
 import { useCallback } from 'react'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import { Color } from '../theme'
 import { useStore } from '../store'
 
 export default function SettingsScreen() {
+  const router = useRouter()
   const { settings, updateSettings, sync, syncNow, refreshSyncStatus } = useStore()
 
   useFocusEffect(
@@ -19,7 +20,7 @@ export default function SettingsScreen() {
 
   return (
     <ScreenArea>
-      <Header title="Settings" />
+      <Header title="Settings" icon="chevron-back" onIconPress={() => router.back()} />
 
       <View style={styles.content}>
         <View style={styles.settingRow}>
