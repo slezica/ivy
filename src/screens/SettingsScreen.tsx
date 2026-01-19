@@ -18,6 +18,14 @@ export default function SettingsScreen() {
 
   const pendingLabel = sync.pendingCount === 1 ? '1 item pending' : `${sync.pendingCount} items pending`
 
+  function handleSyncToggle(enabled: boolean) {
+    updateSettings({ ...settings, sync_enabled: enabled })
+
+    if (enabled && sync.pendingCount > 0) {
+      syncNow()
+    }
+  }
+
   return (
     <ScreenArea>
       <Header title="Settings" icon="chevron-back" onIconPress={() => router.back()} />
@@ -28,7 +36,7 @@ export default function SettingsScreen() {
 
           <Switch
             value={settings.sync_enabled}
-            onValueChange={(value) => updateSettings({ ...settings, sync_enabled: value })}
+            onValueChange={handleSyncToggle}
             trackColor={{ false: Color.GRAY, true: Color.PRIMARY }}
             thumbColor={Color.BLACK}
           />
