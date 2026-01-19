@@ -21,6 +21,7 @@ import type { Settings } from '../services'
 import { createClipSlice } from './clips'
 import { createPlaybackSlice } from './playback'
 import { createLibrarySlice } from './library'
+import { createSyncSlice } from './sync'
 import type { AppState, PlaybackContext } from './types'
 
 const POSITION_SYNC_THROTTLE_MS = 30 * 1000  // Only queue position sync every 30s
@@ -165,52 +166,29 @@ export const useStore = create<AppState>((set, get) => {
     sharing: sharingService,
   })(set, get)
 
+  const syncSlice = createSyncSlice({
+    db: dbService,
+    sync: syncService,
+  })(set, get)
+
   return {
     // Initial state
-    sync: {
-      isSyncing: false,
-      pendingCount: syncService.getPendingCount(),
-      lastSyncTime: dbService.getLastSyncTime(),
-      error: null,
-    },
     settings: dbService.getSettings(),
 
     // Slices
     ...librarySlice,
     ...playbackSlice,
     ...clipSlice,
+    ...syncSlice,
 
     // Actions (below)
     updateSettings,
-    syncNow,
-    autoSync,
-    refreshSyncStatus,
     __DEV_resetApp
   }
 
   function updateSettings(settings: Settings) {
     dbService.setSettings(settings)
     set({ settings })
-  }
-
-  function refreshSyncStatus() {
-    set((state) => ({
-      sync: {
-        ...state.sync,
-        pendingCount: syncService.getPendingCount(),
-        lastSyncTime: dbService.getLastSyncTime(),
-      },
-    }))
-  }
-
-  function syncNow(): void {
-    syncService.syncNow()
-  }
-
-  async function autoSync(): Promise<void> {
-    const { settings } = get()
-    if (!settings.sync_enabled) return
-    await syncService.autoSync()
   }
 
   async function __DEV_resetApp() {

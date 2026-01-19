@@ -11,18 +11,12 @@ import type { ClipWithFile, Book, Settings } from '../services'
 // AppState - The Complete Store
 // =============================================================================
 
-export interface AppState extends LibrarySlice, PlaybackSlice, ClipSlice {
+export interface AppState extends LibrarySlice, PlaybackSlice, ClipSlice, SyncSlice {
   // State
-  sync: SyncState
   settings: Settings
 
   // Settings actions
   updateSettings: (settings: Settings) => void
-
-  // Sync actions
-  syncNow: () => void
-  autoSync: () => Promise<void>
-  refreshSyncStatus: () => void
 
   // Dev tools
   __DEV_resetApp: () => Promise<void>
@@ -61,6 +55,13 @@ export interface ClipSlice {
   updateClipTranscription: (id: string, transcription: string) => void
   deleteClip: (id: string) => Promise<void>
   shareClip: (clipId: string) => Promise<void>
+}
+
+export interface SyncSlice {
+  sync: SyncState
+  syncNow: () => void
+  autoSync: () => Promise<void>
+  refreshSyncStatus: () => void
 }
 
 // =============================================================================
