@@ -42,7 +42,7 @@ export default function TabsLayout() {
           tabBarIcon: ({ color }) => (
             <Ionicons name="play-circle" size={28} color={color} />
           ),
-          tabBarButton: (props) => (
+          tabBarButton: ({ ref, ...props }) => (
             <Pressable
               {...props}
               onPress={hasFile ? props.onPress : undefined}
