@@ -7,6 +7,7 @@ import type {
   Book,
 } from '../services'
 import type { LibrarySlice, SetState, GetState } from './types'
+import { generateId } from '../utils'
 
 
 export interface LibrarySliceDeps {
@@ -91,20 +92,20 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
 
     async function loadFile(pickedFile: { uri: string; name: string }): Promise<void> {
       try {
-        // Step 1: Copy file to app storage
+        // Step 1: Copy file to app storage (with temp filename)
         console.log('Copying file to app storage from:', pickedFile.uri)
         set({ library: { status: 'adding' } })
 
-        const localUri = await files.copyToAppStorage(pickedFile.uri, pickedFile.name)
-        console.log('File copied to:', localUri)
+        let tempUri = await files.copyToAppStorage(pickedFile.uri, pickedFile.name)
+        console.log('File copied to:', tempUri)
 
         // Step 2: Read metadata
-        console.log('Reading metadata from:', localUri)
-        const fileMeta = await metadata.readMetadata(localUri)
+        console.log('Reading metadata from:', tempUri)
+        const fileMeta = await metadata.readMetadata(tempUri)
         console.log('Metadata read:', fileMeta)
 
         // Step 3: Read file fingerprint
-        const { fileSize, fingerprint } = await files.readFileFingerprint(localUri)
+        const { fileSize, fingerprint } = await files.readFileFingerprint(tempUri)
         console.log('File fingerprint:', fileSize, 'bytes,', fingerprint.length, 'byte sample')
 
         // Step 4: Check for existing book with same fingerprint
@@ -113,16 +114,17 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
         const duration = fileMeta.duration
         console.log('Duration from metadata:', duration)
 
-        // Step 5: Determine which book record to use
+        // Step 5: Determine final book ID and rename file
         let book: Book
 
         if (existingBook) {
           if (existingBook.uri === null) {
             // Case A: Archived book - restore it with new file
             console.log('Restoring archived book:', existingBook.id)
+            const finalUri = await files.rename(tempUri, existingBook.id)
             book = db.restoreBook(
               existingBook.id,
-              localUri,
+              finalUri,
               pickedFile.name,
               duration,
               fileMeta.title,
@@ -132,17 +134,20 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
             queue.queueChange('book', book.id, 'upsert')
           } else {
             // Case B: Active book - delete duplicate file, use existing
-            console.log('File already exists in library, removing duplicate:', localUri)
-            await files.deleteFile(localUri)
+            console.log('File already exists in library, removing duplicate:', tempUri)
+            await files.deleteFile(tempUri)
             db.touchBook(existingBook.id)
             book = db.getBookById(existingBook.id)!
             queue.queueChange('book', book.id, 'upsert')
           }
         } else {
-          // Case C: New book - create record
-          console.log('Creating new book record')
+          // Case C: New book - generate ID, rename file, create record
+          const bookId = generateId()
+          console.log('Creating new book with ID:', bookId)
+          const finalUri = await files.rename(tempUri, bookId)
           book = db.upsertBook(
-            localUri,
+            bookId,
+            finalUri,
             pickedFile.name,
             duration,
             0,

@@ -36,8 +36,6 @@ export class FilePickerService {
       }
 
       const asset = result.assets[0]
-      console.log('Picker result:', { uri: asset.uri, name: asset.name, size: asset.size, mimeType: asset.mimeType })
-
       return {
         uri: asset.uri,
         name: asset.name,

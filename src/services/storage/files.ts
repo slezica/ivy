@@ -39,30 +39,9 @@ export class FileStorageService {
     const isLocalFile = externalUri.startsWith('file://') || externalUri.startsWith('/')
     if (isLocalFile) {
       const sourcePath = uriToPath(externalUri)
-
-      // Verify source exists before attempting move
-      const sourceExists = await RNFS.exists(sourcePath)
-      console.log('Source file check:', { sourcePath, exists: sourceExists })
-
-      if (!sourceExists) {
-        throw new Error(`Source file does not exist: ${sourcePath}`)
-      }
-
-      const stat = await RNFS.stat(sourcePath)
-      console.log('Source file stat:', { size: stat.size, isFile: stat.isFile() })
-
       await RNFS.moveFile(sourcePath, localPath)
     } else {
-      console.log('Copying from content URI:', externalUri)
       await RNFS.copyFile(externalUri, localPath)
-    }
-
-    // Verify destination exists after copy/move
-    const destExists = await RNFS.exists(localPath)
-    console.log('Destination file check:', { localPath, exists: destExists })
-
-    if (!destExists) {
-      throw new Error(`File copy/move failed: destination does not exist`)
     }
 
     return `file://${localPath}`
@@ -78,6 +57,20 @@ export class FileStorageService {
     } catch {
       return false
     }
+  }
+
+  /**
+   * Rename a file, keeping it in app storage.
+   * Returns the new file:// URI.
+   */
+  async rename(currentUri: string, newBasename: string): Promise<string> {
+    const currentPath = uriToPath(currentUri)
+    const extension = getExtension(currentPath)
+    const newPath = `${this.storagePath}/${newBasename}${extension}`
+
+    await RNFS.moveFile(currentPath, newPath)
+
+    return `file://${newPath}`
   }
 
   /**
@@ -134,6 +127,11 @@ export class FileStorageService {
 
 function uriToPath(uri: string): string {
   return uri.replace('file://', '')
+}
+
+function getExtension(path: string): string {
+  const dotIndex = path.lastIndexOf('.')
+  return dotIndex >= 0 ? path.substring(dotIndex) : ''
 }
 
 function createUniqueFilename(filename: string): string {

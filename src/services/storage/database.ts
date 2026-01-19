@@ -150,6 +150,7 @@ export class DatabaseService {
   }
 
   upsertBook(
+    id: string,
     uri: string,
     name: string,
     duration: number | null,
@@ -161,16 +162,15 @@ export class DatabaseService {
     fingerprint?: Uint8Array
   ): Book {
     const now = Date.now()
-    const existing = this.getBookByUri(uri)
+    const existing = this.getBookById(id)
 
     if (existing) {
       this.db.runSync(
-        'UPDATE files SET name = ?, duration = ?, position = ?, updated_at = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ? WHERE id = ?',
-        [name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null, existing.id]
+        'UPDATE files SET uri = ?, name = ?, duration = ?, position = ?, updated_at = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ? WHERE id = ?',
+        [uri, name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null, id]
       )
-      return this.getBookById(existing.id)!
+      return this.getBookById(id)!
     } else {
-      const id = generateId()
       this.db.runSync(
         'INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [id, uri, name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null]
