@@ -15,7 +15,7 @@ External content: URIs (like Google Drive) become invalid after app restart. **S
 Everything internal is **milliseconds**. Convert to MM:SS only at display boundaries.
 
 ### 3. **State Management**
-Single Zustand store is the source of truth. Services are stateless. Store is split into slices:
+Single Zustand store is the source of truth. Services are stateless. Store uses **immer middleware** for immutable updates via direct mutations. Store is split into slices:
 - `store/types.ts` - Central type definitions (read top-down to understand shape)
 - `store/library.ts` - Book management and file loading
 - `store/playback.ts` - Audio playback state and controls
@@ -23,6 +23,21 @@ Single Zustand store is the source of truth. Services are stateless. Store is sp
 - `store/sync.ts` - Cloud sync state and actions
 - `store/settings.ts` - App settings
 - `store/index.ts` - Service wiring and slice composition
+
+**Immer usage:** State updates use direct mutations on a draft (immer converts to immutable):
+```typescript
+// ✅ Correct - mutate draft directly
+set((state) => {
+  state.playback.status = 'playing'
+  state.clips[id].note = 'updated'
+  delete state.clips[id]
+})
+
+// ❌ Avoid - spread patterns are verbose and error-prone
+set((state) => ({
+  playback: { ...state.playback, status: 'playing' }
+}))
+```
 
 ### 4. **Library Status Enum**
 `'loading'` → `'idle'` ⇄ `'adding'`
@@ -122,7 +137,7 @@ await archiveBook(bookId)
 
 **Tech Stack:**
 - React Native 0.81.5 + Expo 54
-- Zustand for state
+- Zustand + immer for state
 - Expo Router (file-based tabs)
 - react-native-track-player v5 (playback + system media controls)
 - SQLite (expo-sqlite)
