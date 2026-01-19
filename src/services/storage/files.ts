@@ -26,6 +26,7 @@ export class FileStorageService {
 
   /**
    * Copy a file from external URI to app storage.
+   * If source is a local file (e.g., from cache), moves it instead of copying.
    * Returns the local file:// URI.
    */
   async copyToAppStorage(externalUri: string, filename: string): Promise<string> {
@@ -34,7 +35,35 @@ export class FileStorageService {
     const uniqueFilename = createUniqueFilename(filename)
     const localPath = `${this.storagePath}/${uniqueFilename}`
 
-    await RNFS.copyFile(externalUri, localPath)
+    // If source is already a local file, move instead of copy to save disk space
+    const isLocalFile = externalUri.startsWith('file://') || externalUri.startsWith('/')
+    if (isLocalFile) {
+      const sourcePath = uriToPath(externalUri)
+
+      // Verify source exists before attempting move
+      const sourceExists = await RNFS.exists(sourcePath)
+      console.log('Source file check:', { sourcePath, exists: sourceExists })
+
+      if (!sourceExists) {
+        throw new Error(`Source file does not exist: ${sourcePath}`)
+      }
+
+      const stat = await RNFS.stat(sourcePath)
+      console.log('Source file stat:', { size: stat.size, isFile: stat.isFile() })
+
+      await RNFS.moveFile(sourcePath, localPath)
+    } else {
+      console.log('Copying from content URI:', externalUri)
+      await RNFS.copyFile(externalUri, localPath)
+    }
+
+    // Verify destination exists after copy/move
+    const destExists = await RNFS.exists(localPath)
+    console.log('Destination file check:', { localPath, exists: destExists })
+
+    if (!destExists) {
+      throw new Error(`File copy/move failed: destination does not exist`)
+    }
 
     return `file://${localPath}`
   }
@@ -108,7 +137,9 @@ function uriToPath(uri: string): string {
 }
 
 function createUniqueFilename(filename: string): string {
-  const sanitized = filename.replace(/[/\\]/g, '_')
+  // Remove characters that cause issues with Android MediaMetadataRetriever
+  // Colons, brackets, and other special chars break setDataSource()
+  const sanitized = filename.replace(/[/\\:*?"<>|[\]]/g, '_')
   const timestamp = Date.now()
   const dotIndex = sanitized.lastIndexOf('.')
   const nameWithoutExt = sanitized.substring(0, dotIndex)
