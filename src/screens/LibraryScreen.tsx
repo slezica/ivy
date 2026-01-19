@@ -18,13 +18,13 @@ import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import { Color } from '../theme'
 import type { Book } from '../services'
-import { formatTime, formatDate } from '../utils'
+import { formatTime, formatDate, MAIN_PLAYER_OWNER_ID } from '../utils'
 
 const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, loadFileWithUri, books, archiveBook, sync, autoSync } = useStore()
+  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, sync, autoSync } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -76,8 +76,7 @@ export default function LibraryScreen() {
     }
 
     try {
-      await loadFileWithUri(book.uri, book.name)
-      // Navigate to player tab
+      await play({ fileUri: book.uri, position: book.position, ownerId: MAIN_PLAYER_OWNER_ID })
       router.push('/player')
     } catch (error) {
       console.error('Error loading book:', error)
