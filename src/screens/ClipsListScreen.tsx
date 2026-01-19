@@ -32,7 +32,7 @@ import { formatTime } from '../utils'
 
 export default function ClipsListScreen() {
   const router = useRouter()
-  const { clips, jumpToClip, deleteClip, updateClip, shareClip, fetchClips } = useStore()
+  const { clips, seekClip, deleteClip, updateClip, shareClip, fetchClips } = useStore()
   const [viewingClipId, setViewingClipId] = useState<string | null>(null)
   const [editingClipId, setEditingClipId] = useState<string | null>(null)
   const [menuClipId, setMenuClipId] = useState<string | null>(null)
@@ -51,7 +51,7 @@ export default function ClipsListScreen() {
   const handleJumpToClip = async (clipId: string) => {
     router.replace('/player')
     try {
-      await jumpToClip(clipId)
+      await seekClip(clipId)
     } catch (error) {
       console.error('Error jumping to clip:', error)
       Alert.alert('Error', 'Failed to jump to clip')

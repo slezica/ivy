@@ -23,7 +23,7 @@ interface ClipEditorProps {
 }
 
 export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) {
-  const { audio, play, pause, seek } = useStore()
+  const { playback, play, pause, seek } = useStore()
 
   // ClipEditor requires source file to exist (editing disabled otherwise)
   const fileUri = clip.file_uri!
@@ -38,18 +38,18 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   // Stable owner ID for this instance
   const ownerId = useRef(`clip-editor-${clip.id}`).current
 
-  // Check ownership and file state from global audio
-  const isFileLoaded = audio.uri === fileUri
-  const isOwner = audio.ownerId === ownerId
-  const isPlaying = isOwner && audio.status === 'playing'
-  const isLoading = isOwner && audio.status === 'loading'
+  // Check ownership and file state from global playback
+  const isFileLoaded = playback.uri === fileUri
+  const isOwner = playback.ownerId === ownerId
+  const isPlaying = isOwner && playback.status === 'playing'
+  const isLoading = isOwner && playback.status === 'loading'
 
-  // Sync position from audio when we own playback
+  // Sync position from playback when we own playback
   useEffect(() => {
     if (isOwner && isFileLoaded) {
-      setOwnPosition(audio.position)
+      setOwnPosition(playback.position)
     }
-  }, [isOwner, isFileLoaded, audio.position])
+  }, [isOwner, isFileLoaded, playback.position])
 
   const handleSelectionChange = (start: number, end: number) => {
     setSelectionStart(start)
@@ -60,7 +60,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
     // Always update local position
     setOwnPosition(pos)
 
-    // Only affect audio if we're the owner and file is loaded
+    // Only affect playback if we're the owner and file is loaded
     if (isOwner && isFileLoaded) {
       await seek({ fileUri, position: pos })
     }

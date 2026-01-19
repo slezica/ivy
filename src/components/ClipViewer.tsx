@@ -23,7 +23,7 @@ interface ClipViewerProps {
 }
 
 export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
-  const { audio, play, pause, seek } = useStore()
+  const { playback, play, pause, seek } = useStore()
 
   // Determine playback source: use source file if available, otherwise clip's own file
   const hasSourceFile = clip.file_uri !== null
@@ -37,18 +37,18 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   // Stable owner ID for this instance
   const ownerId = useRef(`clip-viewer-${clip.id}`).current
 
-  // Check ownership and file state from global audio
-  const isFileLoaded = audio.uri === playbackUri
-  const isOwner = audio.ownerId === ownerId
-  const isPlaying = isOwner && audio.status === 'playing'
-  const isLoading = isOwner && audio.status === 'loading'
+  // Check ownership and file state from global playback
+  const isFileLoaded = playback.uri === playbackUri
+  const isOwner = playback.ownerId === ownerId
+  const isPlaying = isOwner && playback.status === 'playing'
+  const isLoading = isOwner && playback.status === 'loading'
 
-  // Sync position from audio when we own playback
+  // Sync position from playback when we own playback
   useEffect(() => {
     if (isOwner && isFileLoaded) {
-      setOwnPosition(audio.position)
+      setOwnPosition(playback.position)
     }
-  }, [isOwner, isFileLoaded, audio.position])
+  }, [isOwner, isFileLoaded, playback.position])
 
   const handlePlayPause = async () => {
     try {
@@ -67,7 +67,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
     // Always update local position
     setOwnPosition(position)
 
-    // Only affect audio if we're the owner and file is loaded
+    // Only affect playback if we're the owner and file is loaded
     if (isOwner && isFileLoaded) {
       seek({ fileUri: playbackUri, position })
     }

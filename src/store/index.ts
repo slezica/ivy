@@ -21,10 +21,9 @@ import {
 import type { PickedFile, Book, Settings } from '../services'
 import { MAIN_PLAYER_OWNER_ID, generateId } from '../utils'
 import { createClipSlice } from './clips'
+import { createPlaybackSlice } from './playback'
 import type { AppState, PlaybackContext } from './types'
 
-const SKIP_FORWARD_MS = 25 * 1000
-const SKIP_BACKWARD_MS = 30 * 1000
 const POSITION_SYNC_THROTTLE_MS = 30 * 1000  // Only queue position sync every 30s
 
 
@@ -112,11 +111,11 @@ export const useStore = create<AppState>((set, get) => {
   const audioService = new AudioPlayerService({
     onPlaybackStatusChange: (status) => {
       set((state) => ({
-        audio: {
-          ...state.audio,
+        playback: {
+          ...state.playback,
           // Only update status if not currently in a transitional state
-          status: state.audio.status === 'loading'
-            ? state.audio.status
+          status: state.playback.status === 'loading'
+            ? state.playback.status
             : status.status,
           position: status.position,
         },
@@ -124,9 +123,9 @@ export const useStore = create<AppState>((set, get) => {
 
       // Update book position in database
       // Only if we have a file loaded and valid position
-      const { audio, books } = get()
-      if (audio.uri && status.position >= 0 && status.duration > 0) {
-        const book = Object.values(books).find(b => b.uri === audio.uri)
+      const { playback, books } = get()
+      if (playback.uri && status.position >= 0 && status.duration > 0) {
+        const book = Object.values(books).find(b => b.uri === playback.uri)
         if (book) {
           dbService.updateBookPosition(book.id, status.position)
 
@@ -145,6 +144,11 @@ export const useStore = create<AppState>((set, get) => {
   // Slices
   // ---------------------------------------------------------------------------
 
+  const playbackSlice = createPlaybackSlice({
+    audio: audioService,
+    db: dbService,
+  })(set, get)
+
   const clipSlice = createClipSlice({
     db: dbService,
     slicer: slicerService,
@@ -158,13 +162,6 @@ export const useStore = create<AppState>((set, get) => {
     library: {
       status: 'loading',
     },
-    audio: {
-      status: 'idle',
-      position: 0,
-      uri: null,
-      duration: 0,
-      ownerId: null,
-    },
     sync: {
       isSyncing: false,
       pendingCount: syncService.getPendingCount(),
@@ -175,6 +172,7 @@ export const useStore = create<AppState>((set, get) => {
     settings: dbService.getSettings(),
 
     // Slices
+    ...playbackSlice,
     ...clipSlice,
 
     // Actions (below)
@@ -183,12 +181,6 @@ export const useStore = create<AppState>((set, get) => {
     loadFileWithUri,
     fetchBooks,
     archiveBook,
-    play,
-    pause,
-    seek,
-    skipForward,
-    skipBackward,
-    syncPlaybackState,
     updateSettings,
     syncNow,
     autoSync,
@@ -291,7 +283,7 @@ export const useStore = create<AppState>((set, get) => {
       // Step 5: Load audio from local URI
       set((state) => ({
         library: { status: 'idle' },
-        audio: { ...state.audio, status: 'loading' },
+        playback: { ...state.playback, status: 'loading' },
       }))
 
       console.log('Loading audio from:', localUri)
@@ -357,8 +349,8 @@ export const useStore = create<AppState>((set, get) => {
 
       // Update state (keep status as 'loading' until play starts)
       set((state) => ({
-        audio: {
-          ...state.audio,
+        playback: {
+          ...state.playback,
           position: book.position,
           uri: book.uri!,
           duration: duration,
@@ -382,148 +374,10 @@ export const useStore = create<AppState>((set, get) => {
       // Reset loading state on error
       set((state) => ({
         library: { status: 'idle' },
-        audio: { ...state.audio, status: state.audio.uri ? 'paused' : 'idle' },
+        playback: { ...state.playback, status: state.playback.uri ? 'paused' : 'idle' },
       }))
       throw error
     }
-  }
-
-  async function play(context?: PlaybackContext) {
-    try {
-      // If context provided, may need to load file and seek first
-      if (context) {
-        const { audio } = get()
-        const isFileSame = audio.uri === context.fileUri
-
-        if (!isFileSame) {
-          // Need to load a different file (could be book or clip audio)
-          const bookRecord = dbService.getBookByAnyUri(context.fileUri)
-          if (!bookRecord) {
-            throw new Error(`No book or clip found for: ${context.fileUri}`)
-          }
-
-          set((state) => ({
-            audio: {
-              ...state.audio,
-              status: 'loading',
-              ...(context.ownerId !== undefined && { ownerId: context.ownerId }),
-            },
-          }))
-
-          const duration = await audioService.load(context.fileUri, {
-            title: bookRecord.title,
-            artist: bookRecord.artist,
-            artwork: bookRecord.artwork,
-          })
-
-          set((state) => ({
-            audio: {
-              ...state.audio,
-              uri: context.fileUri,
-              duration: duration,
-              position: context.position,
-            },
-          }))
-
-          await audioService.seek(context.position)
-        } else if (audio.position !== context.position) {
-          // Same file, different position - just seek
-          await audioService.seek(context.position)
-          set((state) => ({
-            audio: { ...state.audio, position: context.position },
-          }))
-        }
-
-        // Set status to playing, and owner if provided
-        set((state) => ({
-          audio: {
-            ...state.audio,
-            status: 'playing',
-            ...(context.ownerId !== undefined && { ownerId: context.ownerId }),
-          },
-        }))
-      } else {
-        // No context - just resume, keep existing owner
-        set((state) => ({
-          audio: { ...state.audio, status: 'playing' },
-        }))
-      }
-
-      await audioService.play()
-    } catch (error) {
-      console.error('Error playing audio:', error)
-      set((state) => ({
-        audio: { ...state.audio, status: state.audio.uri ? 'paused' : 'idle' },
-      }))
-      throw error
-    }
-  }
-
-  async function pause() {
-    set((state) => ({
-      audio: { ...state.audio, status: 'paused' },
-    }))
-
-    try {
-      await audioService.pause()
-    } catch (error) {
-      console.error('Error pausing audio:', error)
-      throw error
-    }
-  }
-
-  async function seek(context: PlaybackContext) {
-    const { audio } = get()
-
-    // Only seek if the requested file is currently loaded
-    if (audio.uri !== context.fileUri) {
-      console.log('Seek ignored: file not loaded', context.fileUri)
-      return
-    }
-
-    set((state) => ({
-      audio: { ...state.audio, position: context.position },
-    }))
-
-    try {
-      await audioService.seek(context.position)
-    } catch (error) {
-      console.error('Error seeking:', error)
-      throw error
-    }
-  }
-
-  async function skipForward() {
-    try {
-      await audioService.skip(SKIP_FORWARD_MS)
-    } catch (error) {
-      console.error('Error skipping forward:', error)
-      throw error
-    }
-  }
-
-  async function skipBackward() {
-    try {
-      await audioService.skip(-SKIP_BACKWARD_MS)
-    } catch (error) {
-      console.error('Error skipping backward:', error)
-      throw error
-    }
-  }
-
-  async function syncPlaybackState() {
-    const status = await audioService.getStatus()
-    if (!status) return
-
-    set((state) => ({
-      audio: {
-        ...state.audio,
-        status: state.audio.status === 'loading'
-          ? state.audio.status
-          : status.status,
-        position: status.position,
-      },
-    }))
   }
 
   function updateSettings(settings: Settings) {
@@ -563,7 +417,7 @@ export const useStore = create<AppState>((set, get) => {
       library: {
         status: 'idle',
       },
-      audio: {
+      playback: {
         status: 'idle',
         position: 0,
         uri: null,

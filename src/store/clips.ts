@@ -217,19 +217,6 @@ export function createClipSlice(deps: ClipSliceDeps) {
       })
     }
 
-    async function jumpToClip(clipId: string): Promise<void> {
-      const clip = get().clips[clipId]
-      if (!clip) {
-        throw new Error('Clip not found')
-      }
-      if (!clip.file_uri) {
-        throw new Error('Cannot jump to clip: source file has been removed')
-      }
-
-      // Jump to clip includes loading the file if different
-      await get().play({ fileUri: clip.file_uri, position: clip.start })
-    }
-
     async function shareClip(clipId: string): Promise<void> {
       const { clips } = get()
       const clip = clips[clipId]
@@ -256,7 +243,6 @@ export function createClipSlice(deps: ClipSliceDeps) {
       updateClip,
       updateClipTranscription,
       deleteClip,
-      jumpToClip,
       shareClip,
     }
   }

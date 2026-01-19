@@ -11,10 +11,9 @@ import type { ClipWithFile, Book, Settings } from '../services'
 // AppState - The Complete Store
 // =============================================================================
 
-export interface AppState extends ClipSlice {
+export interface AppState extends ClipSlice, PlaybackSlice {
   // State
   library: LibraryState
-  audio: AudioState
   sync: SyncState
   books: Record<string, Book>
   settings: Settings
@@ -25,14 +24,6 @@ export interface AppState extends ClipSlice {
   loadFileWithPicker: () => Promise<void>
   fetchBooks: () => void
   archiveBook: (bookId: string) => Promise<void>
-
-  // Playback actions
-  play: (context?: PlaybackContext) => Promise<void>
-  pause: () => Promise<void>
-  seek: (context: PlaybackContext) => Promise<void>
-  skipForward: () => Promise<void>
-  skipBackward: () => Promise<void>
-  syncPlaybackState: () => Promise<void>
 
   // Settings actions
   updateSettings: (settings: Settings) => void
@@ -50,6 +41,17 @@ export interface AppState extends ClipSlice {
 // Slices
 // =============================================================================
 
+export interface PlaybackSlice {
+  playback: PlaybackState
+  play: (context?: PlaybackContext) => Promise<void>
+  pause: () => Promise<void>
+  seek: (context: PlaybackContext) => Promise<void>
+  seekClip: (clipId: string) => Promise<void>
+  skipForward: () => Promise<void>
+  skipBackward: () => Promise<void>
+  syncPlaybackState: () => Promise<void>
+}
+
 export interface ClipSlice {
   clips: Record<string, ClipWithFile>
   fetchClips: () => void
@@ -57,7 +59,6 @@ export interface ClipSlice {
   updateClip: (id: string, updates: { note?: string; start?: number; duration?: number }) => Promise<void>
   updateClipTranscription: (id: string, transcription: string) => void
   deleteClip: (id: string) => Promise<void>
-  jumpToClip: (clipId: string) => Promise<void>
   shareClip: (clipId: string) => Promise<void>
 }
 
@@ -71,15 +72,15 @@ export interface LibraryState {
 
 export type LibraryStatus = 'loading' | 'idle' | 'adding'
 
-export interface AudioState {
-  status: AudioStatus
+export interface PlaybackState {
+  status: PlaybackStatus
   position: number
   uri: string | null       // URI currently loaded in player
   duration: number         // Duration of loaded audio
   ownerId: string | null   // ID of component that last took control
 }
 
-export type AudioStatus = 'idle' | 'loading' | 'paused' | 'playing'
+export type PlaybackStatus = 'idle' | 'loading' | 'paused' | 'playing'
 
 export interface SyncState {
   isSyncing: boolean

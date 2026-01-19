@@ -12,34 +12,34 @@ import { MAIN_PLAYER_OWNER_ID } from '../utils'
 import type { Book } from '../services'
 
 export default function PlayerScreen() {
-  const { audio, books, addClip, play, pause, seek, syncPlaybackState } = useStore()
+  const { playback, books, addClip, play, pause, seek, syncPlaybackState } = useStore()
 
   // Local state - what the main player "remembers"
   const [ownBook, setOwnBook] = useState<Book | null>(null)
   const [ownPosition, setOwnPosition] = useState(0)
 
   // Ownership check
-  const isOwner = audio.ownerId === MAIN_PLAYER_OWNER_ID
-  const isFileLoaded = audio.uri === ownBook?.uri
+  const isOwner = playback.ownerId === MAIN_PLAYER_OWNER_ID
+  const isFileLoaded = playback.uri === ownBook?.uri
 
-  // Adopt book when audio targets the main player
+  // Adopt book when playback targets the main player
   useEffect(() => {
-    if (isOwner && audio.uri && audio.uri !== ownBook?.uri) {
+    if (isOwner && playback.uri && playback.uri !== ownBook?.uri) {
       // Look up full book record from books map
-      const book = Object.values(books).find(b => b.uri === audio.uri)
+      const book = Object.values(books).find(b => b.uri === playback.uri)
       if (book) {
         setOwnBook(book)
-        setOwnPosition(audio.position)
+        setOwnPosition(playback.position)
       }
     }
-  }, [isOwner, audio.uri, audio.position, ownBook?.uri, books])
+  }, [isOwner, playback.uri, playback.position, ownBook?.uri, books])
 
-  // Sync position from audio when we own playback
+  // Sync position from playback when we own playback
   useEffect(() => {
     if (isOwner && isFileLoaded) {
-      setOwnPosition(audio.position)
+      setOwnPosition(playback.position)
     }
-  }, [isOwner, isFileLoaded, audio.position])
+  }, [isOwner, isFileLoaded, playback.position])
 
   // Sync position immediately when screen comes into focus
   useFocusEffect(
@@ -63,7 +63,7 @@ export default function PlayerScreen() {
     if (!ownBook?.uri) return
 
     try {
-      if (isOwner && audio.status === 'playing') {
+      if (isOwner && playback.status === 'playing') {
         await pause()
       } else {
         // Claim ownership and play from our remembered position
@@ -83,14 +83,14 @@ export default function PlayerScreen() {
     // Always update local position
     setOwnPosition(position)
 
-    // Only affect audio if we're the owner and file is loaded
+    // Only affect playback if we're the owner and file is loaded
     if (isOwner && isFileLoaded && ownBook?.uri) {
       seek({ fileUri: ownBook.uri, position })
     }
   }, [isOwner, isFileLoaded, ownBook, seek])
 
   // Show play button unless we're owner AND playing
-  const isPlaying = isOwner && audio.status === 'playing'
+  const isPlaying = isOwner && playback.status === 'playing'
 
   return (
     <ScreenArea>
