@@ -154,7 +154,8 @@ await archiveBook(bookId)
   ├── screens/
   │   ├── LibraryScreen.tsx       # Book list (active + archived sections) with archive action
   │   ├── PlayerScreen.tsx        # Main player
-  │   └── ClipsListScreen.tsx     # Clip management
+  │   ├── ClipsListScreen.tsx     # Clip management
+  │   └── SettingsScreen.tsx      # App settings (sync toggle, etc.)
   ├── components/
   │   ├── ClipViewer.tsx          # Clip playback (own position state, timeline, transcription)
   │   ├── ClipEditor.tsx          # Clip editing (own position state, selection timeline, note)
@@ -179,6 +180,7 @@ await archiveBook(bookId)
 /app
   ├── _layout.tsx                 # Root (includes LoadingModal)
   ├── +not-found.tsx              # Catch-all redirect (handles notification clicks)
+  ├── settings.tsx                # Settings screen route
   └── (tabs)/
       ├── _layout.tsx             # Tab nav (disables tabs when no file)
       ├── index.tsx               # Library
@@ -261,6 +263,12 @@ key TEXT PRIMARY KEY           -- 'lastSyncTime', 'deviceId'
 value TEXT NOT NULL
 ```
 
+**settings table** (single-row app settings):
+```sql
+id INTEGER PRIMARY KEY CHECK (id = 1)  -- Enforces single row
+sync_enabled INTEGER NOT NULL DEFAULT 0
+```
+
 ## Store State Structure
 
 ```typescript
@@ -274,6 +282,14 @@ audio: {
   duration: number              // Duration of loaded audio (hardware state)
   ownerId: string | null        // ID of component controlling playback
 }
+sync: {
+  isSyncing: boolean            // Sync in progress
+  pendingCount: number          // Items waiting to sync
+  error: string | null          // Last sync error (null if successful)
+}
+settings: {
+  sync_enabled: boolean         // Auto-sync on foreground
+}
 clips: Record<string, ClipWithFile>  // Keyed by clip id (UUID)
 books: Record<string, Book>          // Keyed by book id (UUID)
 
@@ -283,6 +299,10 @@ fetchBooks, archiveBook
 addClip(bookId, position), deleteClip, jumpToClip, shareClip
 updateClip(id, { note?, start?, duration? })  // Edit clip bounds and note (requires source file)
 updateClipTranscription         // Called by TranscriptionService
+updateSettings(settings)        // Save settings to store and database
+syncNow()                       // Fire-and-forget manual sync
+autoSync()                      // Silent sync (only if enabled and authenticated)
+refreshSyncStatus()             // Update pending count from service
 __DEV_resetApp                  // Dev tool (clears all data)
 
 // Context-based playback API
@@ -319,15 +339,18 @@ pause()                                          // Pauses, preserves ownership
 
 ## Development Tools
 
-Library screen header has dev-only buttons (top-right):
+Library screen header has a triple-dot menu (top-right) with:
+- **Settings** - Opens settings screen (always visible)
+- **Load Sample** - Loads bundled test file (dev only)
+- **Reset App** - Clears all data (dev only)
 
-### Sample Button
+### Sample (dev only)
 - Loads bundled test audio file (`assets/test/test-audio.mp3`)
 - Useful for quick testing without file picker
 - Navigates to Player tab after loading
 
-### Reset Button
-- Clears database (files, clips, sessions)
+### Reset (dev only)
+- Clears database (files, clips, sessions, settings)
 - Unloads audio player
 - Resets store state
 - **Note:** Doesn't delete copied files from storage (orphaned)
@@ -578,10 +601,36 @@ Edit from other device
 
 ### Auto-Sync
 
-App auto-syncs when returning to foreground:
-- Must be authenticated
+App auto-syncs when returning to foreground (if `settings.sync_enabled`):
+- Must have sync enabled in settings
+- Must be authenticated (no sign-in prompt for auto-sync)
 - At least 5 minutes since last sync
 - Silent unless conflicts/errors occur
+
+### Sync Service API
+
+The sync service uses callbacks to notify the store of status changes:
+
+```typescript
+// Service setup (in store initialization)
+backupSyncService.setListeners({
+  onStatusChange: (status) => set({ sync: status }),
+  onDataChange: (notification) => {
+    if (notification.booksChanged.length > 0) fetchBooks()
+    if (notification.clipsChanged.length > 0) fetchAllClips()
+  },
+})
+
+// Service methods
+backupSyncService.syncNow()         // Manual sync with auth prompts
+backupSyncService.autoSync()        // Silent sync (only if authenticated)
+backupSyncService.getPendingCount() // Get queue count
+```
+
+The store exposes thin wrappers that components call:
+- `syncNow()` - Fire-and-forget, status updates via `sync` state
+- `autoSync()` - Only runs if `settings.sync_enabled`
+- `refreshSyncStatus()` - Updates `sync.pendingCount`
 
 ### Edge Case: Delete vs Modify
 
@@ -606,7 +655,7 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 **Key Points:**
 - Native library handles token refresh automatically
 - Public Drive folder (visible to user in their Drive)
-- "Sync" button in Library header shows pending count badge
+- Sync UI in Settings screen (toggle + "Sync now" link + status)
 - Both Android + Web OAuth clients required
 
 **Documentation:** See `docs/sync_system.md` for full educational walkthrough.
@@ -650,6 +699,7 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 - Look up `Book` metadata from `books` map using URI when needed (audio state only has uri/duration)
 - Queue changes via `offlineQueueService.queueChange()` when modifying synced entities
 - Use manifest comparison for sync change detection (not just timestamp comparison)
+- Use service callbacks for sync status (store doesn't orchestrate auth)
 
 ❌ **Don't:**
 - Use external content: URIs for audio playback
@@ -668,9 +718,10 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 
 **Start dev server:** `npm start`
 **Run e2e tests:** `maestro test maestro/`
-**Load test file:** Tap "Sample" button in Library
-**Reset app data:** Tap "Reset" button in Library
-**Sync to Drive:** Tap "Sync" button in Library (badge shows pending changes count)
+**Load test file:** Library menu → Load Sample (dev only)
+**Reset app data:** Library menu → Reset App (dev only)
+**Settings:** Library menu → Settings
+**Sync to Drive:** Settings → Sync now (or enable auto-sync toggle)
 **Time format:** Always milliseconds internally
 **ID format:** UUIDs (string) for all entities - use `generateId()` from utils
 **Book playback:** Use `book.uri` (local path) - check for null first (null = archived)
