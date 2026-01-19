@@ -203,6 +203,7 @@ await archiveBook(bookId)
   │       ├── Modal.tsx           # Reusable modal (overlay tap to close)
   │       ├── ScreenArea.tsx      # Safe area wrapper (react-native-safe-area-context)
   │       ├── Header.tsx          # Reusable header (title, subtitle, noBorder)
+  │       ├── InputHeader.tsx     # Search header (text input, close button)
   │       ├── EmptyState.tsx      # Empty state display
   │       ├── IconButton.tsx      # Circular icon button
   │       └── ActionMenu.tsx      # Overflow menu (3-dot)
@@ -374,15 +375,14 @@ pause()                                          // Pauses, preserves ownership
 
 ## Development Tools
 
-Library screen header has a triple-dot menu (top-right) with:
-- **Settings** - Opens settings screen (always visible)
-- **Load Sample** - Loads bundled test file (dev only)
-- **Reset App** - Clears all data (dev only)
+Settings screen has a "Developer" section (dev builds only) with:
+- **Load Sample** - Loads bundled test file
+- **Reset App** - Clears all data
 
 ### Sample (dev only)
 - Loads bundled test audio file (`assets/test/test-audio.mp3`)
 - Useful for quick testing without file picker
-- Adds to library without auto-play
+- Navigates to player after loading
 
 ### Reset (dev only)
 - Clears database (files, clips, sessions, settings)
@@ -450,6 +450,7 @@ Tests are colocated in `__tests__/` directories next to the code they test.
 
 - **ScreenArea** - Wraps screens with safe area insets (uses `react-native-safe-area-context`, NOT deprecated RN `SafeAreaView`)
 - **Header** - Standard screen header with `title`, `subtitle`, optional `children`, and `noBorder` prop
+- **InputHeader** - Search mode header with auto-focused text input and close button
 - **EmptyState** - Centered empty state display with `title` and `subtitle`
 - **ActionMenu** - Bottom sheet action menu (3-dot overflow pattern) with `ActionMenuItem[]`
 
@@ -764,9 +765,9 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 
 **Start dev server:** `npm start`
 **Run e2e tests:** `maestro test maestro/`
-**Load test file:** Library menu → Load Sample (dev only)
-**Reset app data:** Library menu → Reset App (dev only)
-**Settings:** Library menu → Settings
+**Load test file:** Settings → Developer → Load Sample (dev only)
+**Reset app data:** Settings → Developer → Reset App (dev only)
+**Settings:** Library header → gear icon
 **Sync to Drive:** Settings → Sync now (or enable auto-sync toggle)
 **Time format:** Always milliseconds internally
 **ID format:** UUIDs (string) for all entities - use `generateId()` from utils
