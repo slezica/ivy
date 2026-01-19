@@ -15,7 +15,14 @@ External content: URIs (like Google Drive) become invalid after app restart. **S
 Everything internal is **milliseconds**. Convert to MM:SS only at display boundaries.
 
 ### 3. **State Management**
-Single Zustand store (`src/store/index.ts`) is the source of truth. Services are stateless.
+Single Zustand store is the source of truth. Services are stateless. Store is split into slices:
+- `store/types.ts` - Central type definitions (read top-down to understand shape)
+- `store/library.ts` - Book management and file loading
+- `store/playback.ts` - Audio playback state and controls
+- `store/clips.ts` - Clip CRUD operations
+- `store/sync.ts` - Cloud sync state and actions
+- `store/settings.ts` - App settings
+- `store/index.ts` - Service wiring and slice composition
 
 ### 4. **Library Status Enum**
 `'loading'` → `'idle'` ⇄ `'adding'`
@@ -23,7 +30,7 @@ Single Zustand store (`src/store/index.ts`) is the source of truth. Services are
 - `idle`: Library ready
 - `adding`: Copying a new file to app storage
 
-### 5. **Audio Status Enum**
+### 5. **Playback Status Enum**
 `'idle'` → `'loading'` → `'paused'` ⇄ `'playing'`
 - `idle`: No track loaded (initial state)
 - `loading`: Loading audio player
@@ -33,10 +40,10 @@ Event callback preserves transitional state (`loading`) - only updates to `pause
 
 ### 6. **Playback Ownership** 🔥 IMPORTANT
 Multiple UI components can control playback (PlayerScreen, ClipViewer, ClipEditor). To prevent conflicts:
-- `audio.ownerId` tracks which component last took control
+- `playback.ownerId` tracks which component last took control
 - Components pass `ownerId` when calling `play()` to claim ownership
 - Ownership persists until another component calls `play()` with different `ownerId`
-- Components check `audio.ownerId === myId` to know if they're in control
+- Components check `playback.ownerId === myId` to know if they're in control
 
 **Main Player ID:** `MAIN_PLAYER_OWNER_ID = 'main'` (exported from `utils/index.ts`)
 - Well-known ID for the main player tab
@@ -45,14 +52,14 @@ Multiple UI components can control playback (PlayerScreen, ClipViewer, ClipEdito
 
 ```typescript
 // Main player checks for its well-known ID
-const isOwner = audio.ownerId === MAIN_PLAYER_OWNER_ID
+const isOwner = playback.ownerId === MAIN_PLAYER_OWNER_ID
 
 // Other components generate stable IDs
 const ownerId = useRef('clip-editor-123').current
-const isOwner = audio.ownerId === ownerId
+const isOwner = playback.ownerId === ownerId
 
 // Check ownership
-const isPlaying = isOwner && audio.status === 'playing'
+const isPlaying = isOwner && playback.status === 'playing'
 
 // Claim ownership when playing
 await play({ fileUri, position, ownerId })
@@ -61,7 +68,7 @@ await play({ fileUri, position, ownerId })
 **Local state pattern:** Each player maintains its own local state:
 - `ownPosition`: the position this player remembers (all players)
 - `ownBook`: the book this player is showing (PlayerScreen only - clips know their source)
-- When owner: sync `ownPosition` from `audio.position` via effect
+- When owner: sync `ownPosition` from `playback.position` via effect
 - When not owner: keep local position (allows seeking without affecting playback)
 - On play: claim ownership with `ownPosition`
 - On seek: always update `ownPosition`, only call `seek()` if owner
@@ -129,7 +136,14 @@ await archiveBook(bookId)
 
 ```
 /src
-  ├── store/index.ts              # Zustand store - all state
+  ├── store/
+  │   ├── index.ts                # Service wiring & slice composition
+  │   ├── types.ts                # Central type definitions (AppState, slices)
+  │   ├── library.ts              # Library slice (books, file loading)
+  │   ├── playback.ts             # Playback slice (audio controls)
+  │   ├── clips.ts                # Clips slice (clip CRUD)
+  │   ├── sync.ts                 # Sync slice (cloud backup)
+  │   └── settings.ts             # Settings slice
   ├── services/
   │   ├── index.ts                # Barrel exports
   │   ├── audio/
@@ -271,39 +285,40 @@ sync_enabled INTEGER NOT NULL DEFAULT 0
 
 ## Store State Structure
 
+Store is composed of slices. See `store/types.ts` for authoritative type definitions.
+
 ```typescript
-library: {
-  status: 'loading' | 'idle' | 'adding'
-}
-audio: {
+// LibrarySlice
+library: { status: 'loading' | 'idle' | 'adding' }
+books: Record<string, Book>
+fetchBooks, loadFile, loadFileWithUri, loadFileWithPicker, archiveBook
+
+// PlaybackSlice
+playback: {
   status: 'idle' | 'loading' | 'paused' | 'playing'
   position: number              // milliseconds
   uri: string | null            // URI currently loaded in player (hardware state)
   duration: number              // Duration of loaded audio (hardware state)
   ownerId: string | null        // ID of component controlling playback
 }
+play, pause, seek, seekClip, skipForward, skipBackward, syncPlaybackState
+
+// ClipSlice
+clips: Record<string, ClipWithFile>
+fetchClips, addClip, updateClip, updateClipTranscription, deleteClip, shareClip
+
+// SyncSlice
 sync: {
   isSyncing: boolean            // Sync in progress
   pendingCount: number          // Items waiting to sync
+  lastSyncTime: number | null   // Timestamp of last successful sync
   error: string | null          // Last sync error (null if successful)
 }
-settings: {
-  sync_enabled: boolean         // Auto-sync on foreground
-}
-clips: Record<string, ClipWithFile>  // Keyed by clip id (UUID)
-books: Record<string, Book>          // Keyed by book id (UUID)
+syncNow, autoSync, refreshSyncStatus
 
-// Key actions
-loadFile, loadFileWithUri, play, pause, seek, skipForward/Backward
-fetchBooks, archiveBook
-addClip(bookId, position), deleteClip, jumpToClip, shareClip
-updateClip(id, { note?, start?, duration? })  // Edit clip bounds and note (requires source file)
-updateClipTranscription         // Called by TranscriptionService
-updateSettings(settings)        // Save settings to store and database
-syncNow()                       // Fire-and-forget manual sync
-autoSync()                      // Silent sync (only if enabled and authenticated)
-refreshSyncStatus()             // Update pending count from service
-__DEV_resetApp                  // Dev tool (clears all data)
+// SettingsSlice
+settings: { sync_enabled: boolean }
+updateSettings
 
 // Context-based playback API
 play(context?: { fileUri, position, ownerId? })  // Loads file if different, claims ownership
@@ -311,7 +326,7 @@ seek(context: { fileUri, position })             // Only seeks if fileUri matche
 pause()                                          // Pauses, preserves ownership
 ```
 
-**AudioState is hardware-only:** The `audio` object reflects what's loaded in the player, not domain state. Components look up `Book` metadata from the `books` map using the URI when needed.
+**PlaybackState is hardware-only:** The `playback` object reflects what's loaded in the player, not domain state. Components look up `Book` metadata from the `books` map using the URI when needed.
 
 ## File Loading Flow (Critical)
 
@@ -572,7 +587,7 @@ Change detection: `entity.updated_at > manifest.local_updated_at` means changed 
 1. **Process queue** - Push all queued local changes first
 2. **Push phase** - Upload any remaining local changes, handle conflicts
 3. **Pull phase** - Download remote changes not present locally
-4. **Notify store** - Callback triggers `fetchBooks()`/`fetchAllClips()` to refresh UI
+4. **Notify store** - Callback triggers `fetchBooks()`/`fetchClips()` to refresh UI
 
 ### Conflict Resolution
 
@@ -617,7 +632,7 @@ backupSyncService.setListeners({
   onStatusChange: (status) => set({ sync: status }),
   onDataChange: (notification) => {
     if (notification.booksChanged.length > 0) fetchBooks()
-    if (notification.clipsChanged.length > 0) fetchAllClips()
+    if (notification.clipsChanged.length > 0) fetchClips()
   },
 })
 
@@ -663,9 +678,9 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 ## Adding Features
 
 ### New Playback Control
-1. Add action to `src/store/index.ts`
+1. Add action to `src/store/playback.ts` slice
 2. Call `AudioPlayerService` method (from `services/audio/player.ts`)
-3. Update `audio.status` if needed
+3. Update `playback.status` if needed
 4. Add UI in `PlayerScreen.tsx`
 
 ### New Database Field
@@ -686,12 +701,12 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 - Import services from `services/` barrel export (e.g., `import { databaseService } from '../services'`)
 - Use dependency injection for services that depend on other services
 - Store all times in milliseconds internally
-- Set `library.status = 'adding'` when copying files, `audio.status = 'loading'` when loading player
+- Set `library.status = 'adding'` when copying files, `playback.status = 'loading'` when loading player
 - Use local file:// URIs for all audio playback
 - Keep services stateless (state lives in store)
 - Pass `{ fileUri, position, ownerId }` when calling `play()` from UI components
 - Maintain local position state in playback components
-- Check `audio.ownerId === myId` before syncing from global audio state
+- Check `playback.ownerId === myId` before syncing from global playback state
 - Check `clip.file_uri !== null` before enabling edit/jump-to-source features
 - Use `clip.file_uri` (source) when available, fall back to `clip.uri` (clip's own file) when not
 - Use `book.id` (UUID) as the stable identifier for books (not `uri` which can be null)
@@ -707,10 +722,10 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 - Modify `status` from polling callback when in transitional state
 - Call `upsertBook` without a local URI
 - Call `play()` or `seek()` without file context from UI components
-- Assume global `audio.position` is relevant to your component (check ownership first)
+- Assume global `playback.position` is relevant to your component (check ownership first)
 - Assume `Book.uri` is non-null (check before using for playback - null means archived)
 - Attempt to re-slice clips when source book is archived (`file_uri === null`)
-- Read book metadata from `audio` state (it only has hardware state: uri, duration)
+- Read book metadata from `playback` state (it only has hardware state: uri, duration)
 - Modify books/clips without queueing for sync (changes will be lost on other devices)
 - Delete manifest entries manually (sync service manages them)
 
@@ -729,8 +744,8 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 **Clip source check:** `clip.file_uri !== null` means source book available
 **Archive check:** `book.uri === null` means book is archived
 **Library status:** `loading → idle ⇄ adding`
-**Audio status:** `idle → loading → paused ⇄ playing`
-**Audio state:** Hardware-only (uri, duration, position, status, ownerId) - no Book metadata
+**Playback status:** `idle → loading → paused ⇄ playing`
+**Playback state:** Hardware-only (uri, duration, position, status, ownerId) - no Book metadata
 **Sync docs:** `docs/sync_system.md` - full educational walkthrough of sync architecture
 
 ## Custom ESLint Rules
