@@ -4,10 +4,10 @@
  * Google Drive backup for books and clips.
  */
 
-export { googleAuthService } from './auth'
-export { googleDriveService } from './drive'
+export { GoogleAuthService } from './auth'
+export { GoogleDriveService } from './drive'
 export type { DriveFile, BackupFolder } from './drive'
-export { backupSyncService } from './sync'
+export { BackupSyncService } from './sync'
 export type { BookBackup, ClipBackup, SyncResult, SyncNotification, SyncStatus, SyncListeners } from './sync'
-export { offlineQueueService } from './queue'
-export type { QueueStats, ProcessResult } from './queue'
+export { OfflineQueueService } from './queue'
+export type { QueueStats, ProcessResult, QueueItemHandler } from './queue'

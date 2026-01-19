@@ -2,16 +2,20 @@ import { create } from 'zustand'
 import RNFS from 'react-native-fs'
 
 import {
-  AudioPlayerService,
-  FilePickerService,
+  // Service classes
+  DatabaseService,
   FileStorageService,
+  FilePickerService,
+  AudioPlayerService,
   AudioMetadataService,
+  AudioSlicerService,
+  WhisperService,
+  TranscriptionQueueService,
+  GoogleAuthService,
+  GoogleDriveService,
+  OfflineQueueService,
+  BackupSyncService,
   SharingService,
-  transcriptionService,
-  databaseService,
-  audioSlicerService,
-  backupSyncService,
-  offlineQueueService,
 } from '../services'
 
 import type { PickedFile, ClipWithFile, Book, Settings } from '../services'
@@ -45,6 +49,7 @@ interface LibraryState {
 interface SyncState {
   isSyncing: boolean
   pendingCount: number
+  lastSyncTime: number | null
   error: string | null
 }
 
@@ -99,22 +104,84 @@ interface AppState {
 
 export const useStore = create<AppState>((set, get) => {
   // ---------------------------------------------------------------------------
-  // Initialize services
+  // Service Wiring
+  //
+  // All services are created here with explicit dependencies.
+  // Services are encapsulated - UI components access them only via store actions.
   // ---------------------------------------------------------------------------
-
-  // Use shared singletons for services that need to be accessed from multiple places
-  const dbService = databaseService
-  const slicerService = audioSlicerService
 
   // Track last queue time for position updates (throttling)
   let lastPositionQueueTime = 0
 
-  // Create local instances for services only used by the store
-  const filePickerService = new FilePickerService()
-  const fileStorageService = new FileStorageService()
-  const metadataService = new AudioMetadataService()
+  // Note: fetchBooks and fetchAllClips are defined below via function declarations.
+  // They're hoisted, so they're available for use in the sync listeners above.
 
+  // === Foundation Layer (no dependencies) ===
+  const dbService = new DatabaseService()
+  const fileStorageService = new FileStorageService()
+  const filePickerService = new FilePickerService()
+  const metadataService = new AudioMetadataService()
+  const slicerService = new AudioSlicerService()
+  const whisperService = new WhisperService()
   const sharingService = new SharingService()
+
+  // === Auth Layer ===
+  const authService = new GoogleAuthService()
+
+  // === Services with dependencies ===
+  const driveService = new GoogleDriveService(authService)
+  const queueService = new OfflineQueueService(dbService)
+
+  const syncService = new BackupSyncService(
+    dbService,
+    driveService,
+    authService,
+    queueService,
+    {
+      onStatusChange: (status) => {
+        set((state) => ({
+          sync: {
+            ...status,
+            // Preserve lastSyncTime from our state (service doesn't track it)
+            // Refresh it from DB when sync completes
+            lastSyncTime: status.isSyncing ? state.sync.lastSyncTime : dbService.getLastSyncTime(),
+          },
+        }))
+      },
+      onDataChange: (notification) => {
+        if (notification.booksChanged.length > 0) {
+          fetchBooks()
+        }
+        if (notification.clipsChanged.length > 0) {
+          fetchAllClips()
+        }
+      },
+    }
+  )
+
+  const transcriptionService = new TranscriptionQueueService({
+    database: dbService,
+    whisper: whisperService,
+    slicer: slicerService,
+    onTranscriptionComplete: (clipId, transcription) => {
+      const { clips } = get()
+      if (clips[clipId]) {
+        set((state) => ({
+          clips: {
+            ...state.clips,
+            [clipId]: {
+              ...state.clips[clipId],
+              transcription,
+              updated_at: Date.now(),
+            },
+          },
+        }))
+      }
+    },
+  })
+
+  // Start transcription service
+  transcriptionService.start()
 
   const audioService = new AudioPlayerService({
     onPlaybackStatusChange: (status) => {
@@ -141,43 +208,11 @@ export const useStore = create<AppState>((set, get) => {
           const now = Date.now()
           if (now - lastPositionQueueTime > POSITION_SYNC_THROTTLE_MS) {
             lastPositionQueueTime = now
-            offlineQueueService.queueChange('book', book.id, 'upsert')
+            queueService.queueChange('book', book.id, 'upsert')
           }
         }
       }
     },
-  })
-
-  // Register sync listeners to update store state
-  backupSyncService.setListeners({
-    onStatusChange: (status) => {
-      set({ sync: status })
-    },
-    onDataChange: (notification) => {
-      if (notification.booksChanged.length > 0) {
-        fetchBooks()
-      }
-      if (notification.clipsChanged.length > 0) {
-        fetchAllClips()
-      }
-    },
-  })
-
-  // Set up transcription callback to update store when transcription completes
-  transcriptionService.setCallback((clipId, transcription) => {
-    const { clips } = get()
-    if (clips[clipId]) {
-      set((state) => ({
-        clips: {
-          ...state.clips,
-          [clipId]: {
-            ...state.clips[clipId],
-            transcription,
-            updated_at: Date.now(),
-          },
-        },
-      }))
-    }
   })
 
   return {
@@ -194,7 +229,8 @@ export const useStore = create<AppState>((set, get) => {
     },
     sync: {
       isSyncing: false,
-      pendingCount: backupSyncService.getPendingCount(),
+      pendingCount: syncService.getPendingCount(),
+      lastSyncTime: dbService.getLastSyncTime(),
       error: null,
     },
     clips: {},
@@ -260,7 +296,7 @@ export const useStore = create<AppState>((set, get) => {
     // 2. Database update (with rollback on fail)
     try {
       dbService.archiveBook(bookId)
-      offlineQueueService.queueChange('book', bookId, 'upsert')
+      queueService.queueChange('book', bookId, 'upsert')
     } catch (error) {
       // Rollback store
       set((state) => ({
@@ -361,14 +397,14 @@ export const useStore = create<AppState>((set, get) => {
             metadata.artist,
             metadata.artwork
           )
-          offlineQueueService.queueChange('book', book.id, 'upsert')
+          queueService.queueChange('book', book.id, 'upsert')
         } else {
           // Case B: Active book - delete duplicate file, use existing
           console.log('File already exists in library, removing duplicate:', localUri)
           await fileStorageService.deleteFile(localUri)
           dbService.touchBook(existingBook.id)
           book = dbService.getBookById(existingBook.id)!
-          offlineQueueService.queueChange('book', book.id, 'upsert')
+          queueService.queueChange('book', book.id, 'upsert')
 
           // Reload audio from existing file
           await audioService.load(book.uri!, {
@@ -391,7 +427,7 @@ export const useStore = create<AppState>((set, get) => {
           fileSize,
           fingerprint
         )
-        offlineQueueService.queueChange('book', book.id, 'upsert')
+        queueService.queueChange('book', book.id, 'upsert')
       }
 
       // Refresh books and clips in store
@@ -606,7 +642,7 @@ export const useStore = create<AppState>((set, get) => {
     )
 
     // Queue for sync
-    offlineQueueService.queueChange('clip', clip.id, 'upsert')
+    queueService.queueChange('clip', clip.id, 'upsert')
 
     // Reload all clips to include file information
     fetchAllClips()
@@ -656,7 +692,7 @@ export const useStore = create<AppState>((set, get) => {
     dbService.updateClip(id, { ...updates, uri: newUri })
 
     // Queue for sync
-    offlineQueueService.queueChange('clip', id, 'upsert')
+    queueService.queueChange('clip', id, 'upsert')
 
     // Update store
     set((state) => ({
@@ -702,7 +738,7 @@ export const useStore = create<AppState>((set, get) => {
     dbService.deleteClip(id)
 
     // Queue for sync (delete operation)
-    offlineQueueService.queueChange('clip', id, 'delete')
+    queueService.queueChange('clip', id, 'delete')
 
     set((state) => {
       const { [id]: removed, ...rest } = state.clips
@@ -742,18 +778,22 @@ export const useStore = create<AppState>((set, get) => {
 
   function refreshSyncStatus() {
     set((state) => ({
-      sync: { ...state.sync, pendingCount: backupSyncService.getPendingCount() },
+      sync: {
+        ...state.sync,
+        pendingCount: syncService.getPendingCount(),
+        lastSyncTime: dbService.getLastSyncTime(),
+      },
     }))
   }
 
   function syncNow(): void {
-    backupSyncService.syncNow()
+    syncService.syncNow()
   }
 
   async function autoSync(): Promise<void> {
     const { settings } = get()
     if (!settings.sync_enabled) return
-    await backupSyncService.autoSync()
+    await syncService.autoSync()
   }
 
   async function __DEV_resetApp() {
@@ -778,6 +818,7 @@ export const useStore = create<AppState>((set, get) => {
       sync: {
         isSyncing: false,
         pendingCount: 0,
+        lastSyncTime: null,
         error: null,
       },
       clips: {},

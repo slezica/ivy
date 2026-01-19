@@ -1,10 +1,10 @@
-export { AudioPlayerService, audioPlayerService } from './player'
+export { AudioPlayerService } from './player'
 export type { PlayerStatus, PlaybackStatus, AudioPlayerListeners, TrackMetadata } from './player'
 
 export { playbackService } from './integration'
 
-export { AudioMetadataService, audioMetadataService } from './metadata'
+export { AudioMetadataService } from './metadata'
 export type { AudioMetadata } from './metadata'
 
-export { AudioSlicerService, audioSlicerService } from './slicer'
+export { AudioSlicerService } from './slicer'
 export type { SliceOptions, SliceResult } from './slicer'

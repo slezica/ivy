@@ -2,36 +2,36 @@
 // Audio
 // =============================================================================
 
-export { AudioPlayerService, audioPlayerService } from './audio'
+export { AudioPlayerService } from './audio'
 export type { PlayerStatus, PlaybackStatus, AudioPlayerListeners, TrackMetadata } from './audio'
 
 export { playbackService } from './audio'
 
-export { AudioMetadataService, audioMetadataService } from './audio'
+export { AudioMetadataService } from './audio'
 export type { AudioMetadata } from './audio'
 
-export { AudioSlicerService, audioSlicerService } from './audio'
+export { AudioSlicerService } from './audio'
 export type { SliceOptions, SliceResult } from './audio'
 
 // =============================================================================
 // Storage
 // =============================================================================
 
-export { DatabaseService, databaseService } from './storage'
-export type { Book, Clip, ClipWithFile, Session, Settings } from './storage'
+export { DatabaseService } from './storage'
+export type { Book, Clip, ClipWithFile, Session, Settings, SyncEntityType, SyncOperation, SyncManifestEntry, SyncQueueItem } from './storage'
 
-export { FileStorageService, fileStorageService } from './storage'
+export { FileStorageService } from './storage'
 
-export { FilePickerService, filePickerService } from './storage'
+export { FilePickerService } from './storage'
 export type { PickedFile } from './storage'
 
 // =============================================================================
 // Transcription
 // =============================================================================
 
-export { WhisperService, whisperService } from './transcription'
+export { WhisperService } from './transcription'
 
-export { TranscriptionQueueService, transcriptionService } from './transcription'
+export { TranscriptionQueueService } from './transcription'
 export type { TranscriptionCallback, TranscriptionQueueDeps } from './transcription'
 
 // =============================================================================
@@ -44,5 +44,5 @@ export { SharingService } from './system'
 // Backup
 // =============================================================================
 
-export { googleAuthService, googleDriveService, backupSyncService, offlineQueueService } from './backup'
+export { GoogleAuthService, GoogleDriveService, BackupSyncService, OfflineQueueService } from './backup'
 export type { DriveFile, BackupFolder, BookBackup, ClipBackup, SyncResult, SyncNotification, SyncStatus, SyncListeners, QueueStats } from './backup'

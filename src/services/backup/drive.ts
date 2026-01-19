@@ -5,7 +5,7 @@
  * Manages files in a public Ivy/ folder structure.
  */
 
-import { googleAuthService } from './auth'
+import { GoogleAuthService } from './auth'
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3'
@@ -25,11 +25,16 @@ export interface DriveFile {
   modifiedTime?: string  // ISO 8601 timestamp from Drive
 }
 
-class GoogleDriveService {
+export class GoogleDriveService {
+  private auth: GoogleAuthService
   private rootFolderId: string | null = null
   private folderIds: Record<BackupFolder, string | null> = {
     books: null,
     clips: null,
+  }
+
+  constructor(auth: GoogleAuthService) {
+    this.auth = auth
   }
 
   /**
@@ -173,7 +178,7 @@ class GoogleDriveService {
   // ---------------------------------------------------------------------------
 
   private async getToken(): Promise<string> {
-    const token = await googleAuthService.getAccessToken()
+    const token = await this.auth.getAccessToken()
     if (!token) {
       throw new Error('Not authenticated with Google')
     }
@@ -248,4 +253,3 @@ class GoogleDriveService {
   }
 }
 
-export const googleDriveService = new GoogleDriveService()

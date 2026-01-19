@@ -211,8 +211,3 @@ export class AudioPlayerService {
   }
 }
 
-// =============================================================================
-// Singleton (for simple use cases without custom listeners)
-// =============================================================================
-
-export const audioPlayerService = new AudioPlayerService()

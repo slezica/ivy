@@ -12,10 +12,10 @@
  */
 
 import RNFS from 'react-native-fs'
-import { databaseService, Book, Clip, SyncManifestEntry, SyncQueueItem } from '../storage'
-import { googleDriveService, DriveFile } from './drive'
-import { googleAuthService } from './auth'
-import { offlineQueueService } from './queue'
+import { DatabaseService, Book, Clip, SyncManifestEntry, SyncQueueItem } from '../storage'
+import { GoogleDriveService, DriveFile } from './drive'
+import { GoogleAuthService } from './auth'
+import { OfflineQueueService } from './queue'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -89,14 +89,25 @@ interface ParsedFilename {
 // Service
 // ---------------------------------------------------------------------------
 
-class BackupSyncService {
-  private listeners: SyncListeners = {}
+export class BackupSyncService {
+  private db: DatabaseService
+  private drive: GoogleDriveService
+  private auth: GoogleAuthService
+  private queue: OfflineQueueService
+  private listeners: SyncListeners
   private isSyncing = false
 
-  /**
-   * Set callbacks for sync status and data changes.
-   */
-  setListeners(listeners: SyncListeners): void {
+  constructor(
+    db: DatabaseService,
+    drive: GoogleDriveService,
+    auth: GoogleAuthService,
+    queue: OfflineQueueService,
+    listeners: SyncListeners = {}
+  ) {
+    this.db = db
+    this.drive = drive
+    this.auth = auth
+    this.queue = queue
     this.listeners = listeners
   }
 
@@ -104,7 +115,7 @@ class BackupSyncService {
    * Get current pending count.
    */
   getPendingCount(): number {
-    return offlineQueueService.getCount()
+    return this.queue.getCount()
   }
 
   /**
@@ -117,10 +128,10 @@ class BackupSyncService {
     this.setStatus(true, null)
 
     try {
-      await googleAuthService.initialize()
+      await this.auth.initialize()
 
-      if (!googleAuthService.isAuthenticated()) {
-        const signedIn = await googleAuthService.signIn()
+      if (!this.auth.isAuthenticated()) {
+        const signedIn = await this.auth.signIn()
         if (!signedIn) {
           this.setStatus(false, 'Could not sign in to Google')
           return
@@ -147,8 +158,8 @@ class BackupSyncService {
   async autoSync(): Promise<void> {
     if (this.isSyncing) return
 
-    await googleAuthService.initialize()
-    if (!googleAuthService.isAuthenticated()) return
+    await this.auth.initialize()
+    if (!this.auth.isAuthenticated()) return
 
     this.setStatus(true, null)
 
@@ -205,7 +216,7 @@ class BackupSyncService {
       await this.syncClips(result, notification)
 
       // Update last sync time
-      databaseService.setLastSyncTime(Date.now())
+      this.db.setLastSyncTime(Date.now())
 
       // Notify store of external changes
       if (notification.booksChanged.length > 0 || notification.clipsChanged.length > 0) {
@@ -225,15 +236,15 @@ class BackupSyncService {
 
   private async processQueue(result: SyncResult): Promise<void> {
     // Fetch remote state upfront to detect conflicts during queue processing
-    const remoteBookFiles = await googleDriveService.listFiles('books')
-    const remoteClipFiles = await googleDriveService.listFiles('clips')
+    const remoteBookFiles = await this.drive.listFiles('books')
+    const remoteClipFiles = await this.drive.listFiles('clips')
     const remoteBooks = this.groupRemoteFiles(remoteBookFiles, 'book')
     const remoteClips = this.groupRemoteFiles(remoteClipFiles, 'clip')
 
-    const processResult = await offlineQueueService.processQueue(async (item: SyncQueueItem) => {
+    const processResult = await this.queue.processQueue(async (item: SyncQueueItem) => {
       if (item.entity_type === 'book') {
         if (item.operation === 'upsert') {
-          const book = databaseService.getBookById(item.entity_id)
+          const book = this.db.getBookById(item.entity_id)
           if (book) {
             await this.processBookUpsert(book, remoteBooks, result)
           }
@@ -241,7 +252,7 @@ class BackupSyncService {
         // Books don't get deleted remotely (they're just archived locally)
       } else if (item.entity_type === 'clip') {
         if (item.operation === 'upsert') {
-          const clip = databaseService.getClip(item.entity_id)
+          const clip = this.db.getClip(item.entity_id)
           if (clip) {
             await this.processClipUpsert(clip, remoteClips, remoteClipFiles, result)
           }
@@ -265,7 +276,7 @@ class BackupSyncService {
     remoteBooks: Map<string, { file: DriveFile; timestamp: number }>,
     result: SyncResult
   ): Promise<void> {
-    const manifest = databaseService.getManifestEntry('book', book.id)
+    const manifest = this.db.getManifestEntry('book', book.id)
     const remote = remoteBooks.get(book.id)
 
     // Check for conflict: remote changed since our last sync
@@ -289,7 +300,7 @@ class BackupSyncService {
     allRemoteFiles: DriveFile[],
     result: SyncResult
   ): Promise<void> {
-    const manifest = databaseService.getManifestEntry('clip', clip.id)
+    const manifest = this.db.getManifestEntry('clip', clip.id)
     const remote = remoteClips.get(clip.id)
 
     // Check for conflict: remote changed since our last sync
@@ -308,8 +319,8 @@ class BackupSyncService {
   // ---------------------------------------------------------------------------
 
   private async syncBooks(result: SyncResult, notification: SyncNotification): Promise<void> {
-    const localBooks = databaseService.getAllBooks()
-    const remoteFiles = await googleDriveService.listFiles('books')
+    const localBooks = this.db.getAllBooks()
+    const remoteFiles = await this.drive.listFiles('books')
 
     // Build maps for quick lookup
     const remoteByBookId = this.groupRemoteFiles(remoteFiles, 'book')
@@ -317,7 +328,7 @@ class BackupSyncService {
 
     // PUSH PHASE: Upload local changes
     for (const book of localBooks) {
-      const manifest = databaseService.getManifestEntry('book', book.id)
+      const manifest = this.db.getManifestEntry('book', book.id)
       const remote = remoteByBookId.get(book.id)
 
       if (!manifest) {
@@ -338,7 +349,7 @@ class BackupSyncService {
 
     // PULL PHASE: Download remote changes
     for (const [bookId, remote] of remoteByBookId) {
-      const manifest = databaseService.getManifestEntry('book', bookId)
+      const manifest = this.db.getManifestEntry('book', bookId)
       const localBook = localBooksMap.get(bookId)
 
       if (!manifest) {
@@ -357,10 +368,10 @@ class BackupSyncService {
     }
 
     // Clean up manifest entries for deleted books
-    const manifestEntries = databaseService.getAllManifestEntries('book')
+    const manifestEntries = this.db.getAllManifestEntries('book')
     for (const entry of manifestEntries) {
       if (!localBooksMap.has(entry.entity_id) && !remoteByBookId.has(entry.entity_id)) {
-        databaseService.deleteManifestEntry('book', entry.entity_id)
+        this.db.deleteManifestEntry('book', entry.entity_id)
       }
     }
   }
@@ -384,16 +395,16 @@ class BackupSyncService {
       const content = JSON.stringify(backup, null, 2)
 
       // Check if file already exists and delete it first
-      const remoteFiles = await googleDriveService.listFiles('books')
+      const remoteFiles = await this.drive.listFiles('books')
       const existingFile = remoteFiles.find(f => f.name === filename)
       if (existingFile) {
-        await googleDriveService.deleteFile(existingFile.id)
+        await this.drive.deleteFile(existingFile.id)
       }
 
-      const uploaded = await googleDriveService.uploadFile('books', filename, content)
+      const uploaded = await this.drive.uploadFile('books', filename, content)
 
       // Update manifest
-      databaseService.upsertManifestEntry({
+      this.db.upsertManifestEntry({
         entity_type: 'book',
         entity_id: book.id,
         local_updated_at: book.updated_at,
@@ -410,10 +421,10 @@ class BackupSyncService {
   }
 
   private async downloadBook(file: DriveFile, notification: SyncNotification): Promise<void> {
-    const content = await googleDriveService.downloadFile(file.id, false) as string
+    const content = await this.drive.downloadFile(file.id, false) as string
     const backup: BookBackup = JSON.parse(content)
 
-    databaseService.restoreBookFromBackup(
+    this.db.restoreBookFromBackup(
       backup.id,
       backup.name,
       backup.duration,
@@ -427,7 +438,7 @@ class BackupSyncService {
     )
 
     // Update manifest
-    databaseService.upsertManifestEntry({
+    this.db.upsertManifestEntry({
       entity_type: 'book',
       entity_id: backup.id,
       local_updated_at: backup.updated_at,
@@ -446,7 +457,7 @@ class BackupSyncService {
     result: SyncResult
   ): Promise<Book> {
     // Download remote version
-    const content = await googleDriveService.downloadFile(remote.file.id, false) as string
+    const content = await this.drive.downloadFile(remote.file.id, false) as string
     const remoteBackup: BookBackup = JSON.parse(content)
 
     // Merge strategy:
@@ -465,7 +476,7 @@ class BackupSyncService {
     }
 
     // Update local database with merged result
-    databaseService.restoreBookFromBackup(
+    this.db.restoreBookFromBackup(
       merged.id,
       merged.name,
       merged.duration,
@@ -493,8 +504,8 @@ class BackupSyncService {
   // ---------------------------------------------------------------------------
 
   private async syncClips(result: SyncResult, notification: SyncNotification): Promise<void> {
-    const localClips = databaseService.getAllClips()
-    const remoteFiles = await googleDriveService.listFiles('clips')
+    const localClips = this.db.getAllClips()
+    const remoteFiles = await this.drive.listFiles('clips')
 
     // Build maps for quick lookup
     const remoteByClipId = this.groupRemoteFiles(remoteFiles, 'clip')
@@ -503,7 +514,7 @@ class BackupSyncService {
 
     // PUSH PHASE: Upload local changes
     for (const clip of localClips) {
-      const manifest = databaseService.getManifestEntry('clip', clip.id)
+      const manifest = this.db.getManifestEntry('clip', clip.id)
       const remote = remoteByClipId.get(clip.id)
 
       if (!manifest) {
@@ -524,7 +535,7 @@ class BackupSyncService {
 
     // PULL PHASE: Download remote changes
     for (const [clipId, remote] of remoteByClipId) {
-      const manifest = databaseService.getManifestEntry('clip', clipId)
+      const manifest = this.db.getManifestEntry('clip', clipId)
       const localClip = localClipsMap.get(clipId)
 
       if (!manifest) {
@@ -545,7 +556,7 @@ class BackupSyncService {
     // DELETE PHASE: Remove remote clips that were deleted locally
     // This is handled by the queue, but we also clean up orphans here
     for (const [clipId] of remoteByClipId) {
-      const manifest = databaseService.getManifestEntry('clip', clipId)
+      const manifest = this.db.getManifestEntry('clip', clipId)
       // If we have a manifest entry but no local clip, it was deleted
       if (manifest && !localClipIds.has(clipId)) {
         await this.deleteClipFromRemote(clipId, result)
@@ -553,10 +564,10 @@ class BackupSyncService {
     }
 
     // Clean up manifest entries for deleted clips
-    const manifestEntries = databaseService.getAllManifestEntries('clip')
+    const manifestEntries = this.db.getAllManifestEntries('clip')
     for (const entry of manifestEntries) {
       if (!localClipsMap.has(entry.entity_id) && !remoteByClipId.has(entry.entity_id)) {
-        databaseService.deleteManifestEntry('clip', entry.entity_id)
+        this.db.deleteManifestEntry('clip', entry.entity_id)
       }
     }
   }
@@ -581,27 +592,27 @@ class BackupSyncService {
       }
 
       // Delete existing files first
-      const remoteFiles = await googleDriveService.listFiles('clips')
+      const remoteFiles = await this.drive.listFiles('clips')
       const existingJson = remoteFiles.find(f => f.name === jsonFilename)
       const existingMp3 = remoteFiles.find(f => f.name === mp3Filename)
 
-      if (existingJson) await googleDriveService.deleteFile(existingJson.id)
-      if (existingMp3) await googleDriveService.deleteFile(existingMp3.id)
+      if (existingJson) await this.drive.deleteFile(existingJson.id)
+      if (existingMp3) await this.drive.deleteFile(existingMp3.id)
 
       // Upload JSON first
       const jsonContent = JSON.stringify(backup, null, 2)
-      const jsonFile = await googleDriveService.uploadFile('clips', jsonFilename, jsonContent)
+      const jsonFile = await this.drive.uploadFile('clips', jsonFilename, jsonContent)
       jsonFileId = jsonFile.id
 
       // Upload MP3
       const clipPath = clip.uri.replace('file://', '')
       const mp3Content = await RNFS.readFile(clipPath, 'base64')
       const mp3Bytes = base64ToUint8Array(mp3Content)
-      const mp3File = await googleDriveService.uploadFile('clips', mp3Filename, mp3Bytes)
+      const mp3File = await this.drive.uploadFile('clips', mp3Filename, mp3Bytes)
       mp3FileId = mp3File.id
 
       // Update manifest
-      databaseService.upsertManifestEntry({
+      this.db.upsertManifestEntry({
         entity_type: 'clip',
         entity_id: clip.id,
         local_updated_at: clip.updated_at,
@@ -616,7 +627,7 @@ class BackupSyncService {
       // Rollback: if JSON uploaded but MP3 failed, delete JSON
       if (jsonFileId && !mp3FileId) {
         try {
-          await googleDriveService.deleteFile(jsonFileId)
+          await this.drive.deleteFile(jsonFileId)
         } catch (rollbackError) {
           console.warn('Failed to rollback JSON upload:', rollbackError)
         }
@@ -631,7 +642,7 @@ class BackupSyncService {
     notification: SyncNotification
   ): Promise<void> {
     // Download JSON
-    const jsonContent = await googleDriveService.downloadFile(jsonFile.id, false) as string
+    const jsonContent = await this.drive.downloadFile(jsonFile.id, false) as string
     const backup: ClipBackup = JSON.parse(jsonContent)
 
     // Find and download MP3
@@ -642,7 +653,7 @@ class BackupSyncService {
       throw new Error(`MP3 file not found for clip ${backup.id}`)
     }
 
-    const mp3Bytes = await googleDriveService.downloadFile(mp3File.id, true) as Uint8Array
+    const mp3Bytes = await this.drive.downloadFile(mp3File.id, true) as Uint8Array
 
     // Save MP3 to clips directory
     const clipsDir = `${RNFS.DocumentDirectoryPath}/clips`
@@ -657,7 +668,7 @@ class BackupSyncService {
     const localUri = `file://${localMp3Path}`
 
     // Restore to database
-    databaseService.restoreClipFromBackup(
+    this.db.restoreClipFromBackup(
       backup.id,
       backup.source_id,
       localUri,
@@ -670,7 +681,7 @@ class BackupSyncService {
     )
 
     // Update manifest
-    databaseService.upsertManifestEntry({
+    this.db.upsertManifestEntry({
       entity_type: 'clip',
       entity_id: backup.id,
       local_updated_at: backup.updated_at,
@@ -685,18 +696,18 @@ class BackupSyncService {
 
   private async deleteClipFromRemote(clipId: string, result: SyncResult): Promise<void> {
     try {
-      const remoteFiles = await googleDriveService.listFiles('clips')
+      const remoteFiles = await this.drive.listFiles('clips')
       const filesToDelete = remoteFiles.filter(f => {
         const parsed = parseFilename(f.name)
         return parsed && parsed.type === 'clip' && parsed.id === clipId
       })
 
       for (const file of filesToDelete) {
-        await googleDriveService.deleteFile(file.id)
+        await this.drive.deleteFile(file.id)
       }
 
       // Clean up manifest
-      databaseService.deleteManifestEntry('clip', clipId)
+      this.db.deleteManifestEntry('clip', clipId)
 
       if (filesToDelete.length > 0) {
         result.deleted.clips++
@@ -714,7 +725,7 @@ class BackupSyncService {
     result: SyncResult
   ): Promise<Clip> {
     // Download remote version
-    const content = await googleDriveService.downloadFile(remote.file.id, false) as string
+    const content = await this.drive.downloadFile(remote.file.id, false) as string
     const remoteBackup: ClipBackup = JSON.parse(content)
 
     // Merge strategy:
@@ -744,7 +755,7 @@ class BackupSyncService {
     }
 
     // Update local database with merged result
-    databaseService.restoreClipFromBackup(
+    this.db.restoreClipFromBackup(
       merged.id,
       merged.source_id,
       merged.uri,
@@ -828,8 +839,3 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes
 }
 
-// ---------------------------------------------------------------------------
-// Singleton
-// ---------------------------------------------------------------------------
-
-export const backupSyncService = new BackupSyncService()

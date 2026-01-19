@@ -1,4 +1,4 @@
-export { WhisperService, whisperService } from './whisper'
+export { WhisperService } from './whisper'
 
-export { TranscriptionQueueService, transcriptionService } from './queue'
+export { TranscriptionQueueService } from './queue'
 export type { TranscriptionCallback, TranscriptionQueueDeps } from './queue'

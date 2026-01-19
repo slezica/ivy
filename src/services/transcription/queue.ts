@@ -5,9 +5,9 @@
  * Processes clips sequentially to avoid overloading the device.
  */
 
-import { DatabaseService, databaseService } from '../storage/database'
-import { WhisperService, whisperService } from './whisper'
-import { AudioSlicerService, audioSlicerService } from '../audio/slicer'
+import { DatabaseService } from '../storage/database'
+import { WhisperService } from './whisper'
+import { AudioSlicerService } from '../audio/slicer'
 import type { Clip } from '../storage/database'
 
 // =============================================================================
@@ -20,6 +20,7 @@ export interface TranscriptionQueueDeps {
   database: DatabaseService
   whisper: WhisperService
   slicer: AudioSlicerService
+  onTranscriptionComplete?: TranscriptionCallback
 }
 
 // =============================================================================
@@ -36,19 +37,16 @@ export class TranscriptionQueueService {
   private database: DatabaseService
   private whisper: WhisperService
   private slicer: AudioSlicerService
+  private onTranscriptionComplete: TranscriptionCallback | null
 
   private queue: string[] = []
   private processing = false
-  private onTranscriptionComplete: TranscriptionCallback | null = null
 
   constructor(deps: TranscriptionQueueDeps) {
     this.database = deps.database
     this.whisper = deps.whisper
     this.slicer = deps.slicer
-  }
-
-  setCallback(callback: TranscriptionCallback): void {
-    this.onTranscriptionComplete = callback
+    this.onTranscriptionComplete = deps.onTranscriptionComplete ?? null
   }
 
   async start(): Promise<void> {
@@ -156,12 +154,3 @@ export class TranscriptionQueueService {
   }
 }
 
-// =============================================================================
-// Singleton
-// =============================================================================
-
-export const transcriptionService = new TranscriptionQueueService({
-  database: databaseService,
-  whisper: whisperService,
-  slicer: audioSlicerService,
-})

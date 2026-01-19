@@ -43,8 +43,3 @@ export class FilePickerService {
   }
 }
 
-// =============================================================================
-// Singleton
-// =============================================================================
-
-export const filePickerService = new FilePickerService()

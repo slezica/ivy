@@ -5,7 +5,7 @@
  * deduplication of operations on the same entity.
  */
 
-import { databaseService, SyncEntityType, SyncOperation, SyncQueueItem } from '../storage'
+import { DatabaseService, SyncEntityType, SyncOperation, SyncQueueItem } from '../storage'
 
 const MAX_ATTEMPTS = 3
 
@@ -31,34 +31,40 @@ export type QueueItemHandler = (item: SyncQueueItem) => Promise<void>
 // Service
 // ---------------------------------------------------------------------------
 
-class OfflineQueueService {
+export class OfflineQueueService {
+  private db: DatabaseService
+
+  constructor(db: DatabaseService) {
+    this.db = db
+  }
+
   /**
    * Queue a change for later sync.
    * If an item for the same entity already exists, it's replaced.
    */
   queueChange(entityType: SyncEntityType, entityId: string, operation: SyncOperation): void {
-    databaseService.queueChange(entityType, entityId, operation)
+    this.db.queueChange(entityType, entityId, operation)
   }
 
   /**
    * Get all pending items (under max attempts).
    */
   getPendingItems(): SyncQueueItem[] {
-    return databaseService.getPendingQueueItems(MAX_ATTEMPTS)
+    return this.db.getPendingQueueItems(MAX_ATTEMPTS)
   }
 
   /**
    * Get all items in the queue, including failed ones.
    */
   getAllItems(): SyncQueueItem[] {
-    return databaseService.getAllQueueItems()
+    return this.db.getAllQueueItems()
   }
 
   /**
    * Get queue statistics.
    */
   getStats(): QueueStats {
-    const all = databaseService.getAllQueueItems()
+    const all = this.db.getAllQueueItems()
     const failed = all.filter(item => item.attempts >= MAX_ATTEMPTS)
     return {
       pending: all.length - failed.length,
@@ -82,12 +88,12 @@ class OfflineQueueService {
     for (const item of items) {
       try {
         await handler(item)
-        databaseService.removeFromQueue(item.entity_type, item.entity_id)
+        this.db.removeFromQueue(item.entity_type, item.entity_id)
         result.processed++
         console.log(`Processed queue item: ${item.entity_type}:${item.entity_id}`)
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
-        databaseService.updateQueueItemAttempt(item.entity_type, item.entity_id, errorMessage)
+        this.db.updateQueueItemAttempt(item.entity_type, item.entity_id, errorMessage)
         result.failed++
         result.errors.push(`${item.entity_type}:${item.entity_id}: ${errorMessage}`)
         console.warn(`Failed to process queue item ${item.entity_type}:${item.entity_id}:`, error)
@@ -101,48 +107,43 @@ class OfflineQueueService {
    * Remove an item from the queue (after successful sync).
    */
   removeFromQueue(entityType: SyncEntityType, entityId: string): void {
-    databaseService.removeFromQueue(entityType, entityId)
+    this.db.removeFromQueue(entityType, entityId)
   }
 
   /**
    * Clear all items from the queue.
    */
   clearQueue(): void {
-    databaseService.clearQueue()
+    this.db.clearQueue()
   }
 
   /**
    * Get the count of pending items.
    */
   getCount(): number {
-    return databaseService.getQueueCount()
+    return this.db.getQueueCount()
   }
 
   /**
    * Check if an entity has a pending change.
    */
   hasPendingChange(entityType: SyncEntityType, entityId: string): boolean {
-    return databaseService.getQueueItem(entityType, entityId) !== null
+    return this.db.getQueueItem(entityType, entityId) !== null
   }
 
   /**
    * Retry failed items by resetting their attempt count.
    */
   retryFailed(): void {
-    const all = databaseService.getAllQueueItems()
+    const all = this.db.getAllQueueItems()
     const failed = all.filter(item => item.attempts >= MAX_ATTEMPTS)
 
     for (const item of failed) {
       // Re-queue resets the attempts to 0
-      databaseService.queueChange(item.entity_type, item.entity_id, item.operation)
+      this.db.queueChange(item.entity_type, item.entity_id, item.operation)
     }
 
     console.log(`Reset ${failed.length} failed items for retry`)
   }
 }
 
-// ---------------------------------------------------------------------------
-// Singleton
-// ---------------------------------------------------------------------------
-
-export const offlineQueueService = new OfflineQueueService()

@@ -17,7 +17,6 @@ import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import { Color } from '../theme'
 import type { Book } from '../services'
-import { databaseService, offlineQueueService } from '../services'
 import { formatTime, formatDate } from '../utils'
 
 const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
@@ -41,12 +40,11 @@ export default function LibraryScreen() {
       if (nextAppState === 'active') {
         const now = Date.now()
         const timeSinceLastSync = now - lastSyncRef.current
-        const lastSyncTime = databaseService.getLastSyncTime()
 
         // Throttle: at least 5 minutes since last sync attempt
         const shouldAttempt =
           timeSinceLastSync > AUTO_SYNC_MIN_INTERVAL_MS &&
-          (offlineQueueService.getCount() > 0 || !lastSyncTime || now - lastSyncTime > AUTO_SYNC_MIN_INTERVAL_MS)
+          (sync.pendingCount > 0 || !sync.lastSyncTime || now - sync.lastSyncTime > AUTO_SYNC_MIN_INTERVAL_MS)
 
         if (shouldAttempt) {
           lastSyncRef.current = now
@@ -57,7 +55,7 @@ export default function LibraryScreen() {
 
     const subscription = AppState.addEventListener('change', handleAppStateChange)
     return () => subscription.remove()
-  }, [autoSync])
+  }, [autoSync, sync.pendingCount, sync.lastSyncTime])
 
   const handleLoadFile = async () => {
     try {
