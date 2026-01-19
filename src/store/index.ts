@@ -18,88 +18,14 @@ import {
   SharingService,
 } from '../services'
 
-import type { PickedFile, ClipWithFile, Book, Settings } from '../services'
+import type { PickedFile, Book, Settings } from '../services'
 import { MAIN_PLAYER_OWNER_ID, generateId } from '../utils'
-
-const CLIPS_DIR = `${RNFS.DocumentDirectoryPath}/clips`
-
+import { createClipSlice } from './clips'
+import type { AppState, PlaybackContext } from './types'
 
 const SKIP_FORWARD_MS = 25 * 1000
 const SKIP_BACKWARD_MS = 30 * 1000
-const DEFAULT_CLIP_DURATION_MS = 20 * 1000
 const POSITION_SYNC_THROTTLE_MS = 30 * 1000  // Only queue position sync every 30s
-
-
-type AudioStatus = 'idle' | 'loading' | 'paused' | 'playing'
-
-interface AudioState {
-  status: AudioStatus
-  position: number
-  uri: string | null       // URI currently loaded in player (hardware state)
-  duration: number         // Duration of loaded audio (hardware state)
-  ownerId: string | null   // ID of component that last took control
-}
-
-type LibraryStatus = 'loading' | 'idle' | 'adding'
-
-interface LibraryState {
-  status: LibraryStatus
-}
-
-interface SyncState {
-  isSyncing: boolean
-  pendingCount: number
-  lastSyncTime: number | null
-  error: string | null
-}
-
-/**
- * Context for playback actions. Components must specify which file
- * and position they want to play/seek. This prevents "accidents" where
- * a component unknowingly affects another component's playback.
- */
-interface PlaybackContext {
-  fileUri: string
-  position: number
-  ownerId?: string  // ID of component taking control (optional)
-}
-
-interface AppState {
-  // State
-  library: LibraryState
-  audio: AudioState
-  sync: SyncState
-  clips: Record<string, ClipWithFile>
-  books: Record<string, Book>
-  settings: Settings
-
-  // Actions
-  loadFile: (pickedFile: PickedFile) => Promise<void>
-  loadFileWithUri: (uri: string, name: string) => Promise<void>
-  loadFileWithPicker: () => Promise<void>
-  fetchBooks: () => void
-  archiveBook: (bookId: string) => Promise<void>
-  fetchAllClips: () => void
-  play: (context?: PlaybackContext) => Promise<void>
-  pause: () => Promise<void>
-  seek: (context: PlaybackContext) => Promise<void>
-  skipForward: () => Promise<void>
-  skipBackward: () => Promise<void>
-  addClip: (bookId: string, position: number) => Promise<void>
-  updateClip: (id: string, updates: { note?: string; start?: number; duration?: number }) => Promise<void>
-  updateClipTranscription: (id: string, transcription: string) => void
-  deleteClip: (id: string) => Promise<void>
-  jumpToClip: (clipId: string) => Promise<void>
-  shareClip: (clipId: string) => Promise<void>
-  syncPlaybackState: () => Promise<void>
-  updateSettings: (settings: Settings) => void
-  syncNow: () => void
-  autoSync: () => Promise<void>
-  refreshSyncStatus: () => void
-
-  // Dev tools
-  __DEV_resetApp: () => Promise<void>
-}
 
 
 export const useStore = create<AppState>((set, get) => {
@@ -113,8 +39,8 @@ export const useStore = create<AppState>((set, get) => {
   // Track last queue time for position updates (throttling)
   let lastPositionQueueTime = 0
 
-  // Note: fetchBooks and fetchAllClips are defined below via function declarations.
-  // They're hoisted, so they're available for use in the sync listeners above.
+  // Note: fetchBooks is defined below via function declaration and is hoisted.
+  // Clip actions are accessed via get() since they come from the clip slice.
 
   // === Foundation Layer (no dependencies) ===
   const dbService = new DatabaseService()
@@ -153,7 +79,7 @@ export const useStore = create<AppState>((set, get) => {
           fetchBooks()
         }
         if (notification.clipsChanged.length > 0) {
-          fetchAllClips()
+          get().fetchClips()
         }
       },
     }
@@ -215,6 +141,18 @@ export const useStore = create<AppState>((set, get) => {
     },
   })
 
+  // ---------------------------------------------------------------------------
+  // Slices
+  // ---------------------------------------------------------------------------
+
+  const clipSlice = createClipSlice({
+    db: dbService,
+    slicer: slicerService,
+    queue: queueService,
+    transcription: transcriptionService,
+    sharing: sharingService,
+  })(set, get)
+
   return {
     // Initial state
     library: {
@@ -233,9 +171,11 @@ export const useStore = create<AppState>((set, get) => {
       lastSyncTime: dbService.getLastSyncTime(),
       error: null,
     },
-    clips: {},
     books: {},
     settings: dbService.getSettings(),
+
+    // Slices
+    ...clipSlice,
 
     // Actions (below)
     loadFileWithPicker,
@@ -243,18 +183,11 @@ export const useStore = create<AppState>((set, get) => {
     loadFileWithUri,
     fetchBooks,
     archiveBook,
-    fetchAllClips,
     play,
     pause,
     seek,
     skipForward,
     skipBackward,
-    addClip,
-    deleteClip,
-    updateClip,
-    updateClipTranscription,
-    jumpToClip,
-    shareClip,
     syncPlaybackState,
     updateSettings,
     syncNow,
@@ -314,18 +247,6 @@ export const useStore = create<AppState>((set, get) => {
         console.error('Failed to delete archived book file (non-critical):', error)
       })
     }
-  }
-
-  function fetchAllClips(): void {
-    const allClips = dbService.getAllClips()
-
-    // Update clips mapping in store
-    const clipsMap = allClips.reduce((acc, clip) => {
-      acc[clip.id] = clip
-      return acc
-    }, {} as Record<string, ClipWithFile>)
-
-    set({ clips: clipsMap })
   }
 
   async function loadFileWithUri(uri: string, name: string) {
@@ -432,7 +353,7 @@ export const useStore = create<AppState>((set, get) => {
 
       // Refresh books and clips in store
       fetchBooks()
-      fetchAllClips()
+      get().fetchClips()
 
       // Update state (keep status as 'loading' until play starts)
       set((state) => ({
@@ -605,172 +526,6 @@ export const useStore = create<AppState>((set, get) => {
     }))
   }
 
-  async function addClip(bookId: string, position: number) {
-    const { books } = get()
-    const book = books[bookId]
-
-    if (!book) {
-      throw new Error('Book not found')
-    }
-    if (!book.uri) {
-      throw new Error('Book has been archived')
-    }
-
-    // Cap clip duration to not exceed remaining audio length
-    const remainingDuration = book.duration - position
-    const clipDuration = Math.min(DEFAULT_CLIP_DURATION_MS, remainingDuration)
-
-    // Generate clip ID upfront and use it for filename
-    const clipId = generateId()
-    const filename = `${clipId}.mp3`
-    await slicerService.ensureDir(CLIPS_DIR)
-    const sliceResult = await slicerService.slice({
-      sourceUri: book.uri,
-      startMs: position,
-      endMs: position + clipDuration,
-      outputFilename: filename,
-      outputDir: CLIPS_DIR,
-    })
-
-    const clip = dbService.createClip(
-      clipId,
-      bookId,
-      sliceResult.uri,
-      position,
-      clipDuration,
-      '' // Default empty note
-    )
-
-    // Queue for sync
-    queueService.queueChange('clip', clip.id, 'upsert')
-
-    // Reload all clips to include file information
-    fetchAllClips()
-
-    // Queue for transcription
-    transcriptionService.queueClip(clip.id)
-  }
-
-  async function updateClip(id: string, updates: { note?: string; start?: number; duration?: number }) {
-    const { clips } = get()
-    const clip = clips[id]
-    if (!clip) return
-
-    const boundsChanged =
-      (updates.start !== undefined && updates.start !== clip.start) ||
-      (updates.duration !== undefined && updates.duration !== clip.duration)
-
-    let newUri: string | undefined
-
-    // Re-slice if bounds changed (only possible if source file exists)
-    if (boundsChanged) {
-      if (!clip.file_uri) {
-        throw new Error('Cannot edit clip bounds: source file has been removed')
-      }
-
-      const newStart = updates.start ?? clip.start
-      const newDuration = updates.duration ?? clip.duration
-
-      // Re-slice using clip's UUID as filename
-      const filename = `${id}.mp3`
-      await slicerService.ensureDir(CLIPS_DIR)
-      const sliceResult = await slicerService.slice({
-        sourceUri: clip.file_uri,
-        startMs: newStart,
-        endMs: newStart + newDuration,
-        outputFilename: filename,
-        outputDir: CLIPS_DIR,
-      })
-
-      newUri = sliceResult.uri
-
-      // Delete old clip file
-      await slicerService.cleanup(clip.uri)
-    }
-
-    // Update database
-    dbService.updateClip(id, { ...updates, uri: newUri })
-
-    // Queue for sync
-    queueService.queueChange('clip', id, 'upsert')
-
-    // Update store
-    set((state) => ({
-      clips: {
-        ...state.clips,
-        [id]: {
-          ...state.clips[id],
-          ...updates,
-          ...(newUri && { uri: newUri }),
-          updated_at: Date.now(),
-        },
-      },
-    }))
-  }
-
-  function updateClipTranscription(id: string, transcription: string) {
-    set((state) => {
-      const clip = state.clips[id]
-      if (!clip) return state
-
-      return {
-        clips: {
-          ...state.clips,
-          [id]: {
-            ...clip,
-            transcription,
-            updated_at: Date.now(),
-          },
-        },
-      }
-    })
-  }
-
-  async function deleteClip(id: string) {
-    const { clips } = get()
-    const clip = clips[id]
-
-    // Delete clip audio file
-    if (clip?.uri) {
-      await slicerService.cleanup(clip.uri)
-    }
-
-    dbService.deleteClip(id)
-
-    // Queue for sync (delete operation)
-    queueService.queueChange('clip', id, 'delete')
-
-    set((state) => {
-      const { [id]: removed, ...rest } = state.clips
-      return { clips: rest }
-    })
-  }
-
-  async function jumpToClip(clipId: string) {
-    const clip = get().clips[clipId]
-    if (!clip) {
-      throw new Error('Clip not found')
-    }
-    if (!clip.file_uri) {
-      throw new Error('Cannot jump to clip: source file has been removed')
-    }
-
-    // Jump to clip includes loading the file if different
-    await get().play({ fileUri: clip.file_uri, position: clip.start })
-  }
-
-  async function shareClip(clipId: string) {
-    const { clips } = get()
-    const clip = clips[clipId]
-
-    if (!clip) {
-      throw new Error('Clip not found')
-    }
-
-    // Share using the clip's existing audio file
-    await sharingService.shareClipFile(clip.uri, clip.note || clip.file_name)
-  }
-
   function updateSettings(settings: Settings) {
     dbService.setSettings(settings)
     set({ settings })
@@ -829,3 +584,6 @@ export const useStore = create<AppState>((set, get) => {
     console.log('App reset complete')
   }
 })
+
+// Re-export types for consumers
+export type { AppState, PlaybackContext } from './types'

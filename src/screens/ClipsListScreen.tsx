@@ -32,7 +32,7 @@ import { formatTime } from '../utils'
 
 export default function ClipsListScreen() {
   const router = useRouter()
-  const { clips, jumpToClip, deleteClip, updateClip, shareClip, fetchAllClips } = useStore()
+  const { clips, jumpToClip, deleteClip, updateClip, shareClip, fetchClips } = useStore()
   const [viewingClipId, setViewingClipId] = useState<string | null>(null)
   const [editingClipId, setEditingClipId] = useState<string | null>(null)
   const [menuClipId, setMenuClipId] = useState<string | null>(null)
@@ -40,8 +40,8 @@ export default function ClipsListScreen() {
   // Fetch all clips when screen is focused
   useFocusEffect(
     useCallback(() => {
-      fetchAllClips()
-    }, [fetchAllClips])
+      fetchClips()
+    }, [fetchClips])
   )
 
   const clipsArray = Object.values(clips).sort((a, b) => b.created_at - a.created_at)
