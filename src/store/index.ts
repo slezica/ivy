@@ -10,9 +10,8 @@ import {
   transcriptionService,
   databaseService,
   audioSlicerService,
-  offlineQueueService,
   backupSyncService,
-  googleAuthService,
+  offlineQueueService,
 } from '../services'
 
 import type { PickedFile, ClipWithFile, Book, Settings } from '../services'
@@ -148,14 +147,19 @@ export const useStore = create<AppState>((set, get) => {
     },
   })
 
-  // Register sync notification callback to refresh store when external changes arrive
-  backupSyncService.setNotificationCallback((notification) => {
-    if (notification.booksChanged.length > 0) {
-      fetchBooks()
-    }
-    if (notification.clipsChanged.length > 0) {
-      fetchAllClips()
-    }
+  // Register sync listeners to update store state
+  backupSyncService.setListeners({
+    onStatusChange: (status) => {
+      set({ sync: status })
+    },
+    onDataChange: (notification) => {
+      if (notification.booksChanged.length > 0) {
+        fetchBooks()
+      }
+      if (notification.clipsChanged.length > 0) {
+        fetchAllClips()
+      }
+    },
   })
 
   // Set up transcription callback to update store when transcription completes
@@ -189,7 +193,7 @@ export const useStore = create<AppState>((set, get) => {
     },
     sync: {
       isSyncing: false,
-      pendingCount: offlineQueueService.getCount(),
+      pendingCount: backupSyncService.getPendingCount(),
     },
     clips: {},
     books: {},
@@ -736,96 +740,19 @@ export const useStore = create<AppState>((set, get) => {
 
   function refreshSyncStatus() {
     set((state) => ({
-      sync: { ...state.sync, pendingCount: offlineQueueService.getCount() },
+      sync: { ...state.sync, pendingCount: backupSyncService.getPendingCount() },
     }))
   }
 
   async function syncNow(): Promise<{ success: boolean; error?: string }> {
-    const { sync } = get()
-    if (sync.isSyncing) {
-      return { success: false, error: 'Sync already in progress' }
-    }
-
-    set((state) => ({
-      sync: { ...state.sync, isSyncing: true },
-    }))
-
-    try {
-      await googleAuthService.initialize()
-
-      if (!googleAuthService.isAuthenticated()) {
-        const signedIn = await googleAuthService.signIn()
-        if (!signedIn) {
-          return { success: false, error: 'Could not sign in to Google' }
-        }
-      }
-
-      const result = await backupSyncService.sync()
-
-      fetchBooks()
-      fetchAllClips()
-
-      console.log('Sync complete:', {
-        uploaded: result.uploaded,
-        downloaded: result.downloaded,
-        deleted: result.deleted,
-        conflicts: result.conflicts.length,
-        errors: result.errors.length,
-      })
-
-      if (result.errors.length > 0) {
-        return { success: false, error: `${result.errors.length} error(s) occurred during sync` }
-      }
-
-      return { success: true }
-    } catch (error) {
-      console.error('Sync failed:', error)
-      return { success: false, error: String(error) }
-    } finally {
-      set((state) => ({
-        sync: {
-          isSyncing: false,
-          pendingCount: offlineQueueService.getCount(),
-        },
-      }))
-    }
+    const error = await backupSyncService.syncNow()
+    return error ? { success: false, error } : { success: true }
   }
 
   async function autoSync(): Promise<void> {
-    const { sync, settings } = get()
-
-    // Skip if sync disabled, already syncing, or not authenticated
-    if (!settings.sync_enabled || sync.isSyncing) return
-
-    await googleAuthService.initialize()
-    if (!googleAuthService.isAuthenticated()) return
-
-    set((state) => ({
-      sync: { ...state.sync, isSyncing: true },
-    }))
-
-    try {
-      const result = await backupSyncService.sync()
-
-      fetchBooks()
-      fetchAllClips()
-
-      if (result.conflicts.length > 0) {
-        console.log('Auto-sync conflicts resolved:', result.conflicts)
-      }
-      if (result.errors.length > 0) {
-        console.warn('Auto-sync errors:', result.errors)
-      }
-    } catch (error) {
-      console.error('Auto-sync failed:', error)
-    } finally {
-      set((state) => ({
-        sync: {
-          isSyncing: false,
-          pendingCount: offlineQueueService.getCount(),
-        },
-      }))
-    }
+    const { settings } = get()
+    if (!settings.sync_enabled) return
+    await backupSyncService.autoSync()
   }
 
   async function __DEV_resetApp() {

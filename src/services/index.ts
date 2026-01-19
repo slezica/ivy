@@ -45,4 +45,4 @@ export { SharingService } from './system'
 // =============================================================================
 
 export { googleAuthService, googleDriveService, backupSyncService, offlineQueueService } from './backup'
-export type { DriveFile, BackupFolder, BookBackup, ClipBackup, SyncResult, SyncNotification, QueueStats } from './backup'
+export type { DriveFile, BackupFolder, BookBackup, ClipBackup, SyncResult, SyncNotification, SyncStatus, SyncListeners, QueueStats } from './backup'

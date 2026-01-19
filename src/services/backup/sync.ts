@@ -14,6 +14,7 @@
 import RNFS from 'react-native-fs'
 import { databaseService, Book, Clip, SyncManifestEntry, SyncQueueItem } from '../storage'
 import { googleDriveService, DriveFile } from './drive'
+import { googleAuthService } from './auth'
 import { offlineQueueService } from './queue'
 
 // ---------------------------------------------------------------------------
@@ -63,6 +64,16 @@ export interface SyncNotification {
   clipsChanged: string[]  // IDs of clips that were modified by remote changes
 }
 
+export interface SyncStatus {
+  isSyncing: boolean
+  pendingCount: number
+}
+
+export interface SyncListeners {
+  onStatusChange?: (status: SyncStatus) => void
+  onDataChange?: (notification: SyncNotification) => void
+}
+
 // Filename format: {type}_{id}.{ext}
 // Simplified from timestamp-based to just use entity ID
 const FILENAME_REGEX = /^(book|clip)_([a-f0-9-]+)\.(json|mp3)$/
@@ -78,19 +89,99 @@ interface ParsedFilename {
 // ---------------------------------------------------------------------------
 
 class BackupSyncService {
-  private onSyncComplete?: (notification: SyncNotification) => void
+  private listeners: SyncListeners = {}
+  private isSyncing = false
 
   /**
-   * Register a callback to be notified when sync pulls external changes.
+   * Set callbacks for sync status and data changes.
    */
-  setNotificationCallback(callback: (notification: SyncNotification) => void): void {
-    this.onSyncComplete = callback
+  setListeners(listeners: SyncListeners): void {
+    this.listeners = listeners
+  }
+
+  /**
+   * Get current pending count.
+   */
+  getPendingCount(): number {
+    return offlineQueueService.getCount()
+  }
+
+  /**
+   * Manual sync with user authentication prompts if needed.
+   * Returns error message if failed, undefined if successful.
+   */
+  async syncNow(): Promise<string | undefined> {
+    if (this.isSyncing) {
+      return 'Sync already in progress'
+    }
+
+    this.setSyncing(true)
+
+    try {
+      await googleAuthService.initialize()
+
+      if (!googleAuthService.isAuthenticated()) {
+        const signedIn = await googleAuthService.signIn()
+        if (!signedIn) {
+          return 'Could not sign in to Google'
+        }
+      }
+
+      const result = await this.performSync()
+
+      if (result.errors.length > 0) {
+        return `${result.errors.length} error(s) occurred during sync`
+      }
+
+      return undefined
+    } catch (error) {
+      console.error('Sync failed:', error)
+      return String(error)
+    } finally {
+      this.setSyncing(false)
+    }
+  }
+
+  /**
+   * Silent background sync. Only runs if already authenticated.
+   * Does not prompt for sign-in.
+   */
+  async autoSync(): Promise<void> {
+    if (this.isSyncing) return
+
+    await googleAuthService.initialize()
+    if (!googleAuthService.isAuthenticated()) return
+
+    this.setSyncing(true)
+
+    try {
+      const result = await this.performSync()
+
+      if (result.conflicts.length > 0) {
+        console.log('Auto-sync conflicts resolved:', result.conflicts)
+      }
+      if (result.errors.length > 0) {
+        console.warn('Auto-sync errors:', result.errors)
+      }
+    } catch (error) {
+      console.error('Auto-sync failed:', error)
+    } finally {
+      this.setSyncing(false)
+    }
+  }
+
+  private setSyncing(isSyncing: boolean): void {
+    this.isSyncing = isSyncing
+    this.listeners.onStatusChange?.({
+      isSyncing,
+      pendingCount: this.getPendingCount(),
+    })
   }
 
   /**
    * Perform incremental bidirectional sync.
    */
-  async sync(): Promise<SyncResult> {
+  private async performSync(): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: { books: 0, clips: 0 },
       downloaded: { books: 0, clips: 0 },
@@ -116,8 +207,8 @@ class BackupSyncService {
       databaseService.setLastSyncTime(Date.now())
 
       // Notify store of external changes
-      if (this.onSyncComplete && (notification.booksChanged.length > 0 || notification.clipsChanged.length > 0)) {
-        this.onSyncComplete(notification)
+      if (notification.booksChanged.length > 0 || notification.clipsChanged.length > 0) {
+        this.listeners.onDataChange?.(notification)
       }
     } catch (error) {
       result.errors.push(`Sync failed: ${error}`)
