@@ -2,81 +2,40 @@
  * Backup Sync Service
  *
  * Orchestrates incremental synchronization between local database and Google Drive.
- * Uses a manifest to track sync state and detect conflicts.
  *
- * KNOWN LIMITATION:
- * Timestamps are device-local. We store entity.updated_at in the manifest but compare
- * against Drive's modifiedTime. This can cause false conflict detection under clock
- * drift, but conflict resolution is idempotent so results are still correct.
- * See docs/sync_system.md "A Note on Timestamps" for details.
+ * Architecture:
+ * - State gathering: Collect local entities, remote files, and manifest entries
+ * - Planning: Pure function determines what operations are needed (planner.ts)
+ * - Execution: Perform uploads, downloads, merges, and deletes
+ * - Merge logic: Pure functions resolve conflicts (merge.ts)
  */
 
 import RNFS from 'react-native-fs'
-import { DatabaseService, Book, Clip, SyncManifestEntry, SyncQueueItem } from '../storage'
+import { DatabaseService, Book, Clip, SyncManifestEntry } from '../storage'
 import { GoogleDriveService, DriveFile } from './drive'
 import { GoogleAuthService } from './auth'
 import { OfflineQueueService } from './queue'
+import {
+  BookBackup,
+  ClipBackup,
+  SyncResult,
+  SyncNotification,
+  SyncStatus,
+  SyncListeners,
+} from './types'
+import {
+  SyncState,
+  SyncPlan,
+  RemoteBook,
+  RemoteClip,
+  planSync,
+} from './planner'
+import { mergeBook, mergeClip } from './merge'
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface BookBackup {
-  id: string
-  name: string
-  duration: number
-  position: number
-  updated_at: number
-  title: string | null
-  artist: string | null
-  artwork: string | null
-  file_size: number
-  fingerprint: string // base64-encoded
-}
-
-export interface ClipBackup {
-  id: string
-  source_id: string
-  start: number
-  duration: number
-  note: string
-  transcription: string | null
-  created_at: number
-  updated_at: number
-}
-
-export interface ConflictInfo {
-  entityType: 'book' | 'clip'
-  entityId: string
-  resolution: string  // human-readable description of how it was resolved
-}
-
-export interface SyncResult {
-  uploaded: { books: number; clips: number }
-  downloaded: { books: number; clips: number }
-  deleted: { clips: number }
-  conflicts: ConflictInfo[]
-  errors: string[]
-}
-
-export interface SyncNotification {
-  booksChanged: string[]  // IDs of books that were modified by remote changes
-  clipsChanged: string[]  // IDs of clips that were modified by remote changes
-}
-
-export interface SyncStatus {
-  isSyncing: boolean
-  pendingCount: number
-  error: string | null
-}
-
-export interface SyncListeners {
-  onStatusChange?: (status: SyncStatus) => void
-  onDataChange?: (notification: SyncNotification) => void
-}
+// Re-export types for external consumers
+export * from './types'
 
 // Filename format: {type}_{id}.{ext}
-// Simplified from timestamp-based to just use entity ID
 const FILENAME_REGEX = /^(book|clip)_([a-f0-9-]+)\.(json|mp3)$/
 
 interface ParsedFilename {
@@ -85,9 +44,9 @@ interface ParsedFilename {
   extension: 'json' | 'mp3'
 }
 
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // Service
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
 export class BackupSyncService {
   private db: DatabaseService
@@ -111,16 +70,12 @@ export class BackupSyncService {
     this.listeners = listeners
   }
 
-  /**
-   * Get current pending count.
-   */
   getPendingCount(): number {
     return this.queue.getCount()
   }
 
   /**
    * Manual sync with user authentication prompts if needed.
-   * Fire-and-forget - status updates via listeners.
    */
   async syncNow(): Promise<void> {
     if (this.isSyncing) return
@@ -153,7 +108,6 @@ export class BackupSyncService {
 
   /**
    * Silent background sync. Only runs if already authenticated.
-   * Does not prompt for sign-in.
    */
   async autoSync(): Promise<void> {
     if (this.isSyncing) return
@@ -190,9 +144,10 @@ export class BackupSyncService {
     })
   }
 
-  /**
-   * Perform incremental bidirectional sync.
-   */
+  // ---------------------------------------------------------------------------
+  // Core Sync Flow
+  // ---------------------------------------------------------------------------
+
   private async performSync(): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: { books: 0, clips: 0 },
@@ -208,17 +163,22 @@ export class BackupSyncService {
     }
 
     try {
-      // Process offline queue first (push queued changes)
+      // 1. Process offline queue first (push queued changes)
       await this.processQueue(result)
 
-      // Then do incremental sync
-      await this.syncBooks(result, notification)
-      await this.syncClips(result, notification)
+      // 2. Gather state
+      const state = await this.gatherSyncState()
 
-      // Update last sync time
+      // 3. Plan sync operations (pure function)
+      const plan = planSync(state)
+
+      // 4. Execute plan
+      await this.executePlan(plan, state, result, notification)
+
+      // 5. Update last sync time
       this.db.setLastSyncTime(Date.now())
 
-      // Notify store of external changes
+      // 6. Notify store of external changes
       if (notification.booksChanged.length > 0 || notification.clipsChanged.length > 0) {
         this.listeners.onDataChange?.(notification)
       }
@@ -231,152 +191,170 @@ export class BackupSyncService {
   }
 
   // ---------------------------------------------------------------------------
-  // Queue Processing
+  // State Gathering
   // ---------------------------------------------------------------------------
 
-  private async processQueue(result: SyncResult): Promise<void> {
-    // Fetch remote state upfront to detect conflicts during queue processing
+  private async gatherSyncState(): Promise<SyncState> {
+    // Fetch local data
+    const localBooks = this.db.getAllBooks()
+    const localClips = this.db.getAllClips()
+
+    // Fetch remote data
     const remoteBookFiles = await this.drive.listFiles('books')
     const remoteClipFiles = await this.drive.listFiles('clips')
-    const remoteBooks = this.groupRemoteFiles(remoteBookFiles, 'book')
-    const remoteClips = this.groupRemoteFiles(remoteClipFiles, 'clip')
 
-    const processResult = await this.queue.processQueue(async (item: SyncQueueItem) => {
-      if (item.entity_type === 'book') {
-        if (item.operation === 'upsert') {
-          const book = this.db.getBookById(item.entity_id)
-          if (book) {
-            await this.processBookUpsert(book, remoteBooks, result)
-          }
-        }
-        // Books don't get deleted remotely (they're just archived locally)
-      } else if (item.entity_type === 'clip') {
-        if (item.operation === 'upsert') {
-          const clip = this.db.getClip(item.entity_id)
-          if (clip) {
-            await this.processClipUpsert(clip, remoteClips, remoteClipFiles, result)
-          }
-        } else if (item.operation === 'delete') {
-          await this.deleteClipFromRemote(item.entity_id, result)
-        }
+    // Download and parse remote backups
+    const remoteBooks = await this.parseRemoteBooks(remoteBookFiles)
+    const remoteClips = await this.parseRemoteClips(remoteClipFiles)
+
+    // Gather manifests
+    const allManifests = this.db.getAllManifestEntries()
+    const manifests = new Map<string, SyncManifestEntry>()
+    for (const m of allManifests) {
+      manifests.set(`${m.entity_type}:${m.entity_id}`, m)
+    }
+
+    return {
+      local: { books: localBooks, clips: localClips },
+      remote: { books: remoteBooks, clips: remoteClips },
+      manifests,
+    }
+  }
+
+  private async parseRemoteBooks(files: DriveFile[]): Promise<Map<string, RemoteBook>> {
+    const result = new Map<string, RemoteBook>()
+
+    for (const file of files) {
+      const parsed = parseFilename(file.name)
+      if (!parsed || parsed.type !== 'book' || parsed.extension !== 'json') continue
+
+      try {
+        const content = await this.drive.downloadFile(file.id, false) as string
+        const backup: BookBackup = JSON.parse(content)
+        const modifiedAt = file.modifiedTime ? new Date(file.modifiedTime).getTime() : 0
+
+        result.set(parsed.id, { backup, fileId: file.id, modifiedAt })
+      } catch (error) {
+        console.warn(`Failed to parse remote book ${file.name}:`, error)
       }
+    }
+
+    return result
+  }
+
+  private async parseRemoteClips(files: DriveFile[]): Promise<Map<string, RemoteClip>> {
+    const result = new Map<string, RemoteClip>()
+
+    // Group files by clip ID
+    const filesByClipId = new Map<string, { json?: DriveFile; mp3?: DriveFile }>()
+    for (const file of files) {
+      const parsed = parseFilename(file.name)
+      if (!parsed || parsed.type !== 'clip') continue
+
+      const existing = filesByClipId.get(parsed.id) ?? {}
+      if (parsed.extension === 'json') existing.json = file
+      if (parsed.extension === 'mp3') existing.mp3 = file
+      filesByClipId.set(parsed.id, existing)
+    }
+
+    // Parse JSON files
+    for (const [clipId, { json, mp3 }] of filesByClipId) {
+      if (!json || !mp3) continue // Need both files
+
+      try {
+        const content = await this.drive.downloadFile(json.id, false) as string
+        const backup: ClipBackup = JSON.parse(content)
+        const modifiedAt = json.modifiedTime ? new Date(json.modifiedTime).getTime() : 0
+
+        result.set(clipId, {
+          backup,
+          jsonFileId: json.id,
+          mp3FileId: mp3.id,
+          modifiedAt,
+        })
+      } catch (error) {
+        console.warn(`Failed to parse remote clip ${json.name}:`, error)
+      }
+    }
+
+    return result
+  }
+
+  // ---------------------------------------------------------------------------
+  // Plan Execution
+  // ---------------------------------------------------------------------------
+
+  private async executePlan(
+    plan: SyncPlan,
+    state: SyncState,
+    result: SyncResult,
+    notification: SyncNotification
+  ): Promise<void> {
+    // Execute book operations
+    for (const { local, remote } of plan.books.merges) {
+      await this.executeMergeBook(local, remote, result)
+    }
+    for (const { book } of plan.books.uploads) {
+      await this.executeUploadBook(book, result)
+    }
+    for (const { remote } of plan.books.downloads) {
+      await this.executeDownloadBook(remote, notification)
+      result.downloaded.books++
+    }
+
+    // Execute clip operations
+    for (const { local, remote } of plan.clips.merges) {
+      await this.executeMergeClip(local, remote, result)
+    }
+    for (const { clip } of plan.clips.uploads) {
+      await this.executeUploadClip(clip, result)
+    }
+    for (const { remote } of plan.clips.downloads) {
+      await this.executeDownloadClip(remote, notification)
+      result.downloaded.clips++
+    }
+    for (const del of plan.clips.deletes) {
+      await this.executeDeleteClip(del.clipId, del.jsonFileId, del.mp3FileId, result)
+    }
+
+    // Clean up orphaned manifest entries
+    this.cleanupManifests(state)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Book Execution
+  // ---------------------------------------------------------------------------
+
+  private async executeMergeBook(local: Book, remote: RemoteBook, result: SyncResult): Promise<void> {
+    const { merged, resolution } = mergeBook(local, remote.backup)
+
+    // Update local database with merged result
+    this.db.restoreBookFromBackup(
+      merged.id,
+      merged.name,
+      merged.duration,
+      merged.position,
+      merged.updated_at,
+      merged.title,
+      merged.artist,
+      merged.artwork,
+      merged.file_size,
+      merged.fingerprint
+    )
+
+    // Upload merged result
+    await this.executeUploadBook(merged, result)
+
+    result.conflicts.push({
+      entityType: 'book',
+      entityId: local.id,
+      resolution,
     })
 
-    if (processResult.errors.length > 0) {
-      result.errors.push(...processResult.errors.map(e => `Queue: ${e}`))
-    }
+    console.log(`Merged book conflict: ${local.id}`)
   }
 
-  /**
-   * Process a book upsert with conflict detection.
-   * Checks if remote changed since last sync and merges if needed.
-   */
-  private async processBookUpsert(
-    book: Book,
-    remoteBooks: Map<string, { file: DriveFile; timestamp: number }>,
-    result: SyncResult
-  ): Promise<void> {
-    const manifest = this.db.getManifestEntry('book', book.id)
-    const remote = remoteBooks.get(book.id)
-
-    // Check for conflict: remote changed since our last sync
-    if (manifest && remote && remote.timestamp > (manifest.remote_updated_at || 0)) {
-      // Conflict detected - merge before uploading
-      const merged = await this.mergeBook(book, remote, result)
-      await this.uploadBook(merged, result)
-    } else {
-      // No conflict - safe to upload directly
-      await this.uploadBook(book, result)
-    }
-  }
-
-  /**
-   * Process a clip upsert with conflict detection.
-   * Checks if remote changed since last sync and merges if needed.
-   */
-  private async processClipUpsert(
-    clip: Clip,
-    remoteClips: Map<string, { file: DriveFile; timestamp: number }>,
-    allRemoteFiles: DriveFile[],
-    result: SyncResult
-  ): Promise<void> {
-    const manifest = this.db.getManifestEntry('clip', clip.id)
-    const remote = remoteClips.get(clip.id)
-
-    // Check for conflict: remote changed since our last sync
-    if (manifest && remote && remote.timestamp > (manifest.remote_updated_at || 0)) {
-      // Conflict detected - merge before uploading
-      const merged = await this.mergeClip(clip, remote, allRemoteFiles, result)
-      await this.uploadClip(merged, result)
-    } else {
-      // No conflict - safe to upload directly
-      await this.uploadClip(clip, result)
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Books
-  // ---------------------------------------------------------------------------
-
-  private async syncBooks(result: SyncResult, notification: SyncNotification): Promise<void> {
-    const localBooks = this.db.getAllBooks()
-    const remoteFiles = await this.drive.listFiles('books')
-
-    // Build maps for quick lookup
-    const remoteByBookId = this.groupRemoteFiles(remoteFiles, 'book')
-    const localBooksMap = new Map(localBooks.map(b => [b.id, b]))
-
-    // PUSH PHASE: Upload local changes
-    for (const book of localBooks) {
-      const manifest = this.db.getManifestEntry('book', book.id)
-      const remote = remoteByBookId.get(book.id)
-
-      if (!manifest) {
-        // New locally, upload
-        await this.uploadBook(book, result)
-      } else if (book.updated_at > (manifest.local_updated_at || 0)) {
-        // Changed locally since last sync
-        if (remote && remote.timestamp > (manifest.remote_updated_at || 0)) {
-          // CONFLICT: both changed - merge and upload
-          const merged = await this.mergeBook(book, remote, result)
-          await this.uploadBook(merged, result)
-        } else {
-          // Changed locally only, upload
-          await this.uploadBook(book, result)
-        }
-      }
-    }
-
-    // PULL PHASE: Download remote changes
-    for (const [bookId, remote] of remoteByBookId) {
-      const manifest = this.db.getManifestEntry('book', bookId)
-      const localBook = localBooksMap.get(bookId)
-
-      if (!manifest) {
-        // New remotely, download
-        await this.downloadBook(remote.file, notification)
-        result.downloaded.books++
-      } else if (remote.timestamp > (manifest.remote_updated_at || 0)) {
-        // Changed remotely since last sync
-        if (!localBook || localBook.updated_at <= (manifest.local_updated_at || 0)) {
-          // Not changed locally, safe to download
-          await this.downloadBook(remote.file, notification)
-          result.downloaded.books++
-        }
-        // If both changed, conflict was handled in push phase
-      }
-    }
-
-    // Clean up manifest entries for deleted books
-    const manifestEntries = this.db.getAllManifestEntries('book')
-    for (const entry of manifestEntries) {
-      if (!localBooksMap.has(entry.entity_id) && !remoteByBookId.has(entry.entity_id)) {
-        this.db.deleteManifestEntry('book', entry.entity_id)
-      }
-    }
-  }
-
-  private async uploadBook(book: Book, result: SyncResult): Promise<void> {
+  private async executeUploadBook(book: Book, result: SyncResult): Promise<void> {
     try {
       const backup: BookBackup = {
         id: book.id,
@@ -394,7 +372,7 @@ export class BackupSyncService {
       const filename = `book_${book.id}.json`
       const content = JSON.stringify(backup, null, 2)
 
-      // Check if file already exists and delete it first
+      // Delete existing file first
       const remoteFiles = await this.drive.listFiles('books')
       const existingFile = remoteFiles.find(f => f.name === filename)
       if (existingFile) {
@@ -420,9 +398,8 @@ export class BackupSyncService {
     }
   }
 
-  private async downloadBook(file: DriveFile, notification: SyncNotification): Promise<void> {
-    const content = await this.drive.downloadFile(file.id, false) as string
-    const backup: BookBackup = JSON.parse(content)
+  private async executeDownloadBook(remote: RemoteBook, notification: SyncNotification): Promise<void> {
+    const backup = remote.backup
 
     this.db.restoreBookFromBackup(
       backup.id,
@@ -443,7 +420,7 @@ export class BackupSyncService {
       entity_id: backup.id,
       local_updated_at: backup.updated_at,
       remote_updated_at: backup.updated_at,
-      remote_file_id: file.id,
+      remote_file_id: remote.fileId,
       remote_mp3_file_id: null,
     })
 
@@ -451,128 +428,39 @@ export class BackupSyncService {
     console.log(`Downloaded book: ${backup.id}`)
   }
 
-  private async mergeBook(
-    local: Book,
-    remote: { file: DriveFile; timestamp: number },
-    result: SyncResult
-  ): Promise<Book> {
-    // Download remote version
-    const content = await this.drive.downloadFile(remote.file.id, false) as string
-    const remoteBackup: BookBackup = JSON.parse(content)
+  // ---------------------------------------------------------------------------
+  // Clip Execution
+  // ---------------------------------------------------------------------------
 
-    // Merge strategy:
-    // - position: max value wins (user progressed further)
-    // - other fields: last-write-wins based on updated_at
-    const mergedPosition = Math.max(local.position, remoteBackup.position)
-    const localWins = local.updated_at >= remoteBackup.updated_at
-
-    const merged: Book = {
-      ...local,
-      position: mergedPosition,
-      title: localWins ? local.title : remoteBackup.title,
-      artist: localWins ? local.artist : remoteBackup.artist,
-      artwork: localWins ? local.artwork : remoteBackup.artwork,
-      updated_at: Date.now(),
-    }
+  private async executeMergeClip(local: Clip, remote: RemoteClip, result: SyncResult): Promise<void> {
+    const { merged, resolution } = mergeClip(local, remote.backup)
 
     // Update local database with merged result
-    this.db.restoreBookFromBackup(
+    this.db.restoreClipFromBackup(
       merged.id,
-      merged.name,
+      merged.source_id,
+      merged.uri,
+      merged.start,
       merged.duration,
-      merged.position,
-      merged.updated_at,
-      merged.title,
-      merged.artist,
-      merged.artwork,
-      merged.file_size,
-      merged.fingerprint
+      merged.note,
+      merged.transcription,
+      merged.created_at,
+      merged.updated_at
     )
 
+    // Upload merged result
+    await this.executeUploadClip(merged, result)
+
     result.conflicts.push({
-      entityType: 'book',
+      entityType: 'clip',
       entityId: local.id,
-      resolution: `Position: ${mergedPosition}ms (max), metadata: ${localWins ? 'local' : 'remote'} wins`,
+      resolution,
     })
 
-    console.log(`Merged book conflict: ${local.id}`)
-    return merged
+    console.log(`Merged clip conflict: ${local.id}`)
   }
 
-  // ---------------------------------------------------------------------------
-  // Clips
-  // ---------------------------------------------------------------------------
-
-  private async syncClips(result: SyncResult, notification: SyncNotification): Promise<void> {
-    const localClips = this.db.getAllClips()
-    const remoteFiles = await this.drive.listFiles('clips')
-
-    // Build maps for quick lookup
-    const remoteByClipId = this.groupRemoteFiles(remoteFiles, 'clip')
-    const localClipsMap = new Map(localClips.map(c => [c.id, c]))
-    const localClipIds = new Set(localClips.map(c => c.id))
-
-    // PUSH PHASE: Upload local changes
-    for (const clip of localClips) {
-      const manifest = this.db.getManifestEntry('clip', clip.id)
-      const remote = remoteByClipId.get(clip.id)
-
-      if (!manifest) {
-        // New locally, upload
-        await this.uploadClip(clip, result)
-      } else if (clip.updated_at > (manifest.local_updated_at || 0)) {
-        // Changed locally since last sync
-        if (remote && remote.timestamp > (manifest.remote_updated_at || 0)) {
-          // CONFLICT: both changed - merge and upload
-          const merged = await this.mergeClip(clip, remote, remoteFiles, result)
-          await this.uploadClip(merged, result)
-        } else {
-          // Changed locally only, upload
-          await this.uploadClip(clip, result)
-        }
-      }
-    }
-
-    // PULL PHASE: Download remote changes
-    for (const [clipId, remote] of remoteByClipId) {
-      const manifest = this.db.getManifestEntry('clip', clipId)
-      const localClip = localClipsMap.get(clipId)
-
-      if (!manifest) {
-        // New remotely, download
-        await this.downloadClip(remote.file, remoteFiles, notification)
-        result.downloaded.clips++
-      } else if (remote.timestamp > (manifest.remote_updated_at || 0)) {
-        // Changed remotely since last sync
-        if (!localClip || localClip.updated_at <= (manifest.local_updated_at || 0)) {
-          // Not changed locally, safe to download
-          await this.downloadClip(remote.file, remoteFiles, notification)
-          result.downloaded.clips++
-        }
-        // If both changed, conflict was handled in push phase
-      }
-    }
-
-    // DELETE PHASE: Remove remote clips that were deleted locally
-    // This is handled by the queue, but we also clean up orphans here
-    for (const [clipId] of remoteByClipId) {
-      const manifest = this.db.getManifestEntry('clip', clipId)
-      // If we have a manifest entry but no local clip, it was deleted
-      if (manifest && !localClipIds.has(clipId)) {
-        await this.deleteClipFromRemote(clipId, result)
-      }
-    }
-
-    // Clean up manifest entries for deleted clips
-    const manifestEntries = this.db.getAllManifestEntries('clip')
-    for (const entry of manifestEntries) {
-      if (!localClipsMap.has(entry.entity_id) && !remoteByClipId.has(entry.entity_id)) {
-        this.db.deleteManifestEntry('clip', entry.entity_id)
-      }
-    }
-  }
-
-  private async uploadClip(clip: Clip, result: SyncResult): Promise<void> {
+  private async executeUploadClip(clip: Clip, result: SyncResult): Promise<void> {
     const jsonFilename = `clip_${clip.id}.json`
     const mp3Filename = `clip_${clip.id}.mp3`
 
@@ -636,24 +524,11 @@ export class BackupSyncService {
     }
   }
 
-  private async downloadClip(
-    jsonFile: DriveFile,
-    allFiles: DriveFile[],
-    notification: SyncNotification
-  ): Promise<void> {
-    // Download JSON
-    const jsonContent = await this.drive.downloadFile(jsonFile.id, false) as string
-    const backup: ClipBackup = JSON.parse(jsonContent)
+  private async executeDownloadClip(remote: RemoteClip, notification: SyncNotification): Promise<void> {
+    const backup = remote.backup
 
-    // Find and download MP3
-    const mp3Filename = `clip_${backup.id}.mp3`
-    const mp3File = allFiles.find(f => f.name === mp3Filename)
-
-    if (!mp3File) {
-      throw new Error(`MP3 file not found for clip ${backup.id}`)
-    }
-
-    const mp3Bytes = await this.drive.downloadFile(mp3File.id, true) as Uint8Array
+    // Download MP3
+    const mp3Bytes = await this.drive.downloadFile(remote.mp3FileId, true) as Uint8Array
 
     // Save MP3 to clips directory
     const clipsDir = `${RNFS.DocumentDirectoryPath}/clips`
@@ -686,126 +561,94 @@ export class BackupSyncService {
       entity_id: backup.id,
       local_updated_at: backup.updated_at,
       remote_updated_at: backup.updated_at,
-      remote_file_id: jsonFile.id,
-      remote_mp3_file_id: mp3File.id,
+      remote_file_id: remote.jsonFileId,
+      remote_mp3_file_id: remote.mp3FileId,
     })
 
     notification.clipsChanged.push(backup.id)
     console.log(`Downloaded clip: ${backup.id}`)
   }
 
-  private async deleteClipFromRemote(clipId: string, result: SyncResult): Promise<void> {
+  private async executeDeleteClip(
+    clipId: string,
+    jsonFileId: string | null,
+    mp3FileId: string | null,
+    result: SyncResult
+  ): Promise<void> {
     try {
-      const remoteFiles = await this.drive.listFiles('clips')
-      const filesToDelete = remoteFiles.filter(f => {
-        const parsed = parseFilename(f.name)
-        return parsed && parsed.type === 'clip' && parsed.id === clipId
-      })
-
-      for (const file of filesToDelete) {
-        await this.drive.deleteFile(file.id)
-      }
+      if (jsonFileId) await this.drive.deleteFile(jsonFileId)
+      if (mp3FileId) await this.drive.deleteFile(mp3FileId)
 
       // Clean up manifest
       this.db.deleteManifestEntry('clip', clipId)
 
-      if (filesToDelete.length > 0) {
-        result.deleted.clips++
-        console.log(`Deleted clip from remote: ${clipId}`)
-      }
+      result.deleted.clips++
+      console.log(`Deleted clip from remote: ${clipId}`)
     } catch (error) {
       result.errors.push(`Failed to delete clip ${clipId} from Drive: ${error}`)
     }
   }
 
-  private async mergeClip(
-    local: Clip,
-    remote: { file: DriveFile; timestamp: number },
-    allFiles: DriveFile[],
-    result: SyncResult
-  ): Promise<Clip> {
-    // Download remote version
-    const content = await this.drive.downloadFile(remote.file.id, false) as string
-    const remoteBackup: ClipBackup = JSON.parse(content)
+  // ---------------------------------------------------------------------------
+  // Queue Processing (for offline changes)
+  // ---------------------------------------------------------------------------
 
-    // Merge strategy:
-    // - note: concatenate with conflict marker if different
-    // - start, duration: last-write-wins
-    // - transcription: prefer non-null
-    const localWins = local.updated_at >= remoteBackup.updated_at
-
-    let mergedNote = local.note
-    if (local.note !== remoteBackup.note && remoteBackup.note) {
-      // Both have notes and they're different - concatenate
-      const timestamp = new Date().toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      })
-      mergedNote = `${local.note}\n\n--- Conflict (${timestamp}) ---\n${remoteBackup.note}`
-    }
-
-    const merged: Clip = {
-      ...local,
-      note: mergedNote,
-      start: localWins ? local.start : remoteBackup.start,
-      duration: localWins ? local.duration : remoteBackup.duration,
-      transcription: local.transcription || remoteBackup.transcription,
-      updated_at: Date.now(),
-    }
-
-    // Update local database with merged result
-    this.db.restoreClipFromBackup(
-      merged.id,
-      merged.source_id,
-      merged.uri,
-      merged.start,
-      merged.duration,
-      merged.note,
-      merged.transcription,
-      merged.created_at,
-      merged.updated_at
-    )
-
-    result.conflicts.push({
-      entityType: 'clip',
-      entityId: local.id,
-      resolution: local.note !== remoteBackup.note
-        ? 'Notes concatenated with conflict marker'
-        : `Bounds: ${localWins ? 'local' : 'remote'} wins`,
+  private async processQueue(result: SyncResult): Promise<void> {
+    const processResult = await this.queue.processQueue(async (item) => {
+      if (item.entity_type === 'book' && item.operation === 'upsert') {
+        const book = this.db.getBookById(item.entity_id)
+        if (book) await this.executeUploadBook(book, result)
+      } else if (item.entity_type === 'clip') {
+        if (item.operation === 'upsert') {
+          const clip = this.db.getClip(item.entity_id)
+          if (clip) await this.executeUploadClip(clip, result)
+        } else if (item.operation === 'delete') {
+          // Find remote files to delete
+          const remoteFiles = await this.drive.listFiles('clips')
+          const jsonFile = remoteFiles.find(f => f.name === `clip_${item.entity_id}.json`)
+          const mp3File = remoteFiles.find(f => f.name === `clip_${item.entity_id}.mp3`)
+          await this.executeDeleteClip(
+            item.entity_id,
+            jsonFile?.id ?? null,
+            mp3File?.id ?? null,
+            result
+          )
+        }
+      }
     })
 
-    console.log(`Merged clip conflict: ${local.id}`)
-    return merged
+    if (processResult.errors.length > 0) {
+      result.errors.push(...processResult.errors.map(e => `Queue: ${e}`))
+    }
   }
 
   // ---------------------------------------------------------------------------
-  // Helpers
+  // Cleanup
   // ---------------------------------------------------------------------------
 
-  private groupRemoteFiles(
-    files: DriveFile[],
-    type: 'book' | 'clip'
-  ): Map<string, { file: DriveFile; timestamp: number }> {
-    const grouped = new Map<string, { file: DriveFile; timestamp: number }>()
+  private cleanupManifests(state: SyncState): void {
+    const localBookIds = new Set(state.local.books.map(b => b.id))
+    const localClipIds = new Set(state.local.clips.map(c => c.id))
 
-    for (const file of files) {
-      const parsed = parseFilename(file.name)
-      if (!parsed || parsed.type !== type || parsed.extension !== 'json') continue
+    for (const [key, manifest] of state.manifests) {
+      const existsLocally = manifest.entity_type === 'book'
+        ? localBookIds.has(manifest.entity_id)
+        : localClipIds.has(manifest.entity_id)
 
-      // Use modifiedTime from Drive as timestamp, fall back to 0
-      const timestamp = file.modifiedTime ? new Date(file.modifiedTime).getTime() : 0
+      const existsRemotely = manifest.entity_type === 'book'
+        ? state.remote.books.has(manifest.entity_id)
+        : state.remote.clips.has(manifest.entity_id)
 
-      grouped.set(parsed.id, { file, timestamp })
+      if (!existsLocally && !existsRemotely) {
+        this.db.deleteManifestEntry(manifest.entity_type, manifest.entity_id)
+      }
     }
-
-    return grouped
   }
 }
 
-// ---------------------------------------------------------------------------
-// Filename parsing
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Filename Parsing
+// -----------------------------------------------------------------------------
 
 function parseFilename(name: string): ParsedFilename | null {
   const match = name.match(FILENAME_REGEX)
@@ -818,9 +661,9 @@ function parseFilename(name: string): ParsedFilename | null {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Base64 helpers
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Base64 Helpers
+// -----------------------------------------------------------------------------
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {
   let binary = ''
@@ -838,4 +681,3 @@ function base64ToUint8Array(base64: string): Uint8Array {
   }
   return bytes
 }
-
