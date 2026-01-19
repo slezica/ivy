@@ -11,13 +11,7 @@ import type { ClipWithFile, Book, Settings } from '../services'
 // AppState - The Complete Store
 // =============================================================================
 
-export interface AppState extends LibrarySlice, PlaybackSlice, ClipSlice, SyncSlice {
-  // State
-  settings: Settings
-
-  // Settings actions
-  updateSettings: (settings: Settings) => void
-
+export interface AppState extends LibrarySlice, PlaybackSlice, ClipSlice, SyncSlice, SettingsSlice {
   // Dev tools
   __DEV_resetApp: () => Promise<void>
 }
@@ -62,6 +56,11 @@ export interface SyncSlice {
   syncNow: () => void
   autoSync: () => Promise<void>
   refreshSyncStatus: () => void
+}
+
+export interface SettingsSlice {
+  settings: Settings
+  updateSettings: (settings: Settings) => void
 }
 
 // =============================================================================

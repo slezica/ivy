@@ -17,11 +17,11 @@ import {
   SharingService,
 } from '../services'
 
-import type { Settings } from '../services'
 import { createClipSlice } from './clips'
 import { createPlaybackSlice } from './playback'
 import { createLibrarySlice } from './library'
 import { createSyncSlice } from './sync'
+import { createSettingsSlice } from './settings'
 import type { AppState, PlaybackContext } from './types'
 
 const POSITION_SYNC_THROTTLE_MS = 30 * 1000  // Only queue position sync every 30s
@@ -171,24 +171,20 @@ export const useStore = create<AppState>((set, get) => {
     sync: syncService,
   })(set, get)
 
-  return {
-    // Initial state
-    settings: dbService.getSettings(),
+  const settingsSlice = createSettingsSlice({
+    db: dbService,
+  })(set, get)
 
+  return {
     // Slices
     ...librarySlice,
     ...playbackSlice,
     ...clipSlice,
     ...syncSlice,
+    ...settingsSlice,
 
     // Actions (below)
-    updateSettings,
     __DEV_resetApp
-  }
-
-  function updateSettings(settings: Settings) {
-    dbService.setSettings(settings)
-    set({ settings })
   }
 
   async function __DEV_resetApp() {
