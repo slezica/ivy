@@ -350,21 +350,22 @@ pause()                                          // Pauses, preserves ownership
 ## File Loading Flow (Critical)
 
 1. **User picks file** → `pickedFile.uri` (external content: URI)
-2. **Check if already copied:**
-   - Lookup `dbService.getBookByUri(pickedFile.uri)` - checks by local URI
-   - If found and file exists on disk → use existing local copy
-3. **Copy to app storage:**
+2. **Copy to app storage:**
    - `library.status = 'adding'` → Modal shows "Adding to library..."
    - `fileStorageService.copyToAppStorage()` → returns local `file://` URI
-4. **Load audio:**
-   - `status = 'loading'` → Modal shows "Loading audio file..."
-   - `audioService.load(localUri)` → 10s timeout if fails
+3. **Read metadata:**
+   - `metadataService.readMetadata(localUri)` → title, artist, artwork, duration
+4. **Read fingerprint:**
+   - `fileStorageService.readFileFingerprint(localUri)` → fileSize, fingerprint
 5. **Save to database:**
+   - Check for existing book by fingerprint (restore archived or dedupe)
    - `dbService.upsertBook()` returns the `Book` with generated `id`
    - `uri = localUri` (local file:// path)
-6. **Auto-play:**
-   - `status = 'playing'`
-   - Navigate to player tab
+6. **Done** - Book added to library, no auto-play
+
+**On tap from library:**
+- Book loaded into player via `play({ fileUri, position, ownerId })`
+- Playback starts from saved position
 
 **On reload from library:**
 - Book selected by `id` from store (indexed by id)
@@ -381,7 +382,7 @@ Library screen header has a triple-dot menu (top-right) with:
 ### Sample (dev only)
 - Loads bundled test audio file (`assets/test/test-audio.mp3`)
 - Useful for quick testing without file picker
-- Navigates to Player tab after loading
+- Adds to library without auto-play
 
 ### Reset (dev only)
 - Clears database (files, clips, sessions, settings)
@@ -472,9 +473,9 @@ Located in `android/app/src/main/java/com/salezica/ivy/`:
 - Interface: `sliceAudio(inputPath, startMs, endMs, outputPath) → Promise<string>`
 
 **AudioMetadata**:
-- Kotlin native module for extracting ID3 metadata (title, artist, artwork)
+- Kotlin native module for extracting ID3 metadata (title, artist, artwork, duration)
 - Wrapped by `services/audio/metadata.ts`
-- Interface: `extractMetadata(filePath) → Promise<{ title, artist, artwork }>`
+- Interface: `extractMetadata(filePath) → Promise<{ title, artist, artwork, duration }>`
 
 ## Clip File Storage
 
