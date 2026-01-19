@@ -639,22 +639,24 @@ App auto-syncs when returning to foreground (if `settings.sync_enabled`):
 
 ### Sync Service API
 
-The sync service uses callbacks to notify the store of status changes:
+The sync service receives callbacks via constructor:
 
 ```typescript
 // Service setup (in store initialization)
-backupSyncService.setListeners({
-  onStatusChange: (status) => set({ sync: status }),
-  onDataChange: (notification) => {
-    if (notification.booksChanged.length > 0) fetchBooks()
-    if (notification.clipsChanged.length > 0) fetchClips()
-  },
+const sync = new BackupSyncService(db, drive, auth, queue, {
+  onStatusChange: onSyncStatusChange,
+  onDataChange: onSyncDataChange,
 })
 
-// Service methods
-backupSyncService.syncNow()         // Manual sync with auth prompts
-backupSyncService.autoSync()        // Silent sync (only if authenticated)
-backupSyncService.getPendingCount() // Get queue count
+// Listener functions (hoisted, defined at end of store scope)
+function onSyncStatusChange(status) {
+  set((state) => { state.sync = { ...status, lastSyncTime: ... } })
+}
+
+function onSyncDataChange(notification) {
+  if (notification.booksChanged.length > 0) get().fetchBooks()
+  if (notification.clipsChanged.length > 0) get().fetchClips()
+}
 ```
 
 The store exposes thin wrappers that components call:
