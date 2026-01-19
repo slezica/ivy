@@ -107,21 +107,20 @@ export const useStore = create<AppState>()(immer((set, get) => {
         state.playback.position = status.position
       })
 
-      // Update book position in database
-      // Only if we have a file loaded and valid position
+      // Update book position in database (only if we have valid playback)
       const { playback, books } = get()
-      if (playback.uri && status.position >= 0 && status.duration > 0) {
-        const book = Object.values(books).find(b => b.uri === playback.uri)
-        if (book) {
-          dbService.updateBookPosition(book.id, status.position)
+      if (!playback.uri || status.position < 0 || status.duration <= 0) return
 
-          // Throttle queue updates - only sync position every 30 seconds
-          const now = Date.now()
-          if (now - lastPositionQueueTime > POSITION_SYNC_THROTTLE_MS) {
-            lastPositionQueueTime = now
-            queueService.queueChange('book', book.id, 'upsert')
-          }
-        }
+      const book = Object.values(books).find(b => b.uri === playback.uri)
+      if (!book) return
+
+      dbService.updateBookPosition(book.id, status.position)
+
+      // Throttle queue updates - only sync position every 30 seconds
+      const now = Date.now()
+      if (now - lastPositionQueueTime > POSITION_SYNC_THROTTLE_MS) {
+        lastPositionQueueTime = now
+        queueService.queueChange('book', book.id, 'upsert')
       }
     },
   })

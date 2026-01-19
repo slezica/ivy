@@ -88,9 +88,8 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
 
     async function loadFileWithPicker(): Promise<void> {
       const pickedFile = await picker.pickAudioFile()
-      if (pickedFile) {
-        await loadFile(pickedFile)
-      }
+      if (!pickedFile) return
+      await loadFile(pickedFile)
     }
 
     async function loadFile(pickedFile: { uri: string; name: string }): Promise<void> {

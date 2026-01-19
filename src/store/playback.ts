@@ -39,59 +39,61 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
 
     async function play(context?: PlaybackContext): Promise<void> {
       try {
-        // If context provided, may need to load file and seek first
-        if (context) {
-          const { playback } = get()
-          const isFileSame = playback.uri === context.fileUri
-
-          if (!isFileSame) {
-            // Need to load a different file (could be book or clip audio)
-            const bookRecord = dbService.getBookByAnyUri(context.fileUri)
-            if (!bookRecord) {
-              throw new Error(`No book or clip found for: ${context.fileUri}`)
-            }
-
-            set((state) => {
-              state.playback.status = 'loading'
-              if (context.ownerId !== undefined) {
-                state.playback.ownerId = context.ownerId
-              }
-            })
-
-            const duration = await audioService.load(context.fileUri, {
-              title: bookRecord.title,
-              artist: bookRecord.artist,
-              artwork: bookRecord.artwork,
-            })
-
-            set((state) => {
-              state.playback.uri = context.fileUri
-              state.playback.duration = duration
-              state.playback.position = context.position
-            })
-
-            await audioService.seek(context.position)
-          } else if (playback.position !== context.position) {
-            // Same file, different position - just seek
-            await audioService.seek(context.position)
-            set((state) => {
-              state.playback.position = context.position
-            })
-          }
-
-          // Set status to playing, and owner if provided
+        // No context - just resume, keep existing owner
+        if (!context) {
           set((state) => {
             state.playback.status = 'playing'
+          })
+          await audioService.play()
+          return
+        }
+
+        // Context provided - may need to load file and seek first
+        const { playback } = get()
+        const isFileSame = playback.uri === context.fileUri
+
+        if (!isFileSame) {
+          // Need to load a different file (could be book or clip audio)
+          const bookRecord = dbService.getBookByAnyUri(context.fileUri)
+          if (!bookRecord) {
+            throw new Error(`No book or clip found for: ${context.fileUri}`)
+          }
+
+          set((state) => {
+            state.playback.status = 'loading'
             if (context.ownerId !== undefined) {
               state.playback.ownerId = context.ownerId
             }
           })
-        } else {
-          // No context - just resume, keep existing owner
+
+          const duration = await audioService.load(context.fileUri, {
+            title: bookRecord.title,
+            artist: bookRecord.artist,
+            artwork: bookRecord.artwork,
+          })
+
           set((state) => {
-            state.playback.status = 'playing'
+            state.playback.uri = context.fileUri
+            state.playback.duration = duration
+            state.playback.position = context.position
+          })
+
+          await audioService.seek(context.position)
+        } else if (playback.position !== context.position) {
+          // Same file, different position - just seek
+          await audioService.seek(context.position)
+          set((state) => {
+            state.playback.position = context.position
           })
         }
+
+        // Set status to playing, and owner if provided
+        set((state) => {
+          state.playback.status = 'playing'
+          if (context.ownerId !== undefined) {
+            state.playback.ownerId = context.ownerId
+          }
+        })
 
         await audioService.play()
       } catch (error) {
