@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 
 import {
-  // Service classes
   DatabaseService,
   FileStorageService,
   FilePickerService,
@@ -16,6 +15,7 @@ import {
   OfflineQueueService,
   BackupSyncService,
   SharingService,
+  type PlaybackStatus,
 } from '../services'
 
 import { createClipSlice } from './clips'
@@ -29,161 +29,120 @@ const POSITION_SYNC_THROTTLE_MS = 30 * 1000  // Only queue position sync every 3
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
-  // ---------------------------------------------------------------------------
-  // Service Wiring
-  //
-  // All services are created here with explicit dependencies.
-  // Services are encapsulated - UI components access them only via store actions.
-  // ---------------------------------------------------------------------------
-
   // Track last queue time for position updates (throttling)
   let lastPositionQueueTime = 0
 
-  // Note: fetchBooks is defined below via function declaration and is hoisted.
-  // Clip actions are accessed via get() since they come from the clip slice.
-
   // === Foundation Layer (no dependencies) ===
-  const dbService = new DatabaseService()
-  const fileStorageService = new FileStorageService()
-  const filePickerService = new FilePickerService()
-  const metadataService = new AudioMetadataService()
-  const slicerService = new AudioSlicerService()
-  const whisperService = new WhisperService()
-  const sharingService = new SharingService()
+  const db = new DatabaseService()
+  const files = new FileStorageService()
+  const picker = new FilePickerService()
+  const metadata = new AudioMetadataService()
+  const slicer = new AudioSlicerService()
+  const whisper = new WhisperService()
+  const sharing = new SharingService()
 
   // === Auth Layer ===
-  const authService = new GoogleAuthService()
+  const auth = new GoogleAuthService()
 
   // === Services with dependencies ===
-  const driveService = new GoogleDriveService(authService)
-  const queueService = new OfflineQueueService(dbService)
+  const drive = new GoogleDriveService(auth)
+  const queue = new OfflineQueueService(db)
 
-  const syncService = new BackupSyncService(
-    dbService,
-    driveService,
-    authService,
-    queueService,
-    {
-      onStatusChange: (status) => {
-        set((state) => {
-          state.sync = {
-            ...status,
-            // Preserve lastSyncTime from our state (service doesn't track it)
-            // Refresh it from DB when sync completes
-            lastSyncTime: status.isSyncing ? state.sync.lastSyncTime : dbService.getLastSyncTime(),
-          }
-        })
-      },
-      onDataChange: (notification) => {
-        if (notification.booksChanged.length > 0) {
-          get().fetchBooks()
-        }
-        if (notification.clipsChanged.length > 0) {
-          get().fetchClips()
-        }
-      },
-    }
+  const sync = new BackupSyncService(
+    db,
+    drive,
+    auth,
+    queue,
+    { onStatusChange: onSyncStatusChange, onDataChange: onSyncDataChange }
   )
 
-  const transcriptionService = new TranscriptionQueueService({
-    database: dbService,
-    whisper: whisperService,
-    slicer: slicerService,
-    onTranscriptionComplete: (clipId, transcription) => {
-      get().updateClip(clipId, { transcription })
-    },
+  const transcription = new TranscriptionQueueService({
+    database: db,
+    whisper,
+    slicer,
+    onTranscriptionComplete,
   })
 
-  // Start transcription service
-  transcriptionService.start()
+  transcription.start()
 
-  const audioService = new AudioPlayerService({
-    onPlaybackStatusChange: (status) => {
-      set((state) => {
-        // Only update status if not currently in a transitional state
-        if (state.playback.status !== 'loading') {
-          state.playback.status = status.status
-        }
-        state.playback.position = status.position
-      })
+  const audio = new AudioPlayerService({ onPlaybackStatusChange })
 
-      // Update book position in database (only if we have valid playback)
-      const { playback, books } = get()
-      if (!playback.uri || status.position < 0 || status.duration <= 0) return
-
-      const book = Object.values(books).find(b => b.uri === playback.uri)
-      if (!book) return
-
-      dbService.updateBookPosition(book.id, status.position)
-
-      // Throttle queue updates - only sync position every 30 seconds
-      const now = Date.now()
-      if (now - lastPositionQueueTime > POSITION_SYNC_THROTTLE_MS) {
-        lastPositionQueueTime = now
-        queueService.queueChange('book', book.id, 'upsert')
-      }
-    },
-  })
-
-  // ---------------------------------------------------------------------------
-  // Slices
-  // ---------------------------------------------------------------------------
-
-  const librarySlice = createLibrarySlice({
-    db: dbService,
-    files: fileStorageService,
-    picker: filePickerService,
-    metadata: metadataService,
-    audio: audioService,
-    queue: queueService,
-  })(set, get)
-
-  const playbackSlice = createPlaybackSlice({
-    audio: audioService,
-    db: dbService,
-  })(set, get)
-
-  const clipSlice = createClipSlice({
-    db: dbService,
-    slicer: slicerService,
-    queue: queueService,
-    transcription: transcriptionService,
-    sharing: sharingService,
-  })(set, get)
-
-  const syncSlice = createSyncSlice({
-    db: dbService,
-    sync: syncService,
-  })(set, get)
-
-  const settingsSlice = createSettingsSlice({
-    db: dbService,
-  })(set, get)
+  // === Slices ===
+  const librarySlice = createLibrarySlice({ db, files, picker, metadata, audio, queue })
+  const playbackSlice = createPlaybackSlice({ audio, db })
+  const clipSlice = createClipSlice({ db, slicer, queue, transcription, sharing })
+  const syncSlice = createSyncSlice({ db, sync })
+  const settingsSlice = createSettingsSlice({ db })
 
   return {
-    // Slices
-    ...librarySlice,
-    ...playbackSlice,
-    ...clipSlice,
-    ...syncSlice,
-    ...settingsSlice,
+    ...librarySlice(set, get),
+    ...playbackSlice(set, get),
+    ...clipSlice(set, get),
+    ...syncSlice(set, get),
+    ...settingsSlice(set, get),
+    __DEV_resetApp,
+  }
 
-    // Actions (below)
-    __DEV_resetApp
+  // ---------------------------------------------------------------------------
+  // Listeners
+  // ---------------------------------------------------------------------------
+
+  function onSyncStatusChange(status: { isSyncing: boolean; pendingCount: number; error: string | null }) {
+    set((state) => {
+      state.sync = {
+        ...status,
+        // Preserve lastSyncTime from our state (service doesn't track it)
+        // Refresh it from DB when sync completes
+        lastSyncTime: status.isSyncing ? state.sync.lastSyncTime : db.getLastSyncTime(),
+      }
+    })
+  }
+
+  function onSyncDataChange(notification: { booksChanged: string[]; clipsChanged: string[] }) {
+    if (notification.booksChanged.length > 0) {
+      get().fetchBooks()
+    }
+    if (notification.clipsChanged.length > 0) {
+      get().fetchClips()
+    }
+  }
+
+  function onTranscriptionComplete(clipId: string, transcription: string) {
+    get().updateClip(clipId, { transcription })
+  }
+
+  function onPlaybackStatusChange(status: PlaybackStatus) {
+    set((state) => {
+      // Only update status if not currently in a transitional state
+      if (state.playback.status !== 'loading') {
+        state.playback.status = status.status
+      }
+      state.playback.position = status.position
+    })
+
+    // Update book position in database (only if we have valid playback)
+    const { playback, books } = get()
+    if (!playback.uri || status.position < 0 || status.duration <= 0) return
+
+    const book = Object.values(books).find(b => b.uri === playback.uri)
+    if (!book) return
+
+    db.updateBookPosition(book.id, status.position)
+
+    // Throttle queue updates - only sync position every 30 seconds
+    const now = Date.now()
+    if (now - lastPositionQueueTime > POSITION_SYNC_THROTTLE_MS) {
+      lastPositionQueueTime = now
+      queue.queueChange('book', book.id, 'upsert')
+    }
   }
 
   async function __DEV_resetApp() {
-    // Unload current player
-    await audioService.unload()
+    await audio.unload()
+    db.clearAllData()
 
-    // Clear database
-    dbService.clearAllData()
-
-    // Reset store state
     set({
-      library: {
-        status: 'idle',
-      },
+      library: { status: 'idle' },
       playback: {
         status: 'idle',
         position: 0,
