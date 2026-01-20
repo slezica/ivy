@@ -1,6 +1,6 @@
 # Ivy
 
-A React Native Expo app for podcast and audiobook playback with library management, clips/bookmarks with notes, and GPU-accelerated timeline UI. Files are automatically copied to app-owned storage to prevent content URI invalidation issues, with resume position tracking and auto-play support.
+A local podcast and audiobook player for Android with library management, clips with automatic transcription and innovative player UI.
 
 ### AI Notice
 
