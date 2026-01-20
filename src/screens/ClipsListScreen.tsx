@@ -59,6 +59,7 @@ export default function ClipsListScreen() {
       )
     })
     .sort((a, b) => b.created_at - a.created_at)
+
   const viewingClip = viewingClipId ? clips[viewingClipId] : null
   const editingClip = editingClipId ? clips[editingClipId] : null
 
@@ -198,11 +199,11 @@ export default function ClipsListScreen() {
             clips={clipsArray}
             onViewClip={handleViewClip}
             onOpenMenu={handleOpenMenu}
-          />
+          /> :
 
-        : searchQuery
-          ? <EmptyState title="No clips found" subtitle="Nothing matches your search" />
-          : <EmptyState title="No clips yet" subtitle="Add clips from the player screen" />
+       searchQuery.length > 0
+        ? <EmptyState title="No clips found" subtitle="Nothing matches your search" />
+        : <EmptyState title="No clips yet" subtitle="Add clips from the player screen" />
       }
 
       {viewingClip && (
