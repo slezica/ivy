@@ -26,6 +26,7 @@ describe('planSync', () => {
       artwork: null,
       file_size: 1000000,
       fingerprint: new Uint8Array([1, 2, 3, 4]),
+      hidden: false,
     }
   }
 
@@ -43,6 +44,7 @@ describe('planSync', () => {
         artwork: null,
         file_size: 1000000,
         fingerprint: 'AQIDBA==',
+        hidden: false,
       },
       fileId: `file-${id}`,
       modifiedAt,

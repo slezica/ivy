@@ -15,6 +15,7 @@ describe('mergeBook', () => {
     artwork: 'local-artwork.jpg',
     file_size: 1000000,
     fingerprint: new Uint8Array([1, 2, 3, 4]),
+    hidden: false,
   }
 
   const baseBackup: BookBackup = {
@@ -28,6 +29,7 @@ describe('mergeBook', () => {
     artwork: 'remote-artwork.jpg',
     file_size: 1000000,
     fingerprint: 'AQIDBA==', // base64 of [1,2,3,4]
+    hidden: false,
   }
 
   describe('position merge (max wins)', () => {
@@ -161,6 +163,56 @@ describe('mergeBook', () => {
 
       expect(merged.updated_at).toBeGreaterThanOrEqual(before)
       expect(merged.updated_at).toBeLessThanOrEqual(after)
+    })
+  })
+
+  describe('hidden merge (hidden-wins)', () => {
+    it('stays visible when both are visible', () => {
+      const local = { ...baseBook, hidden: false }
+      const remote = { ...baseBackup, hidden: false }
+
+      const { merged } = mergeBook(local, remote)
+
+      expect(merged.hidden).toBe(false)
+    })
+
+    it('becomes hidden when local is hidden', () => {
+      const local = { ...baseBook, hidden: true }
+      const remote = { ...baseBackup, hidden: false }
+
+      const { merged, resolution } = mergeBook(local, remote)
+
+      expect(merged.hidden).toBe(true)
+      expect(resolution).toContain('hidden: true')
+    })
+
+    it('becomes hidden when remote is hidden', () => {
+      const local = { ...baseBook, hidden: false }
+      const remote = { ...baseBackup, hidden: true }
+
+      const { merged, resolution } = mergeBook(local, remote)
+
+      expect(merged.hidden).toBe(true)
+      expect(resolution).toContain('hidden: true')
+    })
+
+    it('stays hidden when both are hidden', () => {
+      const local = { ...baseBook, hidden: true }
+      const remote = { ...baseBackup, hidden: true }
+
+      const { merged } = mergeBook(local, remote)
+
+      expect(merged.hidden).toBe(true)
+    })
+
+    it('handles missing hidden field in remote (backward compat)', () => {
+      const local = { ...baseBook, hidden: false }
+      const remote = { ...baseBackup }
+      delete (remote as Partial<typeof remote>).hidden
+
+      const { merged } = mergeBook(local, remote)
+
+      expect(merged.hidden).toBe(false)
     })
   })
 })
