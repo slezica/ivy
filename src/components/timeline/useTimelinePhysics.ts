@@ -21,7 +21,7 @@ import { timeToX, xToTime, clamp } from './utils'
 
 const HANDLE_CIRCLE_RADIUS = 12
 const HANDLE_TOUCH_RADIUS = 24
-const DISPLAY_UPDATE_INTERVAL = 100 // Throttle time display updates to reduce re-renders
+const DISPLAY_UPDATE_INTERVAL = 50 // Throttle time display updates to reduce re-renders
 
 export interface SelectionConfig {
   start: number
