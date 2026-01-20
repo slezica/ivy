@@ -24,7 +24,7 @@ const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, sync, autoSync } = useStore()
+  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, sync, autoSync } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -115,6 +115,29 @@ export default function LibraryScreen() {
     )
   }
 
+  const handleDeleteBook = (bookId: string) => {
+    const book = books[bookId]
+    Alert.alert(
+      'Remove from Library',
+      `Remove "${book?.title || book?.name}" from your library? The audio file will be deleted. You can restore it by adding the same file again.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteBook(bookId)
+            } catch (error) {
+              console.error('Error removing book:', error)
+              Alert.alert('Error', 'Failed to remove book')
+            }
+          },
+        },
+      ]
+    )
+  }
+
   const handleMenuAction = (action: string) => {
     if (menuBookId === null) return
     const bookId = menuBookId
@@ -124,12 +147,16 @@ export default function LibraryScreen() {
       case 'archive':
         handleArchiveBook(bookId)
         break
+      case 'delete':
+        handleDeleteBook(bookId)
+        break
     }
   }
 
   const getMenuItems = (): ActionMenuItem[] => {
     return [
-      { key: 'archive', label: 'Archive', icon: 'archive-outline', destructive: true },
+      { key: 'archive', label: 'Archive', icon: 'archive-outline' },
+      { key: 'delete', label: 'Remove from library', icon: 'trash-outline', destructive: true },
     ]
   }
 
