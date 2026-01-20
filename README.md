@@ -2,6 +2,10 @@
 
 A React Native Expo app for podcast and audiobook playback with library management, clips/bookmarks with notes, and GPU-accelerated timeline UI. Files are automatically copied to app-owned storage to prevent content URI invalidation issues, with resume position tracking and auto-play support.
 
+### AI Notice
+
+This project was created using an AI-assisted workflow. Humans took care of design, architecture and decision-making while Claude did most of the writing following specific instructions for each task. This kind of micromanaged collaboration was enormously successful and accelerated the project significantly. Thanks, Claude!
+
 ## Development Setup
 
 ### Prerequisites
