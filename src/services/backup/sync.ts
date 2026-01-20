@@ -339,7 +339,8 @@ export class BackupSyncService {
       merged.artist,
       merged.artwork,
       merged.file_size,
-      merged.fingerprint
+      merged.fingerprint,
+      merged.hidden
     )
 
     // Upload merged result
@@ -367,6 +368,7 @@ export class BackupSyncService {
         artwork: book.artwork,
         file_size: book.file_size,
         fingerprint: uint8ArrayToBase64(book.fingerprint),
+        hidden: book.hidden,
       }
 
       const filename = `book_${book.id}.json`
@@ -411,7 +413,8 @@ export class BackupSyncService {
       backup.artist,
       backup.artwork,
       backup.file_size,
-      base64ToUint8Array(backup.fingerprint)
+      base64ToUint8Array(backup.fingerprint),
+      backup.hidden ?? false  // Backward compat: old backups may not have hidden field
     )
 
     // Update manifest

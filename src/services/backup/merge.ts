@@ -25,15 +25,18 @@ export interface MergeResult<T> {
  * Merge a local book with a remote backup.
  *
  * Strategy:
+ * - hidden: hidden-wins (if either side is hidden, result is hidden)
  * - position: max value wins (user progressed further on one device)
  * - metadata (title, artist, artwork): last-write-wins based on updated_at
  */
 export function mergeBook(local: Book, remote: BookBackup): MergeResult<Book> {
+  const mergedHidden = local.hidden || (remote.hidden ?? false)
   const mergedPosition = Math.max(local.position, remote.position)
   const localWins = local.updated_at >= remote.updated_at
 
   const merged: Book = {
     ...local,
+    hidden: mergedHidden,
     position: mergedPosition,
     title: localWins ? local.title : remote.title,
     artist: localWins ? local.artist : remote.artist,
@@ -41,7 +44,8 @@ export function mergeBook(local: Book, remote: BookBackup): MergeResult<Book> {
     updated_at: Date.now(),
   }
 
-  const resolution = `Position: ${mergedPosition}ms (max), metadata: ${localWins ? 'local' : 'remote'} wins`
+  const hiddenNote = mergedHidden ? ', hidden: true' : ''
+  const resolution = `Position: ${mergedPosition}ms (max), metadata: ${localWins ? 'local' : 'remote'} wins${hiddenNote}`
 
   return { merged, resolution }
 }
