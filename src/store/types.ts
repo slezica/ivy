@@ -24,6 +24,7 @@ export interface LibrarySlice {
   loadFileWithUri: (uri: string, name: string) => Promise<void>
   loadFileWithPicker: () => Promise<void>
   archiveBook: (bookId: string) => Promise<void>
+  deleteBook: (bookId: string) => Promise<void>
 }
 
 

@@ -25,6 +25,7 @@ export interface Book {
   artwork: string | null   // base64 data URI
   file_size: number        // File size in bytes (for fingerprint matching)
   fingerprint: Uint8Array  // First 4KB of file (BLOB)
+  hidden: boolean          // Soft-deleted (removed from library)
 }
 
 export interface Clip {
@@ -88,6 +89,13 @@ export interface SyncQueueItem {
 // Service
 // =============================================================================
 
+// Raw book row from database (hidden is integer)
+type BookRow = Omit<Book, 'hidden'> & { hidden: number }
+
+function toBook(row: BookRow): Book {
+  return { ...row, hidden: row.hidden === 1 }
+}
+
 export class DatabaseService {
   private db: SQLite.SQLiteDatabase
 
@@ -101,27 +109,27 @@ export class DatabaseService {
   // ---------------------------------------------------------------------------
 
   getBookByUri(uri: string): Book | null {
-    const result = this.db.getFirstSync<Book>(
+    const row = this.db.getFirstSync<BookRow>(
       'SELECT * FROM files WHERE uri = ?',
       [uri]
     )
-    return result || null
+    return row ? toBook(row) : null
   }
 
   getBookById(id: string): Book | null {
-    const result = this.db.getFirstSync<Book>(
+    const row = this.db.getFirstSync<BookRow>(
       'SELECT * FROM files WHERE id = ?',
       [id]
     )
-    return result || null
+    return row ? toBook(row) : null
   }
 
   getBookByFingerprint(fileSize: number, fingerprint: Uint8Array): Book | null {
-    const result = this.db.getFirstSync<Book>(
+    const row = this.db.getFirstSync<BookRow>(
       'SELECT * FROM files WHERE file_size = ? AND fingerprint = ?',
       [fileSize, fingerprint]
     )
-    return result || null
+    return row ? toBook(row) : null
   }
 
   /**
@@ -134,19 +142,20 @@ export class DatabaseService {
     if (book) return book
 
     // Try to find a clip with this URI and return its source book
-    const result = this.db.getFirstSync<Book>(
+    const row = this.db.getFirstSync<BookRow>(
       `SELECT files.* FROM files
        INNER JOIN clips ON clips.source_id = files.id
        WHERE clips.uri = ?`,
       [uri]
     )
-    return result || null
+    return row ? toBook(row) : null
   }
 
   getAllBooks(): Book[] {
-    return this.db.getAllSync<Book>(
-      'SELECT * FROM files ORDER BY updated_at DESC'
+    const rows = this.db.getAllSync<BookRow>(
+      'SELECT * FROM files WHERE hidden = 0 ORDER BY updated_at DESC'
     )
+    return rows.map(toBook)
   }
 
   upsertBook(
@@ -180,8 +189,8 @@ export class DatabaseService {
   }
 
   /**
-   * Restore an archived book by attaching a new file.
-   * Preserves position, updates uri and metadata, refreshes updated_at.
+   * Restore an archived/hidden book by attaching a new file.
+   * Preserves position, updates uri and metadata, clears hidden flag, refreshes updated_at.
    */
   restoreBook(
     id: string,
@@ -194,10 +203,21 @@ export class DatabaseService {
   ): Book {
     const now = Date.now()
     this.db.runSync(
-      'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, title = ?, artist = ?, artwork = ? WHERE id = ?',
+      'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, title = ?, artist = ?, artwork = ?, hidden = 0 WHERE id = ?',
       [uri, name, duration, now, title, artist, artwork, id]
     )
     return this.getBookById(id)!
+  }
+
+  /**
+   * Soft-delete a book (remove from library).
+   * Sets uri to null and hidden to true. File deletion is caller's responsibility.
+   */
+  hideBook(id: string): void {
+    this.db.runSync(
+      'UPDATE files SET uri = NULL, hidden = 1 WHERE id = ?',
+      [id]
+    )
   }
 
   /**
@@ -346,7 +366,8 @@ export class DatabaseService {
     artist: string | null,
     artwork: string | null,
     fileSize: number,
-    fingerprint: Uint8Array
+    fingerprint: Uint8Array,
+    hidden: boolean = false
   ): void {
     const existing = this.getBookById(id)
 
@@ -355,17 +376,17 @@ export class DatabaseService {
       if (updated_at > existing.updated_at) {
         this.db.runSync(
           `UPDATE files SET name = ?, duration = ?, position = ?, updated_at = ?,
-           title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ?
+           title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ?, hidden = ?
            WHERE id = ?`,
-          [name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint, id]
+          [name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint, hidden ? 1 : 0, id]
         )
       }
     } else {
       // Insert with specific ID (SQLite allows this even with AUTOINCREMENT)
       this.db.runSync(
-        `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint)
-         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint]
+        `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint, hidden)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint, hidden ? 1 : 0]
       )
     }
   }
@@ -487,7 +508,8 @@ export class DatabaseService {
         artist TEXT,
         artwork TEXT,
         file_size INTEGER,
-        fingerprint BLOB
+        fingerprint BLOB,
+        hidden INTEGER NOT NULL DEFAULT 0
       );
     `)
 

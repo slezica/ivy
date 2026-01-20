@@ -34,6 +34,7 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
       loadFileWithUri,
       loadFileWithPicker,
       archiveBook,
+      deleteBook,
     }
 
     function fetchBooks(): void {
@@ -76,6 +77,41 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
       if (previousUri) {
         files.deleteFile(previousUri).catch((error) => {
           console.error('Failed to delete archived book file (non-critical):', error)
+        })
+      }
+    }
+
+    async function deleteBook(bookId: string): Promise<void> {
+      const { books } = get()
+      const book = books[bookId]
+
+      if (!book) {
+        throw new Error('Book not found')
+      }
+
+      const previousBook = { ...book }
+
+      // 1. Optimistic store update (remove from visible books)
+      set((state) => {
+        delete state.books[bookId]
+      })
+
+      // 2. Database update (with rollback on fail)
+      try {
+        db.hideBook(bookId)
+        queue.queueChange('book', bookId, 'upsert')
+      } catch (error) {
+        // Rollback store
+        set((state) => {
+          state.books[bookId] = previousBook
+        })
+        throw error
+      }
+
+      // 3. Async file deletion (fire and forget - file is orphaned if this fails)
+      if (previousBook.uri) {
+        files.deleteFile(previousBook.uri).catch((error) => {
+          console.error('Failed to delete book file (non-critical):', error)
         })
       }
     }
