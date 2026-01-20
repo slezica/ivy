@@ -88,37 +88,59 @@ await play({ fileUri, position, ownerId })
 - On play: claim ownership with `ownPosition`
 - On seek: always update `ownPosition`, only call `seek()` if owner
 
-### 7. **Books and Archiving** 🔥 IMPORTANT
+### 7. **Books, Archiving, and Deletion** 🔥 IMPORTANT
 The domain entity is called `Book` (not AudioFile). A Book represents an audiobook/podcast in the library.
 
 **File Fingerprint:** Each book stores `file_size` + `fingerprint` (first 4KB as BLOB). This enables:
 - **Duplicate detection:** Adding the same file twice reuses the existing book record
-- **Automatic restore:** Adding a file that matches an archived book restores it with preserved position and clips
+- **Automatic restore:** Adding a file that matches an archived/deleted book restores it with preserved position and clips
 
-**Archiving:** Users can archive books to free storage while preserving clips:
-- `book.uri === null` means the book is archived
-- Archiving deletes the underlying audio file but keeps the database record
+**Book States:**
+| State | `uri` | `hidden` | Visible in UI |
+|-------|-------|----------|---------------|
+| Active | path | false | Main library list |
+| Archived | null | false | "Archived" section |
+| Deleted | null | true | Nowhere |
+
+**Archiving:** Users can archive books to free storage while keeping them visible:
+- `book.uri === null && !book.hidden` means the book is archived
+- Archiving deletes the underlying audio file but keeps the database record visible
 - Clips continue to work (they have their own audio files)
 - Archived books appear in a separate "Archived" section in LibraryScreen
+
+**Deletion (soft-delete):** Users can remove books from their library entirely:
+- `book.uri === null && book.hidden` means the book is deleted
+- Deletion deletes the audio file AND hides the book from all UI
+- Book record remains in database (for potential restore via fingerprint)
+- Clips of deleted books still appear in clips list (they're independent)
 
 **Archive action flow:**
 1. Optimistic store update (set `uri: null`)
 2. Database update (with rollback on failure)
 3. Async file deletion (fire-and-forget)
 
+**Delete action flow:**
+1. Optimistic store update (remove from `books` map)
+2. Database update: set `uri: null`, `hidden: true` (with rollback on failure)
+3. Async file deletion (fire-and-forget)
+
 **Restore flow (automatic on file add):**
 1. File copied to app storage
 2. Fingerprint read (file size + first 4KB)
-3. If fingerprint matches archived book → restore: update `uri`, replace metadata, preserve position
+3. If fingerprint matches archived/deleted book → restore: update `uri`, set `hidden: false`, replace metadata, preserve position
 4. If fingerprint matches active book → delete duplicate file, touch `updated_at`
 5. If no match → create new book record
 
 ```typescript
-// Check if book is archived
-const isArchived = book.uri === null
+// Check book state
+const isArchived = book.uri === null && !book.hidden
+const isDeleted = book.uri === null && book.hidden
 
-// Archive a book
+// Archive a book (keeps visible in Archived section)
 await archiveBook(bookId)
+
+// Delete a book (removes from library entirely)
+await deleteBook(bookId)
 
 // Restore happens automatically when same file is added again
 ```
@@ -242,7 +264,7 @@ await archiveBook(bookId)
 **files table (stores `Book` entities):**
 ```sql
 id TEXT PRIMARY KEY            -- UUID, stable identifier
-uri TEXT                       -- Local file:// path (NULL if archived)
+uri TEXT                       -- Local file:// path (NULL if archived/deleted)
 name TEXT
 duration INTEGER               -- milliseconds
 position INTEGER               -- milliseconds (resume position)
@@ -252,6 +274,7 @@ artist TEXT
 artwork TEXT                   -- base64 data URI
 file_size INTEGER              -- File size in bytes (indexed for fast lookup)
 fingerprint BLOB               -- First 4KB of file (for exact matching)
+hidden INTEGER NOT NULL DEFAULT 0  -- Soft-deleted (1 = removed from library)
 ```
 
 **clips table:**
@@ -311,7 +334,7 @@ Store is composed of slices. See `store/types.ts` for authoritative type definit
 // LibrarySlice
 library: { status: 'loading' | 'idle' | 'adding' }
 books: Record<string, Book>
-fetchBooks, loadFile, loadFileWithUri, loadFileWithPicker, archiveBook
+fetchBooks, loadFile, loadFileWithUri, loadFileWithPicker, archiveBook, deleteBook
 
 // PlaybackSlice
 playback: {
@@ -626,6 +649,7 @@ Conflicts occur when same entity modified on two devices before syncing:
 **Books:**
 | Field | Strategy |
 |-------|----------|
+| `hidden` | **Hidden-wins** (if either side is hidden, result is hidden) |
 | `position` | **Max value wins** (user progressed further) |
 | `title`, `artist`, `artwork` | Last-write-wins |
 
@@ -755,7 +779,7 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 - Call `upsertBook` without a local URI
 - Call `play()` or `seek()` without file context from UI components
 - Assume global `playback.position` is relevant to your component (check ownership first)
-- Assume `Book.uri` is non-null (check before using for playback - null means archived)
+- Assume `Book.uri` is non-null (check before using for playback - null means archived or deleted)
 - Attempt to re-slice clips when source book is archived (`file_uri === null`)
 - Read book metadata from `playback` state (it only has hardware state: uri, duration)
 - Modify books/clips without queueing for sync (changes will be lost on other devices)
@@ -771,10 +795,10 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 **Sync to Drive:** Settings → Sync now (or enable auto-sync toggle)
 **Time format:** Always milliseconds internally
 **ID format:** UUIDs (string) for all entities - use `generateId()` from utils
-**Book playback:** Use `book.uri` (local path) - check for null first (null = archived)
+**Book playback:** Use `book.uri` (local path) - check for null first (null = archived/deleted)
 **Book identifier:** Use `book.id` (UUID, stable), not `uri` (can be null)
 **Clip source check:** `clip.file_uri !== null` means source book available
-**Archive check:** `book.uri === null` means book is archived
+**Book states:** Active (`uri != null`), Archived (`uri == null && !hidden`), Deleted (`uri == null && hidden`)
 **Library status:** `loading → idle ⇄ adding`
 **Playback status:** `idle → loading → paused ⇄ playing`
 **Playback state:** Hardware-only (uri, duration, position, status, ownerId) - no Book metadata
