@@ -145,10 +145,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     }
 
     // Track session: immediately on pause, throttled during playback
-    if (status.status === 'paused') {
-      trackSession(book.id)
-      lastSessionTrackTime = now
-    } else if (status.status === 'playing' && now - lastSessionTrackTime > SESSION_TRACK_THROTTLE_MS) {
+    if (status.status === 'playing' && now - lastSessionTrackTime > SESSION_TRACK_THROTTLE_MS) {
       trackSession(book.id)
       lastSessionTrackTime = now
     }
