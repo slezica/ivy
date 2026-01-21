@@ -30,3 +30,17 @@ export function formatDate(timestamp: number): string {
 
   return date.toLocaleDateString()
 }
+
+/**
+ * Creates a throttled version of a function that only executes at most once per interval.
+ */
+export function throttle<T extends (...args: any[]) => void>(fn: T, ms: number): T {
+  let lastCall = 0
+  return ((...args: Parameters<T>) => {
+    const now = Date.now()
+    if (now - lastCall >= ms) {
+      lastCall = now
+      fn(...args)
+    }
+  }) as T
+}

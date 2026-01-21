@@ -25,10 +25,7 @@ import { createSyncSlice } from './sync'
 import { createSettingsSlice } from './settings'
 import { createSessionSlice } from './session'
 import type { AppState, PlaybackContext } from './types'
-import { MAIN_PLAYER_OWNER_ID } from '../utils'
-
-const POSITION_SYNC_THROTTLE_MS = 30 * 1000  // Only queue position sync every 30s
-const SESSION_TRACK_THROTTLE_MS = 5 * 1000   // Track session every 5s during playback
+import { MAIN_PLAYER_OWNER_ID, throttle } from '../utils'
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
@@ -112,9 +109,14 @@ export const useStore = create<AppState>()(immer((set, get) => {
     get().updateClip(clipId, { transcription })
   }
 
-  // Track last queue time for position updates (throttling)
-  let lastPositionQueueTime = 0
-  let lastSessionTrackTime = 0
+  // Throttled operations for playback updates
+  const queuePositionSync = throttle((bookId: string) => {
+    queue.queueChange('book', bookId, 'upsert')
+  }, 30_000)
+
+  const trackSession = throttle((bookId: string) => {
+    get().trackSession(bookId)
+  }, 5_000)
 
   function onPlaybackStatusChange(status: PlaybackStatus) {
     set((state) => {
@@ -126,7 +128,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     })
 
     // Update book position in database (only if we have valid playback)
-    const { playback, books, trackSession } = get()
+    const { playback, books } = get()
     if (!playback.uri || status.position < 0 || status.duration <= 0) return
 
     // Only track sessions for main player (not clips)
@@ -136,18 +138,10 @@ export const useStore = create<AppState>()(immer((set, get) => {
     if (!book) return
 
     db.updateBookPosition(book.id, status.position)
+    queuePositionSync(book.id)
 
-    // Throttle queue updates - only sync position every 30 seconds
-    const now = Date.now()
-    if (now - lastPositionQueueTime > POSITION_SYNC_THROTTLE_MS) {
-      lastPositionQueueTime = now
-      queue.queueChange('book', book.id, 'upsert')
-    }
-
-    // Track session: immediately on pause, throttled during playback
-    if (status.status === 'playing' && now - lastSessionTrackTime > SESSION_TRACK_THROTTLE_MS) {
+    if (status.status === 'playing') {
       trackSession(book.id)
-      lastSessionTrackTime = now
     }
   }
 
