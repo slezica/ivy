@@ -79,6 +79,7 @@ export class BackupSyncService {
    */
   async syncNow(): Promise<void> {
     if (this.isSyncing) return
+    this.isSyncing = true  // Set immediately to prevent race conditions
 
     this.setStatus(true, null)
 
@@ -111,9 +112,13 @@ export class BackupSyncService {
    */
   async autoSync(): Promise<void> {
     if (this.isSyncing) return
+    this.isSyncing = true  // Set immediately to prevent race conditions
 
     await this.auth.initialize()
-    if (!this.auth.isAuthenticated()) return
+    if (!this.auth.isAuthenticated()) {
+      this.isSyncing = false
+      return
+    }
 
     this.setStatus(true, null)
 
