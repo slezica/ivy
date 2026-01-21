@@ -55,6 +55,13 @@ export interface Session {
   ended_at: number
 }
 
+export interface SessionWithBook extends Session {
+  book_name: string
+  book_title: string | null
+  book_artist: string | null
+  book_artwork: string | null
+}
+
 export interface Settings {
   sync_enabled: boolean
 }
@@ -466,6 +473,20 @@ export class DatabaseService {
     this.db.runSync(
       'UPDATE sessions SET ended_at = ? WHERE id = ?',
       [endedAt, sessionId]
+    )
+  }
+
+  getAllSessions(): SessionWithBook[] {
+    return this.db.getAllSync<SessionWithBook>(
+      `SELECT
+        sessions.*,
+        files.name as book_name,
+        files.title as book_title,
+        files.artist as book_artist,
+        files.artwork as book_artwork
+      FROM sessions
+      INNER JOIN files ON sessions.book_id = files.id
+      ORDER BY sessions.started_at DESC`
     )
   }
 

@@ -18,7 +18,7 @@ export type { SliceOptions, SliceResult } from './audio'
 // =============================================================================
 
 export { DatabaseService } from './storage'
-export type { Book, Clip, ClipWithFile, Session, Settings, SyncEntityType, SyncOperation, SyncManifestEntry, SyncQueueItem } from './storage'
+export type { Book, Clip, ClipWithFile, Session, SessionWithBook, Settings, SyncEntityType, SyncOperation, SyncManifestEntry, SyncQueueItem } from './storage'
 
 export { FileStorageService } from './storage'
 

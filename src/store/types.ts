@@ -1,4 +1,4 @@
-import type { ClipWithFile, Book, Settings } from '../services'
+import type { ClipWithFile, Book, Settings, SessionWithBook } from '../services'
 
 
 export interface AppState extends
@@ -80,6 +80,8 @@ export interface SettingsSlice {
 
 
 export interface SessionSlice {
+  sessions: SessionWithBook[]
+  fetchSessions: () => void
   trackSession: (bookId: string) => void
 }
 
