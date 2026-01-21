@@ -142,6 +142,7 @@ export function createClipSlice(deps: ClipSliceDeps) {
       // Update store
       set((state) => {
         const clip = state.clips[id]
+        if (!clip) return
         if (updates.note !== undefined) clip.note = updates.note
         if (updates.start !== undefined) clip.start = updates.start
         if (updates.duration !== undefined) clip.duration = updates.duration
