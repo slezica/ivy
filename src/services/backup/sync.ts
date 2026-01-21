@@ -520,12 +520,19 @@ export class BackupSyncService {
       result.uploaded.clips++
       console.log(`Uploaded clip: ${clip.id}`)
     } catch (error) {
-      // Rollback: if JSON uploaded but MP3 failed, delete JSON
+      // Rollback: if JSON uploaded but MP3 failed, delete JSON to prevent orphans
       if (jsonFileId && !mp3FileId) {
-        try {
-          await this.drive.deleteFile(jsonFileId)
-        } catch (rollbackError) {
-          console.warn('Failed to rollback JSON upload:', rollbackError)
+        let rollbackSuccess = false
+        for (let attempt = 0; attempt < 3 && !rollbackSuccess; attempt++) {
+          try {
+            await this.drive.deleteFile(jsonFileId)
+            rollbackSuccess = true
+          } catch (rollbackError) {
+            console.warn(`Rollback attempt ${attempt + 1} failed:`, rollbackError)
+          }
+        }
+        if (!rollbackSuccess) {
+          result.errors.push(`Orphaned JSON file on Drive: ${jsonFilename}`)
         }
       }
       result.errors.push(`Failed to upload clip ${clip.id}: ${error}`)
