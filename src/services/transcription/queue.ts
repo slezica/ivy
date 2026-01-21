@@ -91,12 +91,14 @@ export class TranscriptionQueueService {
 
     this.processing = true
 
-    while (this.queue.length > 0) {
-      const clipId = this.queue.shift()!
-      await this.processClip(clipId)
+    try {
+      while (this.queue.length > 0) {
+        const clipId = this.queue.shift()!
+        await this.processClip(clipId)
+      }
+    } finally {
+      this.processing = false
     }
-
-    this.processing = false
   }
 
   private async processClip(clipId: string): Promise<void> {
