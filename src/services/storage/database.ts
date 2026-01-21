@@ -50,11 +50,9 @@ export interface ClipWithFile extends Clip {
 
 export interface Session {
   id: string
-  file_uri: string
-  start: number
-  duration: number
-  created_at: number
-  updated_at: number
+  book_id: string
+  started_at: number
+  ended_at: number
 }
 
 export interface Settings {
