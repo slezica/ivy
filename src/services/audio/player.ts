@@ -63,14 +63,20 @@ export class AudioPlayerService {
 
     // Wait for duration to be available
     return new Promise((resolve, reject) => {
+      let settled = false
+
       const timeout = setTimeout(() => {
+        settled = true
         reject(new Error('Failed to load audio file: timeout after 10 seconds'))
       }, 10000)
 
       const checkDuration = async () => {
+        if (settled) return
+
         try {
           const progress = await TrackPlayer.getProgress()
           if (progress.duration > 0) {
+            settled = true
             clearTimeout(timeout)
             this.currentDuration = progress.duration * 1000  // Convert to ms
             resolve(this.currentDuration)
