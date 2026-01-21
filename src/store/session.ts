@@ -34,10 +34,10 @@ export function createSessionSlice(deps: SessionSliceDeps) {
           }
         })
       } else {
-        const session = db.createSession(bookId)
-
         const book = get().books[bookId]
         if (!book) { return }
+
+        const session = db.createSession(bookId)
 
         const sessionWithBook: SessionWithBook = {
           ...session,
