@@ -437,22 +437,36 @@ export class DatabaseService {
   // Sessions
   // ---------------------------------------------------------------------------
 
-  createSession(fileUri: string, start: number, duration: number): Session {
+  /**
+   * Get the current active session for a book (most recent, ended within 5 minutes).
+   */
+  getCurrentSession(bookId: string): Session | null {
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
+    const row = this.db.getFirstSync<Session>(
+      `SELECT * FROM sessions
+       WHERE book_id = ? AND ended_at > ?
+       ORDER BY started_at DESC
+       LIMIT 1`,
+      [bookId, fiveMinutesAgo]
+    )
+    return row ?? null
+  }
+
+  createSession(bookId: string): Session {
     const now = Date.now()
     const id = generateId()
     this.db.runSync(
-      'INSERT INTO sessions (id, file_uri, start, duration, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [id, fileUri, start, duration, now, now]
+      'INSERT INTO sessions (id, book_id, started_at, ended_at) VALUES (?, ?, ?, ?)',
+      [id, bookId, now, now]
     )
+    return { id, book_id: bookId, started_at: now, ended_at: now }
+  }
 
-    return {
-      id,
-      file_uri: fileUri,
-      start,
-      duration,
-      created_at: now,
-      updated_at: now,
-    }
+  updateSessionEndedAt(sessionId: string, endedAt: number): void {
+    this.db.runSync(
+      'UPDATE sessions SET ended_at = ? WHERE id = ?',
+      [endedAt, sessionId]
+    )
   }
 
   // ---------------------------------------------------------------------------
@@ -533,15 +547,13 @@ export class DatabaseService {
     this.db.execSync(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
-        file_uri TEXT NOT NULL,
-        start INTEGER NOT NULL,
-        duration INTEGER NOT NULL,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        book_id TEXT NOT NULL REFERENCES files(id),
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER NOT NULL
       );
     `)
 
-    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_sessions_file_uri ON sessions(file_uri);`)
+    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_sessions_book_id ON sessions(book_id);`)
 
     // Sync tables
     this.db.execSync(`

@@ -7,6 +7,7 @@ export interface AppState extends
   ClipSlice,
   SyncSlice,
   SettingsSlice,
+  SessionSlice,
   DevSlice {
 
   // Each slice adds data and actions. All slices have access to the full state.
@@ -75,6 +76,11 @@ export interface SyncSlice {
 export interface SettingsSlice {
   settings: Settings
   updateSettings: (settings: Settings) => void
+}
+
+
+export interface SessionSlice {
+  trackSession: (bookId: string) => void
 }
 
 

@@ -23,9 +23,12 @@ import { createPlaybackSlice } from './playback'
 import { createLibrarySlice } from './library'
 import { createSyncSlice } from './sync'
 import { createSettingsSlice } from './settings'
+import { createSessionSlice } from './session'
 import type { AppState, PlaybackContext } from './types'
+import { MAIN_PLAYER_OWNER_ID } from '../utils'
 
 const POSITION_SYNC_THROTTLE_MS = 30 * 1000  // Only queue position sync every 30s
+const SESSION_TRACK_THROTTLE_MS = 5 * 1000   // Track session every 5s during playback
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
@@ -71,6 +74,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const clipSlice = createClipSlice({ db, slicer, queue, transcription, sharing })
   const syncSlice = createSyncSlice({ db, sync })
   const settingsSlice = createSettingsSlice({ db })
+  const sessionSlice = createSessionSlice({ db })
 
   return {
     ...librarySlice(set, get),
@@ -78,6 +82,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     ...clipSlice(set, get),
     ...syncSlice(set, get),
     ...settingsSlice(set, get),
+    ...sessionSlice(set, get),
     __DEV_resetApp,
   }
 
@@ -109,6 +114,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   // Track last queue time for position updates (throttling)
   let lastPositionQueueTime = 0
+  let lastSessionTrackTime = 0
 
   function onPlaybackStatusChange(status: PlaybackStatus) {
     set((state) => {
@@ -120,8 +126,11 @@ export const useStore = create<AppState>()(immer((set, get) => {
     })
 
     // Update book position in database (only if we have valid playback)
-    const { playback, books } = get()
+    const { playback, books, trackSession } = get()
     if (!playback.uri || status.position < 0 || status.duration <= 0) return
+
+    // Only track sessions for main player (not clips)
+    if (playback.ownerId !== MAIN_PLAYER_OWNER_ID) return
 
     const book = Object.values(books).find(b => b.uri === playback.uri)
     if (!book) return
@@ -133,6 +142,15 @@ export const useStore = create<AppState>()(immer((set, get) => {
     if (now - lastPositionQueueTime > POSITION_SYNC_THROTTLE_MS) {
       lastPositionQueueTime = now
       queue.queueChange('book', book.id, 'upsert')
+    }
+
+    // Track session: immediately on pause, throttled during playback
+    if (status.status === 'paused') {
+      trackSession(book.id)
+      lastSessionTrackTime = now
+    } else if (status.status === 'playing' && now - lastSessionTrackTime > SESSION_TRACK_THROTTLE_MS) {
+      trackSession(book.id)
+      lastSessionTrackTime = now
     }
   }
 
