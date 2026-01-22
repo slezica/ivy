@@ -39,6 +39,7 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
 
     function fetchBooks(): void {
       const books: Record<string, Book> = {}
+
       for (const book of db.getAllBooks()) {
         books[book.id] = book
       }
@@ -56,24 +57,22 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
 
       const previousUri = book.uri
 
-      // 1. Optimistic store update
-      set((state) => {
-        state.books[bookId].uri = null
-      })
-
-      // 2. Database update (with rollback on fail)
       try {
+        set(state => {
+          state.books[bookId].uri = null
+        })
+
         db.archiveBook(bookId)
         queue.queueChange('book', bookId, 'upsert')
+
       } catch (error) {
-        // Rollback store
-        set((state) => {
+        set(state => {
           state.books[bookId].uri = previousUri
         })
         throw error
       }
 
-      // 3. Async file deletion (fire and forget - file is orphaned if this fails)
+      // Delete file (fire and forget, can clean up later if this fails):
       if (previousUri) {
         files.deleteFile(previousUri).catch((error) => {
           console.error('Failed to delete archived book file (non-critical):', error)
@@ -91,24 +90,22 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
 
       const previousBook = { ...book }
 
-      // 1. Optimistic store update (remove from visible books)
-      set((state) => {
-        delete state.books[bookId]
-      })
-
-      // 2. Database update (with rollback on fail)
       try {
+        set(state => {
+          delete state.books[bookId]
+        })
+
         db.hideBook(bookId)
         queue.queueChange('book', bookId, 'upsert')
+
       } catch (error) {
-        // Rollback store
         set((state) => {
           state.books[bookId] = previousBook
         })
         throw error
       }
 
-      // 3. Async file deletion (fire and forget - file is orphaned if this fails)
+      // Delete file (fire and forget, can clean up later if this fails):
       if (previousBook.uri) {
         files.deleteFile(previousBook.uri).catch((error) => {
           console.error('Failed to delete book file (non-critical):', error)
@@ -123,6 +120,7 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
     async function loadFileWithPicker(): Promise<void> {
       const pickedFile = await picker.pickAudioFile()
       if (!pickedFile) return
+
       await loadFile(pickedFile)
     }
 
@@ -153,11 +151,13 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
         // Step 5: Determine final book ID and rename file
         let book: Book
 
+        // TODO extract this 3-case conditional into 3 functions for readability
         if (existingBook) {
           if (existingBook.uri === null) {
             // Case A: Archived book - restore it with new file
             console.log('Restoring archived book:', existingBook.id)
             const finalUri = await files.rename(tempUri, existingBook.id)
+
             book = db.restoreBook(
               existingBook.id,
               finalUri,
@@ -167,20 +167,26 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
               fileMeta.artist,
               fileMeta.artwork
             )
+
             queue.queueChange('book', book.id, 'upsert')
+
           } else {
             // Case B: Active book - delete duplicate file, use existing
             console.log('File already exists in library, removing duplicate:', tempUri)
             await files.deleteFile(tempUri)
+
             db.touchBook(existingBook.id)
             book = db.getBookById(existingBook.id)!
             queue.queueChange('book', book.id, 'upsert')
           }
+
         } else {
           // Case C: New book - generate ID, rename file, create record
           const bookId = generateId()
+
           console.log('Creating new book with ID:', bookId)
           const finalUri = await files.rename(tempUri, bookId)
+
           book = db.upsertBook(
             bookId,
             finalUri,
@@ -193,17 +199,17 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
             fileSize,
             fingerprint
           )
+
           queue.queueChange('book', book.id, 'upsert')
         }
 
-        // Refresh books and clips in store
         fetchBooks()
         get().fetchClips()
+        set(state => { state.library.status = 'idle' })
 
-        set({ library: { status: 'idle' } })
       } catch (error) {
+        set(state => { state.library.status = 'idle' })
         console.error(error)
-        set({ library: { status: 'idle' } })
         throw error
       }
     }
