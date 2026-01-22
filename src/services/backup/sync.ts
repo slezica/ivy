@@ -114,8 +114,9 @@ export class BackupSyncService {
     if (this.isSyncing) return
     this.isSyncing = true  // Set immediately to prevent race conditions
 
-    await this.auth.initialize()
-    if (!this.auth.isAuthenticated()) {
+    // Validate token (not just cached sign-in state) to catch expired/revoked tokens early
+    const token = await this.auth.getAccessToken()
+    if (!token) {
       this.isSyncing = false
       return
     }
