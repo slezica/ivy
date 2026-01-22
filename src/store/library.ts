@@ -48,12 +48,8 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
     }
 
     async function archiveBook(bookId: string): Promise<void> {
-      const { books } = get()
-      const book = books[bookId]
-
-      if (!book) {
-        throw new Error('Book not found')
-      }
+      const book = get().books[bookId]
+      if (!book) throw new Error('Book not found')
 
       const previousUri = book.uri
 
@@ -81,12 +77,8 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
     }
 
     async function deleteBook(bookId: string): Promise<void> {
-      const { books } = get()
-      const book = books[bookId]
-
-      if (!book) {
-        throw new Error('Book not found')
-      }
+      const book = get().books[bookId]
+      if (!book) throw new Error('Book not found')
 
       const previousBook = { ...book }
 
@@ -124,17 +116,16 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
       await loadFile(pickedFile)
     }
 
-    async function loadFile(pickedFile: { uri: string; name: string }): Promise<void> {
+    async function loadFile(file: { uri: string; name: string }): Promise<void> {
       try {
         // Step 1: Copy file to app storage (with temp filename)
-        console.log('Copying file to app storage from:', pickedFile.uri)
+        console.log('Copying file to app storage from:', file.uri)
         set({ library: { status: 'adding' } })
 
-        let tempUri = await files.copyToAppStorage(pickedFile.uri, pickedFile.name)
+        let tempUri = await files.copyToAppStorage(file.uri, file.name)
         console.log('File copied to:', tempUri)
 
         // Step 2: Read metadata
-        console.log('Reading metadata from:', tempUri)
         const fileMeta = await metadata.readMetadata(tempUri)
         console.log('Metadata read:', fileMeta)
 
@@ -145,29 +136,18 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
         // Step 4: Check for existing book with same fingerprint
         const existingBook = db.getBookByFingerprint(fileSize, fingerprint)
 
-        const duration = fileMeta.duration
-        console.log('Duration from metadata:', duration)
-
-        // Step 5: Determine final book ID and rename file
-        let book: Book
+        // Step 5: Determine final ID and filename, save to database and schedule sync
+        const { name } = file
+        const { title, artist, artwork, duration } = fileMeta
 
         // TODO extract this 3-case conditional into 3 functions for readability
         if (existingBook) {
           if (existingBook.uri === null) {
             // Case A: Archived book - restore it with new file
             console.log('Restoring archived book:', existingBook.id)
-            const finalUri = await files.rename(tempUri, existingBook.id)
+            const uri = await files.rename(tempUri, existingBook.id)
 
-            book = db.restoreBook(
-              existingBook.id,
-              finalUri,
-              pickedFile.name,
-              duration,
-              fileMeta.title,
-              fileMeta.artist,
-              fileMeta.artwork
-            )
-
+            const book = db.restoreBook(existingBook.id, uri, name, duration, title, artist, artwork)
             queue.queueChange('book', book.id, 'upsert')
 
           } else {
@@ -176,30 +156,21 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
             await files.deleteFile(tempUri)
 
             db.touchBook(existingBook.id)
-            book = db.getBookById(existingBook.id)!
+            const book = db.getBookById(existingBook.id)!
+
+            console.log('Scheduling upsert for book', book.id)
             queue.queueChange('book', book.id, 'upsert')
           }
 
         } else {
           // Case C: New book - generate ID, rename file, create record
-          const bookId = generateId()
+          const id = generateId()
+          const uri = await files.rename(tempUri, id)
 
-          console.log('Creating new book with ID:', bookId)
-          const finalUri = await files.rename(tempUri, bookId)
+          console.log('Creating new book with ID:', id)
+          const book = db.upsertBook(id, uri, name, duration, 0, title, artist, artwork, fileSize, fingerprint)
 
-          book = db.upsertBook(
-            bookId,
-            finalUri,
-            pickedFile.name,
-            duration,
-            0,
-            fileMeta.title,
-            fileMeta.artist,
-            fileMeta.artwork,
-            fileSize,
-            fingerprint
-          )
-
+          console.log('Scheduling upsert for book', book.id)
           queue.queueChange('book', book.id, 'upsert')
         }
 
