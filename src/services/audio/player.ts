@@ -10,6 +10,7 @@ import TrackPlayer, {
   Event,
   State,
   AppKilledPlaybackBehavior,
+  EmitterSubscription,
 } from 'react-native-track-player'
 
 // =============================================================================
@@ -42,6 +43,7 @@ export class AudioPlayerService {
   private listeners: AudioPlayerListeners
   private isSetup = false
   private currentDuration: number = 0
+  private eventSubscriptions: EmitterSubscription[] = []
 
   constructor(listeners: AudioPlayerListeners = {}) {
     this.listeners = listeners
@@ -169,21 +171,29 @@ export class AudioPlayerService {
       progressUpdateEventInterval: 1,  // seconds - fires PlaybackProgressUpdated
     })
 
-    // Subscribe to playback events
-    TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
-      this.notifyStatusChange(event.state)
-    })
+    // Clean up any existing subscriptions before registering new ones
+    this.eventSubscriptions.forEach(sub => sub.remove())
+    this.eventSubscriptions = []
 
-    TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, async (event) => {
-      if (this.listeners.onPlaybackStatusChange) {
-        const { state } = await TrackPlayer.getPlaybackState()
-        this.listeners.onPlaybackStatusChange({
-          status: this.mapState(state),
-          position: event.position * 1000,  // Convert to ms
-          duration: event.duration * 1000,  // Convert to ms
-        })
-      }
-    })
+    // Subscribe to playback events
+    this.eventSubscriptions.push(
+      TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
+        this.notifyStatusChange(event.state)
+      })
+    )
+
+    this.eventSubscriptions.push(
+      TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, async (event) => {
+        if (this.listeners.onPlaybackStatusChange) {
+          const { state } = await TrackPlayer.getPlaybackState()
+          this.listeners.onPlaybackStatusChange({
+            status: this.mapState(state),
+            position: event.position * 1000,  // Convert to ms
+            duration: event.duration * 1000,  // Convert to ms
+          })
+        }
+      })
+    )
 
     this.isSetup = true
   }
