@@ -64,9 +64,9 @@ export default function ClipsListScreen() {
   const editingClip = editingClipId ? clips[editingClipId] : null
 
   const handleJumpToClip = async (clipId: string) => {
-    router.replace('/player')
     try {
       await seekClip(clipId)
+      router.replace('/player')
     } catch (error) {
       console.error('Error jumping to clip:', error)
       Alert.alert('Error', 'Failed to jump to clip')
