@@ -672,8 +672,11 @@ export class BackupSyncService {
   // ---------------------------------------------------------------------------
 
   private cleanupManifests(state: SyncState): void {
-    const localBookIds = new Set(state.local.books.map(b => b.id))
-    const localClipIds = new Set(state.local.clips.map(c => c.id))
+    // Re-fetch local state to avoid using stale data from sync start
+    const freshLocalBooks = this.db.getAllBooks()
+    const freshLocalClips = this.db.getAllClips()
+    const localBookIds = new Set(freshLocalBooks.map(b => b.id))
+    const localClipIds = new Set(freshLocalClips.map(c => c.id))
 
     for (const [key, manifest] of state.manifests) {
       const existsLocally = manifest.entity_type === 'book'
