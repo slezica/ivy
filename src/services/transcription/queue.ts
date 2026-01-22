@@ -66,13 +66,17 @@ export class TranscriptionQueueService {
       this.queue.push(clip.id)
     }
 
-    this.processQueue()
+    this.processQueue().catch(error => {
+      console.error('[Transcription] Queue processing failed:', error)
+    })
   }
 
   queueClip(clipId: string): void {
     console.log('[Transcription] Queueing clip:', clipId)
     this.queue.push(clipId)
-    this.processQueue()
+    this.processQueue().catch(error => {
+      console.error('[Transcription] Queue processing failed:', error)
+    })
   }
 
   // ---------------------------------------------------------------------------
