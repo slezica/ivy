@@ -436,6 +436,23 @@ export class BackupSyncService {
     console.log(`Downloaded book: ${backup.id}`)
   }
 
+  private async executeDeleteBook(
+    bookId: string,
+    jsonFileId: string | null,
+    result: SyncResult
+  ): Promise<void> {
+    try {
+      if (jsonFileId) await this.drive.deleteFile(jsonFileId)
+
+      // Clean up manifest
+      this.db.deleteManifestEntry('book', bookId)
+
+      console.log(`Deleted book from remote: ${bookId}`)
+    } catch (error) {
+      result.errors.push(`Failed to delete book ${bookId} from Drive: ${error}`)
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Clip Execution
   // ---------------------------------------------------------------------------
@@ -615,9 +632,16 @@ export class BackupSyncService {
 
   private async processQueue(result: SyncResult): Promise<void> {
     const processResult = await this.queue.processQueue(async (item) => {
-      if (item.entity_type === 'book' && item.operation === 'upsert') {
-        const book = this.db.getBookById(item.entity_id)
-        if (book) await this.executeUploadBook(book, result)
+      if (item.entity_type === 'book') {
+        if (item.operation === 'upsert') {
+          const book = this.db.getBookById(item.entity_id)
+          if (book) await this.executeUploadBook(book, result)
+        } else if (item.operation === 'delete') {
+          // Find remote book file to delete
+          const remoteFiles = await this.drive.listFiles('books')
+          const jsonFile = remoteFiles.find(f => f.name === `book_${item.entity_id}.json`)
+          await this.executeDeleteBook(item.entity_id, jsonFile?.id ?? null, result)
+        }
       } else if (item.entity_type === 'clip') {
         if (item.operation === 'upsert') {
           const clip = this.db.getClip(item.entity_id)
