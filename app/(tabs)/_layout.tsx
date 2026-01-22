@@ -44,6 +44,7 @@ export default function TabsLayout() {
           ),
           tabBarButton: ({ ref, ...props }) => (
             <Pressable
+              ref={ref}
               {...props}
               onPress={hasFile ? props.onPress : undefined}
               style={[props.style, !hasFile && { opacity: 0.3 }]}
