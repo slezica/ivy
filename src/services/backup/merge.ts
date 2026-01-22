@@ -94,8 +94,8 @@ function mergeNotes(localNote: string, remoteNote: string): string {
   }
 
   // If one is empty, use the other
-  if (!localNote) return remoteNote
-  if (!remoteNote) return localNote
+  if (!localNote) { return remoteNote }
+  if (!remoteNote) { return localNote }
 
   // Both have content and differ - concatenate with marker
   const timestamp = new Date().toLocaleDateString('en-US', {

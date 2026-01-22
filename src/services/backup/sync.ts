@@ -700,7 +700,7 @@ export class BackupSyncService {
 
 function parseFilename(name: string): ParsedFilename | null {
   const match = name.match(FILENAME_REGEX)
-  if (!match) return null
+  if (!match) { return null }
 
   return {
     type: match[1] as 'book' | 'clip',
