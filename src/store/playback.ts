@@ -22,10 +22,10 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
     return {
       playback: {
         status: 'idle',
-        position: 0,
-        uri: null,
-        duration: 0,
         ownerId: null,
+        uri: null,
+        position: 0,
+        duration: 0,
       },
 
       play,
@@ -39,29 +39,27 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
 
     async function play(context?: PlaybackContext): Promise<void> {
       try {
-        // No context - just resume, keep existing owner
         if (!context) {
-          set((state) => {
+          // No new context? Just resume playback:
+          set(state => {
             state.playback.status = 'playing'
           })
           await audioService.play()
           return
         }
 
-        // Context provided - may need to load file and seek first
         const { playback } = get()
-        const isFileSame = playback.uri === context.fileUri
+        const isSameFile = (playback.uri == context.fileUri)
 
-        if (!isFileSame) {
-          // Need to load a different file (could be book or clip audio)
-          const bookRecord = dbService.getBookByAnyUri(context.fileUri)
+        if (!isSameFile) {
+          const bookRecord = dbService.getBookByAnyUri(context.fileUri) // TODO read from store
           if (!bookRecord) {
             throw new Error(`No book or clip found for: ${context.fileUri}`)
           }
 
-          set((state) => {
+          set(state => {
             state.playback.status = 'loading'
-            if (context.ownerId !== undefined) {
+            if (context.ownerId != null) {
               state.playback.ownerId = context.ownerId
             }
           })
@@ -70,25 +68,22 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
             title: bookRecord.title,
             artist: bookRecord.artist,
             artwork: bookRecord.artwork,
-          })
+          }) // TODO load() should be able to get metadata on its own and return full playback state
 
-          set((state) => {
+          set(state => {
             state.playback.uri = context.fileUri
             state.playback.duration = duration
             state.playback.position = context.position
           })
 
           await audioService.seek(context.position)
+
         } else if (playback.position !== context.position) {
-          // Same file, different position - just seek
+          set(state => { state.playback.position = context.position })
           await audioService.seek(context.position)
-          set((state) => {
-            state.playback.position = context.position
-          })
         }
 
-        // Set status to playing, and owner if provided
-        set((state) => {
+        set(state => {
           state.playback.status = 'playing'
           if (context.ownerId !== undefined) {
             state.playback.ownerId = context.ownerId
@@ -96,17 +91,19 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
         })
 
         await audioService.play()
+
       } catch (error) {
-        console.error('Error playing audio:', error)
-        set((state) => {
+        set(state => {
           state.playback.status = state.playback.uri ? 'paused' : 'idle'
         })
+
+        console.error('Error playing audio:', error)
         throw error
       }
     }
 
     async function pause(): Promise<void> {
-      set((state) => {
+      set(state => {
         state.playback.status = 'paused'
       })
 
@@ -127,7 +124,7 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
         return
       }
 
-      set((state) => {
+      set(state => {
         state.playback.position = context.position
       })
 
@@ -174,7 +171,7 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
       const status = await audioService.getStatus()
       if (!status) return
 
-      set((state) => {
+      set(state => {
         if (state.playback.status !== 'loading') {
           state.playback.status = status.status
         }
