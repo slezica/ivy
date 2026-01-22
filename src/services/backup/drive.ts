@@ -32,6 +32,8 @@ export class GoogleDriveService {
     books: null,
     clips: null,
   }
+  // Track in-flight folder creation to prevent duplicate folders from concurrent requests
+  private folderPromises: Record<string, Promise<string> | null> = {}
 
   constructor(auth: GoogleAuthService) {
     this.auth = auth
@@ -191,12 +193,35 @@ export class GoogleDriveService {
       return this.folderIds[folder]!
     }
 
-    // Ensure root folder exists
-    if (!this.rootFolderId) {
-      this.rootFolderId = await this.findOrCreateFolder(ROOT_FOLDER_NAME, 'root')
+    // If a request for this folder is already in flight, wait for it
+    const cacheKey = `folder:${folder}`
+    if (this.folderPromises[cacheKey]) {
+      return this.folderPromises[cacheKey]!
     }
 
-    // Ensure subfolder exists
+    // Start folder creation and track the promise
+    this.folderPromises[cacheKey] = this.createFolderStructure(folder)
+
+    try {
+      const folderId = await this.folderPromises[cacheKey]!
+      return folderId
+    } finally {
+      this.folderPromises[cacheKey] = null
+    }
+  }
+
+  private async createFolderStructure(folder: BackupFolder): Promise<string> {
+    // Ensure root folder exists (with its own lock)
+    if (!this.rootFolderId) {
+      const rootKey = 'folder:root'
+      if (!this.folderPromises[rootKey]) {
+        this.folderPromises[rootKey] = this.findOrCreateFolder(ROOT_FOLDER_NAME, 'root')
+      }
+      this.rootFolderId = await this.folderPromises[rootKey]!
+      this.folderPromises[rootKey] = null
+    }
+
+    // Create subfolder
     this.folderIds[folder] = await this.findOrCreateFolder(
       FOLDERS[folder],
       this.rootFolderId
