@@ -192,7 +192,7 @@ export function useTimelinePhysics({
 
   // Check if touch is on a selection handle
   const getHandleAtPosition = useCallback((touchX: number, touchY: number): 'start' | 'end' | null => {
-    if (!selection) { return null }
+    if (!selection) return null
 
     const halfWidth = containerWidth / 2
     const circleY = TIMELINE_HEIGHT - 10 + HANDLE_CIRCLE_RADIUS

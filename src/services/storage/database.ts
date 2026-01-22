@@ -144,7 +144,7 @@ export class DatabaseService {
   getBookByAnyUri(uri: string): Book | null {
     // First try direct book lookup
     const book = this.getBookByUri(uri)
-    if (book) { return book }
+    if (book) return book
 
     // Try to find a clip with this URI and return its source book
     const row = this.db.getFirstSync<BookRow>(

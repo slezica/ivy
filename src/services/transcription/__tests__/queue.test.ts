@@ -54,8 +54,8 @@ describe('TranscriptionQueueService', () => {
       let processCount = 0
       deps.database.getClipsNeedingTranscription = jest.fn(() => {
         processCount++
-        if (processCount === 1) { return [clip1] }
-        if (processCount === 2) { return [clip2] }
+        if (processCount === 1) return [clip1]
+        if (processCount === 2) return [clip2]
         return []
       })
 
