@@ -500,8 +500,13 @@ export class BackupSyncService {
       const jsonFile = await this.drive.uploadFile('clips', jsonFilename, jsonContent)
       jsonFileId = jsonFile.id
 
-      // Upload MP3
+      // Upload MP3 (with size check to prevent OOM)
       const clipPath = clip.uri.replace('file://', '')
+      const fileStat = await RNFS.stat(clipPath)
+      const MAX_CLIP_SIZE = 50 * 1024 * 1024  // 50MB limit
+      if (fileStat.size > MAX_CLIP_SIZE) {
+        throw new Error(`Clip file too large (${Math.round(fileStat.size / 1024 / 1024)}MB). Max: 50MB`)
+      }
       const mp3Content = await RNFS.readFile(clipPath, 'base64')
       const mp3Bytes = base64ToUint8Array(mp3Content)
       const mp3File = await this.drive.uploadFile('clips', mp3Filename, mp3Bytes)
