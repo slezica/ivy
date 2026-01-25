@@ -4,7 +4,7 @@
 
 ## Critical Architecture Decisions
 
-### 1. **File Storage Strategy** 🔥 MOST IMPORTANT
+### 1. **File Storage Strategy** 
 External content: URIs (like Google Drive) become invalid after app restart. **Solution:**
 - **All files are copied to app-owned storage** on first load
 - Database stores: `uri` (local file:// path for playback)
