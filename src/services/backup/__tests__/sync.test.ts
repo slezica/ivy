@@ -2,7 +2,7 @@ import { BackupSyncService } from '../sync'
 import type { DatabaseService } from '../../storage'
 import type { GoogleDriveService } from '../drive'
 import type { GoogleAuthService } from '../auth'
-import type { OfflineQueueService } from '../queue'
+import type { SyncQueueService } from '../queue'
 
 /**
  * Tests for the BackupSyncService.
@@ -42,17 +42,17 @@ describe('BackupSyncService', () => {
       signIn: jest.fn(() => Promise.resolve(true)),
     } as any
 
-    const queue: jest.Mocked<OfflineQueueService> = {
+    const syncQueue: jest.Mocked<SyncQueueService> = {
       getCount: jest.fn(() => 0),
       processQueue: jest.fn(() => Promise.resolve({ processed: 0, errors: [] })),
     } as any
 
-    return { db, drive, auth, queue }
+    return { db, drive, auth, syncQueue }
   }
 
   describe('syncNow', () => {
     it('prevents concurrent sync operations', async () => {
-      const { db, drive, auth, queue } = createMockDeps()
+      const { db, drive, auth, syncQueue } = createMockDeps()
 
       let performSyncStarted = 0
 
@@ -67,7 +67,7 @@ describe('BackupSyncService', () => {
         return []
       })
 
-      const service = new BackupSyncService(db, drive, auth, queue)
+      const service = new BackupSyncService(db, drive, auth, syncQueue)
 
       // Fire multiple sync calls with slight delays to ensure they interleave
       const p1 = service.syncNow()
@@ -81,14 +81,14 @@ describe('BackupSyncService', () => {
     })
 
     it('allows subsequent sync after first completes', async () => {
-      const { db, drive, auth, queue } = createMockDeps()
+      const { db, drive, auth, syncQueue } = createMockDeps()
 
       let syncCompletedCount = 0
       db.setLastSyncTime.mockImplementation(() => {
         syncCompletedCount++
       })
 
-      const service = new BackupSyncService(db, drive, auth, queue)
+      const service = new BackupSyncService(db, drive, auth, syncQueue)
 
       // First sync
       await service.syncNow()
@@ -100,7 +100,7 @@ describe('BackupSyncService', () => {
     })
 
     it('resets sync flag on error', async () => {
-      const { db, drive, auth, queue } = createMockDeps()
+      const { db, drive, auth, syncQueue } = createMockDeps()
 
       let authInitCount = 0
       auth.initialize.mockImplementation(async () => {
@@ -110,7 +110,7 @@ describe('BackupSyncService', () => {
         }
       })
 
-      const service = new BackupSyncService(db, drive, auth, queue)
+      const service = new BackupSyncService(db, drive, auth, syncQueue)
 
       // First sync fails (auth.initialize throws)
       await service.syncNow()
@@ -124,7 +124,7 @@ describe('BackupSyncService', () => {
 
   describe('autoSync', () => {
     it('prevents concurrent auto-sync operations', async () => {
-      const { db, drive, auth, queue } = createMockDeps()
+      const { db, drive, auth, syncQueue } = createMockDeps()
 
       let syncCompletedCount = 0
       db.setLastSyncTime.mockImplementation(() => {
@@ -137,7 +137,7 @@ describe('BackupSyncService', () => {
         return []
       })
 
-      const service = new BackupSyncService(db, drive, auth, queue)
+      const service = new BackupSyncService(db, drive, auth, syncQueue)
 
       // Fire multiple auto-sync calls
       const p1 = service.autoSync()
@@ -151,7 +151,7 @@ describe('BackupSyncService', () => {
     })
 
     it('skips sync when not authenticated', async () => {
-      const { db, drive, auth, queue } = createMockDeps()
+      const { db, drive, auth, syncQueue } = createMockDeps()
 
       auth.getAccessToken.mockResolvedValue(null)
 
@@ -160,7 +160,7 @@ describe('BackupSyncService', () => {
         syncCompletedCount++
       })
 
-      const service = new BackupSyncService(db, drive, auth, queue)
+      const service = new BackupSyncService(db, drive, auth, syncQueue)
 
       await service.autoSync()
 

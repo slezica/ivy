@@ -45,7 +45,7 @@ Ivy is a well-structured React Native Expo app (~6,800 LOC) for audiobook/podcas
 
 | Issue | Location | Description |
 |-------|----------|-------------|
-| **UI component imports service directly** | `LibraryScreen.tsx:20-21` | Imports `databaseService` and `offlineQueueService` directly to check sync state, bypassing store abstraction. |
+| **UI component imports service directly** | `LibraryScreen.tsx:20-21` | Imports `databaseService` and `syncQueueService` directly to check sync state, bypassing store abstraction. |
 | **Throttling logic in store** | `store/index.ts:140-145` | Position sync throttling uses a closure variable. This should be in `AudioPlayerService` or a dedicated throttle utility. |
 | **Timestamp comparison across layers** | `LibraryScreen.tsx:44-49` | Screen directly calls `databaseService.getLastSyncTime()` and does comparison logic that belongs in `backupSyncService`. |
 

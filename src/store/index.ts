@@ -12,7 +12,7 @@ import {
   TranscriptionQueueService,
   GoogleAuthService,
   GoogleDriveService,
-  OfflineQueueService,
+  SyncQueueService,
   BackupSyncService,
   SharingService,
   type PlaybackStatus,
@@ -43,13 +43,13 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const auth = new GoogleAuthService()
 
   const drive = new GoogleDriveService(auth)
-  const queue = new OfflineQueueService(db)
+  const syncQueue = new SyncQueueService(db)
 
   const sync = new BackupSyncService(
     db,
     drive,
     auth,
-    queue,
+    syncQueue,
     { onStatusChange: onSyncStatusChange, onDataChange: onSyncDataChange }
   )
 
@@ -66,9 +66,9 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   // Slices ----------------------------------------------------------------------------------------
 
-  const librarySlice = createLibrarySlice({ db, files, picker, metadata, queue })
+  const librarySlice = createLibrarySlice({ db, files, picker, metadata, syncQueue })
   const playbackSlice = createPlaybackSlice({ audio, db })
-  const clipSlice = createClipSlice({ db, slicer, queue, transcription, sharing })
+  const clipSlice = createClipSlice({ db, slicer, syncQueue, transcription, sharing })
   const syncSlice = createSyncSlice({ db, sync })
   const settingsSlice = createSettingsSlice({ db })
   const sessionSlice = createSessionSlice({ db })
@@ -111,7 +111,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   // Throttled operations for playback updates
   const queuePositionSync = throttle((bookId: string) => {
-    queue.queueChange('book', bookId, 'upsert')
+    syncQueue.queueChange('book', bookId, 'upsert')
   }, 30_000)
 
   const trackSession = throttle((bookId: string) => {

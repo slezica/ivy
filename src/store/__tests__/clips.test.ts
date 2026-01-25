@@ -23,7 +23,7 @@ describe('createClipSlice', () => {
         slice: jest.fn(),
         cleanup: jest.fn(),
       } as any,
-      queue: {
+      syncQueue: {
         queueChange: jest.fn(),
       } as any,
       transcription: {

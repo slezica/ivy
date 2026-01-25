@@ -1,5 +1,5 @@
 /**
- * Offline Queue Service
+ * Sync Queue Service
  *
  * Queues local changes for sync when online. Handles retry logic and
  * deduplication of operations on the same entity.
@@ -31,7 +31,7 @@ export type QueueItemHandler = (item: SyncQueueItem) => Promise<void>
 // Service
 // ---------------------------------------------------------------------------
 
-export class OfflineQueueService {
+export class SyncQueueService {
   private db: DatabaseService
 
   constructor(db: DatabaseService) {

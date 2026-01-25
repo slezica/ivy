@@ -768,7 +768,7 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 - Use `book.id` (UUID) as the stable identifier for books (not `uri` which can be null)
 - Use `generateId()` from utils when creating new database entities
 - Look up `Book` metadata from `books` map using URI when needed (audio state only has uri/duration)
-- Queue changes via `offlineQueueService.queueChange()` when modifying synced entities
+- Queue changes via `syncQueue.queueChange()` when modifying synced entities
 - Use manifest comparison for sync change detection (not just timestamp comparison)
 - Use service callbacks for sync status (store doesn't orchestrate auth)
 

@@ -14,7 +14,7 @@ import RNFS from 'react-native-fs'
 import { DatabaseService, Book, Clip, SyncManifestEntry } from '../storage'
 import { GoogleDriveService, DriveFile } from './drive'
 import { GoogleAuthService } from './auth'
-import { OfflineQueueService } from './queue'
+import { SyncQueueService } from './queue'
 import {
   BookBackup,
   ClipBackup,
@@ -52,7 +52,7 @@ export class BackupSyncService {
   private db: DatabaseService
   private drive: GoogleDriveService
   private auth: GoogleAuthService
-  private queue: OfflineQueueService
+  private syncQueue: SyncQueueService
   private listeners: SyncListeners
   private isSyncing = false
 
@@ -60,18 +60,18 @@ export class BackupSyncService {
     db: DatabaseService,
     drive: GoogleDriveService,
     auth: GoogleAuthService,
-    queue: OfflineQueueService,
+    syncQueue: SyncQueueService,
     listeners: SyncListeners = {}
   ) {
     this.db = db
     this.drive = drive
     this.auth = auth
-    this.queue = queue
+    this.syncQueue = syncQueue
     this.listeners = listeners
   }
 
   getPendingCount(): number {
-    return this.queue.getCount()
+    return this.syncQueue.getCount()
   }
 
   /**
@@ -632,7 +632,7 @@ export class BackupSyncService {
   // ---------------------------------------------------------------------------
 
   private async processQueue(result: SyncResult): Promise<void> {
-    const processResult = await this.queue.processQueue(async (item) => {
+    const processResult = await this.syncQueue.processQueue(async (item) => {
       if (item.entity_type === 'book') {
         if (item.operation === 'upsert') {
           const book = this.db.getBookById(item.entity_id)

@@ -2,7 +2,7 @@ import RNFS from 'react-native-fs'
 import type {
   DatabaseService,
   AudioSlicerService,
-  OfflineQueueService,
+  SyncQueueService,
   TranscriptionQueueService,
   SharingService,
   ClipWithFile,
@@ -18,14 +18,14 @@ const DEFAULT_CLIP_DURATION_MS = 20 * 1000
 export interface ClipSliceDeps {
   db: DatabaseService
   slicer: AudioSlicerService
-  queue: OfflineQueueService
+  syncQueue: SyncQueueService
   transcription: TranscriptionQueueService
   sharing: SharingService
 }
 
 
 export function createClipSlice(deps: ClipSliceDeps) {
-  const { db, slicer, queue, transcription, sharing } = deps
+  const { db, slicer, syncQueue, transcription, sharing } = deps
 
   return (set: SetState, get: GetState): ClipSlice => {
     return {
@@ -84,7 +84,7 @@ export function createClipSlice(deps: ClipSliceDeps) {
       )
 
       // Queue for sync
-      queue.queueChange('clip', clip.id, 'upsert')
+      syncQueue.queueChange('clip', clip.id, 'upsert')
 
       // Reload all clips to include file information
       fetchClips()
@@ -137,7 +137,7 @@ export function createClipSlice(deps: ClipSliceDeps) {
       db.updateClip(id, { ...updates, uri: newUri })
 
       // Queue for sync
-      queue.queueChange('clip', id, 'upsert')
+      syncQueue.queueChange('clip', id, 'upsert')
 
       // Update store
       set((state) => {
@@ -164,7 +164,7 @@ export function createClipSlice(deps: ClipSliceDeps) {
       db.deleteClip(id)
 
       // Queue for sync (delete operation)
-      queue.queueChange('clip', id, 'delete')
+      syncQueue.queueChange('clip', id, 'delete')
 
       set((state) => {
         delete state.clips[id]

@@ -3,7 +3,7 @@ import type {
   FileStorageService,
   FilePickerService,
   AudioMetadataService,
-  OfflineQueueService,
+  SyncQueueService,
   Book,
 } from '../services'
 import type { LibrarySlice, SetState, GetState } from './types'
@@ -15,12 +15,12 @@ export interface LibrarySliceDeps {
   files: FileStorageService
   picker: FilePickerService
   metadata: AudioMetadataService
-  queue: OfflineQueueService
+  syncQueue: SyncQueueService
 }
 
 
 export function createLibrarySlice(deps: LibrarySliceDeps) {
-  const { db, files, picker, metadata, queue } = deps
+  const { db, files, picker, metadata, syncQueue } = deps
 
   return (set: SetState, get: GetState): LibrarySlice => {
     return {
@@ -59,7 +59,7 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
         })
 
         db.archiveBook(bookId)
-        queue.queueChange('book', bookId, 'upsert')
+        syncQueue.queueChange('book', bookId, 'upsert')
 
       } catch (error) {
         set(state => {
@@ -88,7 +88,7 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
         })
 
         db.hideBook(bookId)
-        queue.queueChange('book', bookId, 'upsert')
+        syncQueue.queueChange('book', bookId, 'upsert')
 
       } catch (error) {
         set((state) => {
@@ -148,7 +148,7 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
             const uri = await files.rename(tempUri, existingBook.id)
 
             const book = db.restoreBook(existingBook.id, uri, name, duration, title, artist, artwork)
-            queue.queueChange('book', book.id, 'upsert')
+            syncQueue.queueChange('book', book.id, 'upsert')
 
           } else {
             // Case B: Active book - delete duplicate file, use existing
@@ -159,7 +159,7 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
             const book = db.getBookById(existingBook.id)!
 
             console.log('Scheduling upsert for book', book.id)
-            queue.queueChange('book', book.id, 'upsert')
+            syncQueue.queueChange('book', book.id, 'upsert')
           }
 
         } else {
@@ -171,7 +171,7 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
           const book = db.upsertBook(id, uri, name, duration, 0, title, artist, artwork, fileSize, fingerprint)
 
           console.log('Scheduling upsert for book', book.id)
-          queue.queueChange('book', book.id, 'upsert')
+          syncQueue.queueChange('book', book.id, 'upsert')
         }
 
         fetchBooks()
