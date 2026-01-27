@@ -33,7 +33,7 @@ import { formatTime } from '../utils'
 
 export default function ClipsListScreen() {
   const router = useRouter()
-  const { clips, seekClip, deleteClip, updateClip, shareClip, fetchClips } = useStore()
+  const { clips, transcribing, seekClip, deleteClip, updateClip, shareClip, fetchClips } = useStore()
   const [viewingClipId, setViewingClipId] = useState<string | null>(null)
   const [editingClipId, setEditingClipId] = useState<string | null>(null)
   const [menuClipId, setMenuClipId] = useState<string | null>(null)
@@ -197,6 +197,7 @@ export default function ClipsListScreen() {
       {clipsArray.length > 0
         ? <ClipList
             clips={clipsArray}
+            transcribing={transcribing}
             onViewClip={handleViewClip}
             onOpenMenu={handleOpenMenu}
           /> :
@@ -237,7 +238,7 @@ export default function ClipsListScreen() {
 }
 
 
-function ClipList({ clips, onViewClip, onOpenMenu }: any) {
+function ClipList({ clips, transcribing, onViewClip, onOpenMenu }: any) {
   return (
     <FlatList
       data={clips}
@@ -263,6 +264,11 @@ function ClipList({ clips, onViewClip, onOpenMenu }: any) {
                 </Text>
               )}
             </View>
+            {transcribing ? (
+              <Text style={styles.clipTranscription} numberOfLines={2}>
+                Transcribing...
+              </Text>
+            ) : null}
             {item.transcription ? (
               <Text style={styles.clipTranscription} numberOfLines={2}>
                 &ldquo;{item.transcription} ...&rdquo;
