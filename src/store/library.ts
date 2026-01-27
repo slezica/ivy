@@ -3,11 +3,15 @@ import type {
   FileStorageService,
   FilePickerService,
   AudioMetadataService,
+  AudioPlayerService,
   SyncQueueService,
+  BackupSyncService,
   Book,
+  PlaybackStatus,
+  SyncNotification,
 } from '../services'
 import type { LibrarySlice, SetState, GetState } from './types'
-import { generateId } from '../utils'
+import { generateId, MAIN_PLAYER_OWNER_ID, throttle } from '../utils'
 
 
 export interface LibrarySliceDeps {
@@ -15,14 +19,23 @@ export interface LibrarySliceDeps {
   files: FileStorageService
   picker: FilePickerService
   metadata: AudioMetadataService
+  audio: AudioPlayerService
   syncQueue: SyncQueueService
+  sync: BackupSyncService
 }
 
 
 export function createLibrarySlice(deps: LibrarySliceDeps) {
-  const { db, files, picker, metadata, syncQueue } = deps
+  const { db, files, picker, metadata, audio, syncQueue, sync } = deps
+
+  const queuePositionSync = throttle((bookId: string) => {
+    syncQueue.queueChange('book', bookId, 'upsert')
+  }, 30_000)
 
   return (set: SetState, get: GetState): LibrarySlice => {
+    audio.on('status', onPlaybackStatus)
+    sync.on('data', onSyncData)
+
     return {
       library: {
         status: 'loading',
@@ -35,6 +48,24 @@ export function createLibrarySlice(deps: LibrarySliceDeps) {
       loadFileWithPicker,
       archiveBook,
       deleteBook,
+    }
+
+    function onPlaybackStatus(status: PlaybackStatus) {
+      const { playback, books } = get()
+      if (!playback.uri || status.position < 0 || status.duration <= 0) return
+      if (playback.ownerId !== MAIN_PLAYER_OWNER_ID) return
+
+      const book = Object.values(books).find(b => b.uri === playback.uri)
+      if (!book) return
+
+      db.updateBookPosition(book.id, status.position)
+      queuePositionSync(book.id)
+    }
+
+    function onSyncData(notification: SyncNotification) {
+      if (notification.booksChanged.length > 0) {
+        fetchBooks()
+      }
     }
 
     function fetchBooks(): void {

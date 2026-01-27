@@ -19,9 +19,12 @@ describe('createSessionSlice', () => {
           id: `session-${bookId}`,
           book_id: bookId,
           started_at: Date.now(),
-          ended_at: null,
+          ended_at: Date.now(),
         })),
         updateSessionEndedAt: jest.fn(),
+      } as any,
+      audio: {
+        on: jest.fn(),
       } as any,
     }
   }
@@ -100,7 +103,7 @@ describe('createSessionSlice', () => {
         id: 'session-1',
         book_id: 'book-1',
         started_at: 1000,
-        ended_at: null,
+        ended_at: 1000,
       }
 
       deps.db.getCurrentSession = jest.fn(() => existingSession)
@@ -149,7 +152,7 @@ describe('createSessionSlice', () => {
           id: 'session-1',
           book_id: 'book-1',
           started_at: Date.now(),
-          ended_at: null,
+          ended_at: Date.now(),
         }
       })
 

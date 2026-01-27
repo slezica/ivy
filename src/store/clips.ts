@@ -5,7 +5,9 @@ import type {
   SyncQueueService,
   TranscriptionQueueService,
   SharingService,
+  BackupSyncService,
   ClipWithFile,
+  SyncNotification,
 } from '../services'
 import { generateId } from '../utils'
 import type { ClipSlice, SetState, GetState } from './types'
@@ -21,13 +23,17 @@ export interface ClipSliceDeps {
   syncQueue: SyncQueueService
   transcription: TranscriptionQueueService
   sharing: SharingService
+  sync: BackupSyncService
 }
 
 
 export function createClipSlice(deps: ClipSliceDeps) {
-  const { db, slicer, syncQueue, transcription, sharing } = deps
+  const { db, slicer, syncQueue, transcription, sharing, sync } = deps
 
   return (set: SetState, get: GetState): ClipSlice => {
+    transcription.on('complete', onTranscriptionComplete)
+    sync.on('data', onSyncData)
+
     return {
       clips: {},
 
@@ -36,6 +42,16 @@ export function createClipSlice(deps: ClipSliceDeps) {
       updateClip,
       deleteClip,
       shareClip,
+    }
+
+    function onTranscriptionComplete({ clipId, transcription }: { clipId: string; transcription: string }) {
+      updateClip(clipId, { transcription })
+    }
+
+    function onSyncData(notification: SyncNotification) {
+      if (notification.clipsChanged.length > 0) {
+        fetchClips()
+      }
     }
 
     function fetchClips(): void {

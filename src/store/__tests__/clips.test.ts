@@ -27,10 +27,14 @@ describe('createClipSlice', () => {
         queueChange: jest.fn(),
       } as any,
       transcription: {
+        on: jest.fn(),
         queueClip: jest.fn(),
       } as any,
       sharing: {
         shareClipFile: jest.fn(),
+      } as any,
+      sync: {
+        on: jest.fn(),
       } as any,
     }
   }

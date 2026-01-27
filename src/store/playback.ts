@@ -1,6 +1,7 @@
 import type {
   AudioPlayerService,
   DatabaseService,
+  PlaybackStatus,
 } from '../services'
 import type { PlaybackSlice, PlaybackContext, SetState, GetState } from './types'
 
@@ -19,6 +20,8 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
   const { audio: audioService, db: dbService } = deps
 
   return (set: SetState, get: GetState): PlaybackSlice => {
+    audioService.on('status', onPlaybackStatus)
+
     return {
       playback: {
         status: 'idle',
@@ -35,6 +38,15 @@ export function createPlaybackSlice(deps: PlaybackSliceDeps) {
       skipForward,
       skipBackward,
       syncPlaybackState,
+    }
+
+    function onPlaybackStatus(status: PlaybackStatus) {
+      set((state) => {
+        if (state.playback.status !== 'loading') {
+          state.playback.status = status.status
+        }
+        state.playback.position = status.position
+      })
     }
 
     async function play(context?: PlaybackContext): Promise<void> {
