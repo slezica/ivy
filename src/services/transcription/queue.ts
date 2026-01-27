@@ -8,19 +8,21 @@
 import { DatabaseService } from '../storage/database'
 import { WhisperService } from './whisper'
 import { AudioSlicerService } from '../audio/slicer'
+import { BaseService } from '../base'
 import type { Clip } from '../storage/database'
 
 // =============================================================================
 // Public Interface
 // =============================================================================
 
-export type TranscriptionCallback = (clipId: string, transcription: string) => void
-
 export interface TranscriptionQueueDeps {
   database: DatabaseService
   whisper: WhisperService
   slicer: AudioSlicerService
-  onTranscriptionComplete?: TranscriptionCallback
+}
+
+export type TranscriptionQueueEvents = {
+  complete: { clipId: string; transcription: string }
 }
 
 // =============================================================================
@@ -33,20 +35,19 @@ const MAX_TRANSCRIPTION_DURATION_MS = 10000  // First 5 seconds of clip
 // Service
 // =============================================================================
 
-export class TranscriptionQueueService {
+export class TranscriptionQueueService extends BaseService<TranscriptionQueueEvents> {
   private database: DatabaseService
   private whisper: WhisperService
   private slicer: AudioSlicerService
-  private onTranscriptionComplete: TranscriptionCallback | null
 
   private queue: string[] = []
   private processing = false
 
   constructor(deps: TranscriptionQueueDeps) {
+    super()
     this.database = deps.database
     this.whisper = deps.whisper
     this.slicer = deps.slicer
-    this.onTranscriptionComplete = deps.onTranscriptionComplete ?? null
   }
 
   async start(): Promise<void> {
@@ -125,9 +126,7 @@ export class TranscriptionQueueService {
 
       this.database.updateClip(clipId, { transcription })
 
-      if (this.onTranscriptionComplete) {
-        this.onTranscriptionComplete(clipId, transcription)
-      }
+      this.emit('complete', { clipId, transcription })
 
       console.log('[Transcription] Completed clip:', clipId, '| Result:', transcription)
     } catch (error) {

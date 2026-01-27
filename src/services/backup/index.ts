@@ -8,6 +8,7 @@ export { GoogleAuthService } from './auth'
 export { GoogleDriveService } from './drive'
 export type { DriveFile, BackupFolder } from './drive'
 export { BackupSyncService } from './sync'
+export type { BackupSyncEvents } from './sync'
 export { SyncQueueService } from './queue'
 export type { QueueStats, ProcessResult, QueueItemHandler } from './queue'
 
@@ -18,7 +19,6 @@ export type {
   SyncResult,
   SyncNotification,
   SyncStatus,
-  SyncListeners,
   ConflictInfo,
 } from './types'
 

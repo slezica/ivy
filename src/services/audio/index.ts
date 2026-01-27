@@ -1,5 +1,5 @@
 export { AudioPlayerService } from './player'
-export type { PlayerStatus, PlaybackStatus, AudioPlayerListeners, TrackMetadata } from './player'
+export type { PlayerStatus, PlaybackStatus, AudioPlayerEvents, TrackMetadata } from './player'
 
 export { playbackService } from './integration'
 

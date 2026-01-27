@@ -25,7 +25,6 @@ describe('TranscriptionQueueService', () => {
         slice: jest.fn(() => Promise.resolve({ uri: 'file:///temp.mp3', path: '/temp.mp3' })),
         cleanup: jest.fn(() => Promise.resolve()),
       } as any,
-      onTranscriptionComplete: jest.fn(),
     }
   }
 
@@ -105,11 +104,11 @@ describe('TranscriptionQueueService', () => {
       })
 
       const completedClips: string[] = []
-      deps.onTranscriptionComplete = jest.fn((clipId) => {
-        completedClips.push(clipId)
-      })
 
       const service = new TranscriptionQueueService(deps)
+      service.on('complete', ({ clipId }) => {
+        completedClips.push(clipId)
+      })
 
       // Queue all three clips
       service.queueClip('clip-1')
@@ -142,6 +141,11 @@ describe('TranscriptionQueueService', () => {
 
       const service = new TranscriptionQueueService(deps)
 
+      const completedClips: Array<{ clipId: string; transcription: string }> = []
+      service.on('complete', (event) => {
+        completedClips.push(event)
+      })
+
       // Queue and process first clip (fails)
       service.queueClip('clip-1')
       await new Promise(resolve => setTimeout(resolve, 50))
@@ -150,8 +154,8 @@ describe('TranscriptionQueueService', () => {
       service.queueClip('clip-2')
       await new Promise(resolve => setTimeout(resolve, 50))
 
-      // The callback should have been called for clip-2
-      expect(deps.onTranscriptionComplete).toHaveBeenCalledWith('clip-2', 'transcription result')
+      // The event should have been emitted for clip-2
+      expect(completedClips).toContainEqual({ clipId: 'clip-2', transcription: 'transcription result' })
     })
   })
 

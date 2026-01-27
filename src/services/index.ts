@@ -1,9 +1,15 @@
 // =============================================================================
+// Base
+// =============================================================================
+
+export { BaseService } from './base'
+
+// =============================================================================
 // Audio
 // =============================================================================
 
 export { AudioPlayerService } from './audio'
-export type { PlayerStatus, PlaybackStatus, AudioPlayerListeners, TrackMetadata } from './audio'
+export type { PlayerStatus, PlaybackStatus, AudioPlayerEvents, TrackMetadata } from './audio'
 
 export { playbackService } from './audio'
 
@@ -32,7 +38,7 @@ export type { PickedFile } from './storage'
 export { WhisperService } from './transcription'
 
 export { TranscriptionQueueService } from './transcription'
-export type { TranscriptionCallback, TranscriptionQueueDeps } from './transcription'
+export type { TranscriptionQueueDeps, TranscriptionQueueEvents } from './transcription'
 
 // =============================================================================
 // System
@@ -45,4 +51,4 @@ export { SharingService } from './system'
 // =============================================================================
 
 export { GoogleAuthService, GoogleDriveService, BackupSyncService, SyncQueueService } from './backup'
-export type { DriveFile, BackupFolder, BookBackup, ClipBackup, SyncResult, SyncNotification, SyncStatus, SyncListeners, QueueStats } from './backup'
+export type { DriveFile, BackupFolder, BookBackup, ClipBackup, SyncResult, SyncNotification, SyncStatus, BackupSyncEvents, QueueStats } from './backup'

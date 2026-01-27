@@ -45,24 +45,16 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const drive = new GoogleDriveService(auth)
   const syncQueue = new SyncQueueService(db)
 
-  const sync = new BackupSyncService(
-    db,
-    drive,
-    auth,
-    syncQueue,
-    { onStatusChange: onSyncStatusChange, onDataChange: onSyncDataChange }
-  )
+  const sync = new BackupSyncService(db, drive, auth, syncQueue)
+  sync.on('status', onSyncStatusChange)
+  sync.on('data', onSyncDataChange)
 
-  const transcription = new TranscriptionQueueService({
-    database: db,
-    whisper,
-    slicer,
-    onTranscriptionComplete,
-  })
-
+  const transcription = new TranscriptionQueueService({ database: db, whisper, slicer })
+  transcription.on('complete', onTranscriptionComplete)
   transcription.start()
 
-  const audio = new AudioPlayerService({ onPlaybackStatusChange })
+  const audio = new AudioPlayerService()
+  audio.on('status', onPlaybackStatusChange)
 
   // Slices ----------------------------------------------------------------------------------------
 
@@ -105,7 +97,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     }
   }
 
-  function onTranscriptionComplete(clipId: string, transcription: string) {
+  function onTranscriptionComplete({ clipId, transcription }: { clipId: string; transcription: string }) {
     get().updateClip(clipId, { transcription })
   }
 

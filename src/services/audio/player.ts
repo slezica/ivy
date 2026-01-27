@@ -10,8 +10,10 @@ import TrackPlayer, {
   Event,
   State,
   AppKilledPlaybackBehavior,
-  EmitterSubscription,
 } from 'react-native-track-player'
+import type { EmitterSubscription } from 'react-native'
+
+import { BaseService } from '../base'
 
 // =============================================================================
 // Public Interface
@@ -31,23 +33,18 @@ export interface TrackMetadata {
   artwork?: string | null  // base64 data URI or file:// path
 }
 
-export interface AudioPlayerListeners {
-  onPlaybackStatusChange?: (status: PlaybackStatus) => void
+export type AudioPlayerEvents = {
+  status: PlaybackStatus
 }
 
 // =============================================================================
 // Service
 // =============================================================================
 
-export class AudioPlayerService {
-  private listeners: AudioPlayerListeners
+export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
   private isSetup = false
   private currentDuration: number = 0
   private eventSubscriptions: EmitterSubscription[] = []
-
-  constructor(listeners: AudioPlayerListeners = {}) {
-    this.listeners = listeners
-  }
 
   async load(uri: string, metadata?: TrackMetadata): Promise<number> {
     await this.ensureSetup()
@@ -184,14 +181,12 @@ export class AudioPlayerService {
 
     this.eventSubscriptions.push(
       TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, async (event) => {
-        if (this.listeners.onPlaybackStatusChange) {
-          const { state } = await TrackPlayer.getPlaybackState()
-          this.listeners.onPlaybackStatusChange({
-            status: this.mapState(state),
-            position: event.position * 1000,  // Convert to ms
-            duration: event.duration * 1000,  // Convert to ms
-          })
-        }
+        const { state } = await TrackPlayer.getPlaybackState()
+        this.emit('status', {
+          status: this.mapState(state),
+          position: event.position * 1000,  // Convert to ms
+          duration: event.duration * 1000,  // Convert to ms
+        })
       })
     )
 
@@ -199,11 +194,9 @@ export class AudioPlayerService {
   }
 
   private async notifyStatusChange(state: State): Promise<void> {
-    if (!this.listeners.onPlaybackStatusChange) return
-
     try {
       const progress = await TrackPlayer.getProgress()
-      this.listeners.onPlaybackStatusChange({
+      this.emit('status', {
         status: this.mapState(state),
         position: progress.position * 1000,
         duration: this.currentDuration,

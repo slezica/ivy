@@ -15,13 +15,13 @@ import { DatabaseService, Book, Clip, SyncManifestEntry } from '../storage'
 import { GoogleDriveService, DriveFile } from './drive'
 import { GoogleAuthService } from './auth'
 import { SyncQueueService } from './queue'
+import { BaseService } from '../base'
 import {
   BookBackup,
   ClipBackup,
   SyncResult,
   SyncNotification,
   SyncStatus,
-  SyncListeners,
 } from './types'
 import {
   SyncState,
@@ -44,30 +44,33 @@ interface ParsedFilename {
   extension: 'json' | 'mp3'
 }
 
+export type BackupSyncEvents = {
+  status: SyncStatus
+  data: SyncNotification
+}
+
 // -----------------------------------------------------------------------------
 // Service
 // -----------------------------------------------------------------------------
 
-export class BackupSyncService {
+export class BackupSyncService extends BaseService<BackupSyncEvents> {
   private db: DatabaseService
   private drive: GoogleDriveService
   private auth: GoogleAuthService
   private syncQueue: SyncQueueService
-  private listeners: SyncListeners
   private isSyncing = false
 
   constructor(
     db: DatabaseService,
     drive: GoogleDriveService,
     auth: GoogleAuthService,
-    syncQueue: SyncQueueService,
-    listeners: SyncListeners = {}
+    syncQueue: SyncQueueService
   ) {
+    super()
     this.db = db
     this.drive = drive
     this.auth = auth
     this.syncQueue = syncQueue
-    this.listeners = listeners
   }
 
   getPendingCount(): number {
@@ -143,7 +146,7 @@ export class BackupSyncService {
 
   private setStatus(isSyncing: boolean, error: string | null): void {
     this.isSyncing = isSyncing
-    this.listeners.onStatusChange?.({
+    this.emit('status', {
       isSyncing,
       pendingCount: this.getPendingCount(),
       error,
@@ -186,7 +189,7 @@ export class BackupSyncService {
 
       // 6. Notify store of external changes
       if (notification.booksChanged.length > 0 || notification.clipsChanged.length > 0) {
-        this.listeners.onDataChange?.(notification)
+        this.emit('data', notification)
       }
     } catch (error) {
       result.errors.push(`Sync failed: ${error}`)

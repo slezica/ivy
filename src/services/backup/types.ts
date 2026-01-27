@@ -61,8 +61,3 @@ export interface SyncStatus {
   pendingCount: number
   error: string | null
 }
-
-export interface SyncListeners {
-  onStatusChange?: (status: SyncStatus) => void
-  onDataChange?: (notification: SyncNotification) => void
-}
