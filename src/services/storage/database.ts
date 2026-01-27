@@ -13,6 +13,10 @@ import { generateId } from '../../utils'
 // Public Interface
 // =============================================================================
 
+export interface Status {
+  migration: number
+}
+
 export interface Book {
   id: string               // UUID primary key
   uri: string | null       // Local file:// path (null if archived)
@@ -91,6 +95,119 @@ export interface SyncQueueItem {
 }
 
 // =============================================================================
+// Migrations
+// =============================================================================
+
+type Migration = (db: SQLite.SQLiteDatabase) => void
+
+const migrations: Migration[] = [
+  // Migration 0: Initial schema
+  (db) => {
+    // Status table (for tracking migrations)
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS status (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        migration INTEGER NOT NULL
+      );
+    `)
+
+    db.execSync(`
+      INSERT INTO status (id, migration) VALUES (1, 0);
+    `)
+
+    // Files table (books)
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS files (
+        id TEXT PRIMARY KEY,
+        uri TEXT,
+        name TEXT NOT NULL,
+        duration INTEGER,
+        position INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER,
+        title TEXT,
+        artist TEXT,
+        artwork TEXT,
+        file_size INTEGER,
+        fingerprint BLOB,
+        hidden INTEGER NOT NULL DEFAULT 0
+      );
+    `)
+    db.execSync(`CREATE INDEX IF NOT EXISTS idx_files_uri ON files(uri);`)
+    db.execSync(`CREATE INDEX IF NOT EXISTS idx_files_file_size ON files(file_size);`)
+
+    // Clips table
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS clips (
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES files(id),
+        uri TEXT NOT NULL,
+        start INTEGER NOT NULL,
+        duration INTEGER NOT NULL,
+        note TEXT NOT NULL,
+        transcription TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `)
+    db.execSync(`CREATE INDEX IF NOT EXISTS idx_clips_source_id ON clips(source_id);`)
+
+    // Sessions table
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        book_id TEXT NOT NULL REFERENCES files(id),
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER NOT NULL
+      );
+    `)
+    db.execSync(`CREATE INDEX IF NOT EXISTS idx_sessions_book_id ON sessions(book_id);`)
+
+    // Sync tables
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS sync_manifest (
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        local_updated_at INTEGER,
+        remote_updated_at INTEGER,
+        remote_file_id TEXT,
+        remote_mp3_file_id TEXT,
+        synced_at INTEGER NOT NULL,
+        PRIMARY KEY (entity_type, entity_id)
+      );
+    `)
+
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS sync_queue (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        queued_at INTEGER NOT NULL,
+        attempts INTEGER DEFAULT 0,
+        last_error TEXT,
+        UNIQUE(entity_type, entity_id)
+      );
+    `)
+
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS sync_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `)
+
+    // Settings table
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        sync_enabled INTEGER NOT NULL DEFAULT 0
+      );
+    `)
+    db.runSync('INSERT OR IGNORE INTO settings (id, sync_enabled) VALUES (1, 0)')
+  },
+]
+
+// =============================================================================
 // Service
 // =============================================================================
 
@@ -106,7 +223,7 @@ export class DatabaseService {
 
   constructor() {
     this.db = SQLite.openDatabaseSync('audioplayer.db')
-    this.initialize()
+    this.runMigrations()
   }
 
   // ---------------------------------------------------------------------------
@@ -528,99 +645,28 @@ export class DatabaseService {
   // Private
   // ---------------------------------------------------------------------------
 
-  private initialize(): void {
-    this.db.execSync(`
-      CREATE TABLE IF NOT EXISTS files (
-        id TEXT PRIMARY KEY,
-        uri TEXT,
-        name TEXT NOT NULL,
-        duration INTEGER,
-        position INTEGER NOT NULL DEFAULT 0,
-        updated_at INTEGER,
-        title TEXT,
-        artist TEXT,
-        artwork TEXT,
-        file_size INTEGER,
-        fingerprint BLOB,
-        hidden INTEGER NOT NULL DEFAULT 0
-      );
-    `)
+  private runMigrations(): void {
+    // Decide what the next migration to apply is (if any):
+    let nextMigration
+    try {
+      const row = this.db.getFirstSync<Status>('SELECT migration FROM status WHERE id = 1')
 
-    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_files_uri ON files(uri);`)
-    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_files_file_size ON files(file_size);`)
+      // Table exists (we know row too), start after the last recorded migration:
+      nextMigration = row!.migration + 1 
 
-    this.db.execSync(`
-      CREATE TABLE IF NOT EXISTS clips (
-        id TEXT PRIMARY KEY,
-        source_id TEXT NOT NULL REFERENCES files(id),
-        uri TEXT NOT NULL,
-        start INTEGER NOT NULL,
-        duration INTEGER NOT NULL,
-        note TEXT NOT NULL,
-        transcription TEXT,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      );
-    `)
+    } catch {
+      // Table does not exist, start from special migration 0:
+      nextMigration = 0
+    }
 
-    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_clips_source_id ON clips(source_id);`)
+    // Run pending migrations:
+    for (let i = nextMigration; i < migrations.length; i++) {
+      console.log(`[Database] Running migration ${i}`)
 
-    this.db.execSync(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        id TEXT PRIMARY KEY,
-        book_id TEXT NOT NULL REFERENCES files(id),
-        started_at INTEGER NOT NULL,
-        ended_at INTEGER NOT NULL
-      );
-    `)
-
-    this.db.execSync(`CREATE INDEX IF NOT EXISTS idx_sessions_book_id ON sessions(book_id);`)
-
-    // Sync tables
-    this.db.execSync(`
-      CREATE TABLE IF NOT EXISTS sync_manifest (
-        entity_type TEXT NOT NULL,
-        entity_id TEXT NOT NULL,
-        local_updated_at INTEGER,
-        remote_updated_at INTEGER,
-        remote_file_id TEXT,
-        remote_mp3_file_id TEXT,
-        synced_at INTEGER NOT NULL,
-        PRIMARY KEY (entity_type, entity_id)
-      );
-    `)
-
-    this.db.execSync(`
-      CREATE TABLE IF NOT EXISTS sync_queue (
-        id TEXT PRIMARY KEY,
-        entity_type TEXT NOT NULL,
-        entity_id TEXT NOT NULL,
-        operation TEXT NOT NULL,
-        queued_at INTEGER NOT NULL,
-        attempts INTEGER DEFAULT 0,
-        last_error TEXT,
-        UNIQUE(entity_type, entity_id)
-      );
-    `)
-
-    this.db.execSync(`
-      CREATE TABLE IF NOT EXISTS sync_metadata (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
-    `)
-
-    this.db.execSync(`
-      CREATE TABLE IF NOT EXISTS settings (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        sync_enabled INTEGER NOT NULL DEFAULT 0
-      );
-    `)
-
-    // Ensure settings row exists
-    this.db.runSync(
-      'INSERT OR IGNORE INTO settings (id, sync_enabled) VALUES (1, 0)'
-    )
+      // Apply! If this throws, we should just fail, nothing else makes sense:
+      migrations[i](this.db) 
+      this.db.runSync('UPDATE status SET migration = ? WHERE id = 1', [i])
+    }
   }
 
   // ---------------------------------------------------------------------------
