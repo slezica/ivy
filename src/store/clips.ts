@@ -95,7 +95,7 @@ export function createClipSlice(deps: ClipSliceDeps) {
 
     async function updateClip(
       id: string,
-      updates: { note?: string; start?: number; duration?: number; transcription?: string }
+      updates: { note?: string; start?: number; duration?: number; transcription?: string | null }
     ): Promise<void> {
       const { clips } = get()
       const clip = clips[id]
@@ -131,6 +131,9 @@ export function createClipSlice(deps: ClipSliceDeps) {
 
         // Delete old clip file
         await slicer.cleanup(clip.uri)
+
+        // Clear stale transcription (will re-queue below)
+        updates.transcription = null
       }
 
       // Update database
@@ -150,6 +153,11 @@ export function createClipSlice(deps: ClipSliceDeps) {
         if (newUri) clip.uri = newUri
         clip.updated_at = Date.now()
       })
+
+      // Re-queue for transcription if bounds changed
+      if (boundsChanged) {
+        transcription.queueClip(id)
+      }
     }
 
     async function deleteClip(id: string): Promise<void> {

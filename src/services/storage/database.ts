@@ -427,10 +427,10 @@ export class DatabaseService {
     }
   }
 
-  updateClip(id: string, updates: { note?: string; start?: number; duration?: number; uri?: string; transcription?: string }): void {
+  updateClip(id: string, updates: { note?: string; start?: number; duration?: number; uri?: string; transcription?: string | null }): void {
     const now = Date.now()
     const setClauses: string[] = ['updated_at = ?']
-    const values: (string | number)[] = [now]
+    const values: (string | number | null)[] = [now]
 
     if (updates.note !== undefined) {
       setClauses.push('note = ?')
