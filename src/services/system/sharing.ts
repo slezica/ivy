@@ -16,15 +16,31 @@ export class SharingService {
    */
   async shareClipFile(clipUri: string, title?: string): Promise<void> {
     try {
+      console.log('[Sharing] Attempting to share:', clipUri)
+
       if (!(await Sharing.isAvailableAsync())) {
         throw new Error('Sharing is not available on this device')
       }
 
+      // Verify file exists before sharing
+      const path = clipUri.replace('file://', '')
+      const { default: RNFS } = await import('react-native-fs')
+      const exists = await RNFS.exists(path)
+      console.log('[Sharing] File exists:', exists, 'at path:', path)
+
+      if (!exists) {
+        throw new Error(`Clip file not found: ${path}`)
+      }
+
+      const stat = await RNFS.stat(path)
+      console.log('[Sharing] File size:', stat.size, 'bytes')
+
       await Sharing.shareAsync(clipUri, {
         dialogTitle: title || 'Audio Clip',
-        UTI: 'public.audio',
-        mimeType: 'audio/*',
+        UTI: 'public.mpeg-audio',
+        mimeType: 'audio/mpeg',
       })
+
     } catch (error) {
       console.error('Error sharing clip:', error)
       throw error
