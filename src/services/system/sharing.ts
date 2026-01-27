@@ -35,10 +35,16 @@ export class SharingService {
       const stat = await RNFS.stat(path)
       console.log('[Sharing] File size:', stat.size, 'bytes')
 
+      // Determine MIME type based on file extension
+      const isM4a = path.toLowerCase().endsWith('.m4a')
+      const mimeType = isM4a ? 'audio/mp4' : 'audio/mpeg'
+      const uti = isM4a ? 'public.mpeg-4-audio' : 'public.mp3'
+      console.log('[Sharing] Using MIME type:', mimeType)
+
       await Sharing.shareAsync(clipUri, {
         dialogTitle: title || 'Audio Clip',
-        UTI: 'public.mpeg-audio',
-        mimeType: 'audio/mpeg',
+        UTI: uti,
+        mimeType: mimeType,
       })
 
     } catch (error) {

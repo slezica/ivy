@@ -26,7 +26,21 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
         promise: Promise
     ) {
         try {
+            // Diagnostic logging
+            val inputFile = File(inputPath)
+            android.util.Log.d("AudioSlicer", "Input file exists: ${inputFile.exists()}")
+            android.util.Log.d("AudioSlicer", "Input file size: ${inputFile.length()} bytes")
+            android.util.Log.d("AudioSlicer", "Input file canRead: ${inputFile.canRead()}")
+
+            if (inputFile.exists() && inputFile.length() > 0) {
+                // Log first 16 bytes to check file format
+                val header = inputFile.inputStream().use { it.readNBytes(16) }
+                val headerHex = header.joinToString(" ") { "%02X".format(it) }
+                android.util.Log.d("AudioSlicer", "Input file header (hex): $headerHex")
+            }
+
             val extractor = MediaExtractor()
+            android.util.Log.d("AudioSlicer", "Setting data source: $inputPath")
             extractor.setDataSource(inputPath)
 
             // Find the audio track
@@ -50,6 +64,10 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
             }
 
             val mime = audioFormat.getString(MediaFormat.KEY_MIME) ?: ""
+            val duration = if (audioFormat.containsKey(MediaFormat.KEY_DURATION)) {
+                audioFormat.getLong(MediaFormat.KEY_DURATION)
+            } else -1L
+            android.util.Log.d("AudioSlicer", "Audio format: mime=$mime, duration=${duration}us (${duration/1000}ms)")
 
             // For MP3 files, use simple byte copying approach
             if (mime.contains("mp3") || mime.contains("mpeg")) {
@@ -57,10 +75,19 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
                 return
             }
 
-            // For other formats (AAC, etc.), use MediaMuxer
-            sliceWithMuxer(extractor, audioTrackIndex, audioFormat, startTimeMs, endTimeMs, outputPath, promise)
+            // For other formats (AAC, etc.), use MediaMuxer with correct extension
+            // MediaMuxer outputs MPEG-4 container, so we need .m4a extension
+            val correctedPath = outputPath.replace(Regex("\\.[^.]+$"), ".m4a")
+            android.util.Log.d("AudioSlicer", "Using muxer, corrected path: $correctedPath")
+            sliceWithMuxer(extractor, audioTrackIndex, audioFormat, startTimeMs, endTimeMs, correctedPath, promise)
 
         } catch (e: Exception) {
+            android.util.Log.e("AudioSlicer", "Slice failed", e)
+            android.util.Log.e("AudioSlicer", "Exception type: ${e.javaClass.name}")
+            android.util.Log.e("AudioSlicer", "Exception message: ${e.message}")
+            e.cause?.let {
+                android.util.Log.e("AudioSlicer", "Cause: ${it.javaClass.name}: ${it.message}")
+            }
             promise.reject("ERROR", "Slice failed: ${e.message}", e)
         }
     }
@@ -91,7 +118,8 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
                 while (true) {
                     val sampleTime = extractor.sampleTime
 
-                    if (sampleTime < 0 || sampleTime > endTimeUs) {
+                    // sampleTime == -1 means no more samples (small negative values are valid encoder delay)
+                    if (sampleTime == -1L || sampleTime > endTimeUs) {
                         break
                     }
 
@@ -142,7 +170,17 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
             val startTimeUs = (startTimeMs * 1000).toLong()
             val endTimeUs = (endTimeMs * 1000).toLong()
+
+            android.util.Log.d("AudioSlicer", "sliceWithMuxer: startTimeUs=$startTimeUs, endTimeUs=$endTimeUs")
+
+            // Check first sample time before seeking
+            val firstSampleTime = extractor.sampleTime
+            android.util.Log.d("AudioSlicer", "First sample time before seek: $firstSampleTime us")
+
             extractor.seekTo(startTimeUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+
+            val afterSeekTime = extractor.sampleTime
+            android.util.Log.d("AudioSlicer", "Sample time after seek to $startTimeUs: $afterSeekTime us")
 
             // Create output file
             val outputFile = File(outputPath)
@@ -159,10 +197,19 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
             var samplesWritten = 0
 
+            var loopCount = 0
             while (true) {
                 val sampleTime = extractor.sampleTime
 
-                if (sampleTime > endTimeUs || sampleTime < 0) {
+                if (loopCount < 3) {
+                    android.util.Log.d("AudioSlicer", "Loop $loopCount: sampleTime=$sampleTime us, endTimeUs=$endTimeUs")
+                }
+                loopCount++
+
+                // Note: sampleTime == -1 means no more samples
+                // Small negative values (e.g., -27709us) are valid AAC encoder delay, not end-of-stream
+                if (sampleTime == -1L || sampleTime > endTimeUs) {
+                    android.util.Log.d("AudioSlicer", "Breaking loop: sampleTime=$sampleTime, endTimeUs=$endTimeUs, reason=${if (sampleTime == -1L) "end of stream" else "exceeded end"}")
                     break
                 }
 
@@ -187,6 +234,8 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
             muxer.stop()
             muxer.release()
             extractor.release()
+
+            android.util.Log.d("AudioSlicer", "Muxer finished: samplesWritten=$samplesWritten, loopCount=$loopCount")
 
             if (samplesWritten == 0) {
                 promise.reject("ERROR", "No samples written - check time range")
