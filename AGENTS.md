@@ -326,6 +326,41 @@ id INTEGER PRIMARY KEY CHECK (id = 1)  -- Enforces single row
 sync_enabled INTEGER NOT NULL DEFAULT 0
 ```
 
+**status table** (migration tracking):
+```sql
+id INTEGER PRIMARY KEY CHECK (id = 1)  -- Enforces single row
+migration INTEGER NOT NULL             -- Last applied migration index
+```
+
+## Database Migrations
+
+Schema changes are managed via a migration system in `services/storage/database.ts`.
+
+**How it works:**
+1. `migrations` array at module level contains migration functions: `(db) => void`
+2. On startup, `runMigrations()` reads `status.migration` to find last applied migration
+3. If `status` table doesn't exist (fresh install), starts from migration 0
+4. Runs each pending migration, updates `status.migration` after each success
+
+**Adding a new migration:**
+```typescript
+const migrations: Migration[] = [
+  // Migration 0: Initial schema (creates all tables including status)
+  (db) => { /* ... */ },
+
+  // Migration 1: Add new_column to settings
+  (db) => {
+    db.runSync('ALTER TABLE settings ADD COLUMN new_column TEXT')
+  },
+]
+```
+
+**Key points:**
+- Migration 0 creates all tables including `status`, then inserts `migration = 0`
+- Subsequent migrations just run their SQL; the loop updates `status.migration` after each
+- If a migration throws, the app crashes (intentional - partial migrations are dangerous)
+- Migrations are never removed or reordered once deployed
+
 ## Store State Structure
 
 Store is composed of slices. See `store/types.ts` for authoritative type definitions.
@@ -559,7 +594,7 @@ On-device automatic clip transcription using Whisper:
 **Flow:**
 1. Clip created → `transcriptionService.queueClip(clipId)`
 2. `audioSlicerService` extracts first 10s from clip's audio file (`clip.uri`)
-3. `whisperService` transcribes the audio (using whisper.rn with ggml-tiny model)
+3. `whisperService` transcribes the audio (using whisper.rn with ggml-small model)
 4. Result stored in `clips.transcription` column
 5. Callback notifies store to update UI
 
