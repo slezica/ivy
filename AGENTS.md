@@ -607,11 +607,11 @@ const initialPosition = hasSourceFile ? clip.start : 0
 On-device automatic clip transcription using Whisper:
 
 **Flow:**
-1. Clip created → `transcriptionService.queueClip(clipId)`
-2. `audioSlicerService` extracts first 10s from clip's audio file (`clip.uri`)
-3. `whisperService` transcribes the audio (using whisper.rn with ggml-small model)
-4. Result stored in `clips.transcription` column
-5. Service emits `complete` event → clipSlice updates store
+1. Clip created → `transcriptionService.queueClip(clipId)` → emits `queued`
+2. Processing begins → emits `started`
+3. `audioSlicerService` extracts first 10s from clip's audio file (`clip.uri`)
+4. `whisperService` transcribes the audio (using whisper.rn with ggml-small model)
+5. Result stored in `clips.transcription` column → emits `complete`
 
 **Services** (`services/transcription/`):
 - `whisper.ts` - Downloads/caches Whisper model, runs transcription
