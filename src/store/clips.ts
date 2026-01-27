@@ -11,6 +11,7 @@ import type {
 } from '../services'
 import { generateId } from '../utils'
 import type { ClipSlice, SetState, GetState } from './types'
+import { TranscriptionQueueEvents } from '../services/transcription/queue'
 
 
 const CLIPS_DIR = `${RNFS.DocumentDirectoryPath}/clips`
@@ -31,11 +32,13 @@ export function createClipSlice(deps: ClipSliceDeps) {
   const { db, slicer, syncQueue, transcription, sharing, sync } = deps
 
   return (set: SetState, get: GetState): ClipSlice => {
-    transcription.on('complete', onTranscriptionComplete)
+    transcription.on('queued', onTranscriptionQueued)
+    transcription.on('finish', onTranscriptionFinished)
     sync.on('data', onSyncData)
 
     return {
       clips: {},
+      transcribing: new Set(),
 
       fetchClips,
       addClip,
@@ -44,8 +47,24 @@ export function createClipSlice(deps: ClipSliceDeps) {
       shareClip,
     }
 
-    function onTranscriptionComplete({ clipId, transcription }: { clipId: string; transcription: string }) {
-      updateClip(clipId, { transcription })
+    function onTranscriptionQueued({ clipId }: TranscriptionQueueEvents['queued']) {
+      set(state => {
+        state.transcribing.add(clipId)
+      })
+    }
+
+    function onTranscriptionFinished({ clipId, error, transcription }: TranscriptionQueueEvents['finish']) {
+      set(state => {
+        state.transcribing.delete(clipId)
+      })
+
+      if (error) {
+        console.error(error)
+      }
+
+      if (transcription) {
+        updateClip(clipId, { transcription })
+      }
     }
 
     function onSyncData(notification: SyncNotification) {

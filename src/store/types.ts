@@ -50,6 +50,7 @@ export interface PlaybackSlice {
 
 export interface ClipSlice {
   clips: Record<string, ClipWithFile>
+  transcribing: Set<string>
 
   fetchClips: () => void
   addClip: (bookId: string, position: number) => Promise<void>

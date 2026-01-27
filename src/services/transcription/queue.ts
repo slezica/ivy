@@ -24,14 +24,14 @@ export interface TranscriptionQueueDeps {
 export type TranscriptionQueueEvents = {
   queued: { clipId: string }
   started: { clipId: string }
-  complete: { clipId: string; transcription: string }
+  finish: { clipId: string; error?: Error, transcription?: string }
 }
 
 // =============================================================================
 // Constants
 // =============================================================================
 
-const MAX_TRANSCRIPTION_DURATION_MS = 10000  // First 5 seconds of clip
+const MAX_TRANSCRIPTION_DURATION_MS = 10000  // First 10 seconds of clip
 
 // =============================================================================
 // Service
@@ -130,13 +130,14 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
       const transcription = await this.whisper.transcribe(audioPath)
 
       this.database.updateClip(clipId, { transcription })
-
-      this.emit('complete', { clipId, transcription })
-
       console.log('[Transcription] Completed clip:', clipId, '| Result:', transcription)
+
+      this.emit('finish', { clipId, transcription })
+
     } catch (error) {
       console.error('[Transcription] Failed to process clip:', clipId, error)
-      // Leave transcription as null, will retry on next app start
+      this.emit('finish', { clipId, error: error as Error })
+
     } finally {
       if (audioPath) {
         await this.slicer.cleanup(audioPath)
