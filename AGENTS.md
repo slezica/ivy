@@ -22,7 +22,21 @@ Single Zustand store is the source of truth. Services are stateless. Store uses 
 - `store/clips.ts` - Clip CRUD operations
 - `store/sync.ts` - Cloud sync state and actions
 - `store/settings.ts` - App settings
-- `store/index.ts` - Service wiring and slice composition
+- `store/index.ts` - Service construction and slice composition
+
+**Service Events:** Services extend `BaseService<Events>` and emit typed events. Slices subscribe to relevant events during initialization:
+
+```typescript
+// In slice initialization
+audio.on('status', (status) => {
+  set((state) => { state.playback.position = status.position })
+})
+
+// Service emits events internally
+this.emit('status', { status: 'playing', position: 1000, duration: 60000 })
+```
+
+Event subscriptions live in slices, not store/index.ts. Multiple slices can subscribe to the same service event.
 
 **Immer usage:** State updates use direct mutations on a draft (immer converts to immutable):
 ```typescript
@@ -51,7 +65,7 @@ set((state) => ({
 - `loading`: Loading audio player
 - `paused`/`playing`: Playback states
 
-Event callback preserves transitional state (`loading`) - only updates to `paused`/`playing` when not in transition.
+Event handler preserves transitional state (`loading`) - only updates to `paused`/`playing` when not in transition.
 
 ### 6. **Playback Ownership** 🔥 IMPORTANT
 Multiple UI components can control playback (PlayerScreen, ClipViewer, ClipEditor). To prevent conflicts:
@@ -183,6 +197,7 @@ await deleteBook(bookId)
   │   └── settings.ts             # Settings slice
   ├── services/
   │   ├── index.ts                # Barrel exports
+  │   ├── base.ts                 # BaseService with typed events (on/off/emit)
   │   ├── audio/
   │   │   ├── player.ts           # react-native-track-player wrapper
   │   │   ├── integration.ts      # Playback service for remote control events
@@ -596,7 +611,7 @@ On-device automatic clip transcription using Whisper:
 2. `audioSlicerService` extracts first 10s from clip's audio file (`clip.uri`)
 3. `whisperService` transcribes the audio (using whisper.rn with ggml-small model)
 4. Result stored in `clips.transcription` column
-5. Callback notifies store to update UI
+5. Service emits `complete` event → clipSlice updates store
 
 **Services** (`services/transcription/`):
 - `whisper.ts` - Downloads/caches Whisper model, runs transcription
@@ -675,7 +690,7 @@ Change detection: `entity.updated_at > manifest.local_updated_at` means changed 
 1. **Process queue** - Push all queued local changes first
 2. **Push phase** - Upload any remaining local changes, handle conflicts
 3. **Pull phase** - Download remote changes not present locally
-4. **Notify store** - Callback triggers `fetchBooks()`/`fetchClips()` to refresh UI
+4. **Notify slices** - Emits `data` event → slices call `fetchBooks()`/`fetchClips()`
 
 ### Conflict Resolution
 
@@ -712,26 +727,6 @@ App auto-syncs when returning to foreground (if `settings.sync_enabled`):
 - Silent unless conflicts/errors occur
 
 ### Sync Service API
-
-The sync service receives callbacks via constructor:
-
-```typescript
-// Service setup (in store initialization)
-const sync = new BackupSyncService(db, drive, auth, queue, {
-  onStatusChange: onSyncStatusChange,
-  onDataChange: onSyncDataChange,
-})
-
-// Listener functions (hoisted, defined at end of store scope)
-function onSyncStatusChange(status) {
-  set((state) => { state.sync = { ...status, lastSyncTime: ... } })
-}
-
-function onSyncDataChange(notification) {
-  if (notification.booksChanged.length > 0) get().fetchBooks()
-  if (notification.clipsChanged.length > 0) get().fetchClips()
-}
-```
 
 The store exposes thin wrappers that components call:
 - `syncNow()` - Fire-and-forget, status updates via `sync` state
@@ -805,7 +800,7 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 - Look up `Book` metadata from `books` map using URI when needed (audio state only has uri/duration)
 - Queue changes via `syncQueue.queueChange()` when modifying synced entities
 - Use manifest comparison for sync change detection (not just timestamp comparison)
-- Use service callbacks for sync status (store doesn't orchestrate auth)
+- Subscribe to service events in slices via `service.on('event', handler)`
 
 ❌ **Don't:**
 - Use external content: URIs for audio playback
