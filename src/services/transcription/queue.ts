@@ -22,6 +22,8 @@ export interface TranscriptionQueueDeps {
 }
 
 export type TranscriptionQueueEvents = {
+  queued: { clipId: string }
+  started: { clipId: string }
   complete: { clipId: string; transcription: string }
 }
 
@@ -75,6 +77,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
   queueClip(clipId: string): void {
     console.log('[Transcription] Queueing clip:', clipId)
     this.queue.push(clipId)
+    this.emit('queued', { clipId })
     this.processQueue().catch(error => {
       console.error('[Transcription] Queue processing failed:', error)
     })
@@ -116,6 +119,8 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
       console.log('[Transcription] Clip not found or already transcribed:', clipId)
       return
     }
+
+    this.emit('started', { clipId })
 
     let audioPath: string | null = null
 
