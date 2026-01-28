@@ -42,6 +42,7 @@ export type WhisperServiceEvents = {
 export class WhisperService extends BaseService<WhisperServiceEvents> {
   private context: WhisperContext | null = null
   private initializing: Promise<void> | null = null
+  private downloading = false
 
   constructor() {
     super()
@@ -222,14 +223,22 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
   private async ensureModelDownloaded(): Promise<string> {
     const modelDir = `${RNFS.DocumentDirectoryPath}/whisper`
     const modelPath = `${modelDir}/${MODEL_FILENAME}`
+    const downloadPath = `${modelPath}.download`
 
+    // Check if model already exists (only the final file, not .download)
     const exists = await RNFS.exists(modelPath)
     if (exists) {
       console.log('[Whisper] Model already downloaded')
       return modelPath
     }
 
+    // Prevent concurrent downloads
+    if (this.downloading) {
+      throw new Error('Download already in progress')
+    }
+
     console.log('[Whisper] Downloading model...')
+    this.downloading = true
     this.emit('status', { status: 'downloading' })
 
     try {
@@ -238,9 +247,10 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
         await RNFS.mkdir(modelDir)
       }
 
+      // Download to temp file (overwrites any leftover partial download)
       const result = await RNFS.downloadFile({
         fromUrl: MODEL_URL,
-        toFile: modelPath,
+        toFile: downloadPath,
         background: false,
         discretionary: false,
       }).promise
@@ -249,9 +259,17 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
         throw new Error(`Failed to download model: ${result.statusCode}`)
       }
 
+      // Rename to final path only after successful download
+      await RNFS.moveFile(downloadPath, modelPath)
+
       console.log('[Whisper] Model downloaded successfully')
       return modelPath
+    } catch (error) {
+      // Clean up partial download on failure
+      await RNFS.unlink(downloadPath).catch(() => {})
+      throw error
     } finally {
+      this.downloading = false
       this.emit('status', { status: 'idle' })
     }
   }
