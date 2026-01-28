@@ -923,14 +923,6 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 **Transcription status:** `idle ⇄ downloading ⇄ processing` (queue-level, not per-file)
 **Sessions:** Main player only, 5-min resume window, <1s sessions deleted, Record keyed by id
 
-## Custom ESLint Rules
-
-Project-specific rules in `eslint/` directory, used as `ivy/<rule-name>`:
-
-- **jsx-align-ternary-single** - In JSX ternaries, `?` and `:` must be on aligned new lines
-- **jsx-align-ternary-chain** - Chained ternaries must have consistent alignment
-- **jsx-newline-around-multiline** - Blank line required between sibling JSX elements when either spans multiple lines
-
 ## System Media Controls
 
 Uses `react-native-track-player` v5 for system-level playback integration:
@@ -952,5 +944,4 @@ Uses `react-native-track-player` v5 for system-level playback integration:
 - Events are handled via `TrackPlayer.addEventListener()` in integration.ts
 - Notification click opens `ivy://notification.click` → caught by `+not-found.tsx` → redirects to player
 - v5 API: use `TrackPlayer.getProgress()` instead of separate `getPosition()`/`getDuration()`
-
 
