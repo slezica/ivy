@@ -16,7 +16,7 @@ Everything internal is **milliseconds**. Convert to MM:SS only at display bounda
 
 ### 3. **State Management**
 Single Zustand store is the source of truth. Services are stateless. Store uses **immer middleware** for immutable updates via direct mutations. Store is split into slices:
-- `store/types.ts` - Central type definitions (read top-down to understand shape)
+- `store/types.ts` - Central type definitions (AppState, slices, Action, ActionFactory)
 - `store/library.ts` - Book management and file loading
 - `store/playback.ts` - Audio playback state and controls
 - `store/clips.ts` - Clip CRUD operations
@@ -25,6 +25,30 @@ Single Zustand store is the source of truth. Services are stateless. Store uses 
 - `store/session.ts` - Listening history tracking
 - `store/settings.ts` - App settings
 - `store/index.ts` - Service construction and slice composition
+
+**Action Factories:** Actions are defined in `src/actions/` as factory functions with explicit dependencies. This enables unit testing actions in isolation:
+
+```typescript
+// actions/update_settings.ts
+export interface UpdateSettingsDeps {
+  db: DatabaseService
+  set: SetState
+}
+
+export type UpdateSettings = Action<[Settings]>
+
+export const createUpdateSettings: ActionFactory<UpdateSettingsDeps, UpdateSettings> = (deps) => (
+  async (settings) => {
+    deps.db.setSettings(settings)
+    deps.set({ settings })
+  }
+)
+
+// store/settings.ts - wires up dependencies
+const updateSettings = createUpdateSettings({ db, set })
+```
+
+All actions are async (`Action<Args>` returns `Promise<void>`). Dependencies are wired in slice files, keeping coupling at the store layer.
 
 **Service Events:** Services extend `BaseService<Events>` and emit typed events. Slices subscribe to relevant events during initialization:
 
@@ -190,16 +214,22 @@ await deleteBook(bookId)
 
 ```
 /src
+  ├── actions/                    # Action factories (one file per action)
+  │   ├── constants.ts            # Shared constants (durations, paths)
+  │   ├── play.ts, pause.ts, ... # Playback actions
+  │   ├── add_clip.ts, ...       # Clip actions
+  │   ├── load_file.ts, ...      # Library actions
+  │   └── ...                     # ~28 action files total
   ├── store/
   │   ├── index.ts                # Service wiring & slice composition
-  │   ├── types.ts                # Central type definitions (AppState, slices)
-  │   ├── library.ts              # Library slice (books, file loading)
-  │   ├── playback.ts             # Playback slice (audio controls)
-  │   ├── clips.ts                # Clips slice (clip CRUD)
-  │   ├── transcription.ts        # Transcription slice (status, service control)
-  │   ├── sync.ts                 # Sync slice (cloud backup)
-  │   ├── session.ts              # Session slice (listening history)
-  │   └── settings.ts             # Settings slice
+  │   ├── types.ts                # Central type definitions (AppState, slices, Action, ActionFactory)
+  │   ├── library.ts              # Library slice (wires library actions)
+  │   ├── playback.ts             # Playback slice (wires playback actions)
+  │   ├── clips.ts                # Clips slice (wires clip actions)
+  │   ├── transcription.ts        # Transcription slice (wires transcription actions)
+  │   ├── sync.ts                 # Sync slice (wires sync actions)
+  │   ├── session.ts              # Session slice (wires session actions)
+  │   └── settings.ts             # Settings slice (wires settings actions)
   ├── services/
   │   ├── index.ts                # Barrel exports
   │   ├── base.ts                 # BaseService with typed events (on/off/emit)
@@ -842,10 +872,16 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 
 ## Adding Features
 
+### New Action
+1. Create action factory in `src/actions/my_action.ts` with deps interface and type
+2. Wire up in the relevant slice file (e.g., `store/playback.ts`)
+3. Add to slice interface in `store/types.ts`
+4. Add UI in relevant screen/component
+
 ### New Playback Control
-1. Add action to `src/store/playback.ts` slice
-2. Call `AudioPlayerService` method (from `services/audio/player.ts`)
-3. Update `playback.status` if needed
+1. Create action in `src/actions/` (deps: `audio`, `set`, etc.)
+2. Wire in `store/playback.ts`
+3. Update `PlaybackSlice` interface in `store/types.ts`
 4. Add UI in `PlayerScreen.tsx`
 
 ### New Database Field
@@ -862,6 +898,9 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 ## Key Patterns to Follow
 
 ✅ **Do:**
+- Define new actions in `src/actions/` using the `ActionFactory` pattern with explicit deps
+- Wire action dependencies in slice files (coupling lives at the store layer, not in actions)
+- Make all actions async (return `Promise<void>`)
 - Use services for all I/O (never call react-native-track-player, SQLite, FileSystem directly from components)
 - Import services from `services/` barrel export (e.g., `import { databaseService } from '../services'`)
 - Use dependency injection for services that depend on other services
