@@ -32,8 +32,13 @@ import type { ResetApp } from '../actions/reset_app'
 
 export interface AppState {
   // State
-  library: { status: 'loading' | 'idle' | 'adding' }
   books: Record<string, Book>
+  clips: Record<string, ClipWithFile>
+  settings: Settings
+  sessions: Record<string, SessionWithBook>
+
+  library: { status: 'loading' | 'idle' | 'adding' }
+
   playback: {
     status: 'idle' | 'loading' | 'paused' | 'playing'
     position: number
@@ -41,20 +46,20 @@ export interface AppState {
     duration: number         // Duration of loaded audio
     ownerId: string | null   // ID of component that last took control
   }
-  clips: Record<string, ClipWithFile>
+
   transcription: {
     status: 'idle' | 'downloading' | 'processing'
     pending: Record<string, true>
   }
+
   sync: {
     isSyncing: boolean
     pendingCount: number
     lastSyncTime: number | null
     error: string | null
   }
-  settings: Settings
-  sessions: Record<string, SessionWithBook>
-  currentSessionBookId: string | null
+
+  currentSessionBookId: string | null // TODO move out of here
 
   // Actions
   fetchBooks: FetchBooks
