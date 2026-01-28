@@ -1,5 +1,6 @@
 import type { GetState, Action, ActionFactory } from '../store/types'
 import type { Play } from './play'
+import { MAIN_PLAYER_OWNER_ID } from '../utils'
 
 
 export interface SeekClipDeps {
@@ -22,6 +23,6 @@ export const createSeekClip: ActionFactory<SeekClipDeps, SeekClip> = (deps) => (
     }
 
     // Seek to clip includes loading the file if different
-    await play({ fileUri: clip.file_uri, position: clip.start })
+    await play({ fileUri: clip.file_uri, position: clip.start, ownerId: MAIN_PLAYER_OWNER_ID })
   }
 )

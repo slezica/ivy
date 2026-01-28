@@ -5,7 +5,7 @@ import type { SetState, GetState, Action, ActionFactory } from '../store/types'
 export interface PlayContext {
   fileUri: string
   position: number
-  ownerId?: string
+  ownerId: string
 }
 
 export interface PlayDeps {
@@ -42,9 +42,7 @@ export const createPlay: ActionFactory<PlayDeps, Play> = (deps) => (
 
         set(state => {
           state.playback.status = 'loading'
-          if (context.ownerId != null) {
-            state.playback.ownerId = context.ownerId
-          }
+          state.playback.ownerId = context.ownerId
         })
 
         const duration = await audio.load(context.fileUri, {
@@ -68,9 +66,7 @@ export const createPlay: ActionFactory<PlayDeps, Play> = (deps) => (
 
       set(state => {
         state.playback.status = 'playing'
-        if (context.ownerId !== undefined) {
-          state.playback.ownerId = context.ownerId
-        }
+        state.playback.ownerId = context.ownerId
       })
 
       await audio.play()
