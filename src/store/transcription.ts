@@ -14,9 +14,11 @@ export function createTranscriptionSlice(deps: TranscriptionSliceDeps) {
   return (set: SetState, _get: GetState): TranscriptionSlice => {
     transcription.on('queued', onTranscriptionQueued)
     transcription.on('finish', onTranscriptionFinished)
+    transcription.on('status', onStatusChange)
 
     return {
       transcription: {
+        status: 'idle',
         pending: {},
       },
     }
@@ -34,6 +36,12 @@ export function createTranscriptionSlice(deps: TranscriptionSliceDeps) {
 
       set(state => {
         delete state.transcription.pending[clipId]
+      })
+    }
+
+    function onStatusChange({ status }: TranscriptionQueueEvents['status']) {
+      set(state => {
+        state.transcription.status = status
       })
     }
   }

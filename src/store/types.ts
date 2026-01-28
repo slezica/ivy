@@ -62,6 +62,7 @@ export interface ClipSlice {
 
 export interface TranscriptionSlice {
   transcription: {
+    status: 'idle' | 'downloading' | 'processing'
     pending: Record<string, true>
   }
 }

@@ -11,6 +11,7 @@
 import { initWhisper, WhisperContext } from 'whisper.rn'
 import { decodeAudioData } from 'react-native-audio-api'
 import RNFS from 'react-native-fs'
+import { BaseService } from '../base'
 
 // =============================================================================
 // Constants
@@ -25,12 +26,26 @@ const WHISPER_CHANNELS = 1
 const WHISPER_BITS_PER_SAMPLE = 16
 
 // =============================================================================
+// Events
+// =============================================================================
+
+export type WhisperServiceStatus = 'idle' | 'downloading' | 'processing'
+
+export type WhisperServiceEvents = {
+  status: { status: WhisperServiceStatus }
+}
+
+// =============================================================================
 // Service
 // =============================================================================
 
-export class WhisperService {
+export class WhisperService extends BaseService<WhisperServiceEvents> {
   private context: WhisperContext | null = null
   private initializing: Promise<void> | null = null
+
+  constructor() {
+    super()
+  }
 
   async initialize(): Promise<void> {
     if (this.context) {
@@ -60,6 +75,7 @@ export class WhisperService {
     }
 
     console.log('[Whisper] Transcribing:', audioPath)
+    this.emit('status', { status: 'processing' })
 
     // Convert to Whisper-compatible format (16kHz mono WAV)
     const wavPath = await this.convertToWav(audioPath)
@@ -78,6 +94,7 @@ export class WhisperService {
     } finally {
       // Clean up temp WAV file
       await RNFS.unlink(wavPath).catch(() => {})
+      this.emit('status', { status: 'idle' })
     }
   }
 
@@ -213,25 +230,30 @@ export class WhisperService {
     }
 
     console.log('[Whisper] Downloading model...')
+    this.emit('status', { status: 'downloading' })
 
-    const dirExists = await RNFS.exists(modelDir)
-    if (!dirExists) {
-      await RNFS.mkdir(modelDir)
+    try {
+      const dirExists = await RNFS.exists(modelDir)
+      if (!dirExists) {
+        await RNFS.mkdir(modelDir)
+      }
+
+      const result = await RNFS.downloadFile({
+        fromUrl: MODEL_URL,
+        toFile: modelPath,
+        background: false,
+        discretionary: false,
+      }).promise
+
+      if (result.statusCode !== 200) {
+        throw new Error(`Failed to download model: ${result.statusCode}`)
+      }
+
+      console.log('[Whisper] Model downloaded successfully')
+      return modelPath
+    } finally {
+      this.emit('status', { status: 'idle' })
     }
-
-    const result = await RNFS.downloadFile({
-      fromUrl: MODEL_URL,
-      toFile: modelPath,
-      background: false,
-      discretionary: false,
-    }).promise
-
-    if (result.statusCode !== 200) {
-      throw new Error(`Failed to download model: ${result.statusCode}`)
-    }
-
-    console.log('[Whisper] Model downloaded successfully')
-    return modelPath
   }
 }
 

@@ -21,10 +21,13 @@ export interface TranscriptionQueueDeps {
   slicer: AudioSlicerService
 }
 
+export type TranscriptionServiceStatus = 'idle' | 'downloading' | 'processing'
+
 export type TranscriptionQueueEvents = {
   queued: { clipId: string }
   started: { clipId: string }
   finish: { clipId: string; error?: Error, transcription?: string }
+  status: { status: TranscriptionServiceStatus }
 }
 
 // =============================================================================
@@ -44,12 +47,27 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
 
   private queue: string[] = []
   private processing = false
+  private downloading = false
 
   constructor(deps: TranscriptionQueueDeps) {
     super()
     this.database = deps.database
     this.whisper = deps.whisper
     this.slicer = deps.slicer
+
+    this.whisper.on('status', ({ status }) => {
+      this.downloading = status === 'downloading'
+      this.emitStatus()
+    })
+  }
+
+  private emitStatus(): void {
+    const status: TranscriptionServiceStatus =
+      this.downloading ? 'downloading' :
+      this.processing ? 'processing' :
+      'idle'
+
+    this.emit('status', { status })
   }
 
   async start(): Promise<void> {
@@ -98,6 +116,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     }
 
     this.processing = true
+    this.emitStatus()
 
     try {
       while (this.queue.length > 0) {
@@ -106,6 +125,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
       }
     } finally {
       this.processing = false
+      this.emitStatus()
     }
   }
 
