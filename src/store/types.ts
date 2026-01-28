@@ -52,9 +52,9 @@ export interface PlaybackSlice {
 export interface ClipSlice {
   clips: Record<string, ClipWithFile>
 
-  fetchClips: () => void
+  fetchClips: () => Promise<void>
   addClip: (bookId: string, position: number) => Promise<void>
-  updateClip: (id: string, updates: { note?: string; start?: number; duration?: number; transcription?: string }) => Promise<void>
+  updateClip: (id: string, updates: { note?: string; start?: number; duration?: number; transcription?: string | null }) => Promise<void>
   deleteClip: (id: string) => Promise<void>
   shareClip: (clipId: string) => Promise<void>
 }
