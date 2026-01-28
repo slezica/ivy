@@ -31,6 +31,13 @@ function createMockDeps(overrides: Partial<LoadFileDeps> = {}): LoadFileDeps {
   return {
     db: {
       getBookByFingerprint: jest.fn(() => null),
+      getBookByUri: jest.fn((uri: string) => {
+        // By default, permanent URIs are "found" (simulates successful DB write)
+        if (uri.includes('generated-id-1') || uri.includes('archived-1')) {
+          return createMockBook({ uri })
+        }
+        return null
+      }),
       upsertBook: jest.fn(() => createMockBook({ id: 'generated-id-1', uri: 'file:///audio/generated-id-1.mp3' })),
       restoreBook: jest.fn(() => createMockBook()),
       touchBook: jest.fn(),
@@ -175,15 +182,6 @@ describe('createLoadFile', () => {
 
       expect(deps.syncQueue.queueChange).toHaveBeenCalledWith('book', 'generated-id-1', 'upsert')
     })
-
-    it('does not delete any files', async () => {
-      const deps = createMockDeps()
-      const loadFile = createLoadFile(deps)
-
-      await loadFile(INPUT)
-
-      expect(deps.files.deleteFile).not.toHaveBeenCalled()
-    })
   })
 
   // -- Case A: Archived book (fingerprint match, uri is null) -----------------
@@ -194,6 +192,10 @@ describe('createLoadFile', () => {
       return createMockDeps({
         db: {
           getBookByFingerprint: jest.fn(() => archivedBook),
+          getBookByUri: jest.fn((uri: string) => {
+            if (uri.includes('archived-1')) return createMockBook({ id: 'archived-1', uri })
+            return null
+          }),
           restoreBook: jest.fn(() => createMockBook({ id: 'archived-1' })),
           touchBook: jest.fn(),
           getBookById: jest.fn(),
@@ -246,15 +248,6 @@ describe('createLoadFile', () => {
       expect(deps.db.upsertBook).not.toHaveBeenCalled()
       expect(deps.db.touchBook).not.toHaveBeenCalled()
     })
-
-    it('does not delete the temp file', async () => {
-      const deps = depsWithArchivedBook()
-      const loadFile = createLoadFile(deps)
-
-      await loadFile(INPUT)
-
-      expect(deps.files.deleteFile).not.toHaveBeenCalled()
-    })
   })
 
   // -- Case B: Active duplicate (fingerprint match, uri is set) ---------------
@@ -265,6 +258,7 @@ describe('createLoadFile', () => {
       return createMockDeps({
         db: {
           getBookByFingerprint: jest.fn(() => activeBook),
+          getBookByUri: jest.fn(() => null), // no permanent URI in this case
           restoreBook: jest.fn(),
           touchBook: jest.fn(),
           getBookById: jest.fn(() => activeBook),
@@ -272,15 +266,6 @@ describe('createLoadFile', () => {
         } as any,
       })
     }
-
-    it('deletes the duplicate temp file', async () => {
-      const deps = depsWithActiveBook()
-      const loadFile = createLoadFile(deps)
-
-      await loadFile(INPUT)
-
-      expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/temp-abc.mp3')
-    })
 
     it('touches the existing book to update timestamp', async () => {
       const deps = depsWithActiveBook()
@@ -378,6 +363,154 @@ describe('createLoadFile', () => {
       await expect(loadFile(INPUT)).rejects.toThrow()
 
       expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
+    })
+  })
+
+  // -- File cleanup (finally block) -------------------------------------------
+
+  describe('file cleanup', () => {
+    it('attempts to delete temp file on success (no-op after rename)', async () => {
+      const deps = createMockDeps()
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/temp-abc.mp3')
+    })
+
+    it('does not delete permanent file when DB record exists', async () => {
+      const deps = createMockDeps()
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      // Should only be called once (for temp), not for permanent
+      expect(deps.files.deleteFile).toHaveBeenCalledTimes(1)
+      expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/temp-abc.mp3')
+    })
+
+    it('deletes temp file when duplicate is detected (Case B)', async () => {
+      const activeBook = createMockBook({ id: 'active-1', uri: 'file:///audio/active-1.mp3' })
+      const deps = createMockDeps({
+        db: {
+          getBookByFingerprint: jest.fn(() => activeBook),
+          getBookByUri: jest.fn(() => null),
+          restoreBook: jest.fn(),
+          touchBook: jest.fn(),
+          getBookById: jest.fn(() => activeBook),
+          upsertBook: jest.fn(),
+        } as any,
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      // Only temp file deleted (no permanent URI in Case B)
+      expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/temp-abc.mp3')
+    })
+
+    it('cleans up temp file when metadata read fails', async () => {
+      const deps = createMockDeps({
+        metadata: {
+          readMetadata: jest.fn(async () => { throw new Error('metadata failed') }),
+        } as any,
+      })
+      const loadFile = createLoadFile(deps)
+
+      await expect(loadFile(INPUT)).rejects.toThrow('metadata failed')
+
+      expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/temp-abc.mp3')
+    })
+
+    it('cleans up temp file when fingerprint read fails', async () => {
+      const deps = createMockDeps({
+        files: {
+          copyToAppStorage: jest.fn(async () => 'file:///audio/temp-abc.mp3'),
+          readFileFingerprint: jest.fn(async () => { throw new Error('fingerprint failed') }),
+          rename: jest.fn(async () => ''),
+          deleteFile: jest.fn(async () => {}),
+        } as any,
+      })
+      const loadFile = createLoadFile(deps)
+
+      await expect(loadFile(INPUT)).rejects.toThrow('fingerprint failed')
+
+      expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/temp-abc.mp3')
+    })
+
+    it('cleans up renamed file when DB write fails (Case C)', async () => {
+      const deps = createMockDeps({
+        db: {
+          getBookByFingerprint: jest.fn(() => null),
+          getBookByUri: jest.fn(() => null), // DB write failed, no record
+          upsertBook: jest.fn(() => { throw new Error('db failed') }),
+          restoreBook: jest.fn(),
+          touchBook: jest.fn(),
+          getBookById: jest.fn(),
+        } as any,
+      })
+      const loadFile = createLoadFile(deps)
+
+      await expect(loadFile(INPUT)).rejects.toThrow('db failed')
+
+      // Both temp and permanent should be cleaned up
+      expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/temp-abc.mp3')
+      expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/generated-id-1.mp3')
+    })
+
+    it('cleans up renamed file when DB restore fails (Case A)', async () => {
+      const archivedBook = createMockBook({ id: 'archived-1', uri: null })
+      const deps = createMockDeps({
+        db: {
+          getBookByFingerprint: jest.fn(() => archivedBook),
+          getBookByUri: jest.fn(() => null), // restore failed, no record with this URI
+          restoreBook: jest.fn(() => { throw new Error('restore failed') }),
+          touchBook: jest.fn(),
+          getBookById: jest.fn(),
+          upsertBook: jest.fn(),
+        } as any,
+      })
+      const loadFile = createLoadFile(deps)
+
+      await expect(loadFile(INPUT)).rejects.toThrow('restore failed')
+
+      expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/temp-abc.mp3')
+      expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/archived-1.mp3')
+    })
+
+    it('does not throw if cleanup itself fails', async () => {
+      const deps = createMockDeps({
+        metadata: {
+          readMetadata: jest.fn(async () => { throw new Error('metadata failed') }),
+        } as any,
+        files: {
+          copyToAppStorage: jest.fn(async () => 'file:///audio/temp-abc.mp3'),
+          readFileFingerprint: jest.fn(),
+          rename: jest.fn(),
+          deleteFile: jest.fn(async () => { throw new Error('delete also failed') }),
+        } as any,
+      })
+      const loadFile = createLoadFile(deps)
+
+      // Should throw the original error, not the cleanup error
+      await expect(loadFile(INPUT)).rejects.toThrow('metadata failed')
+    })
+
+    it('does not attempt cleanup when copy itself fails', async () => {
+      const deps = createMockDeps({
+        files: {
+          copyToAppStorage: jest.fn(async () => { throw new Error('copy failed') }),
+          readFileFingerprint: jest.fn(),
+          rename: jest.fn(),
+          deleteFile: jest.fn(),
+        } as any,
+      })
+      const loadFile = createLoadFile(deps)
+
+      await expect(loadFile(INPUT)).rejects.toThrow('copy failed')
+
+      // tempUri is null, so no cleanup attempted
+      expect(deps.files.deleteFile).not.toHaveBeenCalled()
     })
   })
 })

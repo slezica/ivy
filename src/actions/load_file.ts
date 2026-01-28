@@ -21,12 +21,15 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
   async (file) => {
     const { db, files, metadata, syncQueue, set, fetchBooks, fetchClips } = deps
 
+    let tempUri: string | null = null
+    let permanentUri: string | null = null
+
     try {
       // Step 1: Copy file to app storage (with temp filename)
       console.log('Copying file to app storage from:', file.uri)
       set({ library: { status: 'adding' } })
 
-      let tempUri = await files.copyToAppStorage(file.uri, file.name)
+      tempUri = await files.copyToAppStorage(file.uri, file.name)
       console.log('File copied to:', tempUri)
 
       // Step 2: Read metadata
@@ -44,20 +47,19 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
       const { name } = file
       const { title, artist, artwork, duration } = fileMeta
 
-      // TODO extract this 3-case conditional into 3 functions for readability
       if (existingBook) {
         if (existingBook.uri === null) {
           // Case A: Archived book - restore it with new file
           console.log('Restoring archived book:', existingBook.id)
-          const uri = await files.rename(tempUri, existingBook.id)
+          permanentUri = await files.rename(tempUri, existingBook.id)
 
-          const book = db.restoreBook(existingBook.id, uri, name, duration, title, artist, artwork)
+          const book = db.restoreBook(existingBook.id, permanentUri, name, duration, title, artist, artwork)
           syncQueue.queueChange('book', book.id, 'upsert')
 
         } else {
-          // Case B: Active book - delete duplicate file, use existing
-          console.log('File already exists in library, removing duplicate:', tempUri)
-          await files.deleteFile(tempUri)
+          // Case B: Active book - duplicate file, use existing
+          console.log('File already exists in library, duplicate will be cleaned up:', tempUri)
+          permanentUri = existingBook.uri
 
           db.touchBook(existingBook.id)
           const book = db.getBookById(existingBook.id)!
@@ -69,10 +71,10 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
       } else {
         // Case C: New book - generate ID, rename file, create record
         const id = generateId()
-        const uri = await files.rename(tempUri, id)
+        permanentUri = await files.rename(tempUri, id)
 
         console.log('Creating new book with ID:', id)
-        const book = db.upsertBook(id, uri, name, duration, 0, title, artist, artwork, fileSize, fingerprint)
+        const book = db.upsertBook(id, permanentUri, name, duration, 0, title, artist, artwork, fileSize, fingerprint)
 
         console.log('Scheduling upsert for book', book.id)
         syncQueue.queueChange('book', book.id, 'upsert')
@@ -86,6 +88,17 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
       set(state => { state.library.status = 'idle' })
       console.error(error)
       throw error
+
+    } finally {
+      // Whatever happened above, we must clean up unused files. Temporary files must always go,
+      // and also "permanent" files that are actually not referenced from the DB (something failed).
+      if (tempUri) {
+        await files.deleteFile(tempUri).catch(() => {})
+      }
+
+      if (permanentUri && !db.getBookByUri(permanentUri)) {
+        await files.deleteFile(permanentUri).catch(() => {})
+      }
     }
   }
 )
