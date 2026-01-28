@@ -20,6 +20,7 @@ Single Zustand store is the source of truth. Services are stateless. Store uses 
 - `store/library.ts` - Book management and file loading
 - `store/playback.ts` - Audio playback state and controls
 - `store/clips.ts` - Clip CRUD operations
+- `store/transcription.ts` - Transcription state and service control
 - `store/sync.ts` - Cloud sync state and actions
 - `store/settings.ts` - App settings
 - `store/index.ts` - Service construction and slice composition
@@ -193,6 +194,7 @@ await deleteBook(bookId)
   │   ├── library.ts              # Library slice (books, file loading)
   │   ├── playback.ts             # Playback slice (audio controls)
   │   ├── clips.ts                # Clips slice (clip CRUD)
+  │   ├── transcription.ts        # Transcription slice (status, service control)
   │   ├── sync.ts                 # Sync slice (cloud backup)
   │   └── settings.ts             # Settings slice
   ├── services/
@@ -225,7 +227,7 @@ await deleteBook(bookId)
   │   ├── LibraryScreen.tsx       # Book list (active + archived sections) with archive action
   │   ├── PlayerScreen.tsx        # Main player
   │   ├── ClipsListScreen.tsx     # Clip management
-  │   └── SettingsScreen.tsx      # App settings (sync toggle, etc.)
+  │   └── SettingsScreen.tsx      # App settings (sync toggle, transcription toggle)
   ├── components/
   │   ├── ClipViewer.tsx          # Clip playback (own position state, timeline, transcription)
   │   ├── ClipEditor.tsx          # Clip editing (own position state, selection timeline, note)
@@ -339,6 +341,7 @@ value TEXT NOT NULL
 ```sql
 id INTEGER PRIMARY KEY CHECK (id = 1)  -- Enforces single row
 sync_enabled INTEGER NOT NULL DEFAULT 0
+transcription_enabled INTEGER NOT NULL DEFAULT 1
 ```
 
 **status table** (migration tracking):
@@ -400,6 +403,13 @@ play, pause, seek, seekClip, skipForward, skipBackward, syncPlaybackState
 clips: Record<string, ClipWithFile>
 fetchClips, addClip, updateClip, deleteClip, shareClip
 
+// TranscriptionSlice
+transcription: {
+  status: 'idle' | 'downloading' | 'processing'
+  pending: Record<string, true>   // Clips currently queued/processing
+}
+startTranscription, stopTranscription
+
 // SyncSlice
 sync: {
   isSyncing: boolean            // Sync in progress
@@ -410,7 +420,7 @@ sync: {
 syncNow, autoSync, refreshSyncStatus
 
 // SettingsSlice
-settings: { sync_enabled: boolean }
+settings: { sync_enabled: boolean, transcription_enabled: boolean }
 updateSettings
 
 // Context-based playback API
@@ -604,25 +614,42 @@ const initialPosition = hasSourceFile ? clip.start : 0
 
 ## Transcription Architecture
 
-On-device automatic clip transcription using Whisper:
+On-device automatic clip transcription using Whisper. Controlled by `settings.transcription_enabled` (default: true).
+
+**Service Status:** Both services emit status events with different granularity:
+- **WhisperService** (`WhisperServiceStatus`): `'idle'` ↔ `'processing'` per-file, plus `'downloading'` during model fetch
+- **TranscriptionQueueService** (`TranscriptionServiceStatus`): `'processing'` for entire queue drain, `'idle'` only when empty, forwards `'downloading'` from whisper
 
 **Flow:**
-1. Clip created → `transcriptionService.queueClip(clipId)` → emits `queued`
-2. Processing begins → emits `started`
+1. Clip created → `transcriptionService.queueClip(clipId)` → emits `queued` (no-op if service not started)
+2. Queue processing begins → emits `status: 'processing'`
 3. `audioSlicerService` extracts first 10s from clip's audio file (`clip.uri`)
 4. `whisperService` transcribes the audio (using whisper.rn with ggml-small model)
-5. Result stored in `clips.transcription` column → emits `complete`
+5. Result stored in `clips.transcription` column → emits `finish`
+6. Queue empty → emits `status: 'idle'`
 
 **Services** (`services/transcription/`):
-- `whisper.ts` - Downloads/caches Whisper model, runs transcription
-- `queue.ts` - Background queue that processes clips sequentially (uses slicer)
+- `whisper.ts` - Downloads/caches Whisper model, runs transcription, emits status events
+- `queue.ts` - Background queue that processes clips sequentially, emits status events
+
+**Start/Stop Behavior:**
+- `start()` - No-op if already started. Initializes whisper, queues all untranscribed clips, begins processing
+- `stop()` - No-op if not started. Clears queue immediately, emits `'idle'` status
+- `queueClip()` - No-op if service not started (clips created while disabled are picked up on re-enable)
+
+**Model Download Resilience:**
+- Downloads to `{modelPath}.download` temp file
+- Only renames to final path after successful download
+- Partial/corrupted `.download` files are overwritten on retry
+- `downloading` boolean prevents concurrent download attempts
 
 **Key Points:**
-- Model auto-downloads on first use (~75MB ggml-tiny.bin from HuggingFace)
+- Model auto-downloads on first use (~150MB ggml-small.bin from HuggingFace)
 - Processing is sequential (one clip at a time) to avoid overload
-- Failed transcriptions retry on next app start (transcription stays null)
+- Failed transcriptions retry on next `start()` (transcription stays null)
 - Transcription displayed in ClipViewer below the time
 - `note` and `transcription` are separate fields (user notes vs auto-generated)
+- UI shows status in SettingsScreen: "Downloading model..." or "Processing..." (nothing when idle)
 
 ## Google Drive Sync 🔥 IMPORTANT
 
@@ -832,6 +859,7 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 **Library status:** `loading → idle ⇄ adding`
 **Playback status:** `idle → loading → paused ⇄ playing`
 **Playback state:** Hardware-only (uri, duration, position, status, ownerId) - no Book metadata
+**Transcription status:** `idle ⇄ downloading ⇄ processing` (queue-level, not per-file)
 **Sync docs:** `docs/sync_system.md` - full educational walkthrough of sync architecture
 
 ## Custom ESLint Rules
