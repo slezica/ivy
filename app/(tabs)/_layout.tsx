@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import { Pressable } from 'react-native'
+import { Pressable, View } from 'react-native'
 import { useStore } from '../../src/store'
 import { Color } from '../../src/theme'
 
@@ -44,7 +44,7 @@ export default function TabsLayout() {
           ),
           tabBarButton: ({ ref, ...props }) => (
             <Pressable
-              ref={ref}
+              ref={ref as React.Ref<View>}
               {...props}
               onPress={hasFile ? props.onPress : undefined}
               style={[props.style, !hasFile && { opacity: 0.3 }]}
