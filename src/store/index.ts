@@ -39,7 +39,8 @@ import { createResetApp } from '../actions/reset_app'
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
-  const { db, files, picker, metadata, audio, slicer, syncQueue, transcription, sharing, sync } = services
+  const deps = { set, get, ...services}
+  const { db, audio, syncQueue, transcription, sync } = services
 
   // Start transcription service if enabled in settings
   const initialSettings = db.getSettings()
@@ -58,46 +59,33 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   // Actions ---------------------------------------------------------------------------------------
 
-  // Library
-  const fetchBooks = createFetchBooks({ db, set })
-  const fetchClips = createFetchClips({ db, set })
-  const archiveBook = createArchiveBook({ db, files, syncQueue, set, get })
-  const deleteBook = createDeleteBook({ db, files, syncQueue, set, get })
-  const loadFile = createLoadFile({ db, files, metadata, syncQueue, set, fetchBooks, fetchClips })
-  const loadFileWithUri = createLoadFileWithUri({ loadFile })
-  const loadFileWithPicker = createLoadFileWithPicker({ picker, loadFile })
-
-  // Playback
-  const play = createPlay({ audio, db, set, get })
-  const pause = createPause({ audio, set })
-  const seek = createSeek({ audio, set, get })
-  const seekClip = createSeekClip({ get, play })
-  const skipForward = createSkipForward({ audio })
-  const skipBackward = createSkipBackward({ audio })
-  const syncPlaybackState = createSyncPlaybackState({ audio, set })
-
-  // Clips
-  const updateClip = createUpdateClip({ db, slicer, syncQueue, transcription, set, get })
-  const deleteClip = createDeleteClip({ db, slicer, syncQueue, set, get })
-  const shareClip = createShareClip({ sharing, get })
-  const addClip = createAddClip({ db, slicer, syncQueue, transcription, get, fetchClips })
-
-  // Transcription
-  const startTranscription = createStartTranscription({ transcription })
-  const stopTranscription = createStopTranscription({ transcription, set })
-
-  // Sync
-  const syncNow = createSyncNow({ sync })
-  const autoSync = createAutoSync({ sync, get })
-  const refreshSyncStatus = createRefreshSyncStatus({ db, sync, set })
-
-  // Settings
-  const updateSettings = createUpdateSettings({ db, set })
-
-  // Sessions
-  const fetchSessions = createFetchSessions({ db, set })
-  const trackSession = createTrackSession({ db, set, get })
-  const finalizeSession = createFinalizeSession({ db, set })
+  const fetchBooks = createFetchBooks(deps)
+  const fetchClips = createFetchClips(deps)
+  const archiveBook = createArchiveBook(deps)
+  const deleteBook = createDeleteBook(deps)
+  const loadFile = createLoadFile({ ...deps, fetchBooks, fetchClips })
+  const loadFileWithUri = createLoadFileWithUri({ ...deps, loadFile })
+  const loadFileWithPicker = createLoadFileWithPicker({ ...deps, loadFile })
+  const play = createPlay(deps)
+  const pause = createPause(deps)
+  const seek = createSeek(deps)
+  const seekClip = createSeekClip({ ...deps, play })
+  const skipForward = createSkipForward(deps)
+  const skipBackward = createSkipBackward(deps)
+  const syncPlaybackState = createSyncPlaybackState(deps)
+  const updateClip = createUpdateClip(deps)
+  const deleteClip = createDeleteClip(deps)
+  const shareClip = createShareClip(deps)
+  const addClip = createAddClip({ ...deps, fetchClips })
+  const startTranscription = createStartTranscription(deps)
+  const stopTranscription = createStopTranscription(deps)
+  const syncNow = createSyncNow(deps)
+  const autoSync = createAutoSync(deps)
+  const refreshSyncStatus = createRefreshSyncStatus(deps)
+  const updateSettings = createUpdateSettings(deps)
+  const fetchSessions = createFetchSessions(deps)
+  const trackSession = createTrackSession(deps)
+  const finalizeSession = createFinalizeSession(deps)
 
   // Dev
   const __DEV_resetApp = createResetApp({ db, audio, set })
@@ -114,9 +102,16 @@ export const useStore = create<AppState>()(immer((set, get) => {
   // Initial state ---------------------------------------------------------------------------------
 
   return {
-    // State
-    library: { status: 'loading' },
+    // State:
+    clips: {},
     books: {},
+    settings: db.getSettings(),
+    sessions: db.getAllSessions(),
+
+    library: {
+      status: 'loading',
+    },
+
     playback: {
       status: 'idle',
       ownerId: null,
@@ -124,22 +119,22 @@ export const useStore = create<AppState>()(immer((set, get) => {
       position: 0,
       duration: 0,
     },
-    clips: {},
+
     transcription: {
       status: 'idle',
       pending: {},
     },
+
     sync: {
       isSyncing: false,
       pendingCount: sync.getPendingCount(),
       lastSyncTime: db.getLastSyncTime(),
       error: null,
     },
-    settings: db.getSettings(),
-    sessions: db.getAllSessions(),
-    currentSessionBookId: null,
 
-    // Actions
+    currentSessionBookId: null, // TODO sucks
+
+    // Actions:
     fetchBooks,
     loadFile,
     loadFileWithUri,
