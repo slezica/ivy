@@ -16,7 +16,7 @@ Everything internal is **milliseconds**. Convert to MM:SS only at display bounda
 
 ### 3. **State Management**
 Single Zustand store is the source of truth. Services are stateless. Store uses **immer middleware** for immutable updates via direct mutations:
-- `store/types.ts` - Type definitions (AppState, slice interfaces, Action, ActionFactory)
+- `store/types.ts` - Type definitions (AppState, Action, ActionFactory)
 - `store/index.ts` - All state, action wiring, and event listeners in one place
 
 **Action Factories:** Actions are defined in `src/actions/` as factory functions with explicit dependencies. This enables unit testing actions in isolation:
@@ -37,16 +37,16 @@ export const createUpdateSettings: ActionFactory<UpdateSettingsDeps, UpdateSetti
   }
 )
 
-// store/settings.ts - wires up dependencies
+// store/index.ts - wires up dependencies
 const updateSettings = createUpdateSettings({ db, set })
 ```
 
-All actions are async (`Action<Args>` returns `Promise<void>`). Dependencies are wired in slice files, keeping coupling at the store layer.
+All actions are async (`Action<Args>` returns `Promise<void>`). Dependencies are wired in `store/index.ts`.
 
-**Service Events:** Services extend `BaseService<Events>` and emit typed events. Slices subscribe to relevant events during initialization:
+**Service Events:** Services extend `BaseService<Events>` and emit typed events. The store subscribes to relevant events during initialization:
 
 ```typescript
-// In slice initialization
+// In store initialization
 audio.on('status', (status) => {
   set((state) => { state.playback.position = status.position })
 })
@@ -54,8 +54,6 @@ audio.on('status', (status) => {
 // Service emits events internally
 this.emit('status', { status: 'playing', position: 1000, duration: 60000 })
 ```
-
-Event subscriptions live in slices, not store/index.ts. Multiple slices can subscribe to the same service event.
 
 **Immer usage:** State updates use direct mutations on a draft (immer converts to immutable):
 ```typescript
@@ -215,7 +213,7 @@ await deleteBook(bookId)
   │   └── ...                     # ~28 action files total
   ├── store/
   │   ├── index.ts                # All state, action wiring, event listeners
-  │   └── types.ts                # Type definitions (AppState, slice interfaces, Action, ActionFactory)
+  │   └── types.ts                # Type definitions (AppState, Action, ActionFactory)
   ├── services/
   │   ├── index.ts                # Barrel exports
   │   ├── base.ts                 # BaseService with typed events (on/off/emit)
@@ -411,15 +409,12 @@ const migrations: Migration[] = [
 
 ## Store State Structure
 
-Store is composed of slices. See `store/types.ts` for authoritative type definitions.
+See `store/types.ts` for authoritative type definitions (`AppState` interface).
 
 ```typescript
-// LibrarySlice
+// State
 library: { status: 'loading' | 'idle' | 'adding' }
 books: Record<string, Book>
-fetchBooks, loadFile, loadFileWithUri, loadFileWithPicker, archiveBook, deleteBook
-
-// PlaybackSlice
 playback: {
   status: 'idle' | 'loading' | 'paused' | 'playing'
   position: number              // milliseconds
@@ -427,41 +422,36 @@ playback: {
   duration: number              // Duration of loaded audio (hardware state)
   ownerId: string | null        // ID of component controlling playback
 }
-play, pause, seek, seekClip, skipForward, skipBackward, syncPlaybackState
-
-// ClipSlice
 clips: Record<string, ClipWithFile>
-fetchClips, addClip, updateClip, deleteClip, shareClip
-
-// TranscriptionSlice
 transcription: {
   status: 'idle' | 'downloading' | 'processing'
   pending: Record<string, true>   // Clips currently queued/processing
 }
-startTranscription, stopTranscription
-
-// SyncSlice
 sync: {
   isSyncing: boolean            // Sync in progress
   pendingCount: number          // Items waiting to sync
   lastSyncTime: number | null   // Timestamp of last successful sync
   error: string | null          // Last sync error (null if successful)
 }
-syncNow, autoSync, refreshSyncStatus
-
-// SessionSlice
-sessions: SessionWithBook[]       // Listening history (loaded on startup)
-fetchSessions, trackSession
-
-// SettingsSlice
 settings: { sync_enabled: boolean, transcription_enabled: boolean }
-updateSettings
+sessions: SessionWithBook[]       // Listening history (loaded on startup)
+currentSessionBookId: string | null
 
-// Context-based playback API
-play(context?: { fileUri, position, ownerId? })  // Loads file if different, claims ownership
-seek(context: { fileUri, position })             // Only seeks if fileUri matches loaded file
-pause()                                          // Pauses, preserves ownership
+// Actions
+fetchBooks, loadFile, loadFileWithUri, loadFileWithPicker, archiveBook, deleteBook
+play, pause, seek, seekClip, skipForward, skipBackward, syncPlaybackState
+fetchClips, addClip, updateClip, deleteClip, shareClip
+startTranscription, stopTranscription
+syncNow, autoSync, refreshSyncStatus
+updateSettings
+fetchSessions, trackSession
+__DEV_resetApp
 ```
+
+**Context-based playback API:**
+- `play(context?: { fileUri, position, ownerId? })` - Loads file if different, claims ownership
+- `seek(context: { fileUri, position })` - Only seeks if fileUri matches loaded file
+- `pause()` - Pauses, preserves ownership
 
 **PlaybackState is hardware-only:** The `playback` object reflects what's loaded in the player, not domain state. Components look up `Book` metadata from the `books` map using the URI when needed.
 
@@ -786,7 +776,7 @@ Change detection: `entity.updated_at > manifest.local_updated_at` means changed 
 1. **Process queue** - Push all queued local changes first
 2. **Push phase** - Upload any remaining local changes, handle conflicts
 3. **Pull phase** - Download remote changes not present locally
-4. **Notify slices** - Emits `data` event → slices call `fetchBooks()`/`fetchClips()`
+4. **Notify store** - Emits `data` event → store calls `fetchBooks()`/`fetchClips()`
 
 ### Conflict Resolution
 
@@ -860,15 +850,9 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 
 ### New Action
 1. Create action factory in `src/actions/my_action.ts` with deps interface and type
-2. Wire up in the relevant slice file (e.g., `store/playback.ts`)
-3. Add to slice interface in `store/types.ts`
+2. Wire up in `store/index.ts`
+3. Add to `AppState` interface in `store/types.ts`
 4. Add UI in relevant screen/component
-
-### New Playback Control
-1. Create action in `src/actions/` (deps: `audio`, `set`, etc.)
-2. Wire in `store/playback.ts`
-3. Update `PlaybackSlice` interface in `store/types.ts`
-4. Add UI in `PlayerScreen.tsx`
 
 ### New Database Field
 1. Update interface in `services/storage/database.ts`
@@ -885,7 +869,7 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 
 ✅ **Do:**
 - Define new actions in `src/actions/` using the `ActionFactory` pattern with explicit deps
-- Wire action dependencies in slice files (coupling lives at the store layer, not in actions)
+- Wire action dependencies in `store/index.ts`
 - Make all actions async (return `Promise<void>`)
 - Use services for all I/O (never call react-native-track-player, SQLite, FileSystem directly from components)
 - Import services from `services/` barrel export (e.g., `import { databaseService } from '../services'`)
@@ -904,7 +888,7 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 - Look up `Book` metadata from `books` map using URI when needed (audio state only has uri/duration)
 - Queue changes via `syncQueue.queueChange()` when modifying synced entities
 - Use manifest comparison for sync change detection (not just timestamp comparison)
-- Subscribe to service events in slices via `service.on('event', handler)`
+- Subscribe to service events in the store via `service.on('event', handler)`
 
 ❌ **Don't:**
 - Use external content: URIs for audio playback
