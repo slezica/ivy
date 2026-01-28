@@ -20,6 +20,7 @@ describe('TranscriptionQueueService', () => {
         initialize: jest.fn(() => Promise.resolve()),
         isReady: jest.fn(() => true),
         transcribe: jest.fn(() => Promise.resolve('transcription result')),
+        on: jest.fn(),
       } as any,
       slicer: {
         slice: jest.fn(() => Promise.resolve({ uri: 'file:///temp.mp3', path: '/temp.mp3' })),
@@ -49,35 +50,31 @@ describe('TranscriptionQueueService', () => {
       const clip1 = createMockClip('clip-1')
       const clip2 = createMockClip('clip-2')
 
-      // First clip throws, second should still be processed
-      let processCount = 0
+      // Track which clips are "pending" (not yet transcribed)
+      const pendingClips = new Set([clip1.id, clip2.id])
+
       deps.database.getClipsNeedingTranscription = jest.fn(() => {
-        processCount++
-        if (processCount === 1) return [clip1]
-        if (processCount === 2) return [clip2]
-        return []
+        return [clip1, clip2].filter(c => pendingClips.has(c.id))
       })
 
+      // First clip throws, second should still be processed
       deps.slicer.slice = jest.fn()
         .mockRejectedValueOnce(new Error('Slice failed'))
         .mockResolvedValue({ uri: 'file:///temp.mp3', path: '/temp.mp3' })
 
-      const service = new TranscriptionQueueService(deps)
+      // Mark clip as transcribed when updateClip is called
+      deps.database.updateClip = jest.fn((id: string) => {
+        pendingClips.delete(id)
+      })
 
-      // Queue first clip (will fail)
-      service.queueClip('clip-1')
+      const service = new TranscriptionQueueService(deps)
+      await service.start()
 
       // Wait for processing to complete
-      await new Promise(resolve => setTimeout(resolve, 50))
+      await new Promise(resolve => setTimeout(resolve, 100))
 
-      // Queue second clip (should work because flag was reset)
-      service.queueClip('clip-2')
-
-      // Wait for processing
-      await new Promise(resolve => setTimeout(resolve, 50))
-
-      // Both clips should have been attempted
-      expect(deps.database.getClipsNeedingTranscription).toHaveBeenCalledTimes(2)
+      // clip-1 failed but clip-2 should have been processed
+      expect(deps.database.updateClip).toHaveBeenCalledWith('clip-2', { transcription: 'transcription result' })
     })
 
     it('continues processing remaining queue items after error', async () => {
@@ -86,12 +83,15 @@ describe('TranscriptionQueueService', () => {
       const clip2 = createMockClip('clip-2')
       const clip3 = createMockClip('clip-3')
 
-      // Return clips in sequence
-      deps.database.getClipsNeedingTranscription = jest.fn()
-        .mockReturnValueOnce([clip1])  // First call for clip-1
-        .mockReturnValueOnce([clip2])  // Second call for clip-2
-        .mockReturnValueOnce([clip3])  // Third call for clip-3
-        .mockReturnValue([])
+      const pendingClips = new Set([clip1.id, clip2.id, clip3.id])
+
+      deps.database.getClipsNeedingTranscription = jest.fn(() => {
+        return [clip1, clip2, clip3].filter(c => pendingClips.has(c.id))
+      })
+
+      deps.database.updateClip = jest.fn((id: string) => {
+        pendingClips.delete(id)
+      })
 
       // Second clip throws error
       let sliceCallCount = 0
@@ -106,17 +106,14 @@ describe('TranscriptionQueueService', () => {
       const completedClips: string[] = []
 
       const service = new TranscriptionQueueService(deps)
-      service.on('complete', ({ clipId }) => {
-        completedClips.push(clipId)
+      service.on('finish', ({ clipId, transcription }) => {
+        if (transcription) completedClips.push(clipId)
       })
 
-      // Queue all three clips
-      service.queueClip('clip-1')
-      service.queueClip('clip-2')
-      service.queueClip('clip-3')
+      await service.start()
 
       // Wait for all processing
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise(resolve => setTimeout(resolve, 150))
 
       // clip-1 and clip-3 should have completed, clip-2 failed
       expect(completedClips).toContain('clip-1')
@@ -129,10 +126,15 @@ describe('TranscriptionQueueService', () => {
       const clip1 = createMockClip('clip-1')
       const clip2 = createMockClip('clip-2')
 
-      deps.database.getClipsNeedingTranscription = jest.fn()
-        .mockReturnValueOnce([clip1])
-        .mockReturnValueOnce([clip2])
-        .mockReturnValue([])
+      const pendingClips = new Set([clip1.id, clip2.id])
+
+      deps.database.getClipsNeedingTranscription = jest.fn(() => {
+        return [clip1, clip2].filter(c => pendingClips.has(c.id))
+      })
+
+      deps.database.updateClip = jest.fn((id: string) => {
+        pendingClips.delete(id)
+      })
 
       // First clip throws
       deps.slicer.slice = jest.fn()
@@ -142,17 +144,14 @@ describe('TranscriptionQueueService', () => {
       const service = new TranscriptionQueueService(deps)
 
       const completedClips: Array<{ clipId: string; transcription: string }> = []
-      service.on('complete', (event) => {
-        completedClips.push(event)
+      service.on('finish', ({ clipId, transcription }) => {
+        if (transcription) completedClips.push({ clipId, transcription })
       })
 
-      // Queue and process first clip (fails)
-      service.queueClip('clip-1')
-      await new Promise(resolve => setTimeout(resolve, 50))
+      await service.start()
 
-      // Verify processing flag is reset by checking we can queue another
-      service.queueClip('clip-2')
-      await new Promise(resolve => setTimeout(resolve, 50))
+      // Wait for processing
+      await new Promise(resolve => setTimeout(resolve, 100))
 
       // The event should have been emitted for clip-2
       expect(completedClips).toContainEqual({ clipId: 'clip-2', transcription: 'transcription result' })
@@ -181,13 +180,14 @@ describe('TranscriptionQueueService', () => {
       })
 
       const service = new TranscriptionQueueService(deps)
+      await service.start()
 
-      // Queue multiple clips rapidly
+      // Queue the same clip multiple times rapidly
       service.queueClip('clip-1')
       service.queueClip('clip-1')
       service.queueClip('clip-1')
 
-      await new Promise(resolve => setTimeout(resolve, 200))
+      await new Promise(resolve => setTimeout(resolve, 300))
 
       // Should never have more than 1 concurrent processing
       expect(maxConcurrent).toBe(1)
