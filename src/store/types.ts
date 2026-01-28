@@ -115,3 +115,10 @@ export interface PlaybackContext {
 
 export type GetState = () => AppState
 export type SetState = (partial: Partial<AppState> | ((state: AppState) => void)) => void
+
+// Actions are functions that take whatever arguments and return void:
+export type Action<Args extends unknown[]> = (...args: Args) => void
+
+// Action factories create Actions with dependencies:
+export type ActionFactory<Deps, A extends Action<any>> = (deps: Deps) => Action<Parameters<A>>;
+
