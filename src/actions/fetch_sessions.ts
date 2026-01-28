@@ -10,7 +10,7 @@ export interface FetchSessionsDeps {
 export type FetchSessions = Action<[]>
 
 export const createFetchSessions: ActionFactory<FetchSessionsDeps, FetchSessions> = (deps) => (
-  () => {
+  async () => {
     const { db, set } = deps
     const sessions = db.getAllSessions()
     set({ sessions })

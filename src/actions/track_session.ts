@@ -11,7 +11,7 @@ export interface TrackSessionDeps {
 export type TrackSession = Action<[string]>
 
 export const createTrackSession: ActionFactory<TrackSessionDeps, TrackSession> = (deps) => (
-  (bookId) => {
+  async (bookId) => {
     const { db, set, get } = deps
     const now = Date.now()
     const current = db.getCurrentSession(bookId)

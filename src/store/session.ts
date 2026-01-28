@@ -25,7 +25,6 @@ export function createSessionSlice(deps: SessionSliceDeps) {
 
     audio.on('status', onPlaybackStatus)
 
-    // Fetch sessions on initialization
     const initialSessions = db.getAllSessions()
 
     return {
@@ -48,7 +47,6 @@ export function createSessionSlice(deps: SessionSliceDeps) {
         set((state) => { state.currentSessionBookId = book.id })
         throttledTrackSession(book.id)
       } else if (currentSessionBookId) {
-        // Playback stopped/paused - finalize the session
         finalizeSession(currentSessionBookId)
         set((state) => { state.currentSessionBookId = null })
       }

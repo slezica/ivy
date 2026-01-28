@@ -10,10 +10,12 @@ export interface SettingsSliceDeps {
 export function createSettingsSlice(deps: SettingsSliceDeps) {
   const { db } = deps
 
-  return (set: SetState, get: GetState): SettingsSlice => {
+  return (set: SetState, _get: GetState): SettingsSlice => {
+    const updateSettings = createUpdateSettings({ db, set })
+
     return {
       settings: db.getSettings(),
-      updateSettings: createUpdateSettings({ db, set }),
+      updateSettings,
     }
   }
 }

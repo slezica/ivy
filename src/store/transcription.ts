@@ -1,6 +1,8 @@
 import type { TranscriptionQueueService } from '../services'
 import type { TranscriptionQueueEvents } from '../services/transcription/queue'
 import type { TranscriptionSlice, SetState, GetState } from './types'
+import { createStartTranscription } from '../actions/start_transcription'
+import { createStopTranscription } from '../actions/stop_transcription'
 
 
 export interface TranscriptionSliceDeps {
@@ -12,6 +14,9 @@ export function createTranscriptionSlice(deps: TranscriptionSliceDeps) {
   const { transcription } = deps
 
   return (set: SetState, _get: GetState): TranscriptionSlice => {
+    const startTranscription = createStartTranscription({ transcription })
+    const stopTranscription = createStopTranscription({ transcription, set })
+
     transcription.on('queued', onTranscriptionQueued)
     transcription.on('finish', onTranscriptionFinished)
     transcription.on('status', onStatusChange)
@@ -24,17 +29,6 @@ export function createTranscriptionSlice(deps: TranscriptionSliceDeps) {
 
       startTranscription,
       stopTranscription,
-    }
-
-    function startTranscription(): void {
-      transcription.start()
-    }
-
-    function stopTranscription(): void {
-      transcription.stop()
-      set(state => {
-        state.transcription.pending = {}
-      })
     }
 
     function onTranscriptionQueued({ clipId }: TranscriptionQueueEvents['queued']) {

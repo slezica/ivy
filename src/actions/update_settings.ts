@@ -10,7 +10,7 @@ export interface UpdateSettingsDeps {
 export type UpdateSettings = Action<[Settings]>
 
 export const createUpdateSettings: ActionFactory<UpdateSettingsDeps, UpdateSettings> = (deps) => (
-  (settings) => {
+  async (settings) => {
     const { db, set } = deps
 
     db.setSettings(settings)

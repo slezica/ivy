@@ -66,8 +66,8 @@ export interface TranscriptionSlice {
     pending: Record<string, true>
   }
 
-  startTranscription: () => void
-  stopTranscription: () => void
+  startTranscription: () => Promise<void>
+  stopTranscription: () => Promise<void>
 }
 
 
@@ -87,15 +87,15 @@ export interface SyncSlice {
 
 export interface SettingsSlice {
   settings: Settings
-  updateSettings: (settings: Settings) => void
+  updateSettings: (settings: Settings) => Promise<void>
 }
 
 
 export interface SessionSlice {
   sessions: SessionWithBook[]
   currentSessionBookId: string | null
-  fetchSessions: () => void
-  trackSession: (bookId: string) => void
+  fetchSessions: () => Promise<void>
+  trackSession: (bookId: string) => Promise<void>
 }
 
 
@@ -117,9 +117,9 @@ export interface PlaybackContext {
 export type GetState = () => AppState
 export type SetState = (partial: Partial<AppState> | ((state: AppState) => void)) => void
 
-// Actions are functions that take whatever arguments and return void:
-export type Action<Args extends unknown[]> = (...args: Args) => void
+// Actions are async functions that take arguments and return Promise<void>:
+export type Action<Args extends unknown[]> = (...args: Args) => Promise<void>
 
 // Action factories create Actions with dependencies:
-export type ActionFactory<Deps, A extends Action<any>> = (deps: Deps) => Action<Parameters<A>>;
+export type ActionFactory<Deps, A extends Action<any>> = (deps: Deps) => A
 

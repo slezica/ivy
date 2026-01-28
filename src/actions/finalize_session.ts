@@ -11,7 +11,7 @@ export interface FinalizeSessionDeps {
 export type FinalizeSession = Action<[string]>
 
 export const createFinalizeSession: ActionFactory<FinalizeSessionDeps, FinalizeSession> = (deps) => (
-  (bookId) => {
+  async (bookId) => {
     const { db, set } = deps
     const now = Date.now()
     const current = db.getCurrentSession(bookId)
