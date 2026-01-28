@@ -1,36 +1,10 @@
 import type { ClipWithFile, Book, Settings, SessionWithBook } from '../services'
 
 
-export interface AppState extends
-  LibrarySlice,
-  PlaybackSlice,
-  ClipSlice,
-  TranscriptionSlice,
-  SyncSlice,
-  SettingsSlice,
-  SessionSlice,
-  DevSlice {
-
-  // Each slice adds data and actions. All slices have access to the full state.
-}
-
-
-export interface LibrarySlice {
-  library: {
-    status: 'loading' | 'idle' | 'adding'
-  }
+export interface AppState {
+  // State
+  library: { status: 'loading' | 'idle' | 'adding' }
   books: Record<string, Book>
-
-  fetchBooks: () => Promise<void>
-  loadFile: (pickedFile: { uri: string; name: string }) => Promise<void>
-  loadFileWithUri: (uri: string, name: string) => Promise<void>
-  loadFileWithPicker: () => Promise<void>
-  archiveBook: (bookId: string) => Promise<void>
-  deleteBook: (bookId: string) => Promise<void>
-}
-
-
-export interface PlaybackSlice {
   playback: {
     status: 'idle' | 'loading' | 'paused' | 'playing'
     position: number
@@ -38,7 +12,28 @@ export interface PlaybackSlice {
     duration: number         // Duration of loaded audio
     ownerId: string | null   // ID of component that last took control
   }
+  clips: Record<string, ClipWithFile>
+  transcription: {
+    status: 'idle' | 'downloading' | 'processing'
+    pending: Record<string, true>
+  }
+  sync: {
+    isSyncing: boolean
+    pendingCount: number
+    lastSyncTime: number | null
+    error: string | null
+  }
+  settings: Settings
+  sessions: SessionWithBook[]
+  currentSessionBookId: string | null
 
+  // Actions
+  fetchBooks: () => Promise<void>
+  loadFile: (pickedFile: { uri: string; name: string }) => Promise<void>
+  loadFileWithUri: (uri: string, name: string) => Promise<void>
+  loadFileWithPicker: () => Promise<void>
+  archiveBook: (bookId: string) => Promise<void>
+  deleteBook: (bookId: string) => Promise<void>
   play: (context?: PlaybackContext) => Promise<void>
   pause: () => Promise<void>
   seek: (context: PlaybackContext) => Promise<void>
@@ -46,60 +41,19 @@ export interface PlaybackSlice {
   skipForward: () => Promise<void>
   skipBackward: () => Promise<void>
   syncPlaybackState: () => Promise<void>
-}
-
-
-export interface ClipSlice {
-  clips: Record<string, ClipWithFile>
-
   fetchClips: () => Promise<void>
   addClip: (bookId: string, position: number) => Promise<void>
   updateClip: (id: string, updates: { note?: string; start?: number; duration?: number; transcription?: string | null }) => Promise<void>
   deleteClip: (id: string) => Promise<void>
   shareClip: (clipId: string) => Promise<void>
-}
-
-
-export interface TranscriptionSlice {
-  transcription: {
-    status: 'idle' | 'downloading' | 'processing'
-    pending: Record<string, true>
-  }
-
   startTranscription: () => Promise<void>
   stopTranscription: () => Promise<void>
-}
-
-
-export interface SyncSlice {
-  sync: {
-    isSyncing: boolean
-    pendingCount: number
-    lastSyncTime: number | null
-    error: string | null
-  }
-
   syncNow: () => Promise<void>
   autoSync: () => Promise<void>
   refreshSyncStatus: () => Promise<void>
-}
-
-
-export interface SettingsSlice {
-  settings: Settings
   updateSettings: (settings: Settings) => Promise<void>
-}
-
-
-export interface SessionSlice {
-  sessions: SessionWithBook[]
-  currentSessionBookId: string | null
   fetchSessions: () => Promise<void>
   trackSession: (bookId: string) => Promise<void>
-}
-
-
-export interface DevSlice {
   __DEV_resetApp: () => Promise<void>
 }
 
