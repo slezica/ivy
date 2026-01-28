@@ -22,6 +22,7 @@ Single Zustand store is the source of truth. Services are stateless. Store uses 
 - `store/clips.ts` - Clip CRUD operations
 - `store/transcription.ts` - Transcription state and service control
 - `store/sync.ts` - Cloud sync state and actions
+- `store/session.ts` - Listening history tracking
 - `store/settings.ts` - App settings
 - `store/index.ts` - Service construction and slice composition
 
@@ -165,6 +166,7 @@ await deleteBook(bookId)
 **React Native Expo app** for podcast/audiobook playback with:
 - Library management (file history with resume positions + metadata)
 - Clips/bookmarks with notes and automatic transcription
+- Listening history (session tracking)
 - GPU-accelerated timeline UI (Skia Canvas)
 - Auto-play, resume from last position
 - On-device speech-to-text via Whisper (privacy-first)
@@ -196,6 +198,7 @@ await deleteBook(bookId)
   │   ├── clips.ts                # Clips slice (clip CRUD)
   │   ├── transcription.ts        # Transcription slice (status, service control)
   │   ├── sync.ts                 # Sync slice (cloud backup)
+  │   ├── session.ts              # Session slice (listening history)
   │   └── settings.ts             # Settings slice
   ├── services/
   │   ├── index.ts                # Barrel exports
@@ -227,6 +230,7 @@ await deleteBook(bookId)
   │   ├── LibraryScreen.tsx       # Book list (active + archived sections) with archive action
   │   ├── PlayerScreen.tsx        # Main player
   │   ├── ClipsListScreen.tsx     # Clip management
+  │   ├── SessionsScreen.tsx      # Listening history
   │   └── SettingsScreen.tsx      # App settings (sync toggle, transcription toggle)
   ├── components/
   │   ├── ClipViewer.tsx          # Clip playback (own position state, timeline, transcription)
@@ -254,6 +258,7 @@ await deleteBook(bookId)
   ├── _layout.tsx                 # Root (includes LoadingModal)
   ├── +not-found.tsx              # Catch-all redirect (handles notification clicks)
   ├── settings.tsx                # Settings screen route
+  ├── sessions.tsx                # Listening history route
   └── (tabs)/
       ├── _layout.tsx             # Tab nav (disables tabs when no file)
       ├── index.tsx               # Library
@@ -305,6 +310,14 @@ note TEXT
 transcription TEXT             -- Auto-generated from audio (Whisper)
 created_at INTEGER
 updated_at INTEGER
+```
+
+**sessions table** (listening history):
+```sql
+id TEXT PRIMARY KEY            -- UUID
+book_id TEXT NOT NULL          -- References files.id
+started_at INTEGER NOT NULL    -- Timestamp when session began
+ended_at INTEGER NOT NULL      -- Timestamp when session ended (updated during playback)
 ```
 
 **sync_manifest table** (tracks last-synced state per entity):
@@ -419,6 +432,10 @@ sync: {
 }
 syncNow, autoSync, refreshSyncStatus
 
+// SessionSlice
+sessions: SessionWithBook[]       // Listening history (loaded on startup)
+fetchSessions, trackSession
+
 // SettingsSlice
 settings: { sync_enabled: boolean, transcription_enabled: boolean }
 updateSettings
@@ -506,6 +523,7 @@ Tests are colocated in `__tests__/` directories next to the code they test.
 
 **Current coverage:**
 - `services/backup/__tests__/` - Sync planning (`planner.test.ts`) and conflict resolution (`merge.test.ts`)
+- `store/__tests__/` - Session tracking (`session.test.ts`)
 
 ## Common Issues & Solutions
 
@@ -650,6 +668,37 @@ On-device automatic clip transcription using Whisper. Controlled by `settings.tr
 - Transcription displayed in ClipViewer below the time
 - `note` and `transcription` are separate fields (user notes vs auto-generated)
 - UI shows status in SettingsScreen: "Downloading model..." or "Processing..." (nothing when idle)
+
+## Listening History (Sessions)
+
+Automatic tracking of listening activity. Sessions record when and how long a user listened to each book.
+
+**How it works:**
+1. When playback starts on main player → session created (or existing session resumed if within 5 minutes)
+2. Every 5 seconds while playing → `ended_at` timestamp updated (throttled)
+3. When playback pauses/stops → session finalized with accurate `ended_at`
+4. Sessions < 1 second are deleted (prevents accidental tap-play-pause clutter)
+
+**5-Minute Window:** If playback resumes on the same book within 5 minutes of the last session ending, the existing session is extended rather than creating a new one. This prevents fragmented sessions from brief pauses.
+
+**Main Player Only:** Sessions are only tracked when `playback.ownerId === MAIN_PLAYER_OWNER_ID`. Clip playback (ClipViewer, ClipEditor) doesn't create sessions.
+
+**UI Access:** PlayerScreen header → clock icon → SessionsScreen ("History")
+
+**SessionWithBook type:**
+```typescript
+interface SessionWithBook extends Session {
+  book_name: string
+  book_title: string | null
+  book_artist: string | null
+  book_artwork: string | null
+}
+```
+
+**Key Points:**
+- Sessions loaded on app startup (not lazy-loaded like clips screen)
+- Sessions are local-only (not synced to Drive)
+- INNER JOIN with files table means deleted books' sessions still appear (book record exists with `hidden: true`)
 
 ## Google Drive Sync 🔥 IMPORTANT
 
@@ -860,6 +909,7 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 **Playback status:** `idle → loading → paused ⇄ playing`
 **Playback state:** Hardware-only (uri, duration, position, status, ownerId) - no Book metadata
 **Transcription status:** `idle ⇄ downloading ⇄ processing` (queue-level, not per-file)
+**Sessions:** Main player only, 5-min resume window, <1s sessions deleted, loaded on startup
 **Sync docs:** `docs/sync_system.md` - full educational walkthrough of sync architecture
 
 ## Custom ESLint Rules
