@@ -15,16 +15,9 @@ External content: URIs (like Google Drive) become invalid after app restart. **S
 Everything internal is **milliseconds**. Convert to MM:SS only at display boundaries.
 
 ### 3. **State Management**
-Single Zustand store is the source of truth. Services are stateless. Store uses **immer middleware** for immutable updates via direct mutations. Store is split into slices:
-- `store/types.ts` - Central type definitions (AppState, slices, Action, ActionFactory)
-- `store/library.ts` - Book management and file loading
-- `store/playback.ts` - Audio playback state and controls
-- `store/clips.ts` - Clip CRUD operations
-- `store/transcription.ts` - Transcription state and service control
-- `store/sync.ts` - Cloud sync state and actions
-- `store/session.ts` - Listening history tracking
-- `store/settings.ts` - App settings
-- `store/index.ts` - Service construction and slice composition
+Single Zustand store is the source of truth. Services are stateless. Store uses **immer middleware** for immutable updates via direct mutations:
+- `store/types.ts` - Type definitions (AppState, slice interfaces, Action, ActionFactory)
+- `store/index.ts` - All state, action wiring, and event listeners in one place
 
 **Action Factories:** Actions are defined in `src/actions/` as factory functions with explicit dependencies. This enables unit testing actions in isolation:
 
@@ -221,15 +214,8 @@ await deleteBook(bookId)
   │   ├── load_file.ts, ...      # Library actions
   │   └── ...                     # ~28 action files total
   ├── store/
-  │   ├── index.ts                # Service wiring & slice composition
-  │   ├── types.ts                # Central type definitions (AppState, slices, Action, ActionFactory)
-  │   ├── library.ts              # Library slice (wires library actions)
-  │   ├── playback.ts             # Playback slice (wires playback actions)
-  │   ├── clips.ts                # Clips slice (wires clip actions)
-  │   ├── transcription.ts        # Transcription slice (wires transcription actions)
-  │   ├── sync.ts                 # Sync slice (wires sync actions)
-  │   ├── session.ts              # Session slice (wires session actions)
-  │   └── settings.ts             # Settings slice (wires settings actions)
+  │   ├── index.ts                # All state, action wiring, event listeners
+  │   └── types.ts                # Type definitions (AppState, slice interfaces, Action, ActionFactory)
   ├── services/
   │   ├── index.ts                # Barrel exports
   │   ├── base.ts                 # BaseService with typed events (on/off/emit)
