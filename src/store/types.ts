@@ -21,7 +21,7 @@ export interface LibrarySlice {
   }
   books: Record<string, Book>
 
-  fetchBooks: () => void
+  fetchBooks: () => Promise<void>
   loadFile: (pickedFile: { uri: string; name: string }) => Promise<void>
   loadFileWithUri: (uri: string, name: string) => Promise<void>
   loadFileWithPicker: () => Promise<void>
