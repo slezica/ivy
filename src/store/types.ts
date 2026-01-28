@@ -34,9 +34,9 @@ export interface AppState {
   loadFileWithPicker: () => Promise<void>
   archiveBook: (bookId: string) => Promise<void>
   deleteBook: (bookId: string) => Promise<void>
-  play: (context?: PlaybackContext) => Promise<void>
+  play: (context?: { fileUri: string; position: number; ownerId?: string }) => Promise<void>
   pause: () => Promise<void>
-  seek: (context: PlaybackContext) => Promise<void>
+  seek: (context: { fileUri: string; position: number }) => Promise<void>
   seekClip: (clipId: string) => Promise<void>
   skipForward: () => Promise<void>
   skipBackward: () => Promise<void>
@@ -55,16 +55,6 @@ export interface AppState {
   fetchSessions: () => Promise<void>
   trackSession: (bookId: string) => Promise<void>
   __DEV_resetApp: () => Promise<void>
-}
-
-
-/**
- * Context for playback actions. Components must specify file and position they want to play/seek.
- */
-export interface PlaybackContext {
-  fileUri: string
-  position: number
-  ownerId?: string
 }
 
 

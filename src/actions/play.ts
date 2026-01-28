@@ -1,6 +1,12 @@
 import type { AudioPlayerService, DatabaseService } from '../services'
-import type { SetState, GetState, PlaybackContext, Action, ActionFactory } from '../store/types'
+import type { SetState, GetState, Action, ActionFactory } from '../store/types'
 
+
+export interface PlayContext {
+  fileUri: string
+  position: number
+  ownerId?: string
+}
 
 export interface PlayDeps {
   audio: AudioPlayerService
@@ -9,7 +15,7 @@ export interface PlayDeps {
   get: GetState
 }
 
-export type Play = Action<[PlaybackContext?]>
+export type Play = Action<[PlayContext?]>
 
 export const createPlay: ActionFactory<PlayDeps, Play> = (deps) => (
   async (context?) => {

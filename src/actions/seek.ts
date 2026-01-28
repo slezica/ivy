@@ -1,6 +1,11 @@
 import type { AudioPlayerService } from '../services'
-import type { SetState, GetState, PlaybackContext, Action, ActionFactory } from '../store/types'
+import type { SetState, GetState, Action, ActionFactory } from '../store/types'
 
+
+export interface SeekContext {
+  fileUri: string
+  position: number
+}
 
 export interface SeekDeps {
   audio: AudioPlayerService
@@ -8,7 +13,7 @@ export interface SeekDeps {
   get: GetState
 }
 
-export type Seek = Action<[PlaybackContext]>
+export type Seek = Action<[SeekContext]>
 
 export const createSeek: ActionFactory<SeekDeps, Seek> = (deps) => (
   async (context) => {
