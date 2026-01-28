@@ -1,21 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 
-import {
-  DatabaseService,
-  FileStorageService,
-  FilePickerService,
-  AudioPlayerService,
-  AudioMetadataService,
-  AudioSlicerService,
-  WhisperService,
-  TranscriptionQueueService,
-  GoogleAuthService,
-  GoogleDriveService,
-  SyncQueueService,
-  BackupSyncService,
-  SharingService,
-} from '../services'
+import * as services from '../services'
 
 import { createClipSlice } from './clips'
 import { createPlaybackSlice } from './playback'
@@ -28,25 +14,9 @@ import type { AppState } from './types'
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
-
-  // Services --------------------------------------------------------------------------------------
-
-  const db = new DatabaseService()
-  const files = new FileStorageService()
-  const picker = new FilePickerService()
-  const metadata = new AudioMetadataService()
-  const slicer = new AudioSlicerService()
-  const whisper = new WhisperService()
-  const sharing = new SharingService()
-  const audio = new AudioPlayerService()
-
-  const auth = new GoogleAuthService()
-  const drive = new GoogleDriveService(auth)
-  const syncQueue = new SyncQueueService(db)
-  const sync = new BackupSyncService(db, drive, auth, syncQueue)
-
-  const transcription = new TranscriptionQueueService({ database: db, whisper, slicer })
-
+  const deps = {...services}
+  const { db, transcription, audio } = services // TODO this seems like broken layering
+  
   // Start transcription service if enabled in settings
   const initialSettings = db.getSettings()
   if (initialSettings.transcription_enabled) {
@@ -55,13 +25,13 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   // Slices ----------------------------------------------------------------------------------------
 
-  const librarySlice = createLibrarySlice({ db, files, picker, metadata, audio, syncQueue, sync })
-  const playbackSlice = createPlaybackSlice({ audio, db })
-  const clipSlice = createClipSlice({ db, slicer, syncQueue, transcription, sharing, sync })
-  const transcriptionSlice = createTranscriptionSlice({ transcription })
-  const syncSlice = createSyncSlice({ db, sync })
-  const settingsSlice = createSettingsSlice({ db })
-  const sessionSlice = createSessionSlice({ db, audio })
+  const librarySlice = createLibrarySlice(deps)
+  const playbackSlice = createPlaybackSlice(deps)
+  const clipSlice = createClipSlice(deps)
+  const transcriptionSlice = createTranscriptionSlice(deps)
+  const syncSlice = createSyncSlice(deps)
+  const settingsSlice = createSettingsSlice(deps)
+  const sessionSlice = createSessionSlice(deps)
 
   return {
     ...librarySlice(set, get),
