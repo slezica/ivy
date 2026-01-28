@@ -10,13 +10,14 @@ import { createTranscriptionSlice } from './transcription'
 import { createSyncSlice } from './sync'
 import { createSettingsSlice } from './settings'
 import { createSessionSlice } from './session'
+import { createResetApp } from '../actions/reset_app'
 import type { AppState } from './types'
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
   const deps = {...services}
   const { db, transcription, audio } = services // TODO this seems like broken layering
-  
+
   // Start transcription service if enabled in settings
   const initialSettings = db.getSettings()
   if (initialSettings.transcription_enabled) {
@@ -33,6 +34,10 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const settingsSlice = createSettingsSlice(deps)
   const sessionSlice = createSessionSlice(deps)
 
+  // Dev -------------------------------------------------------------------------------------------
+
+  const __DEV_resetApp = createResetApp({ db, audio, set })
+
   return {
     ...librarySlice(set, get),
     ...playbackSlice(set, get),
@@ -42,37 +47,6 @@ export const useStore = create<AppState>()(immer((set, get) => {
     ...settingsSlice(set, get),
     ...sessionSlice(set, get),
     __DEV_resetApp,
-  }
-
-  // Development -----------------------------------------------------------------------------------
-
-  async function __DEV_resetApp() {
-    await audio.unload()
-    db.clearAllData()
-
-    set({
-      library: { status: 'idle' },
-      playback: {
-        status: 'idle',
-        position: 0,
-        uri: null,
-        duration: 0,
-        ownerId: null,
-      },
-      sync: {
-        isSyncing: false,
-        pendingCount: 0,
-        lastSyncTime: null,
-        error: null,
-      },
-      clips: {},
-      transcription: { status: 'idle', pending: {} },
-      books: {},
-      sessions: [],
-      settings: { sync_enabled: false, transcription_enabled: true },
-    })
-
-    console.log('App reset complete')
   }
 }))
 
