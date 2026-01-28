@@ -79,9 +79,9 @@ export interface SyncSlice {
     error: string | null
   }
 
-  syncNow: () => void
+  syncNow: () => Promise<void>
   autoSync: () => Promise<void>
-  refreshSyncStatus: () => void
+  refreshSyncStatus: () => Promise<void>
 }
 
 
