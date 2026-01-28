@@ -1,5 +1,6 @@
-import type { DatabaseService, Settings } from '../services'
-import type { SettingsSlice, SetState, GetState, Action, ActionFactory } from './types'
+import type { DatabaseService } from '../services'
+import type { SettingsSlice, SetState, GetState } from './types'
+import { createUpdateSettings } from '../actions/update_settings'
 
 
 export interface SettingsSliceDeps {
@@ -16,19 +17,3 @@ export function createSettingsSlice(deps: SettingsSliceDeps) {
     }
   }
 }
-
-export interface UpdateSettingsDeps {
-  db: DatabaseService
-  set: SetState
-}
-
-export type UpdateSettings = Action<[Settings]>
-
-const createUpdateSettings: ActionFactory<UpdateSettingsDeps, UpdateSettings> = (deps) => (
-  (settings) => {
-    const { db, set } = deps
-
-    db.setSettings(settings)
-    set({ settings })
-  }
-)
