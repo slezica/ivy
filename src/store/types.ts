@@ -61,7 +61,9 @@ export interface ClipSlice {
 
 
 export interface TranscriptionSlice {
-  transcribing: Record<string, true>
+  transcription: {
+    pending: Record<string, true>
+  }
 }
 
 

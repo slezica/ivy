@@ -91,7 +91,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
         error: null,
       },
       clips: {},
-      transcribing: {},
+      transcription: { pending: {} },
       books: {},
       settings: { sync_enabled: false },
     })

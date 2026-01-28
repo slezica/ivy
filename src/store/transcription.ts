@@ -16,12 +16,14 @@ export function createTranscriptionSlice(deps: TranscriptionSliceDeps) {
     transcription.on('finish', onTranscriptionFinished)
 
     return {
-      transcribing: {},
+      transcription: {
+        pending: {},
+      },
     }
 
     function onTranscriptionQueued({ clipId }: TranscriptionQueueEvents['queued']) {
       set(state => {
-        state.transcribing[clipId] = true
+        state.transcription.pending[clipId] = true
       })
     }
 
@@ -31,7 +33,7 @@ export function createTranscriptionSlice(deps: TranscriptionSliceDeps) {
       }
 
       set(state => {
-        delete state.transcribing[clipId]
+        delete state.transcription.pending[clipId]
       })
     }
   }
