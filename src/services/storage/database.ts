@@ -229,7 +229,7 @@ export class DatabaseService {
 
   constructor() {
     this.db = SQLite.openDatabaseSync('audioplayer.db')
-    this.runMigrations()
+    this.runMigrations() // TODO this shouldn't be in the constructor
   }
 
   // ---------------------------------------------------------------------------
@@ -657,6 +657,8 @@ export class DatabaseService {
   // ---------------------------------------------------------------------------
 
   private runMigrations(): void {
+    console.log(`[Database] Running migrations`)
+
     // Decide what the next migration to apply is (if any):
     let nextMigration
     try {
