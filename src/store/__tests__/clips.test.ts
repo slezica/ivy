@@ -1,44 +1,14 @@
-import { createClipSlice, ClipSliceDeps } from '../clips'
+import { createUpdateClip, UpdateClipDeps } from '../../actions/update_clip'
 import type { ClipWithFile } from '../../services'
 
 /**
- * Tests for the clips store slice.
+ * Tests for clip actions.
  *
  * Bug #1: Race condition where clip could be deleted between
  * the initial check and the set callback in updateClip.
  */
 
-describe('createClipSlice', () => {
-  // Mock dependencies
-  function createMockDeps(): ClipSliceDeps {
-    return {
-      db: {
-        getAllClips: jest.fn(() => []),
-        updateClip: jest.fn(),
-        createClip: jest.fn(),
-        deleteClip: jest.fn(),
-      } as any,
-      slicer: {
-        ensureDir: jest.fn(),
-        slice: jest.fn(),
-        cleanup: jest.fn(),
-      } as any,
-      syncQueue: {
-        queueChange: jest.fn(),
-      } as any,
-      transcription: {
-        on: jest.fn(),
-        queueClip: jest.fn(),
-      } as any,
-      sharing: {
-        shareClipFile: jest.fn(),
-      } as any,
-      sync: {
-        on: jest.fn(),
-      } as any,
-    }
-  }
-
+describe('createUpdateClip', () => {
   // Helper to create a mock clip
   function createMockClip(id: string): ClipWithFile {
     return {
@@ -59,83 +29,85 @@ describe('createClipSlice', () => {
     }
   }
 
-  describe('updateClip', () => {
-    it('handles clip deleted between check and set callback', async () => {
-      const deps = createMockDeps()
-
-      let storeState: any = {
-        clips: { 'clip-1': createMockClip('clip-1') },
-        books: {},
-      }
-
-      const set = jest.fn((updater: any) => {
-        if (typeof updater === 'function') {
-          // Simulate clip being deleted before set callback runs
-          delete storeState.clips['clip-1']
-          updater(storeState)
-        } else {
-          Object.assign(storeState, updater)
-        }
-      })
-
-      const get = jest.fn(() => storeState)
-
-      const slice = createClipSlice(deps)(set, get)
-
-      // This should not throw even though clip is deleted mid-operation
-      await expect(
-        slice.updateClip('clip-1', { note: 'updated note' })
-      ).resolves.not.toThrow()
-
-      // Verify set was called (the guard inside should have prevented the crash)
-      expect(set).toHaveBeenCalled()
-    })
-
-    it('updates clip note when clip exists', async () => {
-      const deps = createMockDeps()
-      const clip = createMockClip('clip-1')
-
-      let storeState: any = {
-        clips: { 'clip-1': clip },
-        books: {},
-      }
-
-      const set = jest.fn((updater: any) => {
+  function createMockDeps(storeState: any): UpdateClipDeps {
+    return {
+      db: {
+        updateClip: jest.fn(),
+      } as any,
+      slicer: {
+        ensureDir: jest.fn(),
+        slice: jest.fn(),
+        cleanup: jest.fn(),
+      } as any,
+      syncQueue: {
+        queueChange: jest.fn(),
+      } as any,
+      transcription: {
+        queueClip: jest.fn(),
+      } as any,
+      set: jest.fn((updater: any) => {
         if (typeof updater === 'function') {
           updater(storeState)
         } else {
           Object.assign(storeState, updater)
         }
-      })
+      }),
+      get: jest.fn(() => storeState),
+    }
+  }
 
-      const get = jest.fn(() => storeState)
+  it('handles clip deleted between check and set callback', async () => {
+    let storeState: any = {
+      clips: { 'clip-1': createMockClip('clip-1') },
+    }
 
-      const slice = createClipSlice(deps)(set, get)
+    const deps = createMockDeps(storeState)
 
-      await slice.updateClip('clip-1', { note: 'updated note' })
-
-      expect(deps.db.updateClip).toHaveBeenCalledWith('clip-1', { note: 'updated note', uri: undefined })
-      expect(storeState.clips['clip-1'].note).toBe('updated note')
-    })
-
-    it('does nothing when clip does not exist initially', async () => {
-      const deps = createMockDeps()
-
-      const storeState: any = {
-        clips: {},
-        books: {},
+    // Override set to simulate deletion mid-operation
+    deps.set = jest.fn((updater: any) => {
+      if (typeof updater === 'function') {
+        delete storeState.clips['clip-1']
+        updater(storeState)
       }
-
-      const set = jest.fn()
-      const get = jest.fn(() => storeState)
-
-      const slice = createClipSlice(deps)(set, get)
-
-      await slice.updateClip('nonexistent', { note: 'updated note' })
-
-      // Should return early without calling db or set
-      expect(deps.db.updateClip).not.toHaveBeenCalled()
-      expect(set).not.toHaveBeenCalled()
     })
+
+    const updateClip = createUpdateClip(deps)
+
+    // This should not throw even though clip is deleted mid-operation
+    await expect(
+      updateClip('clip-1', { note: 'updated note' })
+    ).resolves.not.toThrow()
+
+    expect(deps.set).toHaveBeenCalled()
+  })
+
+  it('updates clip note when clip exists', async () => {
+    const clip = createMockClip('clip-1')
+    const storeState: any = {
+      clips: { 'clip-1': clip },
+    }
+
+    const deps = createMockDeps(storeState)
+    const updateClip = createUpdateClip(deps)
+
+    await updateClip('clip-1', { note: 'updated note' })
+
+    expect(deps.db.updateClip).toHaveBeenCalledWith('clip-1', { note: 'updated note', uri: undefined })
+    expect(storeState.clips['clip-1'].note).toBe('updated note')
+  })
+
+  it('does nothing when clip does not exist initially', async () => {
+    const storeState: any = {
+      clips: {},
+    }
+
+    const deps = createMockDeps(storeState)
+    const updateClip = createUpdateClip(deps)
+
+    await updateClip('nonexistent', { note: 'updated note' })
+
+    // Should return early without calling db or set
+    expect(deps.db.updateClip).not.toHaveBeenCalled()
+    expect(deps.set).not.toHaveBeenCalled()
   })
 })
