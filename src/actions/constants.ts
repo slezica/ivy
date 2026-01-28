@@ -1,0 +1,1 @@
+export const MIN_SESSION_DURATION_MS = 1000
