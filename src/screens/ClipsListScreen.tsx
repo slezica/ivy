@@ -264,7 +264,7 @@ function ClipList({ clips, transcribing, onViewClip, onOpenMenu }: any) {
                 </Text>
               )}
             </View>
-            {transcribing ? (
+            {transcribing[item.id] ? (
               <Text style={styles.clipTranscription} numberOfLines={2}>
                 Transcribing...
               </Text>

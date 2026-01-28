@@ -38,7 +38,7 @@ export function createClipSlice(deps: ClipSliceDeps) {
 
     return {
       clips: {},
-      transcribing: new Set(),
+      transcribing: {},
 
       fetchClips,
       addClip,
@@ -49,13 +49,13 @@ export function createClipSlice(deps: ClipSliceDeps) {
 
     function onTranscriptionQueued({ clipId }: TranscriptionQueueEvents['queued']) {
       set(state => {
-        state.transcribing.add(clipId)
+        state.transcribing[clipId] = true
       })
     }
 
     function onTranscriptionFinished({ clipId, error, transcription }: TranscriptionQueueEvents['finish']) {
       set(state => {
-        state.transcribing.delete(clipId)
+        delete state.transcribing[clipId]
       })
 
       if (error) {
