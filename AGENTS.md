@@ -216,7 +216,7 @@ await deleteBook(bookId)
   │   │   ├── queue.ts            # Background transcription queue
   │   │   └── whisper.ts          # On-device speech-to-text (whisper.rn)
   │   ├── backup/
-  │   │   ├── auth.ts             # Google OAuth (expo-auth-session)
+  │   │   ├── auth.ts             # Google OAuth (@react-native-google-signin)
   │   │   ├── drive.ts            # Google Drive REST API wrapper
   │   │   ├── queue.ts            # Offline change queue (persists pending sync ops)
   │   │   ├── sync.ts             # Sync orchestrator (state → plan → execute)
@@ -243,13 +243,14 @@ await deleteBook(bookId)
   │   │   ├── utils.ts            # timeToX, xToTime, segment heights
   │   │   └── index.ts            # Barrel exports
   │   └── shared/
-  │       ├── Modal.tsx           # Reusable modal (overlay tap to close)
   │       ├── ScreenArea.tsx      # Safe area wrapper (react-native-safe-area-context)
   │       ├── Header.tsx          # Reusable header (title, subtitle, noBorder)
   │       ├── InputHeader.tsx     # Search header (text input, close button)
   │       ├── EmptyState.tsx      # Empty state display
   │       ├── IconButton.tsx      # Circular icon button
-  │       └── ActionMenu.tsx      # Overflow menu (3-dot)
+  │       ├── ActionMenu.tsx      # Overflow menu (3-dot)
+  │       ├── Dialog.tsx          # Simple dialog/modal component
+  │       └── ErrorBoundary.tsx   # React error boundary
   ├── utils/
   │   └── index.ts                # Shared utilities (formatTime, formatDate)
   └── theme.ts
@@ -522,8 +523,9 @@ Run with `npm test` (or `npm test:watch` for watch mode).
 Tests are colocated in `__tests__/` directories next to the code they test.
 
 **Current coverage:**
-- `services/backup/__tests__/` - Sync planning (`planner.test.ts`) and conflict resolution (`merge.test.ts`)
-- `store/__tests__/` - Session tracking (`session.test.ts`)
+- `services/backup/__tests__/` - Sync planning (`planner.test.ts`), conflict resolution (`merge.test.ts`), sync orchestration (`sync.test.ts`)
+- `services/transcription/__tests__/` - Transcription queue (`queue.test.ts`)
+- `store/__tests__/` - Session tracking (`session.test.ts`), clip operations (`clips.test.ts`)
 
 ## Common Issues & Solutions
 
@@ -553,17 +555,19 @@ Tests are colocated in `__tests__/` directories next to the code they test.
 - **Header** - Standard screen header with `title`, `subtitle`, optional `children`, and `noBorder` prop
 - **InputHeader** - Search mode header with auto-focused text input and close button
 - **EmptyState** - Centered empty state display with `title` and `subtitle`
+- **IconButton** - Circular icon button
 - **ActionMenu** - Bottom sheet action menu (3-dot overflow pattern) with `ActionMenuItem[]`
+- **Dialog** - Simple dialog/modal component
+- **ErrorBoundary** - React error boundary for graceful error handling
 
 ## Utilities
 
 `src/utils/index.ts` exports:
-- `generateId()` - Generates a UUID for new database entities (uses `crypto.randomUUID()`)
+- `generateId()` - Generates a UUID for new database entities (uses `expo-crypto`)
 - `MAIN_PLAYER_OWNER_ID` - Well-known owner ID for the main player tab (`'main'`)
 - `formatTime(ms)` - Converts milliseconds to `MM:SS` or `H:MM:SS` format
-- `formatDate(timestamp)` - Formats timestamp as `MMM D, YYYY`
-
-**Note:** `react-native-get-random-values` polyfill is imported in `index.js` to enable `crypto.randomUUID()`.
+- `formatDate(timestamp)` - Formats timestamp as relative ("Today", "Yesterday", "X days ago") or locale date
+- `throttle(fn, ms)` - Creates a throttled function that executes at most once per interval
 
 ## Native Modules
 
@@ -835,7 +839,6 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 - Sync UI in Settings screen (toggle + "Sync now" link + status)
 - Both Android + Web OAuth clients required
 
-**Documentation:** See `docs/sync_system.md` for full educational walkthrough.
 
 ## Adding Features
 
@@ -910,7 +913,6 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 **Playback state:** Hardware-only (uri, duration, position, status, ownerId) - no Book metadata
 **Transcription status:** `idle ⇄ downloading ⇄ processing` (queue-level, not per-file)
 **Sessions:** Main player only, 5-min resume window, <1s sessions deleted, loaded on startup
-**Sync docs:** `docs/sync_system.md` - full educational walkthrough of sync architecture
 
 ## Custom ESLint Rules
 
