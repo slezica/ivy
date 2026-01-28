@@ -5,6 +5,7 @@ export interface AppState extends
   LibrarySlice,
   PlaybackSlice,
   ClipSlice,
+  TranscriptionSlice,
   SyncSlice,
   SettingsSlice,
   SessionSlice,
@@ -50,13 +51,17 @@ export interface PlaybackSlice {
 
 export interface ClipSlice {
   clips: Record<string, ClipWithFile>
-  transcribing: Record<string, true>
 
   fetchClips: () => void
   addClip: (bookId: string, position: number) => Promise<void>
   updateClip: (id: string, updates: { note?: string; start?: number; duration?: number; transcription?: string }) => Promise<void>
   deleteClip: (id: string) => Promise<void>
   shareClip: (clipId: string) => Promise<void>
+}
+
+
+export interface TranscriptionSlice {
+  transcribing: Record<string, true>
 }
 
 

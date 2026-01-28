@@ -32,13 +32,11 @@ export function createClipSlice(deps: ClipSliceDeps) {
   const { db, slicer, syncQueue, transcription, sharing, sync } = deps
 
   return (set: SetState, get: GetState): ClipSlice => {
-    transcription.on('queued', onTranscriptionQueued)
     transcription.on('finish', onTranscriptionFinished)
     sync.on('data', onSyncData)
 
     return {
       clips: {},
-      transcribing: {},
 
       fetchClips,
       addClip,
@@ -47,21 +45,7 @@ export function createClipSlice(deps: ClipSliceDeps) {
       shareClip,
     }
 
-    function onTranscriptionQueued({ clipId }: TranscriptionQueueEvents['queued']) {
-      set(state => {
-        state.transcribing[clipId] = true
-      })
-    }
-
     function onTranscriptionFinished({ clipId, error, transcription }: TranscriptionQueueEvents['finish']) {
-      set(state => {
-        delete state.transcribing[clipId]
-      })
-
-      if (error) {
-        console.error(error)
-      }
-
       if (transcription) {
         updateClip(clipId, { transcription })
       }

@@ -20,6 +20,7 @@ import {
 import { createClipSlice } from './clips'
 import { createPlaybackSlice } from './playback'
 import { createLibrarySlice } from './library'
+import { createTranscriptionSlice } from './transcription'
 import { createSyncSlice } from './sync'
 import { createSettingsSlice } from './settings'
 import { createSessionSlice } from './session'
@@ -52,6 +53,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const librarySlice = createLibrarySlice({ db, files, picker, metadata, audio, syncQueue, sync })
   const playbackSlice = createPlaybackSlice({ audio, db })
   const clipSlice = createClipSlice({ db, slicer, syncQueue, transcription, sharing, sync })
+  const transcriptionSlice = createTranscriptionSlice({ transcription })
   const syncSlice = createSyncSlice({ db, sync })
   const settingsSlice = createSettingsSlice({ db })
   const sessionSlice = createSessionSlice({ db, audio })
@@ -60,6 +62,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     ...librarySlice(set, get),
     ...playbackSlice(set, get),
     ...clipSlice(set, get),
+    ...transcriptionSlice(set, get),
     ...syncSlice(set, get),
     ...settingsSlice(set, get),
     ...sessionSlice(set, get),
@@ -88,6 +91,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
         error: null,
       },
       clips: {},
+      transcribing: {},
       books: {},
       settings: { sync_enabled: false },
     })
