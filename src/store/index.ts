@@ -104,7 +104,74 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   // Event listeners -------------------------------------------------------------------------------
 
-  audio.on('status', (status: PlaybackStatus) => {
+  audio.on('status', onAudioStatus)
+  sync.on('status', onSyncStatus)
+  sync.on('data', onSyncData)
+  transcription.on('queued', onTranscriptionQueued)
+  transcription.on('finish', onTranscriptionFinish)
+  transcription.on('status', onTranscriptionStatus)
+
+  // Initial state ---------------------------------------------------------------------------------
+
+  return {
+    // State
+    library: { status: 'loading' },
+    books: {},
+    playback: {
+      status: 'idle',
+      ownerId: null,
+      uri: null,
+      position: 0,
+      duration: 0,
+    },
+    clips: {},
+    transcription: {
+      status: 'idle',
+      pending: {},
+    },
+    sync: {
+      isSyncing: false,
+      pendingCount: sync.getPendingCount(),
+      lastSyncTime: db.getLastSyncTime(),
+      error: null,
+    },
+    settings: db.getSettings(),
+    sessions: db.getAllSessions(),
+    currentSessionBookId: null,
+
+    // Actions
+    fetchBooks,
+    loadFile,
+    loadFileWithUri,
+    loadFileWithPicker,
+    archiveBook,
+    deleteBook,
+    play,
+    pause,
+    seek,
+    seekClip,
+    skipForward,
+    skipBackward,
+    syncPlaybackState,
+    fetchClips,
+    addClip,
+    updateClip,
+    deleteClip,
+    shareClip,
+    startTranscription,
+    stopTranscription,
+    syncNow,
+    autoSync,
+    refreshSyncStatus,
+    updateSettings,
+    fetchSessions,
+    trackSession,
+    __DEV_resetApp,
+  }
+
+  // Event handler functions (hoisted) -------------------------------------------------------------
+
+  function onAudioStatus(status: PlaybackStatus) {
     // Update playback state
     set((state) => {
       if (state.playback.status !== 'loading') {
@@ -135,33 +202,33 @@ export const useStore = create<AppState>()(immer((set, get) => {
       finalizeSession(currentSessionBookId)
       set((state) => { state.currentSessionBookId = null })
     }
-  })
+  }
 
-  sync.on('status', (status: SyncStatus) => {
+  function onSyncStatus(status: SyncStatus) {
     set((state) => {
       state.sync = {
         ...status,
         lastSyncTime: status.isSyncing ? state.sync.lastSyncTime : db.getLastSyncTime(),
       }
     })
-  })
+  }
 
-  sync.on('data', (notification: SyncNotification) => {
+  function onSyncData(notification: SyncNotification) {
     if (notification.booksChanged.length > 0) {
       fetchBooks()
     }
     if (notification.clipsChanged.length > 0) {
       fetchClips()
     }
-  })
+  }
 
-  transcription.on('queued', ({ clipId }: TranscriptionQueueEvents['queued']) => {
+  function onTranscriptionQueued({ clipId }: TranscriptionQueueEvents['queued']) {
     set(state => {
       state.transcription.pending[clipId] = true
     })
-  })
+  }
 
-  transcription.on('finish', ({ clipId, error, transcription }: TranscriptionQueueEvents['finish']) => {
+  function onTranscriptionFinish({ clipId, error, transcription }: TranscriptionQueueEvents['finish']) {
     if (error) {
       console.error(error)
     }
@@ -173,82 +240,12 @@ export const useStore = create<AppState>()(immer((set, get) => {
     if (transcription) {
       updateClip(clipId, { transcription })
     }
-  })
+  }
 
-  transcription.on('status', ({ status }: TranscriptionQueueEvents['status']) => {
+  function onTranscriptionStatus({ status }: TranscriptionQueueEvents['status']) {
     set(state => {
       state.transcription.status = status
     })
-  })
-
-  // Initial state ---------------------------------------------------------------------------------
-
-  return {
-    // Library
-    library: { status: 'loading' },
-    books: {},
-    fetchBooks,
-    loadFile,
-    loadFileWithUri,
-    loadFileWithPicker,
-    archiveBook,
-    deleteBook,
-
-    // Playback
-    playback: {
-      status: 'idle',
-      ownerId: null,
-      uri: null,
-      position: 0,
-      duration: 0,
-    },
-    play,
-    pause,
-    seek,
-    seekClip,
-    skipForward,
-    skipBackward,
-    syncPlaybackState,
-
-    // Clips
-    clips: {},
-    fetchClips,
-    addClip,
-    updateClip,
-    deleteClip,
-    shareClip,
-
-    // Transcription
-    transcription: {
-      status: 'idle',
-      pending: {},
-    },
-    startTranscription,
-    stopTranscription,
-
-    // Sync
-    sync: {
-      isSyncing: false,
-      pendingCount: sync.getPendingCount(),
-      lastSyncTime: db.getLastSyncTime(),
-      error: null,
-    },
-    syncNow,
-    autoSync,
-    refreshSyncStatus,
-
-    // Settings
-    settings: db.getSettings(),
-    updateSettings,
-
-    // Sessions
-    sessions: db.getAllSessions(),
-    currentSessionBookId: null,
-    fetchSessions,
-    trackSession,
-
-    // Dev
-    __DEV_resetApp,
   }
 }))
 
