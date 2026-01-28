@@ -599,6 +599,10 @@ export class DatabaseService {
     )
   }
 
+  deleteSession(sessionId: string): void {
+    this.db.runSync('DELETE FROM sessions WHERE id = ?', [sessionId])
+  }
+
   getAllSessions(): SessionWithBook[] {
     return this.db.getAllSync<SessionWithBook>(
       `SELECT

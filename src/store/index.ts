@@ -98,6 +98,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
       clips: {},
       transcription: { status: 'idle', pending: {} },
       books: {},
+      sessions: [],
       settings: { sync_enabled: false, transcription_enabled: true },
     })
 
