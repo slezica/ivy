@@ -53,6 +53,7 @@ describe('createSessionSlice', () => {
 
       const storeState: any = {
         sessions: [],
+        currentSessionBookId: null,
         books: {}, // No books!
       }
 
@@ -74,6 +75,7 @@ describe('createSessionSlice', () => {
 
       const storeState: any = {
         sessions: [],
+        currentSessionBookId: null,
         books: { 'book-1': book },
       }
 
@@ -116,6 +118,7 @@ describe('createSessionSlice', () => {
           book_artist: book.artist,
           book_artwork: book.artwork,
         }],
+        currentSessionBookId: null,
         books: { 'book-1': book },
       }
 
@@ -141,8 +144,9 @@ describe('createSessionSlice', () => {
       const callOrder: string[] = []
 
       // Track call order
-      const originalGet = jest.fn(() => ({
+      const originalGet = jest.fn((): any => ({
         sessions: [],
+        currentSessionBookId: null,
         books: {}, // No book
       }))
 

@@ -93,6 +93,7 @@ export interface SettingsSlice {
 
 export interface SessionSlice {
   sessions: SessionWithBook[]
+  currentSessionBookId: string | null
   fetchSessions: () => void
   trackSession: (bookId: string) => void
 }
