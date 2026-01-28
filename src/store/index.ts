@@ -46,7 +46,12 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const sync = new BackupSyncService(db, drive, auth, syncQueue)
 
   const transcription = new TranscriptionQueueService({ database: db, whisper, slicer })
-  transcription.start()
+
+  // Start transcription service if enabled in settings
+  const initialSettings = db.getSettings()
+  if (initialSettings.transcription_enabled) {
+    transcription.start()
+  }
 
   // Slices ----------------------------------------------------------------------------------------
 
@@ -93,7 +98,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
       clips: {},
       transcription: { status: 'idle', pending: {} },
       books: {},
-      settings: { sync_enabled: false },
+      settings: { sync_enabled: false, transcription_enabled: true },
     })
 
     console.log('App reset complete')

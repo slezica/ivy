@@ -65,6 +65,9 @@ export interface TranscriptionSlice {
     status: 'idle' | 'downloading' | 'processing'
     pending: Record<string, true>
   }
+
+  startTranscription: () => void
+  stopTranscription: () => void
 }
 
 

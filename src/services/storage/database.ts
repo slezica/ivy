@@ -68,6 +68,7 @@ export interface SessionWithBook extends Session {
 
 export interface Settings {
   sync_enabled: boolean
+  transcription_enabled: boolean
 }
 
 // Sync-related interfaces
@@ -204,6 +205,11 @@ const migrations: Migration[] = [
       );
     `)
     db.runSync('INSERT OR IGNORE INTO settings (id, sync_enabled) VALUES (1, 0)')
+  },
+
+  // Migration 1: Add transcription_enabled setting
+  (db) => {
+    db.execSync('ALTER TABLE settings ADD COLUMN transcription_enabled INTEGER NOT NULL DEFAULT 1')
   },
 ]
 
@@ -612,18 +618,19 @@ export class DatabaseService {
   // ---------------------------------------------------------------------------
 
   getSettings(): Settings {
-    const row = this.db.getFirstSync<{ sync_enabled: number }>(
-      'SELECT sync_enabled FROM settings WHERE id = 1'
+    const row = this.db.getFirstSync<{ sync_enabled: number; transcription_enabled: number }>(
+      'SELECT sync_enabled, transcription_enabled FROM settings WHERE id = 1'
     )
     return {
       sync_enabled: row?.sync_enabled === 1,
+      transcription_enabled: row?.transcription_enabled !== 0, // default true
     }
   }
 
   setSettings(settings: Settings): void {
     this.db.runSync(
-      'UPDATE settings SET sync_enabled = ? WHERE id = 1',
-      [settings.sync_enabled ? 1 : 0]
+      'UPDATE settings SET sync_enabled = ?, transcription_enabled = ? WHERE id = 1',
+      [settings.sync_enabled ? 1 : 0, settings.transcription_enabled ? 1 : 0]
     )
   }
 

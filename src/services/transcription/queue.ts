@@ -48,6 +48,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
   private queue: string[] = []
   private processing = false
   private downloading = false
+  private started = false
 
   constructor(deps: TranscriptionQueueDeps) {
     super()
@@ -71,7 +72,12 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
   }
 
   async start(): Promise<void> {
+    if (this.started) {
+      return
+    }
+
     console.log('[Transcription] Starting service...')
+    this.started = true
 
     try {
       await this.whisper.initialize()
@@ -92,7 +98,24 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     })
   }
 
+  stop(): void {
+    if (!this.started) {
+      return
+    }
+
+    console.log('[Transcription] Stopping service...')
+    this.started = false
+    this.queue = []
+    this.processing = false
+    this.emitStatus()
+  }
+
   queueClip(clipId: string): void {
+    if (!this.started) {
+      console.log('[Transcription] Service not started, ignoring clip:', clipId)
+      return
+    }
+
     console.log('[Transcription] Queueing clip:', clipId)
     this.queue.push(clipId)
     this.emit('queued', { clipId })
@@ -106,7 +129,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
   // ---------------------------------------------------------------------------
 
   private async processQueue(): Promise<void> {
-    if (this.processing || this.queue.length === 0) {
+    if (!this.started || this.processing || this.queue.length === 0) {
       return
     }
 
@@ -119,7 +142,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     this.emitStatus()
 
     try {
-      while (this.queue.length > 0) {
+      while (this.queue.length > 0 && this.started) {
         const clipId = this.queue.shift()!
         await this.processClip(clipId)
       }

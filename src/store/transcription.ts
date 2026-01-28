@@ -21,6 +21,20 @@ export function createTranscriptionSlice(deps: TranscriptionSliceDeps) {
         status: 'idle',
         pending: {},
       },
+
+      startTranscription,
+      stopTranscription,
+    }
+
+    function startTranscription(): void {
+      transcription.start()
+    }
+
+    function stopTranscription(): void {
+      transcription.stop()
+      set(state => {
+        state.transcription.pending = {}
+      })
     }
 
     function onTranscriptionQueued({ clipId }: TranscriptionQueueEvents['queued']) {

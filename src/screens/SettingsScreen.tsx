@@ -8,7 +8,7 @@ import { useStore } from '../store'
 
 export default function SettingsScreen() {
   const router = useRouter()
-  const { settings, updateSettings, sync, syncNow, refreshSyncStatus, loadFileWithUri, fetchBooks, __DEV_resetApp } = useStore()
+  const { settings, updateSettings, sync, syncNow, refreshSyncStatus, transcription, startTranscription, stopTranscription, loadFileWithUri, fetchBooks, __DEV_resetApp } = useStore()
 
   useFocusEffect(
     useCallback(() => {
@@ -23,6 +23,16 @@ export default function SettingsScreen() {
 
     if (enabled && sync.pendingCount > 0) {
       syncNow()
+    }
+  }
+
+  function handleTranscriptionToggle(enabled: boolean) {
+    updateSettings({ ...settings, transcription_enabled: enabled })
+
+    if (enabled) {
+      startTranscription()
+    } else {
+      stopTranscription()
     }
   }
 
@@ -99,6 +109,25 @@ export default function SettingsScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        <View style={[styles.settingRow, { marginTop: 24 }]}>
+          <Text style={styles.settingLabel}>Auto-transcribe clips</Text>
+
+          <Switch
+            value={settings.transcription_enabled}
+            onValueChange={handleTranscriptionToggle}
+            trackColor={{ false: Color.GRAY, true: Color.PRIMARY }}
+            thumbColor={Color.BLACK}
+          />
+        </View>
+
+        {transcription.status !== 'idle' && (
+          <View style={styles.settingSecondary}>
+            <Text style={styles.secondaryText}>
+              {transcription.status === 'downloading' ? 'Downloading model...' : 'Processing...'}
+            </Text>
+          </View>
+        )}
 
         {__DEV__ && (
           <>
