@@ -19,7 +19,7 @@ export const createTrackSession: ActionFactory<TrackSessionDeps, TrackSession> =
     if (current) {
       db.updateSessionEndedAt(current.id, now)
       set((state) => {
-        const session = state.sessions.find(s => s.id === current.id)
+        const session = state.sessions[current.id]
         if (session) {
           session.ended_at = now
         }
@@ -39,7 +39,7 @@ export const createTrackSession: ActionFactory<TrackSessionDeps, TrackSession> =
       }
 
       set((state) => {
-        state.sessions.unshift(sessionWithBook)
+        state.sessions[session.id] = sessionWithBook
       })
     }
   }

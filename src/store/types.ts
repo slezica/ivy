@@ -53,7 +53,7 @@ export interface AppState {
     error: string | null
   }
   settings: Settings
-  sessions: SessionWithBook[]
+  sessions: Record<string, SessionWithBook>
   currentSessionBookId: string | null
 
   // Actions

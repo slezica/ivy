@@ -50,7 +50,7 @@ describe('createTrackSession', () => {
 
   it('does not create session for non-existent book', async () => {
     const storeState: any = {
-      sessions: [],
+      sessions: {},
       currentSessionBookId: null,
       books: {}, // No books!
     }
@@ -68,7 +68,7 @@ describe('createTrackSession', () => {
   it('creates session when book exists', async () => {
     const book = createMockBook('book-1')
     const storeState: any = {
-      sessions: [],
+      sessions: {},
       currentSessionBookId: null,
       books: { 'book-1': book },
     }
@@ -81,8 +81,9 @@ describe('createTrackSession', () => {
     // createSession should have been called
     expect(deps.db.createSession).toHaveBeenCalledWith('book-1')
     expect(deps.set).toHaveBeenCalled()
-    expect(storeState.sessions.length).toBe(1)
-    expect(storeState.sessions[0].book_name).toBe(book.name)
+    const sessionValues = Object.values(storeState.sessions)
+    expect(sessionValues.length).toBe(1)
+    expect((sessionValues[0] as any).book_name).toBe(book.name)
   })
 
   it('updates existing session instead of creating new one', async () => {
@@ -96,13 +97,15 @@ describe('createTrackSession', () => {
     }
 
     const storeState: any = {
-      sessions: [{
-        ...existingSession,
-        book_name: book.name,
-        book_title: book.title,
-        book_artist: book.artist,
-        book_artwork: book.artwork,
-      }],
+      sessions: {
+        'session-1': {
+          ...existingSession,
+          book_name: book.name,
+          book_title: book.title,
+          book_artist: book.artist,
+          book_artwork: book.artwork,
+        },
+      },
       currentSessionBookId: null,
       books: { 'book-1': book },
     }
@@ -123,7 +126,7 @@ describe('createTrackSession', () => {
     const callOrder: string[] = []
 
     const storeState: any = {
-      sessions: [],
+      sessions: {},
       currentSessionBookId: null,
       books: {}, // No book
     }

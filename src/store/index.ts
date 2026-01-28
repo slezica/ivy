@@ -106,7 +106,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     clips: {},
     books: {},
     settings: db.getSettings(),
-    sessions: db.getAllSessions(),
+    sessions: {},
 
     library: {
       status: 'loading',

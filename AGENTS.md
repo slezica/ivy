@@ -434,7 +434,7 @@ sync: {
   error: string | null          // Last sync error (null if successful)
 }
 settings: { sync_enabled: boolean, transcription_enabled: boolean }
-sessions: SessionWithBook[]       // Listening history (loaded on startup)
+sessions: Record<string, SessionWithBook>  // Listening history (keyed by id)
 currentSessionBookId: string | null
 
 // Actions
@@ -706,7 +706,7 @@ interface SessionWithBook extends Session {
 ```
 
 **Key Points:**
-- Sessions loaded on app startup (not lazy-loaded like clips screen)
+- Sessions loaded on focus via `fetchSessions()` (like clips)
 - Sessions are local-only (not synced to Drive)
 - INNER JOIN with files table means deleted books' sessions still appear (book record exists with `hidden: true`)
 
@@ -921,7 +921,7 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 **Playback status:** `idle → loading → paused ⇄ playing`
 **Playback state:** Hardware-only (uri, duration, position, status, ownerId) - no Book metadata
 **Transcription status:** `idle ⇄ downloading ⇄ processing` (queue-level, not per-file)
-**Sessions:** Main player only, 5-min resume window, <1s sessions deleted, loaded on startup
+**Sessions:** Main player only, 5-min resume window, <1s sessions deleted, Record keyed by id
 
 ## Custom ESLint Rules
 

@@ -23,16 +23,13 @@ export const createFinalizeSession: ActionFactory<FinalizeSessionDeps, FinalizeS
       // Delete zero/short-duration sessions
       db.deleteSession(current.id)
       set((state) => {
-        const index = state.sessions.findIndex(s => s.id === current.id)
-        if (index !== -1) {
-          state.sessions.splice(index, 1)
-        }
+        delete state.sessions[current.id]
       })
     } else {
       // Update final ended_at timestamp
       db.updateSessionEndedAt(current.id, now)
       set((state) => {
-        const session = state.sessions.find(s => s.id === current.id)
+        const session = state.sessions[current.id]
         if (session) {
           session.ended_at = now
         }

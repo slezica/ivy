@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, FlatList, Image } from 'react-native'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useFocusEffect, useRouter } from 'expo-router'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
@@ -13,6 +13,11 @@ export default function SessionsScreen() {
   const router = useRouter()
   const { sessions, fetchSessions } = useStore()
 
+  const sortedSessions = useMemo(
+    () => Object.values(sessions).sort((a, b) => b.started_at - a.started_at),
+    [sessions]
+  )
+
   useFocusEffect(
     useCallback(() => {
       fetchSessions()
@@ -23,9 +28,9 @@ export default function SessionsScreen() {
     <ScreenArea>
       <Header title="History" icon="chevron-back" onIconPress={() => router.back()} />
 
-      {sessions.length > 0 ? (
+      {sortedSessions.length > 0 ? (
         <FlatList
-          data={sessions}
+          data={sortedSessions}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (

@@ -35,7 +35,7 @@ export const createResetApp: ActionFactory<ResetAppDeps, ResetApp> = (deps) => (
       clips: {},
       transcription: { status: 'idle', pending: {} },
       books: {},
-      sessions: [],
+      sessions: {},
       currentSessionBookId: null,
       settings: { sync_enabled: false, transcription_enabled: true },
     })
