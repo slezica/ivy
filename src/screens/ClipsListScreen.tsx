@@ -15,7 +15,7 @@ import {
   Pressable,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 
 import { useStore } from '../store'
@@ -47,18 +47,21 @@ export default function ClipsListScreen() {
     }, [fetchClips])
   )
 
-  const clipsArray = Object.values(clips)
-    .filter((clip) => {
-      if (!searchQuery) return true
-      const query = searchQuery.toLowerCase()
-      return (
-        clip.file_title?.toLowerCase().includes(query) ||
-        clip.file_name.toLowerCase().includes(query) ||
-        clip.transcription?.toLowerCase().includes(query) ||
-        clip.note?.toLowerCase().includes(query)
-      )
-    })
-    .sort((a, b) => b.created_at - a.created_at)
+  const sortedClips = useMemo(() =>
+    Object.values(clips)
+      .filter((clip) => {
+        if (!searchQuery) return true
+        const query = searchQuery.toLowerCase()
+        return (
+          clip.file_title?.toLowerCase().includes(query) ||
+          clip.file_name.toLowerCase().includes(query) ||
+          clip.transcription?.toLowerCase().includes(query) ||
+          clip.note?.toLowerCase().includes(query)
+        )
+      })
+      .sort((a, b) => b.created_at - a.created_at),
+    [clips, searchQuery]
+  )
 
   const viewingClip = viewingClipId ? clips[viewingClipId] : null
   const editingClip = editingClipId ? clips[editingClipId] : null
@@ -194,9 +197,9 @@ export default function ClipsListScreen() {
           </Header>
       }
 
-      {clipsArray.length > 0
+      {sortedClips.length > 0
         ? <ClipList
-            clips={clipsArray}
+            clips={sortedClips}
             pending={transcription.pending}
             onViewClip={handleViewClip}
             onOpenMenu={handleOpenMenu}
