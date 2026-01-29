@@ -564,34 +564,14 @@ On-device automatic clip transcription using Whisper. See **[docs/TRANSCRIPTION.
 
 ## Listening History (Sessions)
 
-Automatic tracking of listening activity. Sessions record when and how long a user listened to each book.
+Automatic listening activity tracking. See **[docs/SESSIONS.md](docs/SESSIONS.md)** for the full guide.
 
-**How it works:**
-1. When playback starts on main player → session created (or existing session resumed if within 5 minutes)
-2. Every 5 seconds while playing → `ended_at` timestamp updated (throttled)
-3. When playback pauses/stops → session finalized with accurate `ended_at`
-4. Sessions < 1 second are deleted (prevents accidental tap-play-pause clutter)
+**Quick summary:** Main player playback creates sessions (time ranges per book) → `ended_at` updated every 5s while playing → finalized on pause (sessions < 1s are deleted). 5-minute resume window prevents fragmentation. Local-only, not synced.
 
-**5-Minute Window:** If playback resumes on the same book within 5 minutes of the last session ending, the existing session is extended rather than creating a new one. This prevents fragmented sessions from brief pauses.
-
-**Main Player Only:** Sessions are only tracked when `playback.ownerId === MAIN_PLAYER_OWNER_ID`. Clip playback (ClipViewer, ClipEditor) doesn't create sessions.
-
-**UI Access:** PlayerScreen header → clock icon → SessionsScreen ("History")
-
-**SessionWithBook type:**
-```typescript
-interface SessionWithBook extends Session {
-  book_name: string
-  book_title: string | null
-  book_artist: string | null
-  book_artwork: string | null
-}
-```
-
-**Key Points:**
-- Sessions loaded on focus via `fetchSessions()` (like clips)
+**Key rules for working with sessions:**
+- Sessions are main-player-only (`ownerId === MAIN_PLAYER_OWNER_ID`)
 - Sessions are local-only (not synced to Drive)
-- INNER JOIN with files table means deleted books' sessions still appear (book record exists with `hidden: true`)
+- Deleted books' sessions still appear (soft-delete preserves the record)
 
 ## Google Drive Sync 🔥 IMPORTANT
 
