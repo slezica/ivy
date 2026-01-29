@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native'
-import { useFocusEffect, useRouter } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'
+import { View, Text, StyleSheet, Alert } from 'react-native'
+import { useFocusEffect } from 'expo-router'
 
 import { Color } from '../theme'
 import { useStore } from '../store'
@@ -11,10 +10,8 @@ import ScreenArea from '../components/shared/ScreenArea'
 import EmptyState from '../components/shared/EmptyState'
 import { MAIN_PLAYER_OWNER_ID } from '../utils'
 import type { Book } from '../services'
-import Header from '../components/shared/Header'
 
 export default function PlayerScreen() {
-  const router = useRouter()
   const { playback, books, addClip, play, pause, seek, syncPlaybackState } = useStore()
 
   // Local state - what the main player "remembers"
@@ -97,12 +94,6 @@ export default function PlayerScreen() {
 
   return (
     <ScreenArea>
-      <Header title="">
-        <TouchableOpacity onPress={() => router.push('/sessions')}>
-          <Ionicons name="time-outline" size={24} color={Color.BLACK} />
-        </TouchableOpacity>
-      </Header>
-
       <View style={styles.content}>
         {ownBook
           ? <Player

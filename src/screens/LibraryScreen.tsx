@@ -26,6 +26,7 @@ export default function LibraryScreen() {
   const router = useRouter()
   const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, sync, autoSync } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const lastSyncRef = useRef<number>(0)
@@ -199,12 +200,12 @@ export default function LibraryScreen() {
 
         : <Header title="Library">
             <View style={styles.headerButtons}>
-              <TouchableOpacity onPress={() => router.push('/settings')}>
-                <Ionicons name="settings-outline" size={24} color={Color.BLACK} />
-              </TouchableOpacity>
-
               <TouchableOpacity onPress={handleOpenSearch}>
                 <Ionicons name="search" size={24} color={Color.BLACK} />
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => setIsHeaderMenuOpen(true)}>
+                <Ionicons name="ellipsis-vertical" size={24} color={Color.BLACK} />
               </TouchableOpacity>
             </View>
           </Header>
@@ -300,6 +301,20 @@ export default function LibraryScreen() {
         onClose={handleCloseMenu}
         onAction={handleMenuAction}
         items={getMenuItems()}
+      />
+
+      <ActionMenu
+        visible={isHeaderMenuOpen}
+        onClose={() => setIsHeaderMenuOpen(false)}
+        onAction={(action) => {
+          setIsHeaderMenuOpen(false)
+          if (action === 'history') router.push('/sessions')
+          if (action === 'settings') router.push('/settings')
+        }}
+        items={[
+          { key: 'history', label: 'History', icon: 'time-outline' },
+          { key: 'settings', label: 'Settings', icon: 'settings-outline' },
+        ]}
       />
 
 
