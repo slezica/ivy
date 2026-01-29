@@ -87,7 +87,7 @@ describe('createAddClip', () => {
         sourceUri: 'file:///audio/book-1.mp3',
         startMs: 10000,
         endMs: 30000, // 10000 + 20000 default
-        outputFilename: 'generated-id.mp3',
+        outputPrefix: 'generated-id',
         outputDir: expect.any(String),
       })
     })

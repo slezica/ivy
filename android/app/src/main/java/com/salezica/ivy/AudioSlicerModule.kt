@@ -71,15 +71,16 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
             // For MP3 files, use simple byte copying approach
             if (mime.contains("mp3") || mime.contains("mpeg")) {
-                sliceMP3(extractor, audioTrackIndex, startTimeMs, endTimeMs, outputPath, promise)
+                val finalPath = "$outputPath.mp3"
+                sliceMP3(extractor, audioTrackIndex, startTimeMs, endTimeMs, finalPath, promise)
                 return
             }
 
-            // For other formats (AAC, etc.), use MediaMuxer with correct extension
+            // For other formats (AAC, etc.), use MediaMuxer
             // MediaMuxer outputs MPEG-4 container, so we need .m4a extension
-            val correctedPath = outputPath.replace(Regex("\\.[^.]+$"), ".m4a")
-            android.util.Log.d("AudioSlicer", "Using muxer, corrected path: $correctedPath")
-            sliceWithMuxer(extractor, audioTrackIndex, audioFormat, startTimeMs, endTimeMs, correctedPath, promise)
+            val finalPath = "$outputPath.m4a"
+            android.util.Log.d("AudioSlicer", "Using muxer, output path: $finalPath")
+            sliceWithMuxer(extractor, audioTrackIndex, audioFormat, startTimeMs, endTimeMs, finalPath, promise)
 
         } catch (e: Exception) {
             android.util.Log.e("AudioSlicer", "Slice failed", e)

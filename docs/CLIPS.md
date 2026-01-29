@@ -109,7 +109,7 @@ The native `AudioSlicerService` extracts the segment from the book's audio file:
 ```
 source: book.uri
 range:  [position .. position + clipDuration]
-output: {DocumentDirectory}/clips/{clipId}.{ext}
+prefix: {DocumentDirectory}/clips/{clipId}
 ```
 
 The slicer is a Kotlin native module. It preserves the source format — no re-encoding:
@@ -117,7 +117,7 @@ The slicer is a Kotlin native module. It preserves the source format — no re-e
 - **MP3 sources** → raw byte copy → `.mp3` output
 - **AAC/M4A sources** → MediaMuxer remux → `.m4a` output
 
-The JS side requests `.mp3` as the filename, but the native module silently corrects the extension to `.m4a` for non-MP3 sources. The JS code uses the native return value (the actual path), so the correct extension is what gets stored in the database. This means **clip files are not always MP3** — they match their source format.
+The JS side passes a filename prefix (no extension) to the native module, which appends the correct extension based on the detected audio format. The JS code uses the native return value (the actual path), so the correct extension is what gets stored in the database. This means **clip files are not always MP3** — they match their source format.
 
 ### Step 4: Save to database
 
@@ -126,7 +126,7 @@ A new clip record is created:
 ```
 id:         generated UUID
 source_id:  bookId
-uri:        file path to the extracted MP3
+uri:        file path to the extracted audio
 start:      position (milliseconds into the source)
 duration:   clipDuration (milliseconds)
 note:       "" (empty, user can edit later)
@@ -159,7 +159,7 @@ The source book's audio file is on disk. The clip can:
 The source book has been archived or deleted. The clip can still:
 - **Play from its own file** — the timeline shows only the clip's duration
 - **Display notes and transcription** — these are stored in the clip record
-- **Be shared** — the clip's own MP3 is sent via the share sheet
+- **Be shared** — the clip's own audio file is sent via the share sheet
 
 But it **cannot**:
 - Edit bounds (no source to re-slice from)
@@ -204,7 +204,7 @@ ClipViewer picks between two playback modes based on source availability:
 
 **With source:** Plays the full book audio. The timeline shows the entire book duration with the clip range highlighted. Playback starts at `clip.start`. The user can seek anywhere in the book.
 
-**Without source:** Plays the clip's own MP3. The timeline shows only the clip duration. Playback starts at position 0.
+**Without source:** Plays the clip's own audio file. The timeline shows only the clip duration. Playback starts at position 0.
 
 ### Ownership
 
@@ -246,7 +246,7 @@ ClipEditor is a modal for changing a clip's bounds and note. It requires the sou
 2. **If bounds changed:**
    - Validate source file exists (throw if archived)
    - Re-slice the source audio with new bounds
-   - Replace the clip's MP3 file with the new slice
+   - Replace the clip's audio file with the new slice
    - Clean up the old file
    - Clear the transcription (now stale) and re-queue for transcription
 3. **Update database** — write new values plus `updated_at = now`
@@ -270,7 +270,7 @@ The editor's timeline shows the full source book duration. Two draggable handles
 
 `deleteClip(clipId)`:
 
-1. Delete the clip's MP3 file from disk
+1. Delete the clip's audio file from disk
 2. Delete the database record
 3. Queue a `'delete'` operation for sync
 4. Remove from the store
@@ -353,7 +353,7 @@ If the user creates a clip at position 59:50 in a 60:00 book, the clip duration 
 
 ### Source archived after clip creation
 
-The clip continues to work — it has its own MP3. The UI adapts by hiding edit and "go to source" options. Metadata (title, artist, filename) is preserved in the database from the JOIN with the `files` table, which retains soft-deleted book records.
+The clip continues to work — it has its own audio file. The UI adapts by hiding edit and "go to source" options. Metadata (title, artist, filename) is preserved in the database from the JOIN with the `files` table, which retains soft-deleted book records.
 
 ### Bounds edit with archived source
 
@@ -361,9 +361,9 @@ The clip continues to work — it has its own MP3. The UI adapts by hiding edit 
 
 ### Clip file cleanup
 
-When a clip is deleted, `slicer.cleanup()` deletes its MP3 file. If the file is already missing (e.g., manually deleted), cleanup handles it silently.
+When a clip is deleted, `slicer.cleanup()` deletes its audio file. If the file is already missing (e.g., manually deleted), cleanup handles it silently.
 
-When bounds are edited, the native slicer writes the new slice to the same path, overwriting the old file in place. (The actual extension depends on the source format — `.mp3` or `.m4a`.)
+When bounds are edited, the native slicer writes the new slice to the same prefix, overwriting the old file in place. (The extension is determined by the native module based on the source format — `.mp3` or `.m4a`.)
 
 ### Database reload after creation
 

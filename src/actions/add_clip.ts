@@ -36,13 +36,12 @@ export const createAddClip: ActionFactory<AddClipDeps, AddClip> = (deps) => (
 
     // Generate clip ID upfront and use it for filename
     const clipId = generateId()
-    const filename = `${clipId}.mp3`
     await slicer.ensureDir(CLIPS_DIR)
     const sliceResult = await slicer.slice({
       sourceUri: book.uri,
       startMs: position,
       endMs: position + clipDuration,
-      outputFilename: filename,
+      outputPrefix: clipId,
       outputDir: CLIPS_DIR,
     })
 

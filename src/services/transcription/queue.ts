@@ -203,7 +203,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
       sourceUri: clip.uri,
       startMs: 0,
       endMs: durationMs,
-      outputFilename: `transcription_${clip.id}_${Date.now()}.mp3`,
+      outputPrefix: `transcription_${clip.id}_${Date.now()}`,
     })
 
     return result.path

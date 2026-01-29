@@ -45,13 +45,12 @@ export const createUpdateClip: ActionFactory<UpdateClipDeps, UpdateClip> = (deps
       const newDuration = updates.duration ?? clip.duration
 
       // Re-slice using clip's UUID as filename
-      const filename = `${id}.mp3`
       await slicer.ensureDir(CLIPS_DIR)
       const sliceResult = await slicer.slice({
         sourceUri: clip.file_uri,
         startMs: newStart,
         endMs: newStart + newDuration,
-        outputFilename: filename,
+        outputPrefix: id,
         outputDir: CLIPS_DIR,
       })
 
