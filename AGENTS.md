@@ -1,6 +1,50 @@
-# AI Agent Reference - Ivy
+# AI Agent Reference for Ivy
 
 **Quick onboarding guide for AI agents.** Read this first when starting a new session.
+
+## What is Ivy?
+
+Ivy is a local-first audiobook/podcast player written in React Native. It can:
+
+- Import audio files into its library
+- Play audio files in the library
+- Extract, play and share clips
+- Remember listening sessions
+- Auto-sync data and clips to Google Drive
+
+## Topics
+
+### Clips
+
+Bookmarks with their own audio files. See **[docs/CLIPS.md](docs/CLIPS.md)** for the full guide.
+
+**Quick summary:** Clips are sliced from source books as standalone MP3s at `clips/{uuid}.mp3`. They work independently of the source — if the book is archived, clips fall back to their own audio. Each clip has a note (user-written) and a transcription (auto-generated).
+
+**Key rules for working with clips:**
+- Check `clip.file_uri !== null` before enabling edit or "go to source"
+- Use `clip.file_uri` (source) when available, fall back to `clip.uri` (clip's own file)
+- Every clip mutation must queue for sync (`syncQueue.queueChange`)
+- `note` and `transcription` are separate fields — don't conflate them
+
+### Transcription
+
+On-device automatic clip transcription using Whisper. See **[docs/TRANSCRIPTION.md](docs/TRANSCRIPTION.md)** for the full guide.
+
+**Quick summary:** Clips are queued for transcription on creation → processed sequentially by a background queue → first 10s of audio extracted and fed to on-device Whisper → result saved to `clips.transcription` column. Controlled by `settings.transcription_enabled`.
+
+
+### Sessions
+
+Automatic listening activity tracking. See **[docs/SESSIONS.md](docs/SESSIONS.md)** for the full guide.
+
+**Quick summary:** Main player playback creates sessions (time ranges per book) → `ended_at` updated every 5s while playing → finalized on pause (sessions < 1s are deleted). 5-minute resume window prevents fragmentation. Local-only, not synced.
+
+### Sync and Backup
+
+Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC.md)** for the full guide.
+
+**Quick summary:** Store actions queue changes to SQLite → sync drains queue and does manifest-based incremental push/pull → conflicts resolved by pure merge functions → store notified of remote changes via events.
+
 
 ## Critical Architecture Decisions
 
@@ -426,6 +470,7 @@ __DEV_resetApp
 
 **PlaybackState is hardware-only:** The `playback` object reflects what's loaded in the player, not domain state. Components look up `Book` metadata from the `books` map using the URI when needed.
 
+
 ## File Loading Flow (Critical)
 
 1. **User picks file** → `pickedFile.uri` (external content: URI)
@@ -451,30 +496,12 @@ __DEV_resetApp
 - If `book.uri` exists on disk → load directly
 - If `book.uri` is null → book is archived, show alert
 
+
 ## Unit Testing (Jest)
 
 Run with `npm test` (or `npm test:watch` for watch mode).
 
 Tests are colocated in `__tests__/` directories next to the code they test. Action tests use shared helpers from `actions/__tests__/helpers.ts` for mock state, services, and immer-compatible `set`.
-
-## Common Issues & Solutions
-
-### TypeScript Errors
-- **Expo FileSystem API changed in v54:**
-  - ❌ OLD: `FileSystem.documentDirectory`, `getInfoAsync`, `copyAsync`
-  - ✅ NEW: `Paths.document`, `Directory`, `File` classes
-  - Import: `import { Paths, Directory, File } from 'expo-file-system'`
-
-### File Won't Load
-1. Check console logs in `loadFile()` function
-2. Verify local file exists: `fileStorageService.fileExists()`
-3. Check if AudioService timeout (10s) - means player can't load file
-4. Try reset button and re-add file
-
-### Content URI Issues
-- External URIs (Google Drive, etc.) **will fail** after app restart
-- This is expected - files must be re-copied from local storage
-- Only local `file://` URIs should be used for playback
 
 
 ## Utilities
@@ -485,6 +512,7 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 - `formatTime(ms)` - Converts milliseconds to `MM:SS` or `H:MM:SS` format
 - `formatDate(timestamp)` - Formats timestamp as relative ("Today", "Yesterday", "X days ago") or locale date
 - `throttle(fn, ms)` - Creates a throttled function that executes at most once per interval
+
 
 ## Native Modules
 
@@ -500,59 +528,8 @@ Located in `android/app/src/main/java/com/salezica/ivy/`:
 - Wrapped by `services/audio/metadata.ts`
 - Interface: `extractMetadata(filePath) → Promise<{ title, artist, artwork, duration }>`
 
-## Clips 🔥 IMPORTANT
 
-Bookmarks with their own audio files. See **[docs/CLIPS.md](docs/CLIPS.md)** for the full guide.
 
-**Quick summary:** Clips are sliced from source books as standalone MP3s at `clips/{uuid}.mp3`. They work independently of the source — if the book is archived, clips fall back to their own audio. Each clip has a note (user-written) and a transcription (auto-generated).
-
-**Key rules for working with clips:**
-- Check `clip.file_uri !== null` before enabling edit or "go to source"
-- Use `clip.file_uri` (source) when available, fall back to `clip.uri` (clip's own file)
-- Every clip mutation must queue for sync (`syncQueue.queueChange`)
-- `note` and `transcription` are separate fields — don't conflate them
-
-**Source availability pattern:**
-```typescript
-const hasSourceFile = clip.file_uri !== null
-const playbackUri = hasSourceFile ? clip.file_uri! : clip.uri
-const playbackDuration = hasSourceFile ? clip.file_duration : clip.duration
-const initialPosition = hasSourceFile ? clip.start : 0
-```
-
-## Transcription Architecture
-
-On-device automatic clip transcription using Whisper. See **[docs/TRANSCRIPTION.md](docs/TRANSCRIPTION.md)** for the full guide.
-
-**Quick summary:** Clips are queued for transcription on creation → processed sequentially by a background queue → first 10s of audio extracted and fed to on-device Whisper → result saved to `clips.transcription` column. Controlled by `settings.transcription_enabled`.
-
-**Key rules for working with transcription:**
-- `note` and `transcription` are separate fields (user-written vs auto-generated)
-- `queueClip()` is a no-op if the service isn't started — clips are picked up on re-enable
-- If clip bounds change, clear `transcription` and re-queue
-
-## Listening History (Sessions)
-
-Automatic listening activity tracking. See **[docs/SESSIONS.md](docs/SESSIONS.md)** for the full guide.
-
-**Quick summary:** Main player playback creates sessions (time ranges per book) → `ended_at` updated every 5s while playing → finalized on pause (sessions < 1s are deleted). 5-minute resume window prevents fragmentation. Local-only, not synced.
-
-**Key rules for working with sessions:**
-- Sessions are main-player-only (`ownerId === MAIN_PLAYER_OWNER_ID`)
-- Sessions are local-only (not synced to Drive)
-- Deleted books' sessions still appear (soft-delete preserves the record)
-
-## Google Drive Sync 🔥 IMPORTANT
-
-Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC.md)** for the full guide.
-
-**Quick summary:** Store actions queue changes to SQLite → sync drains queue and does manifest-based incremental push/pull → conflicts resolved by pure merge functions → store notified of remote changes via events.
-
-**Key rules for working with sync:**
-- Queue changes via `syncQueue.queueChange()` when modifying synced entities
-- Use manifest comparison for change detection (not just timestamp comparison)
-- Don't delete manifest entries manually (sync service manages them)
-- Don't modify books/clips without queueing for sync (changes will be lost on other devices)
 
 ## Adding Features
 
@@ -610,3 +587,7 @@ Uses `react-native-track-player` v5 for system-level playback integration:
 - Notification click opens `ivy://notification.click` → caught by `+not-found.tsx` → redirects to player
 - v5 API: use `TrackPlayer.getProgress()` instead of separate `getPosition()`/`getDuration()`
 
+
+# Next Steps
+
+When you are told you'll be working on a specific topic, and there's a guide on that topic, tell the user and read it carefully NOW.
