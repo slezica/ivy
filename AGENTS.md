@@ -378,35 +378,6 @@ id INTEGER PRIMARY KEY CHECK (id = 1)  -- Enforces single row
 migration INTEGER NOT NULL             -- Last applied migration index
 ```
 
-## Database Migrations
-
-Schema changes are managed via a migration system in `services/storage/database.ts`.
-
-**How it works:**
-1. `migrations` array at module level contains migration functions: `(db) => void`
-2. On startup, `runMigrations()` reads `status.migration` to find last applied migration
-3. If `status` table doesn't exist (fresh install), starts from migration 0
-4. Runs each pending migration, updates `status.migration` after each success
-
-**Adding a new migration:**
-```typescript
-const migrations: Migration[] = [
-  // Migration 0: Initial schema (creates all tables including status)
-  (db) => { /* ... */ },
-
-  // Migration 1: Add new_column to settings
-  (db) => {
-    db.runSync('ALTER TABLE settings ADD COLUMN new_column TEXT')
-  },
-]
-```
-
-**Key points:**
-- Migration 0 creates all tables including `status`, then inserts `migration = 0`
-- Subsequent migrations just run their SQL; the loop updates `status.migration` after each
-- If a migration throws, the app crashes (intentional - partial migrations are dangerous)
-- Migrations are never removed or reordered once deployed
-
 ## Store State Structure
 
 See `store/types.ts` for authoritative type definitions (`AppState` interface).
@@ -479,48 +450,6 @@ __DEV_resetApp
 - Book selected by `id` from store (indexed by id)
 - If `book.uri` exists on disk → load directly
 - If `book.uri` is null → book is archived, show alert
-
-## Development Tools
-
-Settings screen has a "Developer" section (dev builds only) with:
-- **Load Sample** - Loads bundled test file
-- **Reset App** - Clears all data
-
-### Sample (dev only)
-- Loads bundled test audio file (`assets/test/test-audio.mp3`)
-- Useful for quick testing without file picker
-- Navigates to player after loading
-
-### Reset (dev only)
-- Clears database (files, clips, sessions, settings)
-- Unloads audio player
-- Resets store state
-- **Note:** Doesn't delete copied files from storage (orphaned)
-- Access via: `store.__DEV_resetApp()`
-
-## E2E Testing (Maestro)
-
-Automated UI tests using [Maestro](https://maestro.mobile.dev/). Tests are in `maestro/` directory.
-
-**Run all tests:**
-```bash
-maestro test maestro/
-```
-
-**Run single test:**
-```bash
-maestro test maestro/smoke-test.yaml
-```
-
-**Available flows:**
-- `smoke-test.yaml` - Verifies empty states (Library, Clips screens)
-- `load-and-play.yaml` - File loading, playback controls, library persistence
-- `clip-crud.yaml` - Clip creation, note editing, deletion
-- `timeline-gestures.yaml` - Timeline tap-to-seek, swipe-to-scrub, flick momentum
-
-**Ad-hoc testing:** During development, you can write quick one-off Maestro flows to test specific interactions without committing them. Useful for debugging or verifying fixes.
-
-**Test file:** A bundled test audio file (`assets/test/test-audio.mp3`) is available. The Sample button loads it without needing the file picker.
 
 ## Unit Testing (Jest)
 
@@ -824,24 +753,6 @@ If Device A deletes a clip while Device B modifies it (later timestamp), then bo
 - Device A downloads the "resurrected" clip
 
 **Result:** Modification wins (last-write-wins semantics). No tombstones implemented.
-
-### Google Cloud Setup
-
-1. Create project in Google Cloud Console
-2. Enable **Google Drive API** (APIs & Services → Library)
-3. Create **Android** OAuth client:
-   - Package name: `com.salezica.ivy`
-   - SHA-1: from `cd android && ./gradlew signingReport`
-4. Create **Web application** OAuth client:
-   - No redirect URIs needed
-   - Copy client ID to `auth.ts` (`WEB_CLIENT_ID`)
-
-**Key Points:**
-- Native library handles token refresh automatically
-- Public Drive folder (visible to user in their Drive)
-- Sync UI in Settings screen (toggle + "Sync now" link + status)
-- Both Android + Web OAuth clients required
-
 
 ## Adding Features
 
