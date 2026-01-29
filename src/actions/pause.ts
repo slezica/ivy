@@ -17,11 +17,6 @@ export const createPause: ActionFactory<PauseDeps, Pause> = (deps) => (
       state.playback.status = 'paused'
     })
 
-    try {
-      await audio.pause()
-    } catch (error) {
-      console.error('Error pausing audio:', error)
-      throw error
-    }
+    await audio.pause()
   }
 )

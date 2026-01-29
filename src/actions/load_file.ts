@@ -86,7 +86,6 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
     } catch (error) {
       set(state => { state.library.status = 'idle' })
-      console.error(error)
       throw error
 
     } finally {

@@ -11,13 +11,6 @@ export type SkipBackward = Action<[]>
 
 export const createSkipBackward: ActionFactory<SkipBackwardDeps, SkipBackward> = (deps) => (
   async () => {
-    const { audio } = deps
-
-    try {
-      await audio.skip(-SKIP_BACKWARD_MS)
-    } catch (error) {
-      console.error('Error skipping backward:', error)
-      throw error
-    }
+    await deps.audio.skip(-SKIP_BACKWARD_MS)
   }
 )

@@ -224,9 +224,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   }
 
   function onTranscriptionFinish({ clipId, error, transcription }: TranscriptionQueueEvents['finish']) {
-    if (error) {
-      console.error(error)
-    }
+    // error is logged by TranscriptionQueueService at the source
 
     set(state => {
       delete state.transcription.pending[clipId]

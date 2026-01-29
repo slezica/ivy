@@ -30,11 +30,6 @@ export const createSeek: ActionFactory<SeekDeps, Seek> = (deps) => (
       state.playback.position = context.position
     })
 
-    try {
-      await audio.seek(context.position)
-    } catch (error) {
-      console.error('Error seeking:', error)
-      throw error
-    }
+    await audio.seek(context.position)
   }
 )

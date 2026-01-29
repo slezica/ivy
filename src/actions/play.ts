@@ -76,7 +76,6 @@ export const createPlay: ActionFactory<PlayDeps, Play> = (deps) => (
         state.playback.status = state.playback.uri ? 'paused' : 'idle'
       })
 
-      console.error('Error playing audio:', error)
       throw error
     }
   }
