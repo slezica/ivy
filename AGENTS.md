@@ -2,6 +2,7 @@
 
 **Quick onboarding guide for AI agents.** Read this first when starting a new session.
 
+
 ## What is Ivy?
 
 Ivy is a local-first audiobook/podcast player written in React Native. It can:
@@ -12,7 +13,10 @@ Ivy is a local-first audiobook/podcast player written in React Native. It can:
 - Remember listening sessions
 - Auto-sync data and clips to Google Drive
 
+
 ## Topics
+
+These are in-depth guides to aspects of the application. CRITICAL: before you start working on one of the following topics, read the corresponding guide to learn about it.
 
 ### Playback
 
@@ -58,137 +62,6 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
 
 **Quick summary:** Store actions queue changes to SQLite → sync drains queue and does manifest-based incremental push/pull → conflicts resolved by pure merge functions → store notified of remote changes via events.
 
-
-## Critical Architecture Decisions
-
-### 1. **File Storage Strategy** 
-External content: URIs (like Google Drive) become invalid after app restart. **Solution:**
-- **All files are copied to app-owned storage** on first load
-- Database stores: `uri` (local file:// path for playback)
-- `FileStorageService` manages copying to `Paths.document/audio/`
-- Audio playback **only uses local file:// URIs**
-
-### 2. **Time Units**
-Everything internal is **milliseconds**. Convert to MM:SS only at display boundaries.
-
-### 3. **State Management**
-Single Zustand store is the source of truth. Services are stateless. Store uses **immer middleware** for immutable updates via direct mutations:
-- `store/types.ts` - Type definitions (AppState, Action, ActionFactory)
-- `store/index.ts` - All state, action wiring, and event listeners in one place
-
-**Action Factories:** Actions are defined in `src/actions/` as factory functions with explicit dependencies. This enables unit testing actions in isolation:
-
-```typescript
-// actions/update_settings.ts
-export interface UpdateSettingsDeps {
-  db: DatabaseService
-  set: SetState
-}
-
-export type UpdateSettings = Action<[Settings]>
-
-export const createUpdateSettings: ActionFactory<UpdateSettingsDeps, UpdateSettings> = (deps) => (
-  async (settings) => {
-    deps.db.setSettings(settings)
-    deps.set({ settings })
-  }
-)
-
-// store/index.ts - wires up dependencies
-const updateSettings = createUpdateSettings({ db, set })
-```
-
-All actions are async (`Action<Args>` returns `Promise<void>`). Dependencies are wired in `store/index.ts`.
-
-**Service Events:** Services extend `BaseService<Events>` and emit typed events. The store subscribes to relevant events during initialization:
-
-```typescript
-// In store initialization
-audio.on('status', (status) => {
-  set((state) => { state.playback.position = status.position })
-})
-
-// Service emits events internally
-this.emit('status', { status: 'playing', position: 1000, duration: 60000 })
-```
-
-**Immer usage:** State updates use direct mutations on a draft (immer converts to immutable):
-```typescript
-// ✅ Correct - mutate draft directly
-set((state) => {
-  state.playback.status = 'playing'
-  state.clips[id].note = 'updated'
-  delete state.clips[id]
-})
-
-// ❌ Avoid - spread patterns are verbose and error-prone
-set((state) => ({
-  playback: { ...state.playback, status: 'playing' }
-}))
-```
-
-### 4. **Library Status Enum**
-`'loading'` → `'idle'` ⇄ `'adding'`
-- `loading`: Initial state, fetching files from database
-- `idle`: Library ready
-- `adding`: Copying a new file to app storage
-
-### 5. **Books, Archiving, and Deletion** 🔥 IMPORTANT
-The domain entity is called `Book` (not AudioFile). A Book represents an audiobook/podcast in the library.
-
-**File Fingerprint:** Each book stores `file_size` + `fingerprint` (first 4KB as BLOB). This enables:
-- **Duplicate detection:** Adding the same file twice reuses the existing book record
-- **Automatic restore:** Adding a file that matches an archived/deleted book restores it with preserved position and clips
-
-**Book States:**
-| State | `uri` | `hidden` | Visible in UI |
-|-------|-------|----------|---------------|
-| Active | path | false | Main library list |
-| Archived | null | false | "Archived" section |
-| Deleted | null | true | Nowhere |
-
-**Archiving:** Users can archive books to free storage while keeping them visible:
-- `book.uri === null && !book.hidden` means the book is archived
-- Archiving deletes the underlying audio file but keeps the database record visible
-- Clips continue to work (they have their own audio files)
-- Archived books appear in a separate "Archived" section in LibraryScreen
-
-**Deletion (soft-delete):** Users can remove books from their library entirely:
-- `book.uri === null && book.hidden` means the book is deleted
-- Deletion deletes the audio file AND hides the book from all UI
-- Book record remains in database (for potential restore via fingerprint)
-- Clips of deleted books still appear in clips list (they're independent)
-
-**Archive action flow:**
-1. Optimistic store update (set `uri: null`)
-2. Database update (with rollback on failure)
-3. Async file deletion (fire-and-forget)
-
-**Delete action flow:**
-1. Optimistic store update (remove from `books` map)
-2. Database update: set `uri: null`, `hidden: true` (with rollback on failure)
-3. Async file deletion (fire-and-forget)
-
-**Restore flow (automatic on file add):**
-1. File copied to app storage
-2. Fingerprint read (file size + first 4KB)
-3. If fingerprint matches archived/deleted book → restore: update `uri`, set `hidden: false`, replace metadata, preserve position
-4. If fingerprint matches active book → delete duplicate file, touch `updated_at`
-5. If no match → create new book record
-
-```typescript
-// Check book state
-const isArchived = book.uri === null && !book.hidden
-const isDeleted = book.uri === null && book.hidden
-
-// Archive a book (keeps visible in Archived section)
-await archiveBook(bookId)
-
-// Delete a book (removes from library entirely)
-await deleteBook(bookId)
-
-// Restore happens automatically when same file is added again
-```
 
 ## Project Overview
 
@@ -392,6 +265,7 @@ id INTEGER PRIMARY KEY CHECK (id = 1)  -- Enforces single row
 migration INTEGER NOT NULL             -- Last applied migration index
 ```
 
+
 ## Store State Structure
 
 See `store/types.ts` for authoritative type definitions (`AppState` interface).
@@ -433,31 +307,131 @@ fetchSessions, trackSession
 __DEV_resetApp
 ```
 
-## File Loading Flow (Critical)
 
-1. **User picks file** → `pickedFile.uri` (external content: URI)
-2. **Copy to app storage:**
-   - `library.status = 'adding'` → Modal shows "Adding to library..."
-   - `fileStorageService.copyToAppStorage()` → returns local `file://` URI
-3. **Read metadata:**
-   - `metadataService.readMetadata(localUri)` → title, artist, artwork, duration
-4. **Read fingerprint:**
-   - `fileStorageService.readFileFingerprint(localUri)` → fileSize, fingerprint
-5. **Save to database:**
-   - Check for existing book by fingerprint (restore archived or dedupe)
-   - `dbService.upsertBook()` returns the `Book` with generated `id`
-   - `uri = localUri` (local file:// path)
-6. **Done** - Book added to library, no auto-play
+## Critical Architecture Decisions
 
-**On tap from library:**
-- Book loaded into player via `play({ fileUri, position, ownerId })`
-- Playback starts from saved position
+### 1. **File Storage Strategy** 
+External content: URIs (like Google Drive) become invalid after app restart. **Solution:**
+- **All files are copied to app-owned storage** on first load
+- Database stores: `uri` (local file:// path for playback)
+- `FileStorageService` manages copying to `Paths.document/audio/`
+- Audio playback **only uses local file:// URIs**
 
-**On reload from library:**
-- Book selected by `id` from store (indexed by id)
-- If `book.uri` exists on disk → load directly
-- If `book.uri` is null → book is archived, show alert
+### 2. **Time Units**
+Everything internal is **milliseconds**. Convert to MM:SS only at display boundaries.
 
+### 3. **State Management**
+Single Zustand store is the source of truth. Services are stateless. Store uses **immer middleware** for immutable updates via direct mutations:
+- `store/types.ts` - Type definitions (AppState, Action, ActionFactory)
+- `store/index.ts` - All state, action wiring, and event listeners in one place
+
+**Action Factories:** Actions are defined in `src/actions/` as factory functions with explicit dependencies. This enables unit testing actions in isolation:
+
+```typescript
+// actions/update_settings.ts
+export interface UpdateSettingsDeps {
+  db: DatabaseService
+  set: SetState
+}
+
+export type UpdateSettings = Action<[Settings]>
+
+export const createUpdateSettings: ActionFactory<UpdateSettingsDeps, UpdateSettings> = (deps) => (
+  async (settings) => {
+    deps.db.setSettings(settings)
+    deps.set({ settings })
+  }
+)
+
+// store/index.ts - wires up dependencies
+const updateSettings = createUpdateSettings({ db, set })
+```
+
+All actions are async (`Action<Args>` returns `Promise<void>`). Dependencies are wired in `store/index.ts`.
+
+**Service Events:** Services extend `BaseService<Events>` and emit typed events. The store subscribes to relevant events during initialization:
+
+```typescript
+// In store initialization
+audio.on('status', (status) => {
+  set((state) => { state.playback.position = status.position })
+})
+
+// Service emits events internally
+this.emit('status', { status: 'playing', position: 1000, duration: 60000 })
+```
+
+**Immer usage:** State updates use direct mutations on a draft (immer converts to immutable):
+```typescript
+// ✅ Correct - mutate draft directly
+set((state) => {
+  state.playback.status = 'playing'
+  state.clips[id].note = 'updated'
+  delete state.clips[id]
+})
+
+// ❌ Avoid - spread patterns are verbose and error-prone
+set((state) => ({
+  playback: { ...state.playback, status: 'playing' }
+}))
+```
+
+### 5. **Books, Archiving, and Deletion** 🔥 IMPORTANT
+The domain entity is called `Book`. A Book represents an audiobook/podcast in the library.
+
+**File Fingerprint:** Each book stores `file_size` + `fingerprint` (first 4KB as BLOB). This enables:
+- **Duplicate detection:** Adding the same file twice reuses the existing book record
+- **Automatic restore:** Adding a file that matches an archived/deleted book restores it with preserved position and clips
+
+**Book States:**
+| State | `uri` | `hidden` | Visible in UI |
+|-------|-------|----------|---------------|
+| Active | path | false | Main library list |
+| Archived | null | false | "Archived" section |
+| Deleted | null | true | Nowhere |
+
+**Archiving:** Users can archive books to free storage while keeping them visible:
+- `book.uri === null && !book.hidden` means the book is archived
+- Archiving deletes the underlying audio file but keeps the database record visible
+- Clips continue to work (they have their own audio files)
+- Archived books appear in a separate "Archived" section in LibraryScreen
+
+**Deletion (soft-delete):** Users can remove books from their library entirely:
+- `book.uri === null && book.hidden` means the book is deleted
+- Deletion deletes the audio file AND hides the book from all UI
+- Book record remains in database (for potential restore via fingerprint)
+- Clips of deleted books still appear in clips list (they're independent)
+
+**Archive action flow:**
+1. Optimistic store update (set `uri: null`)
+2. Database update (with rollback on failure)
+3. Async file deletion (fire-and-forget)
+
+**Delete action flow:**
+1. Optimistic store update (remove from `books` map)
+2. Database update: set `uri: null`, `hidden: true` (with rollback on failure)
+3. Async file deletion (fire-and-forget)
+
+**Restore flow (automatic on file add):**
+1. File copied to app storage
+2. Fingerprint read (file size + first 4KB)
+3. If fingerprint matches archived/deleted book → restore: update `uri`, set `hidden: false`, replace metadata, preserve position
+4. If fingerprint matches active book → delete duplicate file, touch `updated_at`
+5. If no match → create new book record
+
+```typescript
+// Check book state
+const isArchived = book.uri === null && !book.hidden
+const isDeleted = book.uri === null && book.hidden
+
+// Archive a book (keeps visible in Archived section)
+await archiveBook(bookId)
+
+// Delete a book (removes from library entirely)
+await deleteBook(bookId)
+
+// Restore happens automatically when same file is added again
+```
 
 ## Unit Testing (Jest)
 
@@ -491,8 +465,6 @@ Located in `android/app/src/main/java/com/salezica/ivy/`:
 - Interface: `extractMetadata(filePath) → Promise<{ title, artist, artwork, duration }>`
 
 
-
-
 ## Adding Features
 
 ### New Action
@@ -512,6 +484,7 @@ Located in `android/app/src/main/java/com/salezica/ivy/`:
 2. Add route in `app/(tabs)/`
 3. Update tab bar in `app/(tabs)/_layout.tsx`
 
+
 ## Key Patterns
 
 - All I/O goes through services — never call track-player, SQLite, or FileSystem from components
@@ -519,13 +492,16 @@ Located in `android/app/src/main/java/com/salezica/ivy/`:
 - All times are milliseconds internally
 - `book.uri` can be null (archived/deleted) — always check before using for playback
 
+
 ## Quick Reference
 
 **Start dev server:** `npm start`
 **Run tests:** `npm test`
+**Run tests with console logs**: `npm test:verbose`
 **Run e2e tests:** `maestro test maestro/`
 
 
 # Next Steps
 
-When you are told you'll be working on a specific topic, and there's a guide on that topic, tell the user and read it carefully NOW.
+You have read the introduction to Ivy. If you were told you'll be working on specific topics, and there's guides for those topics, read them now. Learn. When done, inform the user you've read them.
+
