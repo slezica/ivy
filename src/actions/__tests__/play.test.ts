@@ -39,40 +39,6 @@ const CONTEXT = { fileUri: 'file:///audio/book-1.mp3', position: 5000, ownerId: 
 
 describe('createPlay', () => {
 
-  // -- Resume (no context) --------------------------------------------------
-
-  describe('resume (no context)', () => {
-    it('sets status to playing and calls audio.play', async () => {
-      const deps = createMockDeps({ status: 'paused', uri: 'file:///audio/book-1.mp3' })
-      const play = createPlay(deps)
-
-      await play()
-
-      expect(deps.set).toHaveBeenCalledTimes(1)
-      expect(deps.audio.play).toHaveBeenCalled()
-    })
-
-    it('does not load, seek, or look up book', async () => {
-      const deps = createMockDeps({ status: 'paused', uri: 'file:///audio/book-1.mp3' })
-      const play = createPlay(deps)
-
-      await play()
-
-      expect(deps.audio.load).not.toHaveBeenCalled()
-      expect(deps.audio.seek).not.toHaveBeenCalled()
-      expect(deps.db.getBookByAnyUri).not.toHaveBeenCalled()
-    })
-
-    it('does not read current state', async () => {
-      const deps = createMockDeps()
-      const play = createPlay(deps)
-
-      await play()
-
-      expect(deps.get).not.toHaveBeenCalled()
-    })
-  })
-
   // -- New file (different from currently loaded) ---------------------------
 
   describe('new file', () => {
@@ -270,15 +236,5 @@ describe('createPlay', () => {
       await expect(play(CONTEXT)).rejects.toThrow('No book or clip found for')
     })
 
-    it('sets status to paused on resume failure when file was loaded', async () => {
-      const { state, deps } = createStatefulDeps({ status: 'paused', uri: 'file:///audio/book-1.mp3' }, {
-        audio: createMockAudio({ play: jest.fn(async () => { throw new Error('resume failed') }) }),
-      })
-      const play = createPlay(deps)
-
-      await expect(play()).rejects.toThrow('resume failed')
-
-      expect(state.playback.status).toBe('paused')
-    })
   })
 })

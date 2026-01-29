@@ -15,22 +15,13 @@ export interface PlayDeps {
   get: GetState
 }
 
-export type Play = Action<[PlayContext?]>
+export type Play = Action<[PlayContext]>
 
 export const createPlay: ActionFactory<PlayDeps, Play> = (deps) => (
-  async (context?) => {
+  async (context) => {
     const { audio, db, set, get } = deps
 
     try {
-      if (!context) {
-        // No new context? Just resume playback:
-        set(state => {
-          state.playback.status = 'playing'
-        })
-        await audio.play()
-        return
-      }
-
       const { playback } = get()
       const isSameFile = (playback.uri == context.fileUri)
 
