@@ -151,6 +151,7 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek }: P
         onSeek={onSeek}
         leftColor={Color.GRAY}
         rightColor={Color.PRIMARY}
+        showTime='top'
       />
 
       <View style={styles.playbackControls}>
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
   },
   playerContainer: {
     flex: 1,
-    gap: 24,
+    gap: 48,
     paddingHorizontal: 12
   },
   spacerTop: {

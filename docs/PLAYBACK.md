@@ -31,11 +31,7 @@ The playback state in the store is deliberately minimal — it represents **hard
 
 ## Core Concepts
 
-### 1. Milliseconds everywhere except TrackPlayer
-
-The entire app uses milliseconds. TrackPlayer uses seconds. The `AudioPlayerService` is the conversion boundary — it accepts and returns milliseconds, converting to/from seconds internally. No other code touches seconds.
-
-### 2. Playback state is hardware-only
+### 1. Playback state is hardware-only
 
 ```typescript
 playback: {
@@ -49,7 +45,7 @@ playback: {
 
 This is what the audio player is physically doing right now. There's no book title, no artwork, no "currently playing book" concept here. Components that need that information look up the `Book` from the `books` map by matching `playback.uri`.
 
-### 3. Local-first UI state
+### 2. Local-first UI state
 
 Each playback component (PlayerScreen, ClipViewer, ClipEditor) maintains its own local position state (`ownPosition`). This decouples the UI from the global store:
 
@@ -65,51 +61,48 @@ This prevents the timeline from jumping when another component takes over playba
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                     UI Components                             │
-│  PlayerScreen · ClipViewer · ClipEditor                       │
-│                                                               │
-│  Each has:                                                    │
-│    ownPosition (local)     ← syncs from global when owner     │
-│    ownerId (unique per component)                             │
+│                     UI Components                            │
+│  PlayerScreen · ClipViewer · ClipEditor                      │
+│                                                              │
+│  Each has:                                                   │
+│    ownPosition (local)     ← syncs from global when owner    │
+│    ownerId (unique per component)                            │
 └──────────┬───────────────────────────────────────────────────┘
            │ play(), pause(), seek()
            ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                     Store Actions                             │
-│  play · pause · seek · skipForward · skipBackward             │
-│  syncPlaybackState                                            │
+│                     Store Actions                            │
+│  play · pause · seek · skipForward · skipBackward            │
+│  syncPlaybackState                                           │
 └──────────┬───────────────────────────────────────────────────┘
            │
            ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                  AudioPlayerService                           │
-│                                                               │
+│                  AudioPlayerService                          │
+│                                                              │
 │  load(uri, metadata) → duration (ms)                         │
 │  play() · pause() · seek(ms) · skip(ms)                      │
-│                                                               │
-│  ┌─────────────────────────────────┐                         │
-│  │  MS ↔ SECONDS BOUNDARY         │                          │
-│  │  Everything above: milliseconds │                          │
-│  │  Everything below: seconds      │                          │
-│  └─────────────────────────────────┘                         │
-│                                                               │
+│                                                              │
 │  Emits: 'status' events (position, duration, status — in ms) │
 └──────────┬───────────────────────────────────────────────────┘
            │
            ▼
 ┌──────────────────────────────────────────────────────────────┐
-│              react-native-track-player (v5)                   │
-│                                                               │
-│  Native audio engine · Background playback                    │
-│  System notification · Lock screen · Bluetooth                │
+│              react-native-track-player (v5)                  │
+│  Time measured in seconds                                    │
+│  Native audio engine · Background playback                   │
+│  System notification · Lock screen · Bluetooth               │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+### 3. Milliseconds everywhere except TrackPlayer
+
 
 ---
 
 ## The Audio Player Service
 
-`AudioPlayerService` wraps TrackPlayer with a clean millisecond-based API and typed events.
+`AudioPlayerService` wraps TrackPlayer with a clean millisecond-based API and typed events. It's the conversion boundary — it accepts and returns milliseconds, converting to/from seconds internally.
 
 ### Loading audio
 
@@ -336,12 +329,12 @@ The timeline is a GPU-accelerated horizontal scrolling waveform rendered with Sk
 ### Visual structure
 
 ```
-  ┌─ time indicator (optional) ─┐
+  ┌─ time indicator (optional) ──┐
   │         12:34                │
   │                              │
-  │  ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▐▌▐▌ ▐▌▐▌ │  ← bars (decorative waveform)
-  │       ▐▌ ▐▌▐▌ ▐█▐▌▐▌▐▌     │
-  │  ▐▌▐▌ ▐▌▐▌ ▐▌ ▐█▐▌ ▐▌▐▌▐▌ │
+  │  ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▐▌▐▌ ▐▌▐▌    │  ← bars (decorative waveform)
+  │       ▐▌ ▐▌▐▌ ▐█▐▌▐▌▐▌       │
+  │  ▐▌▐▌ ▐▌▐▌ ▐▌ ▐█▐▌ ▐▌▐▌▐▌    │
   │               ╫              │  ← playhead (center-fixed, 2px)
   │               ╫              │
   │                              │
