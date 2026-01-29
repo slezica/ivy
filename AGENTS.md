@@ -455,8 +455,6 @@ __DEV_resetApp
 
 Run with `npm test` (or `npm test:watch` for watch mode).
 
-Tests are colocated in `__tests__/` directories next to the code they test.
-
 Tests are colocated in `__tests__/` directories next to the code they test. Action tests use shared helpers from `actions/__tests__/helpers.ts` for mock state, services, and immer-compatible `set`.
 
 ## Common Issues & Solutions
@@ -478,19 +476,6 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 - This is expected - files must be re-copied from local storage
 - Only local `file://` URIs should be used for playback
 
-
-## Shared Components
-
-`src/components/shared/` contains reusable UI components:
-
-- **ScreenArea** - Wraps screens with safe area insets (uses `react-native-safe-area-context`, NOT deprecated RN `SafeAreaView`)
-- **Header** - Standard screen header with `title`, `subtitle`, optional `children`, and `noBorder` prop
-- **InputHeader** - Search mode header with auto-focused text input and close button
-- **EmptyState** - Centered empty state display with `title` and `subtitle`
-- **IconButton** - Circular icon button
-- **ActionMenu** - Bottom sheet action menu (3-dot overflow pattern) with `ActionMenuItem[]`
-- **Dialog** - Simple dialog/modal component
-- **ErrorBoundary** - React error boundary for graceful error handling
 
 ## Utilities
 
@@ -667,63 +652,20 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
 2. Add route in `app/(tabs)/`
 3. Update tab bar in `app/(tabs)/_layout.tsx`
 
-## Key Patterns to Follow
+## Key Patterns
 
-✅ **Do:**
-- Define new actions in `src/actions/` using the `ActionFactory` pattern with explicit deps
-- Wire action dependencies in `store/index.ts`
-- Make all actions async (return `Promise<void>`)
-- Use services for all I/O (never call react-native-track-player, SQLite, FileSystem directly from components)
-- Import services from `services/` barrel export (e.g., `import { databaseService } from '../services'`)
-- Use dependency injection for services that depend on other services
-- Store all times in milliseconds internally
-- Set `library.status = 'adding'` when copying files, `playback.status = 'loading'` when loading player
-- Use local file:// URIs for all audio playback
-- Keep services stateless (state lives in store)
-- Pass `{ fileUri, position, ownerId }` when calling `play()` from UI components
-- Maintain local position state in playback components
-- Check `playback.ownerId === myId` before syncing from global playback state
-- Check `clip.file_uri !== null` before enabling edit/jump-to-source features
-- Use `clip.file_uri` (source) when available, fall back to `clip.uri` (clip's own file) when not
-- Use `book.id` (UUID) as the stable identifier for books (not `uri` which can be null)
-- Use `generateId()` from utils when creating new database entities
-- Look up `Book` metadata from `books` map using URI when needed (audio state only has uri/duration)
-- Queue changes via `syncQueue.queueChange()` when modifying synced entities
-- Use manifest comparison for sync change detection (not just timestamp comparison)
-- Subscribe to service events in the store via `service.on('event', handler)`
-
-❌ **Don't:**
-- Use external content: URIs for audio playback
-- Trigger React re-renders during TimelineBar animation (use refs)
-- Modify `status` from polling callback when in transitional state
-- Call `upsertBook` without a local URI
-- Call `play()` or `seek()` without file context from UI components
-- Assume global `playback.position` is relevant to your component (check ownership first)
-- Assume `Book.uri` is non-null (check before using for playback - null means archived or deleted)
-- Attempt to re-slice clips when source book is archived (`file_uri === null`)
-- Read book metadata from `playback` state (it only has hardware state: uri, duration)
-- Modify books/clips without queueing for sync (changes will be lost on other devices)
-- Delete manifest entries manually (sync service manages them)
+- All I/O goes through services — never call track-player, SQLite, or FileSystem from components
+- Services are stateless; all state lives in the Zustand store
+- All times are milliseconds internally
+- `book.uri` can be null (archived/deleted) — always check before using for playback
+- `playback` state is hardware-only (uri, duration, position, status, ownerId) — look up `Book` metadata from the `books` map
+- Don't trigger React re-renders during TimelineBar animation (use refs)
 
 ## Quick Reference
 
 **Start dev server:** `npm start`
+**Run tests:** `npm test`
 **Run e2e tests:** `maestro test maestro/`
-**Load test file:** Settings → Developer → Load Sample (dev only)
-**Reset app data:** Settings → Developer → Reset App (dev only)
-**Settings:** Library header → gear icon
-**Sync to Drive:** Settings → Sync now (or enable auto-sync toggle)
-**Time format:** Always milliseconds internally
-**ID format:** UUIDs (string) for all entities - use `generateId()` from utils
-**Book playback:** Use `book.uri` (local path) - check for null first (null = archived/deleted)
-**Book identifier:** Use `book.id` (UUID, stable), not `uri` (can be null)
-**Clip source check:** `clip.file_uri !== null` means source book available
-**Book states:** Active (`uri != null`), Archived (`uri == null && !hidden`), Deleted (`uri == null && hidden`)
-**Library status:** `loading → idle ⇄ adding`
-**Playback status:** `idle → loading → paused ⇄ playing`
-**Playback state:** Hardware-only (uri, duration, position, status, ownerId) - no Book metadata
-**Transcription status:** `idle ⇄ downloading ⇄ processing` (queue-level, not per-file)
-**Sessions:** Main player only, 5-min resume window, <1s sessions deleted, Record keyed by id
 
 ## System Media Controls
 
