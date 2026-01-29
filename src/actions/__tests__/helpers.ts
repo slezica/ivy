@@ -37,10 +37,15 @@ export function createMockPlayback(overrides: Partial<AppState['playback']> = {}
   }
 }
 
-export function createMockState(overrides: { playback?: Partial<AppState['playback']>, library?: Partial<AppState['library']> } = {}) {
+export function createMockState(overrides: {
+  playback?: Partial<AppState['playback']>,
+  library?: Partial<AppState['library']>,
+  books?: Record<string, Book>,
+} = {}) {
   return {
     playback: createMockPlayback(overrides.playback),
     library: { status: 'idle' as string, ...overrides.library },
+    books: overrides.books ?? {} as Record<string, Book>,
   }
 }
 
@@ -90,6 +95,8 @@ export function createMockDb(overrides: Record<string, jest.Mock | jest.Mock<any
     upsertBook: jest.fn(() => createMockBook()),
     restoreBook: jest.fn(() => createMockBook()),
     touchBook: jest.fn(),
+    archiveBook: jest.fn(),
+    hideBook: jest.fn(),
     ...overrides,
   } as any
 }
