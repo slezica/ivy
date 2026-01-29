@@ -14,6 +14,19 @@ Ivy is a local-first audiobook/podcast player written in React Native. It can:
 
 ## Topics
 
+### Playback
+
+Audio playback via react-native-track-player v5. See **[docs/PLAYBACK.md](docs/PLAYBACK.md)** for the full guide.
+
+**Quick summary:** `AudioPlayerService` wraps TrackPlayer with a millisecond API (TrackPlayer uses seconds). Multiple components can control playback via an ownership model (`playback.ownerId`). Playback state is hardware-only — no book metadata, just uri/position/duration/status/ownerId.
+
+**Key rules for working with playback:**
+- All times are milliseconds — the ms↔seconds boundary is inside `AudioPlayerService` only
+- Pass `{ fileUri, position, ownerId }` when calling `play()` from UI components
+- Check `playback.ownerId === myId` before syncing from global playback state
+- Don't update `playback.status` from audio events while in `'loading'` state
+- Only `MAIN_PLAYER_OWNER_ID` persists position to the database
+
 ### Clips
 
 Bookmarks with their own audio files. See **[docs/CLIPS.md](docs/CLIPS.md)** for the full guide.
@@ -120,50 +133,7 @@ set((state) => ({
 - `idle`: Library ready
 - `adding`: Copying a new file to app storage
 
-### 5. **Playback Status Enum**
-`'idle'` → `'loading'` → `'paused'` ⇄ `'playing'`
-- `idle`: No track loaded (initial state)
-- `loading`: Loading audio player
-- `paused`/`playing`: Playback states
-
-Event handler preserves transitional state (`loading`) - only updates to `paused`/`playing` when not in transition.
-
-### 6. **Playback Ownership** 🔥 IMPORTANT
-Multiple UI components can control playback (PlayerScreen, ClipViewer, ClipEditor). To prevent conflicts:
-- `playback.ownerId` tracks which component last took control
-- Components pass `ownerId` when calling `play()` to claim ownership
-- Ownership persists until another component calls `play()` with different `ownerId`
-- Components check `playback.ownerId === myId` to know if they're in control
-
-**Main Player ID:** `MAIN_PLAYER_OWNER_ID = 'main'` (exported from `utils/index.ts`)
-- Well-known ID for the main player tab
-- `loadFile()` uses this ID so PlayerScreen adopts newly loaded books
-- Any component can target the main player by using this ID
-
-```typescript
-// Main player checks for its well-known ID
-const isOwner = playback.ownerId === MAIN_PLAYER_OWNER_ID
-
-// Other components generate stable IDs
-const ownerId = useRef('clip-editor-123').current
-const isOwner = playback.ownerId === ownerId
-
-// Check ownership
-const isPlaying = isOwner && playback.status === 'playing'
-
-// Claim ownership when playing
-await play({ fileUri, position, ownerId })
-```
-
-**Local state pattern:** Each player maintains its own local state:
-- `ownPosition`: the position this player remembers (all players)
-- `ownBook`: the book this player is showing (PlayerScreen only - clips know their source)
-- When owner: sync `ownPosition` from `playback.position` via effect
-- When not owner: keep local position (allows seeking without affecting playback)
-- On play: claim ownership with `ownPosition`
-- On seek: always update `ownPosition`, only call `seek()` if owner
-
-### 7. **Books, Archiving, and Deletion** 🔥 IMPORTANT
+### 5. **Books, Archiving, and Deletion** 🔥 IMPORTANT
 The domain entity is called `Book` (not AudioFile). A Book represents an audiobook/podcast in the library.
 
 **File Fingerprint:** Each book stores `file_size` + `fingerprint` (first 4KB as BLOB). This enables:
@@ -463,14 +433,6 @@ fetchSessions, trackSession
 __DEV_resetApp
 ```
 
-**Context-based playback API:**
-- `play(context?: { fileUri, position, ownerId })` - Loads file if different, claims ownership
-- `seek(context: { fileUri, position })` - Only seeks if fileUri matches loaded file
-- `pause()` - Pauses, preserves ownership
-
-**PlaybackState is hardware-only:** The `playback` object reflects what's loaded in the player, not domain state. Components look up `Book` metadata from the `books` map using the URI when needed.
-
-
 ## File Loading Flow (Critical)
 
 1. **User picks file** → `pickedFile.uri` (external content: URI)
@@ -556,36 +518,12 @@ Located in `android/app/src/main/java/com/salezica/ivy/`:
 - Services are stateless; all state lives in the Zustand store
 - All times are milliseconds internally
 - `book.uri` can be null (archived/deleted) — always check before using for playback
-- `playback` state is hardware-only (uri, duration, position, status, ownerId) — look up `Book` metadata from the `books` map
-- Don't trigger React re-renders during TimelineBar animation (use refs)
 
 ## Quick Reference
 
 **Start dev server:** `npm start`
 **Run tests:** `npm test`
 **Run e2e tests:** `maestro test maestro/`
-
-## System Media Controls
-
-Uses `react-native-track-player` v5 for system-level playback integration:
-
-**Features:**
-- Media notification with play/pause, skip forward/backward
-- Lock screen controls
-- Bluetooth/headphone controls
-- Background playback
-
-**Architecture:**
-- `player.ts` - Wraps TrackPlayer API, converts ms↔seconds, manages setup
-- `integration.ts` - Playback service handling remote events (runs in separate context)
-- `index.js` - Registers playback service at app startup (must be before expo-router)
-
-**Key Points:**
-- TrackPlayer uses **seconds**, app uses **milliseconds** - player.ts handles conversion
-- `load()` accepts metadata (title, artist, artwork) for notification display
-- Events are handled via `TrackPlayer.addEventListener()` in integration.ts
-- Notification click opens `ivy://notification.click` → caught by `+not-found.tsx` → redirects to player
-- v5 API: use `TrackPlayer.getProgress()` instead of separate `getPosition()`/`getDuration()`
 
 
 # Next Steps
