@@ -1,6 +1,6 @@
 # The Transcription System
 
-A teaching guide for Ivy's on-device clip transcription. Start here — no code reading required.
+A guide for Ivy's on-device clip transcription.
 
 ## Table of Contents
 

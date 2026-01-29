@@ -1,6 +1,6 @@
 # The Playback System
 
-A teaching guide for Ivy's audio playback architecture. Start here — no code reading required.
+A guide for Ivy's audio playback architecture.
 
 ## Table of Contents
 

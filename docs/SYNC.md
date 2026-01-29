@@ -1,6 +1,6 @@
 # The Sync System
 
-A teaching guide for Ivy's Google Drive sync. Start here — no code reading required.
+A guide for Ivy's Google Drive sync.
 
 ## Table of Contents
 

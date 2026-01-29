@@ -1,6 +1,6 @@
 # The Sessions System
 
-A teaching guide for Ivy's listening history tracking. Start here — no code reading required.
+A guide for Ivy's listening history tracking.
 
 ## Table of Contents
 

@@ -1,6 +1,6 @@
 # The Clips System
 
-A teaching guide for Ivy's clip (bookmark) system. Start here — no code reading required.
+A guide for Ivy's clip (bookmark) system.
 
 ## Table of Contents
 
