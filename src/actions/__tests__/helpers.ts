@@ -140,6 +140,7 @@ export function createMockDb(overrides: Record<string, jest.Mock | jest.Mock<any
     updateSessionEndedAt: jest.fn(),
     deleteSession: jest.fn(),
     deleteClip: jest.fn(),
+    updateClip: jest.fn(),
     ...overrides,
   } as any
 }
