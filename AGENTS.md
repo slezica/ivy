@@ -18,6 +18,18 @@ Ivy is a local-first audiobook/podcast player written in React Native. It can:
 
 These are in-depth guides to aspects of the application. CRITICAL: before you start working on one of the following topics, read the corresponding guide to learn about it.
 
+### Books and Library
+
+File import, archiving, deletion, and restoration. See **[docs/BOOKS.md](docs/BOOKS.md)** for the full guide.
+
+**Quick summary:** Files are copied to app-owned storage on import. Each book is fingerprinted (file size + first 4KB) for duplicate detection. Adding a file that matches an archived/deleted book restores it with preserved position. Books use soft-delete (`hidden` flag), never hard-delete.
+
+**Key rules for working with books:**
+- `book.uri` can be null — always check before using for playback (null = archived or deleted)
+- Use `book.id` (UUID) as the stable identifier, not `uri` (which changes on restore)
+- Archive/delete are optimistic with rollback — update store first, then DB
+- Every book mutation must queue for sync (`syncQueue.queueChange`)
+
 ### Playback
 
 Audio playback via react-native-track-player v5. See **[docs/PLAYBACK.md](docs/PLAYBACK.md)** for the full guide.
@@ -374,63 +386,6 @@ set((state) => {
 set((state) => ({
   playback: { ...state.playback, status: 'playing' }
 }))
-```
-
-### 5. **Books, Archiving, and Deletion** 🔥 IMPORTANT
-The domain entity is called `Book`. A Book represents an audiobook/podcast in the library.
-
-**File Fingerprint:** Each book stores `file_size` + `fingerprint` (first 4KB as BLOB). This enables:
-- **Duplicate detection:** Adding the same file twice reuses the existing book record
-- **Automatic restore:** Adding a file that matches an archived/deleted book restores it with preserved position and clips
-
-**Book States:**
-| State | `uri` | `hidden` | Visible in UI |
-|-------|-------|----------|---------------|
-| Active | path | false | Main library list |
-| Archived | null | false | "Archived" section |
-| Deleted | null | true | Nowhere |
-
-**Archiving:** Users can archive books to free storage while keeping them visible:
-- `book.uri === null && !book.hidden` means the book is archived
-- Archiving deletes the underlying audio file but keeps the database record visible
-- Clips continue to work (they have their own audio files)
-- Archived books appear in a separate "Archived" section in LibraryScreen
-
-**Deletion (soft-delete):** Users can remove books from their library entirely:
-- `book.uri === null && book.hidden` means the book is deleted
-- Deletion deletes the audio file AND hides the book from all UI
-- Book record remains in database (for potential restore via fingerprint)
-- Clips of deleted books still appear in clips list (they're independent)
-
-**Archive action flow:**
-1. Optimistic store update (set `uri: null`)
-2. Database update (with rollback on failure)
-3. Async file deletion (fire-and-forget)
-
-**Delete action flow:**
-1. Optimistic store update (remove from `books` map)
-2. Database update: set `uri: null`, `hidden: true` (with rollback on failure)
-3. Async file deletion (fire-and-forget)
-
-**Restore flow (automatic on file add):**
-1. File copied to app storage
-2. Fingerprint read (file size + first 4KB)
-3. If fingerprint matches archived/deleted book → restore: update `uri`, set `hidden: false`, replace metadata, preserve position
-4. If fingerprint matches active book → delete duplicate file, touch `updated_at`
-5. If no match → create new book record
-
-```typescript
-// Check book state
-const isArchived = book.uri === null && !book.hidden
-const isDeleted = book.uri === null && book.hidden
-
-// Archive a book (keeps visible in Archived section)
-await archiveBook(bookId)
-
-// Delete a book (removes from library entirely)
-await deleteBook(bookId)
-
-// Restore happens automatically when same file is added again
 ```
 
 ## Unit Testing (Jest)
