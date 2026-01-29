@@ -553,42 +553,14 @@ const initialPosition = hasSourceFile ? clip.start : 0
 
 ## Transcription Architecture
 
-On-device automatic clip transcription using Whisper. Controlled by `settings.transcription_enabled` (default: true).
+On-device automatic clip transcription using Whisper. See **[docs/TRANSCRIPTION.md](docs/TRANSCRIPTION.md)** for the full guide.
 
-**Service Status:** Both services emit status events with different granularity:
-- **WhisperService** (`WhisperServiceStatus`): `'idle'` ↔ `'processing'` per-file, plus `'downloading'` during model fetch
-- **TranscriptionQueueService** (`TranscriptionServiceStatus`): `'processing'` for entire queue drain, `'idle'` only when empty, forwards `'downloading'` from whisper
+**Quick summary:** Clips are queued for transcription on creation → processed sequentially by a background queue → first 10s of audio extracted and fed to on-device Whisper → result saved to `clips.transcription` column. Controlled by `settings.transcription_enabled`.
 
-**Flow:**
-1. Clip created → `transcriptionService.queueClip(clipId)` → emits `queued` (no-op if service not started)
-2. Queue processing begins → emits `status: 'processing'`
-3. `audioSlicerService` extracts first 10s from clip's audio file (`clip.uri`)
-4. `whisperService` transcribes the audio (using whisper.rn with ggml-small model)
-5. Result stored in `clips.transcription` column → emits `finish`
-6. Queue empty → emits `status: 'idle'`
-
-**Services** (`services/transcription/`):
-- `whisper.ts` - Downloads/caches Whisper model, runs transcription, emits status events
-- `queue.ts` - Background queue that processes clips sequentially, emits status events
-
-**Start/Stop Behavior:**
-- `start()` - No-op if already started. Initializes whisper, queues all untranscribed clips, begins processing
-- `stop()` - No-op if not started. Clears queue immediately, emits `'idle'` status
-- `queueClip()` - No-op if service not started (clips created while disabled are picked up on re-enable)
-
-**Model Download Resilience:**
-- Downloads to `{modelPath}.download` temp file
-- Only renames to final path after successful download
-- Partial/corrupted `.download` files are overwritten on retry
-- `downloading` boolean prevents concurrent download attempts
-
-**Key Points:**
-- Model auto-downloads on first use (~150MB ggml-small.bin from HuggingFace)
-- Processing is sequential (one clip at a time) to avoid overload
-- Failed transcriptions retry on next `start()` (transcription stays null)
-- Transcription displayed in ClipViewer below the time
-- `note` and `transcription` are separate fields (user notes vs auto-generated)
-- UI shows status in SettingsScreen: "Downloading model..." or "Processing..." (nothing when idle)
+**Key rules for working with transcription:**
+- `note` and `transcription` are separate fields (user-written vs auto-generated)
+- `queueClip()` is a no-op if the service isn't started — clips are picked up on re-enable
+- If clip bounds change, clear `transcription` and re-queue
 
 ## Listening History (Sessions)
 
