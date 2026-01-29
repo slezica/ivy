@@ -8,7 +8,6 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
 import java.io.File
-import java.io.FileOutputStream
 import java.nio.ByteBuffer
 
 class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -69,15 +68,7 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
             } else -1L
             android.util.Log.d("AudioSlicer", "Audio format: mime=$mime, duration=${duration}us (${duration/1000}ms)")
 
-            // For MP3 files, use simple byte copying approach
-            if (mime.contains("mp3") || mime.contains("mpeg")) {
-                val finalPath = "$outputPath.mp3"
-                sliceMP3(extractor, audioTrackIndex, startTimeMs, endTimeMs, finalPath, promise)
-                return
-            }
-
-            // For other formats (AAC, etc.), use MediaMuxer
-            // MediaMuxer outputs MPEG-4 container, so we need .m4a extension
+            // All formats go through MediaMuxer → M4A output
             val finalPath = "$outputPath.m4a"
             android.util.Log.d("AudioSlicer", "Using muxer, output path: $finalPath")
             sliceWithMuxer(extractor, audioTrackIndex, audioFormat, startTimeMs, endTimeMs, finalPath, promise)
@@ -90,70 +81,6 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
                 android.util.Log.e("AudioSlicer", "Cause: ${it.javaClass.name}: ${it.message}")
             }
             promise.reject("ERROR", "Slice failed: ${e.message}", e)
-        }
-    }
-
-    private fun sliceMP3(
-        extractor: MediaExtractor,
-        trackIndex: Int,
-        startTimeMs: Double,
-        endTimeMs: Double,
-        outputPath: String,
-        promise: Promise
-    ) {
-        try {
-            extractor.selectTrack(trackIndex)
-
-            val startTimeUs = (startTimeMs * 1000).toLong()
-            val endTimeUs = (endTimeMs * 1000).toLong()
-            extractor.seekTo(startTimeUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-
-            // Create output file
-            val outputFile = File(outputPath)
-            outputFile.parentFile?.mkdirs()
-
-            FileOutputStream(outputFile).use { outputStream ->
-                val buffer = ByteBuffer.allocate(256 * 1024) // 256KB buffer
-                var bytesWritten = 0
-
-                while (true) {
-                    val sampleTime = extractor.sampleTime
-
-                    // sampleTime == -1 means no more samples (small negative values are valid encoder delay)
-                    if (sampleTime == -1L || sampleTime > endTimeUs) {
-                        break
-                    }
-
-                    buffer.clear()
-                    val sampleSize = extractor.readSampleData(buffer, 0)
-
-                    if (sampleSize < 0) {
-                        break
-                    }
-
-                    // Write to output file
-                    val byteArray = ByteArray(sampleSize)
-                    buffer.get(byteArray)
-                    outputStream.write(byteArray)
-                    bytesWritten += sampleSize
-
-                    extractor.advance()
-                }
-
-                if (bytesWritten == 0) {
-                    promise.reject("ERROR", "No data written - check time range")
-                    extractor.release()
-                    outputFile.delete()
-                    return
-                }
-            }
-
-            extractor.release()
-            promise.resolve(outputPath)
-
-        } catch (e: Exception) {
-            extractor.release()
-            promise.reject("ERROR", "MP3 slice failed: ${e.message}", e)
         }
     }
 

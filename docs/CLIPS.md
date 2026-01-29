@@ -37,7 +37,7 @@ Clips live independently of their source book. Even if the user archives the boo
 
 ### 1. Every clip has its own audio file
 
-When a clip is created, the relevant segment is extracted from the source book and saved as a standalone audio file at `{DocumentDirectory}/clips/{clipId}.{ext}`. The format matches the source (`.mp3` for MP3 books, `.m4a` for AAC/M4A books). This file is the clip's permanent audio — it doesn't depend on the source book existing.
+When a clip is created, the relevant segment is extracted from the source book and saved as a standalone audio file at `{DocumentDirectory}/clips/{clipId}.m4a`. All clips are output as `.m4a` regardless of source format — the native slicer remuxes all audio into an MPEG-4 container via MediaMuxer. This file is the clip's permanent audio — it doesn't depend on the source book existing.
 
 ### 2. Clips reference their source, but don't require it
 
@@ -112,12 +112,9 @@ range:  [position .. position + clipDuration]
 prefix: {DocumentDirectory}/clips/{clipId}
 ```
 
-The slicer is a Kotlin native module. It preserves the source format — no re-encoding:
+The slicer is a Kotlin native module. It routes all formats through MediaMuxer with `MUXER_OUTPUT_MPEG_4`, which remuxes compressed audio frames into an M4A container without re-encoding. The output is always `.m4a`.
 
-- **MP3 sources** → raw byte copy → `.mp3` output
-- **AAC/M4A sources** → MediaMuxer remux → `.m4a` output
-
-The JS side passes a filename prefix (no extension) to the native module, which appends the correct extension based on the detected audio format. The JS code uses the native return value (the actual path), so the correct extension is what gets stored in the database. This means **clip files are not always MP3** — they match their source format.
+The JS side passes a filename prefix (no extension) to the native module, which appends `.m4a`. The JS code uses the native return value (the actual path), so the correct extension is what gets stored in the database.
 
 ### Step 4: Save to database
 
@@ -363,7 +360,7 @@ The clip continues to work — it has its own audio file. The UI adapts by hidin
 
 When a clip is deleted, `slicer.cleanup()` deletes its audio file. If the file is already missing (e.g., manually deleted), cleanup handles it silently.
 
-When bounds are edited, the native slicer writes the new slice to the same prefix, overwriting the old file in place. (The extension is determined by the native module based on the source format — `.mp3` or `.m4a`.)
+When bounds are edited, the native slicer writes the new slice to the same prefix, overwriting the old file in place (always `.m4a`).
 
 ### Database reload after creation
 

@@ -36,12 +36,12 @@ import { mergeBook, mergeClip } from './merge'
 export * from './types'
 
 // Filename format: {type}_{id}.{ext}
-const FILENAME_REGEX = /^(book|clip)_([a-f0-9-]+)\.(json|mp3)$/
+const FILENAME_REGEX = /^(book|clip)_([a-f0-9-]+)\.(json|mp3|m4a)$/
 
 interface ParsedFilename {
   type: 'book' | 'clip'
   id: string
-  extension: 'json' | 'mp3'
+  extension: 'json' | 'mp3' | 'm4a'
 }
 
 export type BackupSyncEvents = {
@@ -255,20 +255,20 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const result = new Map<string, RemoteClip>()
 
     // Group files by clip ID
-    const filesByClipId = new Map<string, { json?: DriveFile; mp3?: DriveFile }>()
+    const filesByClipId = new Map<string, { json?: DriveFile; audio?: DriveFile }>()
     for (const file of files) {
       const parsed = parseFilename(file.name)
       if (!parsed || parsed.type !== 'clip') continue
 
       const existing = filesByClipId.get(parsed.id) ?? {}
       if (parsed.extension === 'json') existing.json = file
-      if (parsed.extension === 'mp3') existing.mp3 = file
+      else existing.audio = file
       filesByClipId.set(parsed.id, existing)
     }
 
     // Parse JSON files
-    for (const [clipId, { json, mp3 }] of filesByClipId) {
-      if (!json || !mp3) continue // Need both files
+    for (const [clipId, { json, audio }] of filesByClipId) {
+      if (!json || !audio) continue // Need both files
 
       try {
         const content = await this.drive.downloadFile(json.id, false) as string
@@ -278,7 +278,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         result.set(clipId, {
           backup,
           jsonFileId: json.id,
-          mp3FileId: mp3.id,
+          audioFileId: audio.id,
+          audioFilename: audio.name,
           modifiedAt,
         })
       } catch (error) {
@@ -323,7 +324,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       result.downloaded.clips++
     }
     for (const del of plan.clips.deletes) {
-      await this.executeDeleteClip(del.clipId, del.jsonFileId, del.mp3FileId, result)
+      await this.executeDeleteClip(del.clipId, del.jsonFileId, del.audioFileId, result)
     }
 
     // Clean up orphaned manifest entries
@@ -399,7 +400,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         local_updated_at: book.updated_at,
         remote_updated_at: book.updated_at,
         remote_file_id: uploaded.id,
-        remote_mp3_file_id: null,
+        remote_audio_file_id: null,
       })
 
       result.uploaded.books++
@@ -433,7 +434,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       local_updated_at: backup.updated_at,
       remote_updated_at: backup.updated_at,
       remote_file_id: remote.fileId,
-      remote_mp3_file_id: null,
+      remote_audio_file_id: null,
     })
 
     notification.booksChanged.push(backup.id)
@@ -491,10 +492,11 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
   private async executeUploadClip(clip: Clip, result: SyncResult): Promise<void> {
     const jsonFilename = `clip_${clip.id}.json`
-    const mp3Filename = `clip_${clip.id}.mp3`
+    const ext = clip.uri.split('.').pop() ?? 'm4a'
+    const audioFilename = `clip_${clip.id}.${ext}`
 
     let jsonFileId: string | null = null
-    let mp3FileId: string | null = null
+    let audioFileId: string | null = null
 
     try {
       const backup: ClipBackup = {
@@ -508,30 +510,33 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         updated_at: clip.updated_at,
       }
 
-      // Delete existing files first
+      // Delete existing files first (match by prefix to handle format changes)
       const remoteFiles = await this.drive.listFiles('clips')
       const existingJson = remoteFiles.find(f => f.name === jsonFilename)
-      const existingMp3 = remoteFiles.find(f => f.name === mp3Filename)
+      const existingAudio = remoteFiles.find(f => {
+        const parsed = parseFilename(f.name)
+        return parsed?.type === 'clip' && parsed.id === clip.id && parsed.extension !== 'json'
+      })
 
       if (existingJson) await this.drive.deleteFile(existingJson.id)
-      if (existingMp3) await this.drive.deleteFile(existingMp3.id)
+      if (existingAudio) await this.drive.deleteFile(existingAudio.id)
 
       // Upload JSON first
       const jsonContent = JSON.stringify(backup, null, 2)
       const jsonFile = await this.drive.uploadFile('clips', jsonFilename, jsonContent)
       jsonFileId = jsonFile.id
 
-      // Upload MP3 (with size check to prevent OOM)
+      // Upload audio (with size check to prevent OOM)
       const clipPath = clip.uri.replace('file://', '')
       const fileStat = await RNFS.stat(clipPath)
       const MAX_CLIP_SIZE = 50 * 1024 * 1024  // 50MB limit
       if (fileStat.size > MAX_CLIP_SIZE) {
         throw new Error(`Clip file too large (${Math.round(fileStat.size / 1024 / 1024)}MB). Max: 50MB`)
       }
-      const mp3Content = await RNFS.readFile(clipPath, 'base64')
-      const mp3Bytes = base64ToUint8Array(mp3Content)
-      const mp3File = await this.drive.uploadFile('clips', mp3Filename, mp3Bytes)
-      mp3FileId = mp3File.id
+      const audioContent = await RNFS.readFile(clipPath, 'base64')
+      const audioBytes = base64ToUint8Array(audioContent)
+      const audioFile = await this.drive.uploadFile('clips', audioFilename, audioBytes)
+      audioFileId = audioFile.id
 
       // Update manifest
       this.db.upsertManifestEntry({
@@ -540,14 +545,14 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         local_updated_at: clip.updated_at,
         remote_updated_at: clip.updated_at,
         remote_file_id: jsonFileId,
-        remote_mp3_file_id: mp3FileId,
+        remote_audio_file_id: audioFileId,
       })
 
       result.uploaded.clips++
       console.log(`Uploaded clip: ${clip.id}`)
     } catch (error) {
-      // Rollback: if JSON uploaded but MP3 failed, delete JSON to prevent orphans
-      if (jsonFileId && !mp3FileId) {
+      // Rollback: if JSON uploaded but audio failed, delete JSON to prevent orphans
+      if (jsonFileId && !audioFileId) {
         let rollbackSuccess = false
         for (let attempt = 0; attempt < 3 && !rollbackSuccess; attempt++) {
           try {
@@ -568,20 +573,21 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   private async executeDownloadClip(remote: RemoteClip, notification: SyncNotification): Promise<void> {
     const backup = remote.backup
 
-    // Download MP3
-    const mp3Bytes = await this.drive.downloadFile(remote.mp3FileId, true) as Uint8Array
+    // Download audio
+    const audioBytes = await this.drive.downloadFile(remote.audioFileId, true) as Uint8Array
 
-    // Save MP3 to clips directory
+    // Save audio to clips directory, preserving remote extension
     const clipsDir = `${RNFS.DocumentDirectoryPath}/clips`
     if (!(await RNFS.exists(clipsDir))) {
       await RNFS.mkdir(clipsDir)
     }
 
-    const localMp3Path = `${clipsDir}/${backup.id}.mp3`
-    const mp3Base64 = uint8ArrayToBase64(mp3Bytes)
-    await RNFS.writeFile(localMp3Path, mp3Base64, 'base64')
+    const ext = remote.audioFilename.split('.').pop() ?? 'm4a'
+    const localAudioPath = `${clipsDir}/${backup.id}.${ext}`
+    const audioBase64 = uint8ArrayToBase64(audioBytes)
+    await RNFS.writeFile(localAudioPath, audioBase64, 'base64')
 
-    const localUri = `file://${localMp3Path}`
+    const localUri = `file://${localAudioPath}`
 
     // Restore to database
     this.db.restoreClipFromBackup(
@@ -603,7 +609,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       local_updated_at: backup.updated_at,
       remote_updated_at: backup.updated_at,
       remote_file_id: remote.jsonFileId,
-      remote_mp3_file_id: remote.mp3FileId,
+      remote_audio_file_id: remote.audioFileId,
     })
 
     notification.clipsChanged.push(backup.id)
@@ -613,12 +619,12 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   private async executeDeleteClip(
     clipId: string,
     jsonFileId: string | null,
-    mp3FileId: string | null,
+    audioFileId: string | null,
     result: SyncResult
   ): Promise<void> {
     try {
       if (jsonFileId) await this.drive.deleteFile(jsonFileId)
-      if (mp3FileId) await this.drive.deleteFile(mp3FileId)
+      if (audioFileId) await this.drive.deleteFile(audioFileId)
 
       // Clean up manifest
       this.db.deleteManifestEntry('clip', clipId)
@@ -654,11 +660,14 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
           // Find remote files to delete
           const remoteFiles = await this.drive.listFiles('clips')
           const jsonFile = remoteFiles.find(f => f.name === `clip_${item.entity_id}.json`)
-          const mp3File = remoteFiles.find(f => f.name === `clip_${item.entity_id}.mp3`)
+          const audioFile = remoteFiles.find(f => {
+            const parsed = parseFilename(f.name)
+            return parsed?.type === 'clip' && parsed.id === item.entity_id && parsed.extension !== 'json'
+          })
           await this.executeDeleteClip(
             item.entity_id,
             jsonFile?.id ?? null,
-            mp3File?.id ?? null,
+            audioFile?.id ?? null,
             result
           )
         }

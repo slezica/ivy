@@ -21,7 +21,8 @@ export interface RemoteBook {
 export interface RemoteClip {
   backup: ClipBackup
   jsonFileId: string
-  mp3FileId: string
+  audioFileId: string
+  audioFilename: string
   modifiedAt: number
 }
 
@@ -70,7 +71,7 @@ export interface ClipMerge {
 export interface ClipDelete {
   clipId: string
   jsonFileId: string | null
-  mp3FileId: string | null
+  audioFileId: string | null
 }
 
 export interface SyncPlan {
@@ -204,7 +205,7 @@ function planClipSync(state: SyncState): SyncPlan['clips'] {
       deletes.push({
         clipId,
         jsonFileId: remote.jsonFileId,
-        mp3FileId: remote.mp3FileId,
+        audioFileId: remote.audioFileId,
       })
     }
   }

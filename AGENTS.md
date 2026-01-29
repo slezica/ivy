@@ -47,7 +47,7 @@ Audio playback via react-native-track-player v5. See **[docs/PLAYBACK.md](docs/P
 
 Bookmarks with their own audio files. See **[docs/CLIPS.md](docs/CLIPS.md)** for the full guide.
 
-**Quick summary:** Clips are sliced from source books as standalone audio files at `clips/{uuid}.{ext}` (format matches the source). They work independently of the source — if the book is archived, clips fall back to their own audio. Each clip has a note (user-written) and a transcription (auto-generated).
+**Quick summary:** Clips are sliced from source books as standalone `.m4a` audio files at `clips/{uuid}.m4a`. They work independently of the source — if the book is archived, clips fall back to their own audio. Each clip has a note (user-written) and a transcription (auto-generated).
 
 **Key rules for working with clips:**
 - Check `clip.file_uri !== null` before enabling edit or "go to source"
@@ -241,7 +241,7 @@ entity_id TEXT NOT NULL
 local_updated_at INTEGER       -- Local timestamp at last sync
 remote_updated_at INTEGER      -- Remote timestamp at last sync
 remote_file_id TEXT            -- Drive file ID (JSON)
-remote_mp3_file_id TEXT        -- Drive file ID (MP3, clips only)
+remote_audio_file_id TEXT      -- Drive file ID (audio, clips only)
 synced_at INTEGER NOT NULL
 PRIMARY KEY (entity_type, entity_id)
 ```

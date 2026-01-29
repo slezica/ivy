@@ -153,7 +153,7 @@ Stored in the `sync_manifest` SQLite table, each entry records:
 | `local_updated_at` | The entity's local `updated_at` at the time of last sync |
 | `remote_updated_at` | The remote `modifiedTime` at the time of last sync |
 | `remote_file_id` | The Drive file ID for the JSON backup |
-| `remote_mp3_file_id` | The Drive file ID for the MP3 (clips only) |
+| `remote_audio_file_id` | The Drive file ID for the audio file (clips only) |
 
 ### Change detection
 
@@ -187,7 +187,7 @@ Three things are collected sequentially:
 2. **Remote state** — all files listed from Drive's `books/` and `clips/` folders, each downloaded and parsed one by one
 3. **Manifests** — all entries from the `sync_manifest` table, indexed as `"book:id"` or `"clip:id"`
 
-For remote clips, files are grouped by ID: each clip has a `.json` and a `.mp3` file. Both must be present for the clip to be considered valid.
+For remote clips, files are grouped by ID: each clip has a `.json` and an audio file (`.m4a` or `.mp3`). Both must be present for the clip to be considered valid.
 
 ### Step 3: Plan
 
@@ -324,9 +324,9 @@ My Drive/
     books/                      ← One JSON file per book
       book_abc123-def456.json
       book_789xyz-012abc.json
-    clips/                      ← JSON + MP3 pair per clip
+    clips/                      ← JSON + audio pair per clip
       clip_def456-789xyz.json
-      clip_def456-789xyz.mp3
+      clip_def456-789xyz.m4a
 ```
 
 ### File naming convention
@@ -334,9 +334,9 @@ My Drive/
 Files are named `{type}_{uuid}.{ext}`:
 - `book_<id>.json` — book metadata
 - `clip_<id>.json` — clip metadata
-- `clip_<id>.mp3` — clip audio
+- `clip_<id>.m4a` — clip audio (legacy clips may use `.mp3`)
 
-The filename regex is: `/^(book|clip)_([a-f0-9-]+)\.(json|mp3)$/`
+The filename regex is: `/^(book|clip)_([a-f0-9-]+)\.(json|mp3|m4a)$/`
 
 ### Upload strategy
 

@@ -81,7 +81,7 @@ export interface SyncManifestEntry {
   local_updated_at: number | null   // Local timestamp at last sync
   remote_updated_at: number | null  // Remote timestamp at last sync
   remote_file_id: string | null     // Drive file ID (JSON)
-  remote_mp3_file_id: string | null // Drive file ID (MP3, clips only)
+  remote_audio_file_id: string | null // Drive file ID (MP3, clips only)
   synced_at: number
 }
 
@@ -171,7 +171,7 @@ const migrations: Migration[] = [
         local_updated_at INTEGER,
         remote_updated_at INTEGER,
         remote_file_id TEXT,
-        remote_mp3_file_id TEXT,
+        remote_audio_file_id TEXT,
         synced_at INTEGER NOT NULL,
         PRIMARY KEY (entity_type, entity_id)
       );
@@ -210,6 +210,11 @@ const migrations: Migration[] = [
   // Migration 1: Add transcription_enabled setting
   (db) => {
     db.execSync('ALTER TABLE settings ADD COLUMN transcription_enabled INTEGER NOT NULL DEFAULT 1')
+  },
+
+  // Migration 2: Rename remote_mp3_file_id → remote_audio_file_id
+  (db) => {
+    db.execSync('ALTER TABLE sync_manifest RENAME COLUMN remote_mp3_file_id TO remote_audio_file_id')
   },
 ]
 
@@ -707,15 +712,15 @@ export class DatabaseService {
   upsertManifestEntry(entry: Omit<SyncManifestEntry, 'synced_at'>): void {
     const now = Date.now()
     this.db.runSync(
-      `INSERT INTO sync_manifest (entity_type, entity_id, local_updated_at, remote_updated_at, remote_file_id, remote_mp3_file_id, synced_at)
+      `INSERT INTO sync_manifest (entity_type, entity_id, local_updated_at, remote_updated_at, remote_file_id, remote_audio_file_id, synced_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(entity_type, entity_id) DO UPDATE SET
          local_updated_at = excluded.local_updated_at,
          remote_updated_at = excluded.remote_updated_at,
          remote_file_id = excluded.remote_file_id,
-         remote_mp3_file_id = excluded.remote_mp3_file_id,
+         remote_audio_file_id = excluded.remote_audio_file_id,
          synced_at = excluded.synced_at`,
-      [entry.entity_type, entry.entity_id, entry.local_updated_at, entry.remote_updated_at, entry.remote_file_id, entry.remote_mp3_file_id ?? null, now]
+      [entry.entity_type, entry.entity_id, entry.local_updated_at, entry.remote_updated_at, entry.remote_file_id, entry.remote_audio_file_id ?? null, now]
     )
   }
 

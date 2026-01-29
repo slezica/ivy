@@ -80,7 +80,8 @@ describe('planSync', () => {
         updated_at,
       },
       jsonFileId: `json-${id}`,
-      mp3FileId: `mp3-${id}`,
+      audioFileId: `audio-${id}`,
+      audioFilename: `clip_${id}.m4a`,
       modifiedAt,
     }
   }
@@ -98,7 +99,7 @@ describe('planSync', () => {
       local_updated_at,
       remote_updated_at,
       remote_file_id: `file-${id}`,
-      remote_mp3_file_id: type === 'clip' ? `mp3-${id}` : null,
+      remote_audio_file_id: type === 'clip' ? `audio-${id}` : null,
       synced_at: Math.max(local_updated_at, remote_updated_at),
     }
   }
@@ -313,7 +314,7 @@ describe('planSync', () => {
         const plan = planSync(state)
 
         expect(plan.clips.deletes[0].jsonFileId).toBe('json-clip-1')
-        expect(plan.clips.deletes[0].mp3FileId).toBe('mp3-clip-1')
+        expect(plan.clips.deletes[0].audioFileId).toBe('audio-clip-1')
       })
     })
   })
@@ -376,7 +377,7 @@ describe('planSync', () => {
         local_updated_at: null as any, // Simulate potential DB null
         remote_updated_at: null as any,
         remote_file_id: 'file-1',
-        remote_mp3_file_id: null,
+        remote_audio_file_id: null,
         synced_at: 0,
       }
       state.manifests.set('book:book-1', manifest)
