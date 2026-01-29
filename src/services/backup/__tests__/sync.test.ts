@@ -1,5 +1,5 @@
 import { BackupSyncService } from '../sync'
-import type { DatabaseService } from '../../storage'
+import type { DatabaseService, Book } from '../../storage'
 import type { GoogleDriveService } from '../drive'
 import type { GoogleAuthService } from '../auth'
 import type { SyncQueueService } from '../queue'
@@ -10,6 +10,15 @@ import type { SyncQueueService } from '../queue'
  * Bug #2: Race condition where multiple syncNow() calls could
  * run concurrently before the isSyncing flag was set.
  */
+
+// Helper: encode Uint8Array to base64 (mirrors sync.ts internal helper)
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
 
 describe('BackupSyncService', () => {
   // Mock dependencies
@@ -23,6 +32,7 @@ describe('BackupSyncService', () => {
       upsertManifestEntry: jest.fn(),
       deleteManifestEntry: jest.fn(),
       getBookById: jest.fn(),
+      getBookByFingerprint: jest.fn(() => null),
       getClip: jest.fn(),
       restoreBookFromBackup: jest.fn(),
       restoreClipFromBackup: jest.fn(),
@@ -166,6 +176,112 @@ describe('BackupSyncService', () => {
 
       // Sync should not have started
       expect(syncCompletedCount).toBe(0)
+    })
+  })
+
+  describe('fingerprint deduplication', () => {
+    const FINGERPRINT = new Uint8Array([1, 2, 3, 4])
+    const FINGERPRINT_B64 = uint8ArrayToBase64(FINGERPRINT)
+    const FILE_SIZE = 1000000
+
+    function createLocalBook(id: string): Book {
+      return {
+        id,
+        uri: `file:///path/to/${id}.mp3`,
+        name: `Book ${id}`,
+        duration: 60000,
+        position: 5000,
+        updated_at: 1000,
+        title: 'My Book',
+        artist: 'Author',
+        artwork: null,
+        file_size: FILE_SIZE,
+        fingerprint: FINGERPRINT,
+        hidden: false,
+      }
+    }
+
+    function setupSyncWithRemoteBook(deps: ReturnType<typeof createMockDeps>, remoteId: string) {
+      const { db, drive } = deps
+      const remoteBookJson = JSON.stringify({
+        id: remoteId,
+        name: 'Book remote',
+        duration: 60000,
+        position: 3000,
+        updated_at: 2000,
+        title: 'My Book',
+        artist: 'Author',
+        artwork: null,
+        file_size: FILE_SIZE,
+        fingerprint: FINGERPRINT_B64,
+        hidden: false,
+      })
+
+      // Drive returns one remote book JSON file
+      drive.listFiles.mockImplementation(async (folder: string) => {
+        if (folder === 'books') {
+          return [{ id: 'drive-file-1', name: `book_${remoteId}.json`, modifiedTime: new Date(2000).toISOString() }]
+        }
+        return []
+      })
+      drive.downloadFile.mockResolvedValue(remoteBookJson)
+
+      return { remoteBookJson }
+    }
+
+    it('skips download when remote book fingerprint matches a local book with different ID', async () => {
+      const deps = createMockDeps()
+      const { db } = deps
+      const localBook = createLocalBook('a0a0-a0a0')
+
+      // Local state: one book
+      db.getAllBooks.mockReturnValue([localBook])
+
+      // Fingerprint lookup returns the local book (same content, different ID)
+      db.getBookByFingerprint.mockReturnValue(localBook)
+
+      setupSyncWithRemoteBook(deps, 'b0b0-b0b0')
+
+      const service = new BackupSyncService(db, deps.drive, deps.auth, deps.syncQueue)
+      await service.syncNow()
+
+      // restoreBookFromBackup should NOT have been called — the download was skipped
+      expect(db.restoreBookFromBackup).not.toHaveBeenCalled()
+    })
+
+    it('allows download when no fingerprint match exists', async () => {
+      const deps = createMockDeps()
+      const { db } = deps
+
+      // No local books, no fingerprint match
+      db.getBookByFingerprint.mockReturnValue(null)
+
+      setupSyncWithRemoteBook(deps, 'b0b0-b0b0')
+
+      const service = new BackupSyncService(db, deps.drive, deps.auth, deps.syncQueue)
+      await service.syncNow()
+
+      // restoreBookFromBackup SHOULD have been called for the remote book
+      expect(db.restoreBookFromBackup).toHaveBeenCalled()
+      expect(db.restoreBookFromBackup.mock.calls[0][0]).toBe('b0b0-b0b0')
+    })
+
+    it('allows download when fingerprint matches the same ID (not a duplicate)', async () => {
+      const deps = createMockDeps()
+      const { db } = deps
+      const localBook = createLocalBook('aabb-ccdd')
+
+      db.getAllBooks.mockReturnValue([localBook])
+      // Fingerprint matches, but it's the same book ID — this is an update, not a duplicate
+      db.getBookByFingerprint.mockReturnValue(localBook)
+
+      setupSyncWithRemoteBook(deps, 'aabb-ccdd')
+
+      const service = new BackupSyncService(db, deps.drive, deps.auth, deps.syncQueue)
+      await service.syncNow()
+
+      // This is a legitimate update to the same book — should proceed
+      expect(db.restoreBookFromBackup).toHaveBeenCalled()
     })
   })
 })

@@ -336,6 +336,15 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   // ---------------------------------------------------------------------------
 
   private async executeMergeBook(local: Book, remote: RemoteBook, result: SyncResult): Promise<void> {
+    // Check if the remote book's fingerprint matches a different local book.
+    // This happens when two devices independently add the same file.
+    const fingerprint = base64ToUint8Array(remote.backup.fingerprint)
+    const fingerprintMatch = this.db.getBookByFingerprint(remote.backup.file_size, fingerprint)
+    if (fingerprintMatch && fingerprintMatch.id !== local.id && fingerprintMatch.id !== remote.backup.id) {
+      console.log(`Skipping merge of book ${remote.backup.id}: fingerprint matches existing book ${fingerprintMatch.id}`)
+      return
+    }
+
     const { merged, resolution } = mergeBook(local, remote.backup)
 
     // Update local database with merged result
@@ -412,6 +421,15 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
   private async executeDownloadBook(remote: RemoteBook, notification: SyncNotification): Promise<void> {
     const backup = remote.backup
+    const fingerprint = base64ToUint8Array(backup.fingerprint)
+
+    // Check if a local book with the same fingerprint already exists under a different ID.
+    // This happens when two devices independently add the same file (each generates its own UUID).
+    const existingBook = this.db.getBookByFingerprint(backup.file_size, fingerprint)
+    if (existingBook && existingBook.id !== backup.id) {
+      console.log(`Skipping download of book ${backup.id}: fingerprint matches existing book ${existingBook.id}`)
+      return
+    }
 
     this.db.restoreBookFromBackup(
       backup.id,
@@ -423,7 +441,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       backup.artist,
       backup.artwork,
       backup.file_size,
-      base64ToUint8Array(backup.fingerprint),
+      fingerprint,
       backup.hidden ?? false  // Backward compat: old backups may not have hidden field
     )
 
