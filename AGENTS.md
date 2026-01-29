@@ -500,51 +500,20 @@ Located in `android/app/src/main/java/com/salezica/ivy/`:
 - Wrapped by `services/audio/metadata.ts`
 - Interface: `extractMetadata(filePath) → Promise<{ title, artist, artwork, duration }>`
 
-## Clip File Storage
+## Clips 🔥 IMPORTANT
 
-Clips have their own persistent audio files, stored separately from source files:
+Bookmarks with their own audio files. See **[docs/CLIPS.md](docs/CLIPS.md)** for the full guide.
 
-**Storage Location:** `DocumentDirectoryPath/clips/{uuid}.mp3`
+**Quick summary:** Clips are sliced from source books as standalone MP3s at `clips/{uuid}.mp3`. They work independently of the source — if the book is archived, clips fall back to their own audio. Each clip has a note (user-written) and a transcription (auto-generated).
 
-**Lifecycle:**
-- **Create**: Audio sliced from source file, saved to clips directory using clip's UUID as filename
-- **Update**: If bounds change, new slice replaces old file (same UUID filename, requires source file)
-- **Delete**: Clip audio file deleted
-- **Share**: Uses existing clip file directly (no temp file needed)
+**Key rules for working with clips:**
+- Check `clip.file_uri !== null` before enabling edit or "go to source"
+- Use `clip.file_uri` (source) when available, fall back to `clip.uri` (clip's own file)
+- Every clip mutation must queue for sync (`syncQueue.queueChange`)
+- `note` and `transcription` are separate fields — don't conflate them
 
-**File Naming:** Clip's UUID (e.g., `a1b2c3d4-e5f6-7890-abcd-ef1234567890.mp3`)
-
-### Clip Independence from Source 🔥 IMPORTANT
-
-Clips can exist independently of their source book. The source book's `uri` becomes `null` when archived.
-
-**ClipWithFile interface:**
+**Source availability pattern:**
 ```typescript
-interface ClipWithFile extends Clip {
-  file_uri: string | null    // Source book URI (null if archived)
-  file_name: string          // Preserved from when clip was created
-  file_title: string | null
-  file_artist: string | null
-  file_duration: number
-}
-```
-
-**When source book exists (`file_uri !== null`):**
-- ClipViewer plays from source book at `clip.start` position
-- ClipEditor can expand/contract clip bounds, re-slices from source
-- "Go to source" and "Edit" menu options available
-- Timeline shows full source book duration
-
-**When source book is archived (`file_uri === null`):**
-- ClipViewer plays from clip's own audio file (`clip.uri`) at position 0
-- ClipEditor is disabled (Edit button hidden)
-- "Go to source" and "Edit" menu options hidden
-- Timeline shows clip duration only
-- Clip metadata (file_name, file_title, etc.) preserved from when clip was created
-
-**Code pattern for handling source availability:**
-```typescript
-// Determine playback source
 const hasSourceFile = clip.file_uri !== null
 const playbackUri = hasSourceFile ? clip.file_uri! : clip.uri
 const playbackDuration = hasSourceFile ? clip.file_duration : clip.duration
