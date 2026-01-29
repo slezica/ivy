@@ -2,7 +2,7 @@
  * Shared test helpers for action factory tests.
  */
 
-import type { Book } from '../../services'
+import type { Book, SessionWithBook, ClipWithFile } from '../../services'
 import type { AppState } from '../../store/types'
 
 
@@ -26,6 +26,20 @@ export function createMockBook(overrides: Partial<Book> = {}): Book {
   }
 }
 
+export function createMockSession(overrides: Partial<SessionWithBook> = {}): SessionWithBook {
+  return {
+    id: 'session-1',
+    book_id: 'book-1',
+    started_at: 1000,
+    ended_at: 2000,
+    book_name: 'Test Book.mp3',
+    book_title: 'Test Title',
+    book_artist: 'Test Artist',
+    book_artwork: 'data:image/png;base64,abc',
+    ...overrides,
+  }
+}
+
 export function createMockPlayback(overrides: Partial<AppState['playback']> = {}): AppState['playback'] {
   return {
     status: 'idle',
@@ -37,15 +51,39 @@ export function createMockPlayback(overrides: Partial<AppState['playback']> = {}
   }
 }
 
+export function createMockClip(overrides: Partial<ClipWithFile> = {}): ClipWithFile {
+  return {
+    id: 'clip-1',
+    source_id: 'book-1',
+    uri: 'file:///clips/clip-1.mp3',
+    start: 10000,
+    duration: 5000,
+    note: 'Test clip',
+    transcription: null,
+    created_at: 1000,
+    updated_at: 1000,
+    file_uri: 'file:///audio/book-1.mp3',
+    file_name: 'Test Book.mp3',
+    file_title: 'Test Title',
+    file_artist: 'Test Artist',
+    file_duration: 60000,
+    ...overrides,
+  }
+}
+
 export function createMockState(overrides: {
   playback?: Partial<AppState['playback']>,
   library?: Partial<AppState['library']>,
   books?: Record<string, Book>,
+  sessions?: Record<string, SessionWithBook>,
+  clips?: Record<string, ClipWithFile>,
 } = {}) {
   return {
     playback: createMockPlayback(overrides.playback),
     library: { status: 'idle' as string, ...overrides.library },
     books: overrides.books ?? {} as Record<string, Book>,
+    sessions: overrides.sessions ?? {} as Record<string, SessionWithBook>,
+    clips: overrides.clips ?? {} as Record<string, ClipWithFile>,
   }
 }
 
@@ -97,6 +135,11 @@ export function createMockDb(overrides: Record<string, jest.Mock | jest.Mock<any
     touchBook: jest.fn(),
     archiveBook: jest.fn(),
     hideBook: jest.fn(),
+    getCurrentSession: jest.fn(() => null),
+    createSession: jest.fn(() => createMockSession()),
+    updateSessionEndedAt: jest.fn(),
+    deleteSession: jest.fn(),
+    deleteClip: jest.fn(),
     ...overrides,
   } as any
 }
@@ -126,6 +169,22 @@ export function createMockMetadata(overrides: Record<string, jest.Mock> = {}) {
 export function createMockSyncQueue(overrides: Record<string, jest.Mock> = {}) {
   return {
     queueChange: jest.fn(),
+    ...overrides,
+  } as any
+}
+
+export function createMockSlicer(overrides: Record<string, jest.Mock> = {}) {
+  return {
+    ensureDir: jest.fn(async () => {}),
+    slice: jest.fn(async () => ({ uri: 'file:///clips/clip-1.mp3' })),
+    cleanup: jest.fn(async () => {}),
+    ...overrides,
+  } as any
+}
+
+export function createMockTranscription(overrides: Record<string, jest.Mock> = {}) {
+  return {
+    queueClip: jest.fn(),
     ...overrides,
   } as any
 }
