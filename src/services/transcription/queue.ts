@@ -106,7 +106,9 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     console.log('[Transcription] Stopping service...')
     this.started = false
     this.queue = []
-    this.processing = false
+    // Don't reset `processing` here — if processQueue() is mid-await on a clip,
+    // resetting the flag would let a new processQueue() enter concurrently on
+    // re-start. The finally block in processQueue() handles the reset safely.
     this.emitStatus()
   }
 
