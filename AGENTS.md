@@ -638,121 +638,15 @@ interface SessionWithBook extends Session {
 
 ## Google Drive Sync 🔥 IMPORTANT
 
-Multi-device sync system using Google Drive as cloud backend. Works offline-first: changes queue locally and sync when connectivity returns.
+Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC.md)** for the full guide.
 
-**What gets synced:**
-- Book metadata (positions, timestamps) as JSON files
-- Clip metadata + audio as JSON + MP3 pairs
+**Quick summary:** Store actions queue changes to SQLite → sync drains queue and does manifest-based incremental push/pull → conflicts resolved by pure merge functions → store notified of remote changes via events.
 
-**What doesn't get synced:**
-- Full audiobook files (too large, user can re-add from source)
-
-**File structure in Drive:**
-```
-Ivy/
-  books/
-    book_abc123-def456.json
-  clips/
-    clip_def456-789xyz.json
-    clip_def456-789xyz.mp3
-```
-
-Files named: `{type}_{uuid}.{ext}`. One file per entity (overwritten on update).
-
-### Architecture
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Zustand Store │────▶│  Offline Queue   │────▶│  Google Drive   │
-│  (books, clips) │     │  (sync_queue)    │     │  (Ivy/ folder)  │
-└────────┬────────┘     └──────────────────┘     └────────┬────────┘
-         │                                                │
-         │              ┌──────────────────┐              │
-         └─────────────▶│   Sync Manifest  │◀─────────────┘
-                        │ (sync_manifest)  │
-                        └──────────────────┘
-```
-
-**Services** (`services/backup/`):
-- `auth.ts` - Google OAuth via `@react-native-google-signin/google-signin`
-- `drive.ts` - Drive REST API wrapper (resumable uploads, list, download, delete)
-- `queue.ts` - Offline queue (persists changes for later sync)
-- `sync.ts` - Incremental sync with manifest-based change detection and conflict resolution
-
-### Offline Queue
-
-Store actions automatically queue changes for sync:
-- `updateBookPosition` → queues book upsert
-- `archiveBook` → queues book upsert
-- `addClip`, `updateClip` → queues clip upsert
-- `deleteClip` → queues clip delete
-
-Queue persists to SQLite, survives app restarts. Processed on next sync with retry logic (max 3 attempts).
-
-### Sync Manifest
-
-Tracks last-synced state per entity to enable incremental sync:
-- `local_updated_at` - What was the entity's timestamp when we last synced?
-- `remote_updated_at` - What was the remote timestamp when we last synced?
-
-Change detection: `entity.updated_at > manifest.local_updated_at` means changed locally since sync.
-
-### Sync Flow
-
-1. **Process queue** - Push all queued local changes first
-2. **Push phase** - Upload any remaining local changes, handle conflicts
-3. **Pull phase** - Download remote changes not present locally
-4. **Notify store** - Emits `data` event → store calls `fetchBooks()`/`fetchClips()`
-
-### Conflict Resolution
-
-Conflicts occur when same entity modified on two devices before syncing:
-
-**Books:**
-| Field | Strategy |
-|-------|----------|
-| `hidden` | **Hidden-wins** (if either side is hidden, result is hidden) |
-| `position` | **Max value wins** (user progressed further) |
-| `title`, `artist`, `artwork` | Last-write-wins |
-
-**Clips:**
-| Field | Strategy |
-|-------|----------|
-| `note` | **Concatenate with conflict marker** |
-| `start`, `duration` | Last-write-wins |
-| `transcription` | Prefer non-null |
-
-Note conflict example:
-```
-My original note
-
---- Conflict (Jan 18, 2026) ---
-Edit from other device
-```
-
-### Auto-Sync
-
-App auto-syncs when returning to foreground (if `settings.sync_enabled`):
-- Must have sync enabled in settings
-- Must be authenticated (no sign-in prompt for auto-sync)
-- At least 5 minutes since last sync
-- Silent unless conflicts/errors occur
-
-### Sync Service API
-
-The store exposes thin wrappers that components call:
-- `syncNow()` - Fire-and-forget, status updates via `sync` state
-- `autoSync()` - Only runs if `settings.sync_enabled`
-- `refreshSyncStatus()` - Updates `sync.pendingCount`
-
-### Edge Case: Delete vs Modify
-
-If Device A deletes a clip while Device B modifies it (later timestamp), then both sync:
-- Device A's delete removes clip from Drive
-- Device B's modification re-uploads clip
-- Device A downloads the "resurrected" clip
-
-**Result:** Modification wins (last-write-wins semantics). No tombstones implemented.
+**Key rules for working with sync:**
+- Queue changes via `syncQueue.queueChange()` when modifying synced entities
+- Use manifest comparison for change detection (not just timestamp comparison)
+- Don't delete manifest entries manually (sync service manages them)
+- Don't modify books/clips without queueing for sync (changes will be lost on other devices)
 
 ## Adding Features
 
