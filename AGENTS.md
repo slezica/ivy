@@ -449,7 +449,7 @@ __DEV_resetApp
 ```
 
 **Context-based playback API:**
-- `play(context?: { fileUri, position, ownerId? })` - Loads file if different, claims ownership
+- `play(context?: { fileUri, position, ownerId })` - Loads file if different, claims ownership
 - `seek(context: { fileUri, position })` - Only seeks if fileUri matches loaded file
 - `pause()` - Pauses, preserves ownership
 
@@ -528,10 +528,7 @@ Run with `npm test` (or `npm test:watch` for watch mode).
 
 Tests are colocated in `__tests__/` directories next to the code they test.
 
-**Current coverage:**
-- `services/backup/__tests__/` - Sync planning (`planner.test.ts`), conflict resolution (`merge.test.ts`), sync orchestration (`sync.test.ts`)
-- `services/transcription/__tests__/` - Transcription queue (`queue.test.ts`)
-- `store/__tests__/` - Session tracking (`session.test.ts`), clip operations (`clips.test.ts`)
+Tests are colocated in `__tests__/` directories next to the code they test. Action tests use shared helpers from `actions/__tests__/helpers.ts` for mock state, services, and immer-compatible `set`.
 
 ## Common Issues & Solutions
 
