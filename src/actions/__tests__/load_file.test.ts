@@ -1,5 +1,8 @@
 import { createLoadFile, LoadFileDeps } from '../load_file'
-import type { Book } from '../../services'
+import {
+  createMockBook, createMockState, createImmerSet,
+  createMockDb, createMockFiles, createMockMetadata, createMockSyncQueue,
+} from './helpers'
 
 // Mock generateId to return predictable values
 jest.mock('../../utils', () => ({
@@ -9,28 +12,11 @@ jest.mock('../../utils', () => ({
 
 // -- Helpers ------------------------------------------------------------------
 
-function createMockBook(overrides: Partial<Book> = {}): Book {
-  return {
-    id: 'book-1',
-    uri: 'file:///audio/book-1.mp3',
-    name: 'Test Book.mp3',
-    duration: 60000,
-    position: 5000,
-    updated_at: 1000,
-    title: 'Test Title',
-    artist: 'Test Artist',
-    artwork: 'data:image/png;base64,abc',
-    file_size: 1024,
-    fingerprint: new Uint8Array([1, 2, 3]),
-    hidden: false,
-    ...overrides,
-  }
-}
-
 function createMockDeps(overrides: Partial<LoadFileDeps> = {}): LoadFileDeps {
+  const state = createMockState()
+
   return {
-    db: {
-      getBookByFingerprint: jest.fn(() => null),
+    db: createMockDb({
       getBookByUri: jest.fn((uri: string) => {
         // By default, permanent URIs are "found" (simulates successful DB write)
         if (uri.includes('generated-id-1') || uri.includes('archived-1')) {
@@ -39,28 +25,11 @@ function createMockDeps(overrides: Partial<LoadFileDeps> = {}): LoadFileDeps {
         return null
       }),
       upsertBook: jest.fn(() => createMockBook({ id: 'generated-id-1', uri: 'file:///audio/generated-id-1.mp3' })),
-      restoreBook: jest.fn(() => createMockBook()),
-      touchBook: jest.fn(),
-      getBookById: jest.fn(() => createMockBook()),
-    } as any,
-    files: {
-      copyToAppStorage: jest.fn(async () => 'file:///audio/temp-abc.mp3'),
-      readFileFingerprint: jest.fn(async () => ({ fileSize: 1024, fingerprint: new Uint8Array([1, 2, 3]) })),
-      rename: jest.fn(async (_uri: string, newName: string) => `file:///audio/${newName}.mp3`),
-      deleteFile: jest.fn(async () => {}),
-    } as any,
-    metadata: {
-      readMetadata: jest.fn(async () => ({
-        title: 'Test Title',
-        artist: 'Test Artist',
-        artwork: 'data:image/png;base64,abc',
-        duration: 60000,
-      })),
-    } as any,
-    syncQueue: {
-      queueChange: jest.fn(),
-    } as any,
-    set: jest.fn(),
+    }),
+    files: createMockFiles(),
+    metadata: createMockMetadata(),
+    syncQueue: createMockSyncQueue(),
+    set: createImmerSet(state),
     fetchBooks: jest.fn(async () => {}),
     fetchClips: jest.fn(async () => {}),
     ...overrides,
@@ -78,21 +47,13 @@ describe('createLoadFile', () => {
 
   describe('pipeline', () => {
     it('sets library status to adding, then back to idle', async () => {
-      const deps = createMockDeps()
+      const state = createMockState()
+      const deps = createMockDeps({ set: createImmerSet(state) })
       const loadFile = createLoadFile(deps)
 
       await loadFile(INPUT)
 
-      // First call: adding
-      expect(deps.set).toHaveBeenCalledWith({ library: { status: 'adding' } })
-
-      // Last call: idle (via immer-style updater)
-      const lastCall = (deps.set as jest.Mock).mock.calls.at(-1)![0]
-      expect(typeof lastCall).toBe('function')
-
-      const draft = { library: { status: 'adding' as string } }
-      lastCall(draft)
-      expect(draft.library.status).toBe('idle')
+      expect(state.library.status).toBe('idle')
     })
 
     it('copies file to app storage from external URI', async () => {
@@ -190,17 +151,14 @@ describe('createLoadFile', () => {
     function depsWithArchivedBook() {
       const archivedBook = createMockBook({ id: 'archived-1', uri: null })
       return createMockDeps({
-        db: {
+        db: createMockDb({
           getBookByFingerprint: jest.fn(() => archivedBook),
           getBookByUri: jest.fn((uri: string) => {
             if (uri.includes('archived-1')) return createMockBook({ id: 'archived-1', uri })
             return null
           }),
           restoreBook: jest.fn(() => createMockBook({ id: 'archived-1' })),
-          touchBook: jest.fn(),
-          getBookById: jest.fn(),
-          upsertBook: jest.fn(),
-        } as any,
+        }),
       })
     }
 
@@ -256,14 +214,10 @@ describe('createLoadFile', () => {
     function depsWithActiveBook() {
       const activeBook = createMockBook({ id: 'active-1', uri: 'file:///audio/active-1.mp3' })
       return createMockDeps({
-        db: {
+        db: createMockDb({
           getBookByFingerprint: jest.fn(() => activeBook),
-          getBookByUri: jest.fn(() => null), // no permanent URI in this case
-          restoreBook: jest.fn(),
-          touchBook: jest.fn(),
           getBookById: jest.fn(() => activeBook),
-          upsertBook: jest.fn(),
-        } as any,
+        }),
       })
     }
 
@@ -301,31 +255,25 @@ describe('createLoadFile', () => {
 
   describe('error handling', () => {
     it('resets library status to idle on failure', async () => {
+      const state = createMockState()
       const deps = createMockDeps({
-        files: {
+        files: createMockFiles({
           copyToAppStorage: jest.fn(async () => { throw new Error('copy failed') }),
-          readFileFingerprint: jest.fn(),
-          rename: jest.fn(),
-          deleteFile: jest.fn(),
-        } as any,
+        }),
+        set: createImmerSet(state),
       })
       const loadFile = createLoadFile(deps)
 
       await expect(loadFile(INPUT)).rejects.toThrow('copy failed')
 
-      // Should still reset status via updater
-      const setMock = deps.set as jest.Mock
-      const lastCall = setMock.mock.calls.at(-1)![0]
-      const draft = { library: { status: 'adding' as string } }
-      lastCall(draft)
-      expect(draft.library.status).toBe('idle')
+      expect(state.library.status).toBe('idle')
     })
 
     it('re-throws the original error', async () => {
       const deps = createMockDeps({
-        metadata: {
+        metadata: createMockMetadata({
           readMetadata: jest.fn(async () => { throw new Error('metadata failed') }),
-        } as any,
+        }),
       })
       const loadFile = createLoadFile(deps)
 
@@ -334,12 +282,9 @@ describe('createLoadFile', () => {
 
     it('does not refresh books or clips on failure', async () => {
       const deps = createMockDeps({
-        files: {
+        files: createMockFiles({
           copyToAppStorage: jest.fn(async () => { throw new Error('fail') }),
-          readFileFingerprint: jest.fn(),
-          rename: jest.fn(),
-          deleteFile: jest.fn(),
-        } as any,
+        }),
       })
       const loadFile = createLoadFile(deps)
 
@@ -351,12 +296,9 @@ describe('createLoadFile', () => {
 
     it('does not queue sync on failure', async () => {
       const deps = createMockDeps({
-        files: {
+        files: createMockFiles({
           copyToAppStorage: jest.fn(async () => { throw new Error('fail') }),
-          readFileFingerprint: jest.fn(),
-          rename: jest.fn(),
-          deleteFile: jest.fn(),
-        } as any,
+        }),
       })
       const loadFile = createLoadFile(deps)
 
@@ -392,28 +334,23 @@ describe('createLoadFile', () => {
     it('deletes temp file when duplicate is detected (Case B)', async () => {
       const activeBook = createMockBook({ id: 'active-1', uri: 'file:///audio/active-1.mp3' })
       const deps = createMockDeps({
-        db: {
+        db: createMockDb({
           getBookByFingerprint: jest.fn(() => activeBook),
-          getBookByUri: jest.fn(() => null),
-          restoreBook: jest.fn(),
-          touchBook: jest.fn(),
           getBookById: jest.fn(() => activeBook),
-          upsertBook: jest.fn(),
-        } as any,
+        }),
       })
       const loadFile = createLoadFile(deps)
 
       await loadFile(INPUT)
 
-      // Only temp file deleted (no permanent URI in Case B)
       expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/temp-abc.mp3')
     })
 
     it('cleans up temp file when metadata read fails', async () => {
       const deps = createMockDeps({
-        metadata: {
+        metadata: createMockMetadata({
           readMetadata: jest.fn(async () => { throw new Error('metadata failed') }),
-        } as any,
+        }),
       })
       const loadFile = createLoadFile(deps)
 
@@ -424,12 +361,9 @@ describe('createLoadFile', () => {
 
     it('cleans up temp file when fingerprint read fails', async () => {
       const deps = createMockDeps({
-        files: {
-          copyToAppStorage: jest.fn(async () => 'file:///audio/temp-abc.mp3'),
+        files: createMockFiles({
           readFileFingerprint: jest.fn(async () => { throw new Error('fingerprint failed') }),
-          rename: jest.fn(async () => ''),
-          deleteFile: jest.fn(async () => {}),
-        } as any,
+        }),
       })
       const loadFile = createLoadFile(deps)
 
@@ -440,20 +374,14 @@ describe('createLoadFile', () => {
 
     it('cleans up renamed file when DB write fails (Case C)', async () => {
       const deps = createMockDeps({
-        db: {
-          getBookByFingerprint: jest.fn(() => null),
-          getBookByUri: jest.fn(() => null), // DB write failed, no record
+        db: createMockDb({
           upsertBook: jest.fn(() => { throw new Error('db failed') }),
-          restoreBook: jest.fn(),
-          touchBook: jest.fn(),
-          getBookById: jest.fn(),
-        } as any,
+        }),
       })
       const loadFile = createLoadFile(deps)
 
       await expect(loadFile(INPUT)).rejects.toThrow('db failed')
 
-      // Both temp and permanent should be cleaned up
       expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/temp-abc.mp3')
       expect(deps.files.deleteFile).toHaveBeenCalledWith('file:///audio/generated-id-1.mp3')
     })
@@ -461,14 +389,10 @@ describe('createLoadFile', () => {
     it('cleans up renamed file when DB restore fails (Case A)', async () => {
       const archivedBook = createMockBook({ id: 'archived-1', uri: null })
       const deps = createMockDeps({
-        db: {
+        db: createMockDb({
           getBookByFingerprint: jest.fn(() => archivedBook),
-          getBookByUri: jest.fn(() => null), // restore failed, no record with this URI
           restoreBook: jest.fn(() => { throw new Error('restore failed') }),
-          touchBook: jest.fn(),
-          getBookById: jest.fn(),
-          upsertBook: jest.fn(),
-        } as any,
+        }),
       })
       const loadFile = createLoadFile(deps)
 
@@ -480,15 +404,12 @@ describe('createLoadFile', () => {
 
     it('does not throw if cleanup itself fails', async () => {
       const deps = createMockDeps({
-        metadata: {
+        metadata: createMockMetadata({
           readMetadata: jest.fn(async () => { throw new Error('metadata failed') }),
-        } as any,
-        files: {
-          copyToAppStorage: jest.fn(async () => 'file:///audio/temp-abc.mp3'),
-          readFileFingerprint: jest.fn(),
-          rename: jest.fn(),
+        }),
+        files: createMockFiles({
           deleteFile: jest.fn(async () => { throw new Error('delete also failed') }),
-        } as any,
+        }),
       })
       const loadFile = createLoadFile(deps)
 
@@ -498,12 +419,9 @@ describe('createLoadFile', () => {
 
     it('does not attempt cleanup when copy itself fails', async () => {
       const deps = createMockDeps({
-        files: {
+        files: createMockFiles({
           copyToAppStorage: jest.fn(async () => { throw new Error('copy failed') }),
-          readFileFingerprint: jest.fn(),
-          rename: jest.fn(),
-          deleteFile: jest.fn(),
-        } as any,
+        }),
       })
       const loadFile = createLoadFile(deps)
 
