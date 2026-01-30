@@ -44,6 +44,11 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   const isPlaying = isOwner && playback.status === 'playing'
   const isLoading = isOwner && playback.status === 'loading'
 
+  // Stop playback when dismissed
+  useEffect(() => {
+    return () => { pause() }
+  }, [])
+
   // Sync position from playback when we own playback
   useEffect(() => {
     if (isOwner && isFileLoaded) {
