@@ -95,11 +95,16 @@ npx expo run:ios
 
 ### Local Production Builds
 
-**Android APK:**
+**Android build APK:**
 
 ```bash
 cd android && ./gradlew assembleRelease
 # Output: android/app/build/outputs/apk/release/app-release.apk
+```
+
+**Android Build and Install:**
+```
+npx expo run:android --variant release
 ```
 
 **Android AAB (for Google Play):**
