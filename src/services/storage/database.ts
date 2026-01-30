@@ -201,20 +201,11 @@ const migrations: Migration[] = [
     db.execSync(`
       CREATE TABLE IF NOT EXISTS settings (
         id INTEGER PRIMARY KEY CHECK (id = 1),
-        sync_enabled INTEGER NOT NULL DEFAULT 0
+        sync_enabled INTEGER NOT NULL DEFAULT 0,
+        transcription_enabled INTEGER NOT NULL DEFAULT 1
       );
     `)
     db.runSync('INSERT OR IGNORE INTO settings (id, sync_enabled) VALUES (1, 0)')
-  },
-
-  // Migration 1: Add transcription_enabled setting
-  (db) => {
-    db.execSync('ALTER TABLE settings ADD COLUMN transcription_enabled INTEGER NOT NULL DEFAULT 1')
-  },
-
-  // Migration 2: Rename remote_mp3_file_id → remote_audio_file_id
-  (db) => {
-    db.execSync('ALTER TABLE sync_manifest RENAME COLUMN remote_mp3_file_id TO remote_audio_file_id')
   },
 ]
 
