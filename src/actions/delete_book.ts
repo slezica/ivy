@@ -1,8 +1,9 @@
-import type { DatabaseService, FileStorageService, SyncQueueService } from '../services'
+import type { AudioPlayerService, DatabaseService, FileStorageService, SyncQueueService } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
 
 
 export interface DeleteBookDeps {
+  audio: AudioPlayerService
   db: DatabaseService
   files: FileStorageService
   syncQueue: SyncQueueService
@@ -14,12 +15,22 @@ export type DeleteBook = Action<[string]>
 
 export const createDeleteBook: ActionFactory<DeleteBookDeps, DeleteBook> = (deps) => (
   async (bookId) => {
-    const { db, files, syncQueue, set, get } = deps
+    const { audio, db, files, syncQueue, set, get } = deps
 
     const book = get().books[bookId]
     if (!book) throw new Error('Book not found')
 
     const previousBook = { ...book }
+
+    // If this book is currently loaded in the player, unload it
+    if (book.uri && get().playback.uri === book.uri) {
+      set(state => {
+        state.playback.status = 'idle'
+        state.playback.uri = null
+        state.playback.ownerId = null
+      })
+      audio.unload().catch(() => {})
+    }
 
     try {
       set(state => {
