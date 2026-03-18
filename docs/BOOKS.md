@@ -285,7 +285,7 @@ There's no explicit "restore" button. The flow is:
 4. `db.restoreBook()` updates the record:
    - Sets `uri` to the new file path
    - Clears `hidden` flag (makes it visible again)
-   - Updates name, duration, title, artist, artwork from the new file
+   - **Preserves metadata** — existing title, artist, artwork win over ID3 tags (protects user edits); falls back to ID3 values when existing fields are null
    - **Preserves position** (the user's saved playback position)
 5. Queue for sync
 
@@ -318,6 +318,7 @@ A search bar filters across title, filename, and artist. Matching is case-insens
 - No playback
 
 **Context menu (active books only):**
+- **Edit details** — opens metadata editor dialog (title, artist), then `updateBook(bookId, updates)`
 - **Archive** — confirmation dialog, then `archiveBook(bookId)`
 - **Remove from library** — confirmation dialog, then `deleteBook(bookId)`
 
@@ -385,8 +386,12 @@ src/actions/
   load_file_with_picker.ts → Launch picker → loadFile
   fetch_books.ts         → Load all non-hidden books into store
   archive_book.ts        → Set uri=null, delete file
+  update_book.ts         → Update title/artist, queue sync
   delete_book.ts         → Set uri=null + hidden=true, delete file
   constants.ts           → CLIPS_DIR, skip durations (no book-specific constants)
+
+src/components/
+  MetadataEditor.tsx     → Dialog content for editing book title/artist (shows artwork read-only)
 
 src/services/storage/
   database.ts            → Book CRUD, fingerprint lookup, archive/hide/restore

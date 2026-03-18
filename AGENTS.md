@@ -20,7 +20,7 @@ These are in-depth guides to aspects of the application. CRITICAL: before you st
 
 ### Books and Library
 
-File import, archiving, deletion, and restoration. See **[docs/BOOKS.md](docs/BOOKS.md)** for the full guide.
+File import, metadata editing, archiving, deletion, and restoration. See **[docs/BOOKS.md](docs/BOOKS.md)** for the full guide.
 
 **Quick summary:** Files are copied to app-owned storage on import. Each book is fingerprinted (file size + first 4KB) for duplicate detection. Adding a file that matches an archived/deleted book restores it with preserved position. Books use soft-delete (`hidden` flag), never hard-delete.
 
@@ -29,6 +29,7 @@ File import, archiving, deletion, and restoration. See **[docs/BOOKS.md](docs/BO
 - Use `book.id` (UUID) as the stable identifier, not `uri` (which changes on restore)
 - Archive/delete are optimistic with rollback — update store first, then DB
 - Every book mutation must queue for sync (`syncQueue.queueChange`)
+- On restore, existing metadata (title/artist/artwork) wins over ID3 tags — protects user edits
 
 ### Playback
 
@@ -146,6 +147,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── SessionsScreen.tsx      # Listening history
   │   └── SettingsScreen.tsx      # App settings (sync toggle, transcription toggle)
   ├── components/
+  │   ├── MetadataEditor.tsx      # Book metadata editing (title, artist; artwork read-only)
   │   ├── ClipViewer.tsx          # Clip playback (own position state, timeline, transcription)
   │   ├── ClipEditor.tsx          # Clip editing (own position state, selection timeline, note)
   │   ├── LoadingModal.tsx        # "Adding..." / "Loading..." modal
@@ -309,7 +311,7 @@ sessions: Record<string, SessionWithBook>  // Listening history (keyed by id)
 currentSessionBookId: string | null
 
 // Actions
-fetchBooks, loadFile, loadFileWithUri, loadFileWithPicker, archiveBook, deleteBook
+fetchBooks, loadFile, loadFileWithUri, loadFileWithPicker, archiveBook, deleteBook, updateBook
 play, pause, seek, seekClip, skipForward, skipBackward, syncPlaybackState
 fetchClips, addClip, updateClip, deleteClip, shareClip
 startTranscription, stopTranscription
