@@ -16,6 +16,8 @@ import Header from '../components/shared/Header'
 import InputHeader from '../components/shared/InputHeader'
 import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
+import Dialog from '../components/shared/Dialog'
+import MetadataEditor from '../components/MetadataEditor'
 import { Color } from '../theme'
 import type { Book } from '../services'
 import { formatTime, formatDate, MAIN_PLAYER_OWNER_ID } from '../utils'
@@ -24,9 +26,10 @@ const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, sync, autoSync } = useStore()
+  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, updateBook, sync, autoSync } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false)
+  const [editingBookId, setEditingBookId] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const lastSyncRef = useRef<number>(0)
@@ -145,6 +148,9 @@ export default function LibraryScreen() {
     handleCloseMenu()
 
     switch (action) {
+      case 'edit':
+        setEditingBookId(bookId)
+        break
       case 'archive':
         handleArchiveBook(bookId)
         break
@@ -156,6 +162,7 @@ export default function LibraryScreen() {
 
   const getMenuItems = (): ActionMenuItem[] => {
     return [
+      { key: 'edit', label: 'Edit details', icon: 'create-outline' },
       { key: 'archive', label: 'Archive', icon: 'archive-outline' },
       { key: 'delete', label: 'Remove from library', icon: 'trash-outline', destructive: true },
     ]
@@ -317,6 +324,19 @@ export default function LibraryScreen() {
         ]}
       />
 
+
+      {editingBookId && books[editingBookId] && (
+        <Dialog visible onClose={() => setEditingBookId(null)}>
+          <MetadataEditor
+            book={books[editingBookId]}
+            onCancel={() => setEditingBookId(null)}
+            onSave={async (updates) => {
+              await updateBook(editingBookId, updates)
+              setEditingBookId(null)
+            }}
+          />
+        </Dialog>
+      )}
 
       {/* FAB */}
       <View style={styles.fabContainer} pointerEvents="box-none">
