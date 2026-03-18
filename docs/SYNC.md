@@ -26,7 +26,7 @@ Ivy is an audiobook app that runs on multiple devices. The sync system's job is 
 
 **What gets synced:**
 - Book metadata — positions, titles, artists, artwork, archive/delete state
-- Clips — metadata as JSON, audio as MP3
+- Clips — metadata as JSON, audio as M4A (legacy clips may use MP3)
 
 **What does NOT get synced:**
 - Full audiobook files (too large; users re-add from source)
@@ -348,9 +348,9 @@ Note: while the protocol *supports* resuming interrupted uploads, Ivy does not i
 
 ### Clip upload safety
 
-Clips involve two files (JSON + MP3). If the JSON uploads successfully but the MP3 fails, the JSON file is **rolled back** (deleted) with up to 3 retry attempts. This prevents orphaned JSON files on Drive that would confuse future syncs.
+Clips involve two files (JSON + audio). If the JSON uploads successfully but the audio upload fails, the JSON file is **rolled back** (deleted) with up to 3 retry attempts. This prevents orphaned JSON files on Drive that would confuse future syncs.
 
-MP3 uploads are also size-capped at **50MB** to prevent out-of-memory errors on the device.
+Audio uploads are also size-capped at **50MB** to prevent out-of-memory errors on the device.
 
 ### Replace-on-upload
 

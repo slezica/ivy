@@ -182,13 +182,9 @@ This means clip playback (ClipViewer, ClipEditor) never overwrites the book's sa
 
 ## Playback Actions
 
-### `play(context?)`
+### `play(context)`
 
-The most important action. Two modes:
-
-**Resume (no context):** Sets status to `'playing'`, calls `audio.play()`. Ownership unchanged.
-
-**Play with context:** `{ fileUri, position, ownerId }`
+The most important action. Takes a `PlayContext`: `{ fileUri, position, ownerId }`.
 
 1. If a different file is loaded:
    - Look up metadata via `db.getBookByAnyUri(fileUri)` — checks books first, then clips (so clip playback still shows the source book's metadata on the system notification)
@@ -198,7 +194,7 @@ The most important action. Two modes:
    - Seek to requested position
 2. If the same file but different position:
    - Update store position, seek
-3. Set status to `'playing'`, call `audio.play()`
+3. Set status to `'playing'`, update ownerId, call `audio.play()`
 
 On load failure, status reverts to `'paused'` (if a file was previously loaded) or `'idle'` (if nothing was loaded).
 

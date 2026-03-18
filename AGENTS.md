@@ -315,7 +315,7 @@ fetchClips, addClip, updateClip, deleteClip, shareClip
 startTranscription, stopTranscription
 syncNow, autoSync, refreshSyncStatus
 updateSettings
-fetchSessions, trackSession
+fetchSessions, trackSession, finalizeSession
 __DEV_resetApp
 ```
 
