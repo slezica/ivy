@@ -355,6 +355,14 @@ export class DatabaseService {
     )
   }
 
+  updateBookMetadata(id: string, title: string | null, artist: string | null): void {
+    const now = Date.now()
+    this.db.runSync(
+      'UPDATE files SET title = ?, artist = ?, updated_at = ? WHERE id = ?',
+      [title, artist, now, id]
+    )
+  }
+
   updateBookPosition(id: string, position: number): void {
     try {
       const now = Date.now()

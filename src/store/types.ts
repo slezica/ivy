@@ -27,6 +27,7 @@ import type { RefreshSyncStatus } from '../actions/refresh_sync_status'
 import type { UpdateSettings } from '../actions/update_settings'
 import type { FetchSessions } from '../actions/fetch_sessions'
 import type { TrackSession } from '../actions/track_session'
+import type { UpdateBook } from '../actions/update_book'
 import type { ResetApp } from '../actions/reset_app'
 
 
@@ -68,6 +69,7 @@ export interface AppState {
   loadFileWithPicker: LoadFileWithPicker
   archiveBook: ArchiveBook
   deleteBook: DeleteBook
+  updateBook: UpdateBook
   play: Play
   pause: Pause
   seek: Seek

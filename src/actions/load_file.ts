@@ -53,7 +53,12 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
           console.log('Restoring archived book:', existingBook.id)
           permanentUri = await files.rename(tempUri, existingBook.id)
 
-          const book = db.restoreBook(existingBook.id, permanentUri, name, duration, title, artist, artwork)
+          const book = db.restoreBook(
+            existingBook.id, permanentUri, name, duration,
+            existingBook.title ?? title,
+            existingBook.artist ?? artist,
+            existingBook.artwork ?? artwork,
+          )
           syncQueue.queueChange('book', book.id, 'upsert')
 
         } else {

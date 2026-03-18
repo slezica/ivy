@@ -35,6 +35,7 @@ import { createUpdateSettings } from '../actions/update_settings'
 import { createFetchSessions } from '../actions/fetch_sessions'
 import { createTrackSession } from '../actions/track_session'
 import { createFinalizeSession } from '../actions/finalize_session'
+import { createUpdateBook } from '../actions/update_book'
 import { createResetApp } from '../actions/reset_app'
 
 
@@ -63,6 +64,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const fetchClips = createFetchClips(deps)
   const archiveBook = createArchiveBook(deps)
   const deleteBook = createDeleteBook(deps)
+  const updateBook = createUpdateBook(deps)
   const loadFile = createLoadFile({ ...deps, fetchBooks, fetchClips })
   const loadFileWithUri = createLoadFileWithUri({ ...deps, loadFile })
   const loadFileWithPicker = createLoadFileWithPicker({ ...deps, loadFile })
@@ -141,6 +143,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     loadFileWithPicker,
     archiveBook,
     deleteBook,
+    updateBook,
     play,
     pause,
     seek,
