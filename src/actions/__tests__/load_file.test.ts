@@ -1,6 +1,6 @@
 import { createLoadFile, LoadFileDeps } from '../load_file'
 import {
-  createMockBook, createMockState, createImmerSet,
+  createMockBook, createMockState, createImmerSet, createMockGet,
   createMockDb, createMockFiles, createMockMetadata, createMockSyncQueue, createMockCopier,
 } from './helpers'
 
@@ -30,6 +30,7 @@ function createMockDeps(overrides: Partial<LoadFileDeps> = {}): LoadFileDeps {
     metadata: createMockMetadata(),
     syncQueue: createMockSyncQueue(),
     set: createImmerSet(state),
+    get: createMockGet(state),
     fetchBooks: jest.fn(async () => {}),
     fetchClips: jest.fn(async () => {}),
     ...overrides,
@@ -48,7 +49,7 @@ describe('createLoadFile', () => {
   describe('pipeline', () => {
     it('sets library status to adding, then back to idle', async () => {
       const state = createMockState()
-      const deps = createMockDeps({ set: createImmerSet(state) })
+      const deps = createMockDeps({ set: createImmerSet(state), get: createMockGet(state) })
       const loadFile = createLoadFile(deps)
 
       await loadFile(INPUT)
@@ -271,6 +272,7 @@ describe('createLoadFile', () => {
           beginCopy: jest.fn(async () => { throw new Error('open failed') }),
         }),
         set: createImmerSet(state),
+        get: createMockGet(state),
       })
       const loadFile = createLoadFile(deps)
 

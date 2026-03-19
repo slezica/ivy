@@ -16,6 +16,14 @@ export const createCancelLoadFile: ActionFactory<CancelLoadFileDeps, CancelLoadF
 
     if (!opId) return
 
+    // Dismiss immediately — loadFile's catch will handle cleanup in background
+    set(state => {
+      state.library.status = 'idle'
+      state.library.copyProgress = null
+      state.library.copyOpId = null
+    })
+
+    // Signal native side (non-blocking from the user's perspective)
     await copier.cancelCopy(opId)
   }
 )

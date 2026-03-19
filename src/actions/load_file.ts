@@ -1,10 +1,8 @@
 import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, SyncQueueService } from '../services'
-import type { SetState, Action, ActionFactory } from '../store/types'
+import type { GetState, SetState, Action, ActionFactory } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
 import { generateId } from '../utils'
-
-const AUDIO_DIR = 'audio'
 
 export interface LoadFileDeps {
   db: DatabaseService
@@ -12,6 +10,7 @@ export interface LoadFileDeps {
   copier: FileCopierService
   metadata: AudioMetadataService
   syncQueue: SyncQueueService
+  get: GetState
   set: SetState
   fetchBooks: FetchBooks
   fetchClips: FetchClips
@@ -21,20 +20,30 @@ export type LoadFile = Action<[{ uri: string; name: string }]>
 
 export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
   async (file) => {
-    const { db, files, copier, metadata, syncQueue, set, fetchBooks, fetchClips } = deps
+    const { db, files, copier, metadata, syncQueue, get, set, fetchBooks, fetchClips } = deps
 
     let destPath: string | null = null
 
-    try {
-      // Allocate operation ID first — cancellable from this point
-      const opId = copier.createOperation()
+    // Allocate operation ID first — cancellable from this point
+    const opId = copier.createOperation()
 
+    // Helper: only update library state if this operation still owns it.
+    // If the user cancelled and started a new add, we must not touch state.
+    const setLibrary = (updater: (lib: typeof get extends () => infer S ? S extends { library: infer L } ? L : never : never) => void) => {
       set(state => {
-        state.library.status = 'adding'
-        state.library.copyProgress = null
-        state.library.copyOpId = opId
+        if (state.library.copyOpId === opId) {
+          updater(state.library)
+        }
       })
+    }
 
+    set(state => {
+      state.library.status = 'adding'
+      state.library.copyProgress = null
+      state.library.copyOpId = opId
+    })
+
+    try {
       // Phase 1: Open the source and read fingerprint (no file created yet)
       const { fileSize, fingerprint } = await copier.beginCopy(opId, file.uri)
 
@@ -43,7 +52,6 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
       if (existingBook && existingBook.uri !== null) {
         // Case B: Active duplicate — don't copy at all
-        console.log('File already exists in library:', existingBook.id)
         await copier.cancelCopy(opId)
 
         db.touchBook(existingBook.id)
@@ -51,10 +59,10 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
         await fetchBooks()
         await fetchClips()
-        set(state => {
-          state.library.status = 'duplicate'
-          state.library.copyProgress = null
-          state.library.copyOpId = null
+        setLibrary(lib => {
+          lib.status = 'duplicate'
+          lib.copyProgress = null
+          lib.copyOpId = null
         })
         return
       }
@@ -68,8 +76,8 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
       destPath = `${files.audioDirectoryPath}/${filename}`
 
       const { hash } = await copier.commitCopy(opId, destPath, (bytes, total) => {
-        set(state => {
-          state.library.copyProgress = { bytes, total }
+        setLibrary(lib => {
+          lib.copyProgress = { bytes, total }
         })
       })
 
@@ -82,7 +90,6 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
       if (existingBook) {
         // Case A: Restore archived/deleted book
-        console.log('Restoring archived book:', existingBook.id)
         db.restoreBook(
           existingBook.id, fileUri, name, duration,
           existingBook.title ?? title,
@@ -93,16 +100,16 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
       } else {
         // Case C: New book
-        console.log('Creating new book with ID:', bookId)
         db.upsertBook(bookId, fileUri, name, duration, 0, title, artist, artwork, fileSize, fingerprint)
         syncQueue.queueChange('book', bookId, 'upsert')
       }
 
       await fetchBooks()
       await fetchClips()
-      set(state => {
-        state.library.status = 'idle'
-        state.library.copyProgress = null
+      setLibrary(lib => {
+        lib.status = 'idle'
+        lib.copyProgress = null
+        lib.copyOpId = null
       })
 
     } catch (error) {
@@ -111,22 +118,15 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
         await files.deleteFile(`file://${destPath}`).catch(() => {})
       }
 
-      // User cancellation — silently dismiss
-      if (isCancellation(error)) {
-        set(state => {
-          state.library.status = 'idle'
-          state.library.copyProgress = null
-          state.library.copyOpId = null
-        })
-        return
-      }
+      // User cancellation — silently done (cancelLoadFile already dismissed the UI)
+      if (isCancellation(error)) return
 
-      // Real error — show in dialog
+      // Real error — show in dialog (only if we still own state)
       console.error('Failed to add file:', error)
-      set(state => {
-        state.library.status = 'error'
-        state.library.copyProgress = null
-        state.library.copyOpId = null
+      setLibrary(lib => {
+        lib.status = 'error'
+        lib.copyProgress = null
+        lib.copyOpId = null
       })
     }
   }
