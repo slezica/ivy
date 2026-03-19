@@ -44,6 +44,7 @@ app-example
 # Exception: Keep custom native modules and gradle config
 !/android/app
 /android/app/*
+!/android/app/build.gradle
 !/android/app/src
 /android/app/src/*
 !/android/app/src/main
