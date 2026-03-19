@@ -302,25 +302,25 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   ): Promise<void> {
     // Execute book operations
     for (const { local, remote } of plan.books.merges) {
-      await this.executeMergeBook(local, remote, result)
+      await this.executeMergeBook(local, remote, result, notification)
     }
     for (const { book } of plan.books.uploads) {
       await this.executeUploadBook(book, result)
     }
     for (const { remote } of plan.books.downloads) {
-      await this.executeDownloadBook(remote, notification)
+      await this.executeDownloadBook(remote, result, notification)
       result.downloaded.books++
     }
 
     // Execute clip operations
     for (const { local, remote } of plan.clips.merges) {
-      await this.executeMergeClip(local, remote, result)
+      await this.executeMergeClip(local, remote, result, notification)
     }
     for (const { clip } of plan.clips.uploads) {
       await this.executeUploadClip(clip, result)
     }
     for (const { remote } of plan.clips.downloads) {
-      await this.executeDownloadClip(remote, notification)
+      await this.executeDownloadClip(remote, result, notification)
       result.downloaded.clips++
     }
     for (const del of plan.clips.deletes) {
@@ -335,43 +335,48 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   // Book Execution
   // ---------------------------------------------------------------------------
 
-  private async executeMergeBook(local: Book, remote: RemoteBook, result: SyncResult): Promise<void> {
-    // Check if the remote book's fingerprint matches a different local book.
-    // This happens when two devices independently add the same file.
-    const fingerprint = base64ToUint8Array(remote.backup.fingerprint)
-    const fingerprintMatch = this.db.getBookByFingerprint(remote.backup.file_size, fingerprint)
-    if (fingerprintMatch && fingerprintMatch.id !== local.id && fingerprintMatch.id !== remote.backup.id) {
-      console.log(`Skipping merge of book ${remote.backup.id}: fingerprint matches existing book ${fingerprintMatch.id}`)
-      return
+  private async executeMergeBook(local: Book, remote: RemoteBook, result: SyncResult, notification: SyncNotification): Promise<void> {
+    try {
+      // Check if the remote book's fingerprint matches a different local book.
+      // This happens when two devices independently add the same file.
+      const fingerprint = base64ToUint8Array(remote.backup.fingerprint)
+      const fingerprintMatch = this.db.getBookByFingerprint(remote.backup.file_size, fingerprint)
+      if (fingerprintMatch && fingerprintMatch.id !== local.id && fingerprintMatch.id !== remote.backup.id) {
+        console.log(`Skipping merge of book ${remote.backup.id}: fingerprint matches existing book ${fingerprintMatch.id}`)
+        return
+      }
+
+      const { merged, resolution } = mergeBook(local, remote.backup)
+
+      // Update local database with merged result
+      this.db.restoreBookFromBackup(
+        merged.id,
+        merged.name,
+        merged.duration,
+        merged.position,
+        merged.updated_at,
+        merged.title,
+        merged.artist,
+        merged.artwork,
+        merged.file_size,
+        merged.fingerprint,
+        merged.hidden
+      )
+
+      // Upload merged result
+      await this.executeUploadBook(merged, result)
+
+      notification.booksChanged.push(local.id)
+      result.conflicts.push({
+        entityType: 'book',
+        entityId: local.id,
+        resolution,
+      })
+
+      console.log(`Merged book conflict: ${local.id}`)
+    } catch (error) {
+      result.errors.push(`Failed to merge book ${local.id}: ${error}`)
     }
-
-    const { merged, resolution } = mergeBook(local, remote.backup)
-
-    // Update local database with merged result
-    this.db.restoreBookFromBackup(
-      merged.id,
-      merged.name,
-      merged.duration,
-      merged.position,
-      merged.updated_at,
-      merged.title,
-      merged.artist,
-      merged.artwork,
-      merged.file_size,
-      merged.fingerprint,
-      merged.hidden
-    )
-
-    // Upload merged result
-    await this.executeUploadBook(merged, result)
-
-    result.conflicts.push({
-      entityType: 'book',
-      entityId: local.id,
-      resolution,
-    })
-
-    console.log(`Merged book conflict: ${local.id}`)
   }
 
   private async executeUploadBook(book: Book, result: SyncResult): Promise<void> {
@@ -401,13 +406,14 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       }
 
       const uploaded = await this.drive.uploadFile('books', filename, content)
+      const remoteUpdatedAt = uploaded.modifiedTime ? new Date(uploaded.modifiedTime).getTime() : book.updated_at
 
       // Update manifest
       this.db.upsertManifestEntry({
         entity_type: 'book',
         entity_id: book.id,
         local_updated_at: book.updated_at,
-        remote_updated_at: book.updated_at,
+        remote_updated_at: remoteUpdatedAt,
         remote_file_id: uploaded.id,
         remote_audio_file_id: null,
       })
@@ -419,44 +425,48 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     }
   }
 
-  private async executeDownloadBook(remote: RemoteBook, notification: SyncNotification): Promise<void> {
-    const backup = remote.backup
-    const fingerprint = base64ToUint8Array(backup.fingerprint)
+  private async executeDownloadBook(remote: RemoteBook, result: SyncResult, notification: SyncNotification): Promise<void> {
+    try {
+      const backup = remote.backup
+      const fingerprint = base64ToUint8Array(backup.fingerprint)
 
-    // Check if a local book with the same fingerprint already exists under a different ID.
-    // This happens when two devices independently add the same file (each generates its own UUID).
-    const existingBook = this.db.getBookByFingerprint(backup.file_size, fingerprint)
-    if (existingBook && existingBook.id !== backup.id) {
-      console.log(`Skipping download of book ${backup.id}: fingerprint matches existing book ${existingBook.id}`)
-      return
+      // Check if a local book with the same fingerprint already exists under a different ID.
+      // This happens when two devices independently add the same file (each generates its own UUID).
+      const existingBook = this.db.getBookByFingerprint(backup.file_size, fingerprint)
+      if (existingBook && existingBook.id !== backup.id) {
+        console.log(`Skipping download of book ${backup.id}: fingerprint matches existing book ${existingBook.id}`)
+        return
+      }
+
+      this.db.restoreBookFromBackup(
+        backup.id,
+        backup.name,
+        backup.duration,
+        backup.position,
+        backup.updated_at,
+        backup.title,
+        backup.artist,
+        backup.artwork,
+        backup.file_size,
+        fingerprint,
+        backup.hidden ?? false  // Backward compat: old backups may not have hidden field
+      )
+
+      // Update manifest
+      this.db.upsertManifestEntry({
+        entity_type: 'book',
+        entity_id: backup.id,
+        local_updated_at: backup.updated_at,
+        remote_updated_at: remote.modifiedAt,
+        remote_file_id: remote.fileId,
+        remote_audio_file_id: null,
+      })
+
+      notification.booksChanged.push(backup.id)
+      console.log(`Downloaded book: ${backup.id}`)
+    } catch (error) {
+      result.errors.push(`Failed to download book ${remote.backup.id}: ${error}`)
     }
-
-    this.db.restoreBookFromBackup(
-      backup.id,
-      backup.name,
-      backup.duration,
-      backup.position,
-      backup.updated_at,
-      backup.title,
-      backup.artist,
-      backup.artwork,
-      backup.file_size,
-      fingerprint,
-      backup.hidden ?? false  // Backward compat: old backups may not have hidden field
-    )
-
-    // Update manifest
-    this.db.upsertManifestEntry({
-      entity_type: 'book',
-      entity_id: backup.id,
-      local_updated_at: backup.updated_at,
-      remote_updated_at: backup.updated_at,
-      remote_file_id: remote.fileId,
-      remote_audio_file_id: null,
-    })
-
-    notification.booksChanged.push(backup.id)
-    console.log(`Downloaded book: ${backup.id}`)
   }
 
   private async executeDeleteBook(
@@ -480,32 +490,37 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   // Clip Execution
   // ---------------------------------------------------------------------------
 
-  private async executeMergeClip(local: Clip, remote: RemoteClip, result: SyncResult): Promise<void> {
-    const { merged, resolution } = mergeClip(local, remote.backup)
+  private async executeMergeClip(local: Clip, remote: RemoteClip, result: SyncResult, notification: SyncNotification): Promise<void> {
+    try {
+      const { merged, resolution } = mergeClip(local, remote.backup)
 
-    // Update local database with merged result
-    this.db.restoreClipFromBackup(
-      merged.id,
-      merged.source_id,
-      merged.uri,
-      merged.start,
-      merged.duration,
-      merged.note,
-      merged.transcription,
-      merged.created_at,
-      merged.updated_at
-    )
+      // Update local database with merged result
+      this.db.restoreClipFromBackup(
+        merged.id,
+        merged.source_id,
+        merged.uri,
+        merged.start,
+        merged.duration,
+        merged.note,
+        merged.transcription,
+        merged.created_at,
+        merged.updated_at
+      )
 
-    // Upload merged result
-    await this.executeUploadClip(merged, result)
+      // Upload merged result
+      await this.executeUploadClip(merged, result)
 
-    result.conflicts.push({
-      entityType: 'clip',
-      entityId: local.id,
-      resolution,
-    })
+      notification.clipsChanged.push(local.id)
+      result.conflicts.push({
+        entityType: 'clip',
+        entityId: local.id,
+        resolution,
+      })
 
-    console.log(`Merged clip conflict: ${local.id}`)
+      console.log(`Merged clip conflict: ${local.id}`)
+    } catch (error) {
+      result.errors.push(`Failed to merge clip ${local.id}: ${error}`)
+    }
   }
 
   private async executeUploadClip(clip: Clip, result: SyncResult): Promise<void> {
@@ -557,11 +572,12 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       audioFileId = audioFile.id
 
       // Update manifest
+      const remoteUpdatedAt = jsonFile.modifiedTime ? new Date(jsonFile.modifiedTime).getTime() : clip.updated_at
       this.db.upsertManifestEntry({
         entity_type: 'clip',
         entity_id: clip.id,
         local_updated_at: clip.updated_at,
-        remote_updated_at: clip.updated_at,
+        remote_updated_at: remoteUpdatedAt,
         remote_file_id: jsonFileId,
         remote_audio_file_id: audioFileId,
       })
@@ -588,50 +604,54 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     }
   }
 
-  private async executeDownloadClip(remote: RemoteClip, notification: SyncNotification): Promise<void> {
-    const backup = remote.backup
+  private async executeDownloadClip(remote: RemoteClip, result: SyncResult, notification: SyncNotification): Promise<void> {
+    try {
+      const backup = remote.backup
 
-    // Download audio
-    const audioBytes = await this.drive.downloadFile(remote.audioFileId, true) as Uint8Array
+      // Download audio
+      const audioBytes = await this.drive.downloadFile(remote.audioFileId, true) as Uint8Array
 
-    // Save audio to clips directory, preserving remote extension
-    const clipsDir = `${RNFS.DocumentDirectoryPath}/clips`
-    if (!(await RNFS.exists(clipsDir))) {
-      await RNFS.mkdir(clipsDir)
+      // Save audio to clips directory, preserving remote extension
+      const clipsDir = `${RNFS.DocumentDirectoryPath}/clips`
+      if (!(await RNFS.exists(clipsDir))) {
+        await RNFS.mkdir(clipsDir)
+      }
+
+      const ext = remote.audioFilename.split('.').pop() ?? 'm4a'
+      const localAudioPath = `${clipsDir}/${backup.id}.${ext}`
+      const audioBase64 = uint8ArrayToBase64(audioBytes)
+      await RNFS.writeFile(localAudioPath, audioBase64, 'base64')
+
+      const localUri = `file://${localAudioPath}`
+
+      // Restore to database
+      this.db.restoreClipFromBackup(
+        backup.id,
+        backup.source_id,
+        localUri,
+        backup.start,
+        backup.duration,
+        backup.note,
+        backup.transcription,
+        backup.created_at,
+        backup.updated_at
+      )
+
+      // Update manifest
+      this.db.upsertManifestEntry({
+        entity_type: 'clip',
+        entity_id: backup.id,
+        local_updated_at: backup.updated_at,
+        remote_updated_at: remote.modifiedAt,
+        remote_file_id: remote.jsonFileId,
+        remote_audio_file_id: remote.audioFileId,
+      })
+
+      notification.clipsChanged.push(backup.id)
+      console.log(`Downloaded clip: ${backup.id}`)
+    } catch (error) {
+      result.errors.push(`Failed to download clip ${remote.backup.id}: ${error}`)
     }
-
-    const ext = remote.audioFilename.split('.').pop() ?? 'm4a'
-    const localAudioPath = `${clipsDir}/${backup.id}.${ext}`
-    const audioBase64 = uint8ArrayToBase64(audioBytes)
-    await RNFS.writeFile(localAudioPath, audioBase64, 'base64')
-
-    const localUri = `file://${localAudioPath}`
-
-    // Restore to database
-    this.db.restoreClipFromBackup(
-      backup.id,
-      backup.source_id,
-      localUri,
-      backup.start,
-      backup.duration,
-      backup.note,
-      backup.transcription,
-      backup.created_at,
-      backup.updated_at
-    )
-
-    // Update manifest
-    this.db.upsertManifestEntry({
-      entity_type: 'clip',
-      entity_id: backup.id,
-      local_updated_at: backup.updated_at,
-      remote_updated_at: backup.updated_at,
-      remote_file_id: remote.jsonFileId,
-      remote_audio_file_id: remote.audioFileId,
-    })
-
-    notification.clipsChanged.push(backup.id)
-    console.log(`Downloaded clip: ${backup.id}`)
   }
 
   private async executeDeleteClip(
@@ -735,7 +755,7 @@ function parseFilename(name: string): ParsedFilename | null {
   return {
     type: match[1] as 'book' | 'clip',
     id: match[2],
-    extension: match[3] as 'json' | 'mp3',
+    extension: match[3] as 'json' | 'mp3' | 'm4a',
   }
 }
 

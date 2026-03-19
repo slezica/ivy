@@ -23,6 +23,9 @@ export type LoadFile = Action<[{ uri: string; name: string }]>
 export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
   async (file) => {
     const { db, files, copier, metadata, syncQueue, get, set, fetchBooks, fetchClips, cleanupOrphanedFiles } = deps
+    const log = (...args: any[]) => console.log('[LoadFile]', ...args)
+
+    log(`Starting: "${file.name}"`)
 
     // Reclaim space from orphaned files before copying (best-effort)
     await cleanupOrphanedFiles().catch(() => {})
@@ -54,9 +57,11 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
       // Check for an existing book with the same fingerprint
       const existingBook = db.getBookByFingerprint(fileSize, fingerprint)
+      log(`Fingerprint lookup: fileSize=${fileSize}, match=${existingBook?.id ?? 'none'}${existingBook ? `, uri=${existingBook.uri ? 'present' : 'null'}, position=${existingBook.position}` : ''}`)
 
       if (existingBook && existingBook.uri !== null) {
         // Case B: Active duplicate — don't copy at all
+        log(`Case B: active duplicate of ${existingBook.id}, skipping copy`)
         await copier.cancelCopy(opId)
 
         db.touchBook(existingBook.id)
@@ -95,6 +100,7 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
       if (existingBook) {
         // Case A: Restore archived/deleted book
+        log(`Case A: restoring ${existingBook.id}, preserving position=${existingBook.position}`)
         db.restoreBook(
           existingBook.id, fileUri, name, duration,
           existingBook.title ?? title,
@@ -105,6 +111,7 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
       } else {
         // Case C: New book
+        log(`Case C: new book ${bookId}, position=0`)
         db.upsertBook(bookId, fileUri, name, duration, 0, title, artist, artwork, fileSize, fingerprint)
         syncQueue.queueChange('book', bookId, 'upsert')
       }
@@ -124,10 +131,13 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
       }
 
       // User cancellation — silently done (cancelLoadFile already dismissed the UI)
-      if (isCancellation(error)) return
+      if (isCancellation(error)) {
+        log('Cancelled by user')
+        return
+      }
 
       // Real error — show in dialog (only if we still own state)
-      console.error('Failed to add file:', error)
+      log('Error:', error)
       setLibrary(lib => {
         lib.status = 'error'
         lib.copyProgress = null

@@ -809,8 +809,11 @@ export class DatabaseService {
     this.db.runSync('DELETE FROM sync_queue')
   }
 
-  getQueueCount(): number {
-    const result = this.db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM sync_queue')
+  getQueueCount(maxAttempts: number = 3): number {
+    const result = this.db.getFirstSync<{ count: number }>(
+      'SELECT COUNT(*) as count FROM sync_queue WHERE attempts < ?',
+      [maxAttempts]
+    )
     return result?.count ?? 0
   }
 

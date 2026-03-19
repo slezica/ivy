@@ -41,25 +41,39 @@ export class GoogleDriveService {
 
   /**
    * List all files in a backup folder.
+   * Handles pagination to return all files (Drive API returns max 1000 per page).
    */
   async listFiles(folder: BackupFolder): Promise<DriveFile[]> {
     const folderId = await this.ensureFolder(folder)
     const token = await this.getToken()
 
     const query = `'${folderId}' in parents and trashed = false`
-    const fields = 'files(id, name, mimeType, modifiedTime)'
-    const url = `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}`
+    const fields = 'nextPageToken, files(id, name, mimeType, modifiedTime)'
+    const allFiles: DriveFile[] = []
+    let pageToken: string | undefined
 
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    do {
+      const params = new URLSearchParams({
+        q: query,
+        fields,
+        pageSize: '1000',
+      })
+      if (pageToken) params.set('pageToken', pageToken)
 
-    if (!response.ok) {
-      throw new Error(`Failed to list files: ${response.status}`)
-    }
+      const response = await fetch(`${DRIVE_API}/files?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
 
-    const data = await response.json()
-    return data.files || []
+      if (!response.ok) {
+        throw new Error(`Failed to list files: ${response.status}`)
+      }
+
+      const data = await response.json()
+      allFiles.push(...(data.files || []))
+      pageToken = data.nextPageToken
+    } while (pageToken)
+
+    return allFiles
   }
 
   /**
@@ -84,7 +98,8 @@ export class GoogleDriveService {
       parents: [folderId],
     }
 
-    const initResponse = await fetch(`${UPLOAD_API}/files?uploadType=resumable`, {
+    const fields = 'id,name,mimeType,modifiedTime'
+    const initResponse = await fetch(`${UPLOAD_API}/files?uploadType=resumable&fields=${encodeURIComponent(fields)}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -123,6 +138,7 @@ export class GoogleDriveService {
       id: data.id,
       name: data.name,
       mimeType: data.mimeType,
+      modifiedTime: data.modifiedTime,
     }
   }
 

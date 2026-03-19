@@ -260,6 +260,7 @@ describe('planSync', () => {
 
       it('downloads remotely changed clips', () => {
         const state = emptyState()
+        state.local.clips = [createClip('clip-1', 1000)] // unchanged locally
         state.remote.clips.set('clip-1', createRemoteClip('clip-1', 2000, 2000))
         state.manifests.set('clip:clip-1', createManifest('clip', 'clip-1', 1000, 1000))
 
@@ -291,6 +292,20 @@ describe('planSync', () => {
 
         const plan = planSync(state)
 
+        expect(plan.clips.deletes).toHaveLength(1)
+        expect(plan.clips.deletes[0].clipId).toBe('clip-1')
+      })
+
+      it('does not download clips that were deleted locally, even if modified remotely', () => {
+        const state = emptyState()
+        // No local clip, remote exists with newer modifiedAt, and we have a manifest
+        state.remote.clips.set('clip-1', createRemoteClip('clip-1', 2000, 2000))
+        state.manifests.set('clip:clip-1', createManifest('clip', 'clip-1', 1000, 1000))
+
+        const plan = planSync(state)
+
+        // Should delete only, not download
+        expect(plan.clips.downloads).toHaveLength(0)
         expect(plan.clips.deletes).toHaveLength(1)
         expect(plan.clips.deletes[0].clipId).toBe('clip-1')
       })

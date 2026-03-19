@@ -187,9 +187,11 @@ function planClipSync(state: SyncState): SyncPlan['clips'] {
     if (!manifest) {
       // New remotely → download
       downloads.push({ remote })
+    } else if (!localClip) {
+      // Had manifest but deleted locally → skip (DELETE pass handles it)
     } else if (hasRemoteChanged(remote.modifiedAt, manifest)) {
       // Changed remotely since last sync
-      if (!localClip || localClip.updated_at <= (manifest.local_updated_at ?? 0)) {
+      if (localClip.updated_at <= (manifest.local_updated_at ?? 0)) {
         // Not changed locally → download
         downloads.push({ remote })
       }
