@@ -16,6 +16,7 @@ import { createLoadFileWithPicker } from '../actions/load_file_with_picker'
 import { createCancelLoadFile } from '../actions/cancel_load_file'
 import { createArchiveBook } from '../actions/archive_book'
 import { createDeleteBook } from '../actions/delete_book'
+import { createLoadBook } from '../actions/load_book'
 import { createPlay } from '../actions/play'
 import { createPause } from '../actions/pause'
 import { createSeek } from '../actions/seek'
@@ -72,7 +73,8 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const loadFileWithUri = createLoadFileWithUri({ ...deps, loadFile })
   const loadFileWithPicker = createLoadFileWithPicker({ ...deps, loadFile })
   const cancelLoadFile = createCancelLoadFile(deps)
-  const play = createPlay(deps)
+  const loadBook = createLoadBook(deps)
+  const play = createPlay({ ...deps, loadBook })
   const pause = createPause(deps)
   const seek = createSeek(deps)
   const seekClip = createSeekClip({ ...deps, play })
@@ -104,6 +106,17 @@ export const useStore = create<AppState>()(immer((set, get) => {
   transcription.on('queued', onTranscriptionQueued)
   transcription.on('finish', onTranscriptionFinish)
   transcription.on('status', onTranscriptionStatus)
+
+  // Auto-load last played book -------------------------------------------------------------------
+
+  const lastPlayed = db.getLastPlayedBook()
+  if (lastPlayed?.uri) {
+    loadBook({
+      fileUri: lastPlayed.uri,
+      position: lastPlayed.position,
+      ownerId: MAIN_PLAYER_OWNER_ID,
+    }).catch(() => {}) // non-critical
+  }
 
   // Initial state ---------------------------------------------------------------------------------
 

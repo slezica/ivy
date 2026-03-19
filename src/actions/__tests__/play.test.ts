@@ -1,32 +1,19 @@
 import { createPlay, PlayDeps } from '../play'
 import {
-  createMockBook, createMockPlayback, createMockState, createImmerSet, createMockGet,
-  createMockAudio, createMockDb,
+  createMockPlayback, createMockState, createImmerSet, createMockGet,
+  createMockAudio,
 } from './helpers'
 
 
 // -- Helpers ------------------------------------------------------------------
 
-function createMockDeps(playback?: Parameters<typeof createMockPlayback>[0], overrides?: Partial<PlayDeps>): PlayDeps {
-  const state = createMockState({ playback })
-
-  return {
-    audio: createMockAudio(),
-    db: createMockDb(),
-    set: createImmerSet(state),
-    get: createMockGet(state),
-    ...overrides,
-  }
-}
-
-/** Create deps with an accessible state object for assertions on mutations. */
 function createStatefulDeps(playback?: Parameters<typeof createMockPlayback>[0], overrides?: Partial<PlayDeps>) {
   const state = createMockState({ playback })
   const deps: PlayDeps = {
     audio: createMockAudio(),
-    db: createMockDb(),
     set: createImmerSet(state),
     get: createMockGet(state),
+    loadBook: jest.fn(async () => {}),
     ...overrides,
   }
   return { state, deps }
@@ -39,174 +26,44 @@ const CONTEXT = { fileUri: 'file:///audio/book-1.mp3', position: 5000, ownerId: 
 
 describe('createPlay', () => {
 
-  // -- New file (different from currently loaded) ---------------------------
+  it('calls loadBook with the context', async () => {
+    const { deps } = createStatefulDeps()
+    const play = createPlay(deps)
 
-  describe('new file', () => {
-    it('looks up book record by URI', async () => {
-      const deps = createMockDeps({ uri: null })
-      const play = createPlay(deps)
+    await play(CONTEXT)
 
-      await play(CONTEXT)
-
-      expect(deps.db.getBookByAnyUri).toHaveBeenCalledWith(CONTEXT.fileUri)
-    })
-
-    it('throws if no book record found', async () => {
-      const deps = createMockDeps({ uri: null }, {
-        db: createMockDb({ getBookByAnyUri: jest.fn(() => null) }),
-      })
-      const play = createPlay(deps)
-
-      await expect(play(CONTEXT)).rejects.toThrow('No book or clip found for')
-    })
-
-    it('sets status to loading with ownership before audio.load', async () => {
-      const { state, deps } = createStatefulDeps({ uri: null })
-      const play = createPlay(deps)
-
-      await play(CONTEXT)
-
-      // Verify loading was set (final state is 'playing', but loading happened during)
-      const firstUpdater = (deps.set as jest.Mock).mock.calls[0][0]
-      const draft = createMockState()
-      firstUpdater(draft)
-      expect(draft.playback.status).toBe('loading')
-      expect(draft.playback.ownerId).toBe('main')
-    })
-
-    it('loads audio with book metadata', async () => {
-      const book = createMockBook({ title: 'My Book', artist: 'Author', artwork: 'art-data' })
-      const deps = createMockDeps({ uri: null }, {
-        db: createMockDb({ getBookByAnyUri: jest.fn(() => book) }),
-      })
-      const play = createPlay(deps)
-
-      await play(CONTEXT)
-
-      expect(deps.audio.load).toHaveBeenCalledWith(CONTEXT.fileUri, {
-        title: 'My Book',
-        artist: 'Author',
-        artwork: 'art-data',
-      })
-    })
-
-    it('updates playback state with uri, duration, and position after load', async () => {
-      const { state, deps } = createStatefulDeps({ uri: null }, {
-        audio: createMockAudio({ load: jest.fn(async () => 90000) }),
-      })
-      const play = createPlay(deps)
-
-      await play(CONTEXT)
-
-      expect(state.playback.uri).toBe(CONTEXT.fileUri)
-      expect(state.playback.duration).toBe(90000)
-      expect(state.playback.position).toBe(CONTEXT.position)
-    })
-
-    it('seeks to the requested position', async () => {
-      const deps = createMockDeps({ uri: null })
-      const play = createPlay(deps)
-
-      await play(CONTEXT)
-
-      expect(deps.audio.seek).toHaveBeenCalledWith(CONTEXT.position)
-    })
-
-    it('sets status to playing and calls audio.play', async () => {
-      const { state, deps } = createStatefulDeps({ uri: null })
-      const play = createPlay(deps)
-
-      await play(CONTEXT)
-
-      expect(state.playback.status).toBe('playing')
-      expect(state.playback.ownerId).toBe('main')
-      expect(deps.audio.play).toHaveBeenCalled()
-    })
+    expect(deps.loadBook).toHaveBeenCalledWith(CONTEXT)
   })
 
-  // -- Same file, different position ----------------------------------------
+  it('sets status to playing and calls audio.play', async () => {
+    const { state, deps } = createStatefulDeps()
+    const play = createPlay(deps)
 
-  describe('same file, different position', () => {
-    it('seeks to new position without reloading', async () => {
-      const deps = createMockDeps({ uri: CONTEXT.fileUri, position: 0, duration: 60000 })
-      const play = createPlay(deps)
+    await play(CONTEXT)
 
-      await play(CONTEXT)
-
-      expect(deps.audio.load).not.toHaveBeenCalled()
-      expect(deps.audio.seek).toHaveBeenCalledWith(CONTEXT.position)
-    })
-
-    it('updates position in state', async () => {
-      const { state, deps } = createStatefulDeps({ uri: CONTEXT.fileUri, position: 0, duration: 60000 })
-      const play = createPlay(deps)
-
-      await play(CONTEXT)
-
-      expect(state.playback.position).toBe(CONTEXT.position)
-    })
-
-    it('does not look up book record', async () => {
-      const deps = createMockDeps({ uri: CONTEXT.fileUri, position: 0 })
-      const play = createPlay(deps)
-
-      await play(CONTEXT)
-
-      expect(deps.db.getBookByAnyUri).not.toHaveBeenCalled()
-    })
+    expect(state.playback.status).toBe('playing')
+    expect(state.playback.ownerId).toBe('main')
+    expect(deps.audio.play).toHaveBeenCalled()
   })
 
-  // -- Same file, same position ---------------------------------------------
-
-  describe('same file, same position', () => {
-    it('does not seek or load', async () => {
-      const deps = createMockDeps({ uri: CONTEXT.fileUri, position: CONTEXT.position, duration: 60000 })
-      const play = createPlay(deps)
-
-      await play(CONTEXT)
-
-      expect(deps.audio.load).not.toHaveBeenCalled()
-      expect(deps.audio.seek).not.toHaveBeenCalled()
+  it('calls audio.play after loadBook', async () => {
+    const callOrder: string[] = []
+    const { deps } = createStatefulDeps({}, {
+      loadBook: jest.fn(async () => { callOrder.push('loadBook') }),
+      audio: createMockAudio({ play: jest.fn(async () => { callOrder.push('audio.play') }) }),
     })
+    const play = createPlay(deps)
 
-    it('still sets playing and calls audio.play', async () => {
-      const { state, deps } = createStatefulDeps({ uri: CONTEXT.fileUri, position: CONTEXT.position, duration: 60000 })
-      const play = createPlay(deps)
+    await play(CONTEXT)
 
-      await play(CONTEXT)
-
-      expect(state.playback.status).toBe('playing')
-      expect(deps.audio.play).toHaveBeenCalled()
-    })
+    expect(callOrder).toEqual(['loadBook', 'audio.play'])
   })
 
-  // -- Ownership ------------------------------------------------------------
-
-  describe('ownership', () => {
-    it('sets ownerId on load (new file)', async () => {
-      const { state, deps } = createStatefulDeps({ uri: null, ownerId: 'old-owner' })
-      const play = createPlay(deps)
-
-      await play({ ...CONTEXT, ownerId: 'new-owner' })
-
-      expect(state.playback.ownerId).toBe('new-owner')
-    })
-
-    it('sets ownerId on play (same file)', async () => {
-      const { state, deps } = createStatefulDeps({ uri: CONTEXT.fileUri, position: CONTEXT.position, ownerId: 'old-owner' })
-      const play = createPlay(deps)
-
-      await play({ ...CONTEXT, ownerId: 'new-owner' })
-
-      expect(state.playback.ownerId).toBe('new-owner')
-    })
-  })
-
-  // -- Error handling -------------------------------------------------------
+  // -- Error handling ---------------------------------------------------------
 
   describe('error handling', () => {
     it('sets status to paused when a file was loaded', async () => {
-      const { state, deps } = createStatefulDeps({ uri: CONTEXT.fileUri, position: CONTEXT.position }, {
+      const { state, deps } = createStatefulDeps({ uri: CONTEXT.fileUri }, {
         audio: createMockAudio({ play: jest.fn(async () => { throw new Error('play failed') }) }),
       })
       const play = createPlay(deps)
@@ -218,7 +75,7 @@ describe('createPlay', () => {
 
     it('sets status to idle when no file was loaded', async () => {
       const { state, deps } = createStatefulDeps({ uri: null }, {
-        audio: createMockAudio({ load: jest.fn(async () => { throw new Error('load failed') }) }),
+        loadBook: jest.fn(async () => { throw new Error('load failed') }),
       })
       const play = createPlay(deps)
 
@@ -228,13 +85,12 @@ describe('createPlay', () => {
     })
 
     it('re-throws the original error', async () => {
-      const deps = createMockDeps({ uri: null }, {
-        db: createMockDb({ getBookByAnyUri: jest.fn(() => null) }),
+      const { deps } = createStatefulDeps({}, {
+        loadBook: jest.fn(async () => { throw new Error('boom') }),
       })
       const play = createPlay(deps)
 
-      await expect(play(CONTEXT)).rejects.toThrow('No book or clip found for')
+      await expect(play(CONTEXT)).rejects.toThrow('boom')
     })
-
   })
 })

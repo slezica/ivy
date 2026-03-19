@@ -275,6 +275,13 @@ export class DatabaseService {
     return row ? toBook(row) : null
   }
 
+  getLastPlayedBook(): Book | null {
+    const row = this.db.getFirstSync<BookRow>(
+      'SELECT * FROM files WHERE hidden = 0 AND uri IS NOT NULL ORDER BY updated_at DESC LIMIT 1'
+    )
+    return row ? toBook(row) : null
+  }
+
   getAllBooks(): Book[] {
     const rows = this.db.getAllSync<BookRow>(
       'SELECT * FROM files WHERE hidden = 0 ORDER BY updated_at DESC'
