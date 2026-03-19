@@ -41,20 +41,26 @@ export default function LoadingModal() {
                 </View>
               )}
               {isCopying && (
-                <TextButton label="Cancel" onPress={cancelLoadFile} />
+                <View style={styles.buttons}>
+                  <TextButton label="Cancel" onPress={cancelLoadFile} style={{ flex: 1 }} />
+                </View>
               )}
             </>
           )}
           {isDuplicate && (
             <>
               <Text style={styles.text}>This file is already in your library</Text>
-              <TextButton label="OK" onPress={dismiss} variant="primary" />
+              <View style={styles.buttons}>
+                <TextButton label="OK" onPress={dismiss} variant="primary" style={{ flex: 1 }} />
+              </View>
             </>
           )}
           {isError && (
             <>
               <Text style={styles.text}>Something went wrong adding this file</Text>
-              <TextButton label="OK" onPress={dismiss} variant="primary" />
+              <View style={styles.buttons}>
+                <TextButton label="OK" onPress={dismiss} variant="primary" style={{ flex: 1 }} />
+              </View>
             </>
           )}
         </View>
@@ -73,10 +79,16 @@ const styles = StyleSheet.create({
   content: {
     backgroundColor: Color.WHITE,
     borderRadius: 12,
-    padding: 32,
+    padding: 16,
     alignItems: 'center',
     gap: 16,
     minWidth: 200,
+  },
+  buttons: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
   },
   text: {
     fontSize: 16,
