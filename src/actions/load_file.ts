@@ -50,7 +50,7 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
         await fetchBooks()
         await fetchClips()
         set(state => {
-          state.library.status = 'idle'
+          state.library.status = 'duplicate'
           state.library.copyProgress = null
           state.library.copyOpId = null
         })

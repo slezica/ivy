@@ -40,7 +40,7 @@ export interface AppState {
   sessions: Record<string, SessionWithBook>
 
   library: {
-    status: 'loading' | 'idle' | 'adding'
+    status: 'loading' | 'idle' | 'adding' | 'duplicate'
     copyProgress: { bytes: number; total: number } | null
     copyOpId: string | null
   }

@@ -4,12 +4,18 @@ import { Color } from '../theme'
 
 export default function LoadingModal() {
   const { library, cancelLoadFile } = useStore()
-  const isVisible = library.status === 'adding'
+
+  const isAdding = library.status === 'adding'
+  const isDuplicate = library.status === 'duplicate'
+  const isVisible = isAdding || isDuplicate
+
   const progress = library.copyProgress
   const isCopying = library.copyOpId !== null
 
   const hasProgress = progress && progress.total > 0
   const percent = hasProgress ? Math.round((progress.bytes / progress.total) * 100) : null
+
+  const dismiss = () => useStore.setState(state => { state.library.status = 'idle' })
 
   return (
     <Modal
@@ -20,20 +26,32 @@ export default function LoadingModal() {
     >
       <View style={styles.overlay}>
         <View style={styles.content}>
-          <ActivityIndicator size="large" color={Color.PRIMARY} />
-          <Text style={styles.text}>Adding to library...</Text>
-          {hasProgress && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${percent}%` }]} />
-              </View>
-              <Text style={styles.progressText}>{percent}%</Text>
-            </View>
+          {isAdding && (
+            <>
+              <ActivityIndicator size="large" color={Color.PRIMARY} />
+              <Text style={styles.text}>Adding to library...</Text>
+              {hasProgress && (
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${percent}%` }]} />
+                  </View>
+                  <Text style={styles.progressText}>{percent}%</Text>
+                </View>
+              )}
+              {isCopying && (
+                <Pressable onPress={cancelLoadFile} style={styles.button}>
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </Pressable>
+              )}
+            </>
           )}
-          {isCopying && (
-            <Pressable onPress={cancelLoadFile} style={styles.cancelButton}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
+          {isDuplicate && (
+            <>
+              <Text style={styles.text}>This file is already in your library</Text>
+              <Pressable onPress={dismiss} style={styles.button}>
+                <Text style={styles.okText}>OK</Text>
+              </Pressable>
+            </>
           )}
         </View>
       </View>
@@ -82,12 +100,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Color.GRAY_MEDIUM,
   },
-  cancelButton: {
+  button: {
     paddingVertical: 8,
     paddingHorizontal: 24,
   },
-  cancelText: {
+  buttonText: {
     fontSize: 15,
     color: Color.GRAY_DARK,
+  },
+  okText: {
+    fontSize: 15,
+    color: Color.PRIMARY,
+    fontWeight: '500',
   },
 })
