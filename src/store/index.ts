@@ -43,7 +43,7 @@ import { createCleanupOrphanedFiles } from '../actions/cleanup_orphaned_files'
 
 export const useStore = create<AppState>()(immer((set, get) => {
   const deps = { set, get, ...services}
-  const { db, audio, syncQueue, transcription, sync } = services
+  const { db, audio, files, syncQueue, transcription, sync } = services
 
   // Start transcription service if enabled in settings
   const initialSettings = db.getSettings()
