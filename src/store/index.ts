@@ -38,6 +38,7 @@ import { createTrackSession } from '../actions/track_session'
 import { createFinalizeSession } from '../actions/finalize_session'
 import { createUpdateBook } from '../actions/update_book'
 import { createResetApp } from '../actions/reset_app'
+import { createCleanupOrphanedFiles } from '../actions/cleanup_orphaned_files'
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
@@ -66,7 +67,8 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const archiveBook = createArchiveBook(deps)
   const deleteBook = createDeleteBook(deps)
   const updateBook = createUpdateBook(deps)
-  const loadFile = createLoadFile({ ...deps, fetchBooks, fetchClips })
+  const cleanupOrphanedFiles = createCleanupOrphanedFiles({ db, files })
+  const loadFile = createLoadFile({ ...deps, fetchBooks, fetchClips, cleanupOrphanedFiles })
   const loadFileWithUri = createLoadFileWithUri({ ...deps, loadFile })
   const loadFileWithPicker = createLoadFileWithPicker({ ...deps, loadFile })
   const cancelLoadFile = createCancelLoadFile(deps)

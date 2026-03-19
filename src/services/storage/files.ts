@@ -106,6 +106,17 @@ export class FileStorageService {
     return { fileSize, fingerprint }
   }
 
+  /** List all files in a directory as file:// URIs. */
+  async listFiles(dirPath: string): Promise<string[]> {
+    const exists = await RNFS.exists(dirPath)
+    if (!exists) return []
+
+    const items = await RNFS.readDir(dirPath)
+    return items
+      .filter(item => item.isFile())
+      .map(item => `file://${item.path}`)
+  }
+
   /** Ensure the audio storage directory exists. */
   async ensureAudioDirectory(): Promise<void> {
     if (!(await this.storageDir.exists)) {

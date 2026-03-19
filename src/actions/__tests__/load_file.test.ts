@@ -33,6 +33,7 @@ function createMockDeps(overrides: Partial<LoadFileDeps> = {}): LoadFileDeps {
     get: createMockGet(state),
     fetchBooks: jest.fn(async () => {}),
     fetchClips: jest.fn(async () => {}),
+    cleanupOrphanedFiles: jest.fn(async () => {}),
     ...overrides,
   }
 }

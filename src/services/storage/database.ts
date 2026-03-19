@@ -643,6 +643,27 @@ export class DatabaseService {
   }
 
   // ---------------------------------------------------------------------------
+  // Maintenance
+  // ---------------------------------------------------------------------------
+
+  /** Returns all file URIs referenced by books and clips. */
+  getAllFileUris(): Set<string> {
+    const uris = new Set<string>()
+
+    const bookRows = this.db.getAllSync<{ uri: string | null }>('SELECT uri FROM files')
+    for (const row of bookRows) {
+      if (row.uri) uris.add(row.uri)
+    }
+
+    const clipRows = this.db.getAllSync<{ uri: string }>('SELECT uri FROM clips')
+    for (const row of clipRows) {
+      uris.add(row.uri)
+    }
+
+    return uris
+  }
+
+  // ---------------------------------------------------------------------------
   // Development
   // ---------------------------------------------------------------------------
 

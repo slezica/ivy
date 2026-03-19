@@ -2,6 +2,7 @@ import type { DatabaseService, FileStorageService, FileCopierService, AudioMetad
 import type { GetState, SetState, Action, ActionFactory } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
+import type { CleanupOrphanedFiles } from './cleanup_orphaned_files'
 import { generateId } from '../utils'
 
 export interface LoadFileDeps {
@@ -14,13 +15,17 @@ export interface LoadFileDeps {
   set: SetState
   fetchBooks: FetchBooks
   fetchClips: FetchClips
+  cleanupOrphanedFiles: CleanupOrphanedFiles
 }
 
 export type LoadFile = Action<[{ uri: string; name: string }]>
 
 export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
   async (file) => {
-    const { db, files, copier, metadata, syncQueue, get, set, fetchBooks, fetchClips } = deps
+    const { db, files, copier, metadata, syncQueue, get, set, fetchBooks, fetchClips, cleanupOrphanedFiles } = deps
+
+    // Reclaim space from orphaned files before copying
+    await cleanupOrphanedFiles()
 
     let destPath: string | null = null
 
