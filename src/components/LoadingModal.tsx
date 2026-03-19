@@ -1,11 +1,12 @@
-import { View, Text, StyleSheet, Modal, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, Modal, ActivityIndicator, Pressable } from 'react-native'
 import { useStore } from '../store'
 import { Color } from '../theme'
 
 export default function LoadingModal() {
-  const { library } = useStore()
+  const { library, cancelLoadFile } = useStore()
   const isVisible = library.status === 'adding'
   const progress = library.copyProgress
+  const isCopying = library.copyOpId !== null
 
   const hasProgress = progress && progress.total > 0
   const percent = hasProgress ? Math.round((progress.bytes / progress.total) * 100) : null
@@ -28,6 +29,11 @@ export default function LoadingModal() {
               </View>
               <Text style={styles.progressText}>{percent}%</Text>
             </View>
+          )}
+          {isCopying && (
+            <Pressable onPress={cancelLoadFile} style={styles.cancelButton}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </Pressable>
           )}
         </View>
       </View>
@@ -75,5 +81,13 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 13,
     color: Color.GRAY_MEDIUM,
+  },
+  cancelButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+  },
+  cancelText: {
+    fontSize: 15,
+    color: Color.GRAY_DARK,
   },
 })

@@ -34,6 +34,8 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
       const { opId, fileSize, fingerprint } = await copier.beginCopy(file.uri)
 
+      set(state => { state.library.copyOpId = opId })
+
       // Check for an existing book with the same fingerprint
       const existingBook = db.getBookByFingerprint(fileSize, fingerprint)
 
@@ -50,6 +52,7 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
         set(state => {
           state.library.status = 'idle'
           state.library.copyProgress = null
+          state.library.copyOpId = null
         })
         return
       }
@@ -104,12 +107,16 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
       set(state => {
         state.library.status = 'idle'
         state.library.copyProgress = null
+        state.library.copyOpId = null
       })
 
       // Clean up the destination file if it was created but the DB write failed
       if (destPath && !db.getBookByUri(`file://${destPath}`)) {
         await files.deleteFile(`file://${destPath}`).catch(() => {})
       }
+
+      // User cancellation is not an error — swallow it
+      if (isCancellation(error)) return
 
       throw error
     }
@@ -128,4 +135,8 @@ function getExtension(filename: string): string {
 
 function sanitizeFilename(filename: string): string {
   return filename.replace(/[/\\:*?"<>|[\]]/g, '_')
+}
+
+function isCancellation(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('CANCELLED')
 }

@@ -80,7 +80,7 @@ export function createMockState(overrides: {
 } = {}) {
   return {
     playback: createMockPlayback(overrides.playback),
-    library: { status: 'idle' as string, copyProgress: null as { bytes: number; total: number } | null, ...overrides.library },
+    library: { status: 'idle' as string, copyProgress: null as { bytes: number; total: number } | null, copyOpId: null as string | null, ...overrides.library },
     books: overrides.books ?? {} as Record<string, Book>,
     sessions: overrides.sessions ?? {} as Record<string, SessionWithBook>,
     clips: overrides.clips ?? {} as Record<string, ClipWithFile>,

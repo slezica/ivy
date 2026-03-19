@@ -13,6 +13,7 @@ import { createFetchClips } from '../actions/fetch_clips'
 import { createLoadFile } from '../actions/load_file'
 import { createLoadFileWithUri } from '../actions/load_file_with_uri'
 import { createLoadFileWithPicker } from '../actions/load_file_with_picker'
+import { createCancelLoadFile } from '../actions/cancel_load_file'
 import { createArchiveBook } from '../actions/archive_book'
 import { createDeleteBook } from '../actions/delete_book'
 import { createPlay } from '../actions/play'
@@ -68,6 +69,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const loadFile = createLoadFile({ ...deps, fetchBooks, fetchClips })
   const loadFileWithUri = createLoadFileWithUri({ ...deps, loadFile })
   const loadFileWithPicker = createLoadFileWithPicker({ ...deps, loadFile })
+  const cancelLoadFile = createCancelLoadFile(deps)
   const play = createPlay(deps)
   const pause = createPause(deps)
   const seek = createSeek(deps)
@@ -113,6 +115,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     library: {
       status: 'loading',
       copyProgress: null,
+      copyOpId: null,
     },
 
     playback: {
@@ -142,6 +145,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     loadFile,
     loadFileWithUri,
     loadFileWithPicker,
+    cancelLoadFile,
     archiveBook,
     deleteBook,
     updateBook,

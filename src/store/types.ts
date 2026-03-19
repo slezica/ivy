@@ -6,6 +6,7 @@ import type { FetchClips } from '../actions/fetch_clips'
 import type { LoadFile } from '../actions/load_file'
 import type { LoadFileWithUri } from '../actions/load_file_with_uri'
 import type { LoadFileWithPicker } from '../actions/load_file_with_picker'
+import type { CancelLoadFile } from '../actions/cancel_load_file'
 import type { ArchiveBook } from '../actions/archive_book'
 import type { DeleteBook } from '../actions/delete_book'
 import type { Play } from '../actions/play'
@@ -41,6 +42,7 @@ export interface AppState {
   library: {
     status: 'loading' | 'idle' | 'adding'
     copyProgress: { bytes: number; total: number } | null
+    copyOpId: string | null
   }
 
   playback: {
@@ -70,6 +72,7 @@ export interface AppState {
   loadFile: LoadFile
   loadFileWithUri: LoadFileWithUri
   loadFileWithPicker: LoadFileWithPicker
+  cancelLoadFile: CancelLoadFile
   archiveBook: ArchiveBook
   deleteBook: DeleteBook
   updateBook: UpdateBook
