@@ -147,5 +147,5 @@ function sanitizeFilename(filename: string): string {
 }
 
 function isCancellation(error: unknown): boolean {
-  return error instanceof Error && error.message.includes('CANCELLED')
+  return error instanceof Error && error.message.toLowerCase().includes('cancelled')
 }
