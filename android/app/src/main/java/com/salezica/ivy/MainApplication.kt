@@ -25,6 +25,7 @@ class MainApplication : Application(), ReactApplication {
             PackageList(this).packages.apply {
               add(AudioSlicerPackage())
               add(AudioMetadataPackage())
+              add(FileCopierPackage())
             }
 
           override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"

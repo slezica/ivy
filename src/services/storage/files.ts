@@ -17,11 +17,13 @@ const FINGERPRINT_BYTES = 4096
 
 export class FileStorageService {
   private storageDir: Directory
-  private storagePath: string
+
+  /** Absolute path to the audio storage directory (no file:// prefix). */
+  readonly audioDirectoryPath: string
 
   constructor() {
     this.storageDir = new Directory(Paths.document, 'audio')
-    this.storagePath = `${RNFS.DocumentDirectoryPath}/audio`
+    this.audioDirectoryPath = `${RNFS.DocumentDirectoryPath}/audio`
   }
 
   /**
@@ -30,10 +32,10 @@ export class FileStorageService {
    * Returns the local file:// URI.
    */
   async copyToAppStorage(externalUri: string, filename: string): Promise<string> {
-    await this.ensureStorageDirectory()
+    await this.ensureAudioDirectory()
 
     const uniqueFilename = createUniqueFilename(filename)
-    const localPath = `${this.storagePath}/${uniqueFilename}`
+    const localPath = `${this.audioDirectoryPath}/${uniqueFilename}`
 
     // If source is already a local file, move instead of copy to save disk space
     const isLocalFile = externalUri.startsWith('file://') || externalUri.startsWith('/')
@@ -66,7 +68,7 @@ export class FileStorageService {
   async rename(currentUri: string, newBasename: string): Promise<string> {
     const currentPath = uriToPath(currentUri)
     const extension = getExtension(currentPath)
-    const newPath = `${this.storagePath}/${newBasename}${extension}`
+    const newPath = `${this.audioDirectoryPath}/${newBasename}${extension}`
 
     await RNFS.moveFile(currentPath, newPath)
 
@@ -104,18 +106,15 @@ export class FileStorageService {
     return { fileSize, fingerprint }
   }
 
-  // ---------------------------------------------------------------------------
-  // Private
-  // ---------------------------------------------------------------------------
-
-  private async ensureStorageDirectory(): Promise<void> {
+  /** Ensure the audio storage directory exists. */
+  async ensureAudioDirectory(): Promise<void> {
     if (!(await this.storageDir.exists)) {
       await this.storageDir.create()
     }
 
-    const exists = await RNFS.exists(this.storagePath)
+    const exists = await RNFS.exists(this.audioDirectoryPath)
     if (!exists) {
-      await RNFS.mkdir(this.storagePath)
+      await RNFS.mkdir(this.audioDirectoryPath)
     }
   }
 }

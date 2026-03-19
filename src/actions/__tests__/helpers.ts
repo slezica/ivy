@@ -80,7 +80,7 @@ export function createMockState(overrides: {
 } = {}) {
   return {
     playback: createMockPlayback(overrides.playback),
-    library: { status: 'idle' as string, ...overrides.library },
+    library: { status: 'idle' as string, copyProgress: null as { bytes: number; total: number } | null, ...overrides.library },
     books: overrides.books ?? {} as Record<string, Book>,
     sessions: overrides.sessions ?? {} as Record<string, SessionWithBook>,
     clips: overrides.clips ?? {} as Record<string, ClipWithFile>,
@@ -147,10 +147,12 @@ export function createMockDb(overrides: Record<string, jest.Mock | jest.Mock<any
 
 export function createMockFiles(overrides: Record<string, jest.Mock> = {}) {
   return {
+    audioDirectoryPath: '/audio',
     copyToAppStorage: jest.fn(async () => 'file:///audio/temp-abc.mp3'),
     readFileFingerprint: jest.fn(async () => ({ fileSize: 1024, fingerprint: new Uint8Array([1, 2, 3]) })),
     rename: jest.fn(async (_uri: string, newName: string) => `file:///audio/${newName}.mp3`),
     deleteFile: jest.fn(async () => {}),
+    ensureAudioDirectory: jest.fn(async () => {}),
     ...overrides,
   } as any
 }
@@ -163,6 +165,22 @@ export function createMockMetadata(overrides: Record<string, jest.Mock> = {}) {
       artwork: 'data:image/png;base64,abc',
       duration: 60000,
     })),
+    ...overrides,
+  } as any
+}
+
+export function createMockCopier(overrides: Record<string, jest.Mock> = {}) {
+  return {
+    beginCopy: jest.fn(async () => ({
+      opId: 'op-1',
+      fileSize: 1024,
+      fingerprint: new Uint8Array([1, 2, 3]),
+    })),
+    commitCopy: jest.fn(async () => ({
+      hash: 'abc123',
+      bytesWritten: 1024,
+    })),
+    cancelCopy: jest.fn(async () => {}),
     ...overrides,
   } as any
 }

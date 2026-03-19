@@ -112,6 +112,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
     library: {
       status: 'loading',
+      copyProgress: null,
     },
 
     playback: {

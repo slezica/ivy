@@ -1,13 +1,15 @@
-import type { DatabaseService, FileStorageService, AudioMetadataService, SyncQueueService } from '../services'
+import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, SyncQueueService } from '../services'
 import type { SetState, Action, ActionFactory } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
 import { generateId } from '../utils'
 
+const AUDIO_DIR = 'audio'
 
 export interface LoadFileDeps {
   db: DatabaseService
   files: FileStorageService
+  copier: FileCopierService
   metadata: AudioMetadataService
   syncQueue: SyncQueueService
   set: SetState
@@ -19,90 +21,111 @@ export type LoadFile = Action<[{ uri: string; name: string }]>
 
 export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
   async (file) => {
-    const { db, files, metadata, syncQueue, set, fetchBooks, fetchClips } = deps
+    const { db, files, copier, metadata, syncQueue, set, fetchBooks, fetchClips } = deps
 
-    let tempUri: string | null = null
-    let permanentUri: string | null = null
+    let destPath: string | null = null
 
     try {
-      // Step 1: Copy file to app storage (with temp filename)
-      console.log('Copying file to app storage from:', file.uri)
-      set({ library: { status: 'adding' } })
+      // Phase 1: Open the source and read fingerprint (no file created yet)
+      set(state => {
+        state.library.status = 'adding'
+        state.library.copyProgress = null
+      })
 
-      tempUri = await files.copyToAppStorage(file.uri, file.name)
-      console.log('File copied to:', tempUri)
+      const { opId, fileSize, fingerprint } = await copier.beginCopy(file.uri)
 
-      // Step 2: Read metadata
-      const fileMeta = await metadata.readMetadata(tempUri)
-      console.log('Metadata read:', fileMeta)
-
-      // Step 3: Read file fingerprint
-      const { fileSize, fingerprint } = await files.readFileFingerprint(tempUri)
-      console.log('File fingerprint:', fileSize, 'bytes,', fingerprint.length, 'byte sample')
-
-      // Step 4: Check for existing book with same fingerprint
+      // Check for an existing book with the same fingerprint
       const existingBook = db.getBookByFingerprint(fileSize, fingerprint)
 
-      // Step 5: Determine final ID and filename, save to database and schedule sync
-      const { name } = file
+      if (existingBook && existingBook.uri !== null) {
+        // Case B: Active duplicate — don't copy at all
+        console.log('File already exists in library:', existingBook.id)
+        await copier.cancelCopy(opId)
+
+        db.touchBook(existingBook.id)
+        syncQueue.queueChange('book', existingBook.id, 'upsert')
+
+        await fetchBooks()
+        await fetchClips()
+        set(state => {
+          state.library.status = 'idle'
+          state.library.copyProgress = null
+        })
+        return
+      }
+
+      // Case A (restore) or Case C (new book) — we need the file
+      const bookId = existingBook?.id ?? generateId()
+      const extension = getExtension(file.name)
+      const filename = sanitizeFilename(`${bookId}${extension}`)
+
+      await files.ensureAudioDirectory()
+      destPath = `${files.audioDirectoryPath}/${filename}`
+
+      const { hash } = await copier.commitCopy(opId, destPath, (bytes, total) => {
+        set(state => {
+          state.library.copyProgress = { bytes, total }
+        })
+      })
+
+      const fileUri = `file://${destPath}`
+
+      // Read metadata from the copied file
+      const fileMeta = await metadata.readMetadata(fileUri)
       const { title, artist, artwork, duration } = fileMeta
+      const { name } = file
 
       if (existingBook) {
-        if (existingBook.uri === null) {
-          // Case A: Archived book - restore it with new file
-          console.log('Restoring archived book:', existingBook.id)
-          permanentUri = await files.rename(tempUri, existingBook.id)
-
-          const book = db.restoreBook(
-            existingBook.id, permanentUri, name, duration,
-            existingBook.title ?? title,
-            existingBook.artist ?? artist,
-            existingBook.artwork ?? artwork,
-          )
-          syncQueue.queueChange('book', book.id, 'upsert')
-
-        } else {
-          // Case B: Active book - duplicate file, use existing
-          console.log('File already exists in library, duplicate will be cleaned up:', tempUri)
-          permanentUri = existingBook.uri
-
-          db.touchBook(existingBook.id)
-          const book = db.getBookById(existingBook.id)!
-
-          console.log('Scheduling upsert for book', book.id)
-          syncQueue.queueChange('book', book.id, 'upsert')
-        }
+        // Case A: Restore archived/deleted book
+        console.log('Restoring archived book:', existingBook.id)
+        db.restoreBook(
+          existingBook.id, fileUri, name, duration,
+          existingBook.title ?? title,
+          existingBook.artist ?? artist,
+          existingBook.artwork ?? artwork,
+        )
+        syncQueue.queueChange('book', existingBook.id, 'upsert')
 
       } else {
-        // Case C: New book - generate ID, rename file, create record
-        const id = generateId()
-        permanentUri = await files.rename(tempUri, id)
-
-        console.log('Creating new book with ID:', id)
-        const book = db.upsertBook(id, permanentUri, name, duration, 0, title, artist, artwork, fileSize, fingerprint)
-
-        console.log('Scheduling upsert for book', book.id)
-        syncQueue.queueChange('book', book.id, 'upsert')
+        // Case C: New book
+        console.log('Creating new book with ID:', bookId)
+        db.upsertBook(bookId, fileUri, name, duration, 0, title, artist, artwork, fileSize, fingerprint)
+        syncQueue.queueChange('book', bookId, 'upsert')
       }
 
       await fetchBooks()
       await fetchClips()
-      set(state => { state.library.status = 'idle' })
+      set(state => {
+        state.library.status = 'idle'
+        state.library.copyProgress = null
+      })
 
     } catch (error) {
-      set(state => { state.library.status = 'idle' })
+      set(state => {
+        state.library.status = 'idle'
+        state.library.copyProgress = null
+      })
+
+      // Clean up the destination file if it was created but the DB write failed
+      if (destPath && !db.getBookByUri(`file://${destPath}`)) {
+        await files.deleteFile(`file://${destPath}`).catch(() => {})
+      }
+
       throw error
-
-    } finally {
-      // Whatever happened above, we must clean up unused files. Temporary files must always go,
-      // and also "permanent" files that are actually not referenced from the DB (something failed).
-      if (tempUri) {
-        await files.deleteFile(tempUri).catch(() => {})
-      }
-
-      if (permanentUri && !db.getBookByUri(permanentUri)) {
-        await files.deleteFile(permanentUri).catch(() => {})
-      }
     }
   }
 )
+
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+function getExtension(filename: string): string {
+  const dotIndex = filename.lastIndexOf('.')
+  return dotIndex >= 0 ? filename.substring(dotIndex) : ''
+}
+
+function sanitizeFilename(filename: string): string {
+  return filename.replace(/[/\\:*?"<>|[\]]/g, '_')
+}

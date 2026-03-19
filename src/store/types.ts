@@ -38,7 +38,10 @@ export interface AppState {
   settings: Settings
   sessions: Record<string, SessionWithBook>
 
-  library: { status: 'loading' | 'idle' | 'adding' }
+  library: {
+    status: 'loading' | 'idle' | 'adding'
+    copyProgress: { bytes: number; total: number } | null
+  }
 
   playback: {
     status: 'idle' | 'loading' | 'paused' | 'playing'
