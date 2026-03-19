@@ -168,6 +168,7 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
 
                 while (true) {
                     if (op.cancelled) {
+                        android.util.Log.d("FileCopier", "commitCopy: cancelled flag seen in loop, cleaning up")
                         outputStream.close()
                         inputStream.close()
                         java.io.File(destPath).delete()
@@ -206,6 +207,7 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                 promise.resolve(result)
 
             } catch (e: Exception) {
+                android.util.Log.d("FileCopier", "commitCopy catch: cancelled=${op.cancelled}, error=${e.message}")
                 try { inputStream.close() } catch (_: Exception) {}
                 java.io.File(destPath).delete()
                 operations.remove(opId)
@@ -228,20 +230,26 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
      */
     @ReactMethod
     fun cancelCopy(opId: String, promise: Promise) {
+        android.util.Log.d("FileCopier", "cancelCopy called for opId=$opId")
         val op = operations[opId]
 
         if (op == null) {
+            android.util.Log.d("FileCopier", "cancelCopy: op not found in map (already completed?)")
             promise.resolve(null)
             return
         }
 
+        android.util.Log.d("FileCopier", "cancelCopy: setting cancelled=true, stream=${op.inputStream != null}")
         op.cancelled = true
 
         // For the pre-commit case: close stream and remove if we can.
         // During commitCopy, the copy loop handles cleanup after seeing the flag.
         val stream = op.inputStream
         if (stream != null && operations.remove(opId) != null) {
+            android.util.Log.d("FileCopier", "cancelCopy: closing stream and removing from map")
             try { stream.close() } catch (_: Exception) {}
+        } else {
+            android.util.Log.d("FileCopier", "cancelCopy: flag set only, remove returned null or no stream")
         }
 
         promise.resolve(null)
