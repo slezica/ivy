@@ -104,21 +104,28 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
       })
 
     } catch (error) {
-      set(state => {
-        state.library.status = 'idle'
-        state.library.copyProgress = null
-        state.library.copyOpId = null
-      })
-
       // Clean up the destination file if it was created but the DB write failed
       if (destPath && !db.getBookByUri(`file://${destPath}`)) {
         await files.deleteFile(`file://${destPath}`).catch(() => {})
       }
 
-      // User cancellation is not an error — swallow it
-      if (isCancellation(error)) return
+      // User cancellation — silently dismiss
+      if (isCancellation(error)) {
+        set(state => {
+          state.library.status = 'idle'
+          state.library.copyProgress = null
+          state.library.copyOpId = null
+        })
+        return
+      }
 
-      throw error
+      // Real error — show in dialog
+      console.error('Failed to add file:', error)
+      set(state => {
+        state.library.status = 'error'
+        state.library.copyProgress = null
+        state.library.copyOpId = null
+      })
     }
   }
 )

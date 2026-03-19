@@ -264,7 +264,7 @@ describe('createLoadFile', () => {
   // -- Error handling ---------------------------------------------------------
 
   describe('error handling', () => {
-    it('resets library status to idle on failure', async () => {
+    it('sets library status to error on failure', async () => {
       const state = createMockState()
       const deps = createMockDeps({
         copier: createMockCopier({
@@ -274,12 +274,12 @@ describe('createLoadFile', () => {
       })
       const loadFile = createLoadFile(deps)
 
-      await expect(loadFile(INPUT)).rejects.toThrow('open failed')
+      await loadFile(INPUT)
 
-      expect(state.library.status).toBe('idle')
+      expect(state.library.status).toBe('error')
     })
 
-    it('re-throws the original error', async () => {
+    it('does not throw — error is surfaced in UI', async () => {
       const deps = createMockDeps({
         metadata: createMockMetadata({
           readMetadata: jest.fn(async () => { throw new Error('metadata failed') }),
@@ -287,7 +287,7 @@ describe('createLoadFile', () => {
       })
       const loadFile = createLoadFile(deps)
 
-      await expect(loadFile(INPUT)).rejects.toThrow('metadata failed')
+      await expect(loadFile(INPUT)).resolves.toBeUndefined()
     })
 
     it('does not refresh books or clips on failure', async () => {
@@ -298,7 +298,7 @@ describe('createLoadFile', () => {
       })
       const loadFile = createLoadFile(deps)
 
-      await expect(loadFile(INPUT)).rejects.toThrow()
+      await loadFile(INPUT)
 
       expect(deps.fetchBooks).not.toHaveBeenCalled()
       expect(deps.fetchClips).not.toHaveBeenCalled()
@@ -312,7 +312,7 @@ describe('createLoadFile', () => {
       })
       const loadFile = createLoadFile(deps)
 
-      await expect(loadFile(INPUT)).rejects.toThrow()
+      await loadFile(INPUT)
 
       expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
     })
@@ -329,7 +329,7 @@ describe('createLoadFile', () => {
       })
       const loadFile = createLoadFile(deps)
 
-      await expect(loadFile(INPUT)).rejects.toThrow('db failed')
+      await loadFile(INPUT)
 
       expect(deps.files.deleteFile).toHaveBeenCalledWith(
         expect.stringContaining('generated-id-1'),
@@ -346,7 +346,7 @@ describe('createLoadFile', () => {
       })
       const loadFile = createLoadFile(deps)
 
-      await expect(loadFile(INPUT)).rejects.toThrow('restore failed')
+      await loadFile(INPUT)
 
       expect(deps.files.deleteFile).toHaveBeenCalledWith(
         expect.stringContaining('archived-1'),
@@ -361,7 +361,7 @@ describe('createLoadFile', () => {
       })
       const loadFile = createLoadFile(deps)
 
-      await expect(loadFile(INPUT)).rejects.toThrow('open failed')
+      await loadFile(INPUT)
 
       expect(deps.files.deleteFile).not.toHaveBeenCalled()
     })

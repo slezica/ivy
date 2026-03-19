@@ -7,7 +7,8 @@ export default function LoadingModal() {
 
   const isAdding = library.status === 'adding'
   const isDuplicate = library.status === 'duplicate'
-  const isVisible = isAdding || isDuplicate
+  const isError = library.status === 'error'
+  const isVisible = isAdding || isDuplicate || isError
 
   const progress = library.copyProgress
   const isCopying = library.copyOpId !== null
@@ -48,6 +49,14 @@ export default function LoadingModal() {
           {isDuplicate && (
             <>
               <Text style={styles.text}>This file is already in your library</Text>
+              <Pressable onPress={dismiss} style={styles.button}>
+                <Text style={styles.okText}>OK</Text>
+              </Pressable>
+            </>
+          )}
+          {isError && (
+            <>
+              <Text style={styles.text}>Something went wrong adding this file</Text>
               <Pressable onPress={dismiss} style={styles.button}>
                 <Text style={styles.okText}>OK</Text>
               </Pressable>
