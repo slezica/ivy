@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, Modal, ActivityIndicator, Pressable } from 'react-native'
+import { View, Text, StyleSheet, Modal, ActivityIndicator } from 'react-native'
 import { useStore } from '../store'
 import { Color } from '../theme'
+import TextButton from './shared/TextButton'
 
 export default function LoadingModal() {
   const { library, cancelLoadFile } = useStore()
@@ -40,26 +41,20 @@ export default function LoadingModal() {
                 </View>
               )}
               {isCopying && (
-                <Pressable onPress={cancelLoadFile} style={styles.button}>
-                  <Text style={styles.buttonText}>Cancel</Text>
-                </Pressable>
+                <TextButton label="Cancel" onPress={cancelLoadFile} />
               )}
             </>
           )}
           {isDuplicate && (
             <>
               <Text style={styles.text}>This file is already in your library</Text>
-              <Pressable onPress={dismiss} style={styles.button}>
-                <Text style={styles.okText}>OK</Text>
-              </Pressable>
+              <TextButton label="OK" onPress={dismiss} variant="primary" />
             </>
           )}
           {isError && (
             <>
               <Text style={styles.text}>Something went wrong adding this file</Text>
-              <Pressable onPress={dismiss} style={styles.button}>
-                <Text style={styles.okText}>OK</Text>
-              </Pressable>
+              <TextButton label="OK" onPress={dismiss} variant="primary" />
             </>
           )}
         </View>
@@ -108,18 +103,5 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 13,
     color: Color.GRAY_MEDIUM,
-  },
-  button: {
-    paddingVertical: 8,
-    paddingHorizontal: 24,
-  },
-  buttonText: {
-    fontSize: 15,
-    color: Color.GRAY_DARK,
-  },
-  okText: {
-    fontSize: 15,
-    color: Color.PRIMARY,
-    fontWeight: '500',
   },
 })

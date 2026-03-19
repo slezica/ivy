@@ -19,14 +19,16 @@ private const val PROGRESS_INTERVAL_MS = 100L       // Throttle progress events
 private const val PROGRESS_EVENT = "FileCopierProgress"
 
 /**
- * Holds the state of a copy operation between beginCopy and commitCopy/cancelCopy.
+ * Holds the state of a copy operation across its lifecycle:
+ * createOperation → beginCopy → commitCopy/cancelCopy
  */
-private class CopyOperation(
-    val inputStream: InputStream,
-    val fileSize: Long,
-    val fingerprint: ByteArray,
-) {
+private class CopyOperation {
     @Volatile var cancelled = false
+
+    // Populated by beginCopy
+    var inputStream: InputStream? = null
+    var fileSize: Long = -1L
+    var fingerprint: ByteArray = ByteArray(0)
 }
 
 class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -37,15 +39,39 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
     override fun getName(): String = "FileCopier"
 
     /**
-     * Phase 1: Open the source, read the fingerprint, return immediately.
-     * No output file is created yet.
+     * Allocate an operation ID. The operation can be cancelled from this point forward.
+     * Returns the opId as a string.
+     */
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun createOperation(): String {
+        val opId = synchronized(this) { (nextOpId++).toString() }
+        operations[opId] = CopyOperation()
+        return opId
+    }
+
+    /**
+     * Open the source and read the fingerprint. No output file is created.
+     * If the operation was cancelled before this completes, rejects with CANCELLED.
      *
-     * Returns: { opId, fileSize, fingerprint (base64) }
+     * Returns: { fileSize, fingerprint (base64) }
      */
     @ReactMethod
-    fun beginCopy(sourceUri: String, promise: Promise) {
+    fun beginCopy(opId: String, sourceUri: String, promise: Promise) {
         Thread {
+            val op = operations[opId]
+            if (op == null) {
+                promise.reject("UNKNOWN_OP", "No operation found with ID: $opId")
+                return@Thread
+            }
+
             try {
+                // Check if already cancelled before doing any work
+                if (op.cancelled) {
+                    operations.remove(opId)
+                    promise.reject("CANCELLED", "Copy was cancelled")
+                    return@Thread
+                }
+
                 val uri = Uri.parse(sourceUri)
                 val context = reactApplicationContext
 
@@ -70,11 +96,20 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                     fingerprint
                 }
 
-                val opId = synchronized(this) { (nextOpId++).toString() }
-                operations[opId] = CopyOperation(inputStream, fileSize, actualFingerprint)
+                // Check again after the potentially slow stream open/read
+                if (op.cancelled) {
+                    inputStream.close()
+                    operations.remove(opId)
+                    promise.reject("CANCELLED", "Copy was cancelled")
+                    return@Thread
+                }
+
+                // Populate the operation
+                op.inputStream = inputStream
+                op.fileSize = fileSize
+                op.fingerprint = actualFingerprint
 
                 val result = Arguments.createMap().apply {
-                    putString("opId", opId)
                     putDouble("fileSize", fileSize.toDouble())
                     putString("fingerprint", Base64.encodeToString(actualFingerprint, Base64.NO_WRAP))
                 }
@@ -82,13 +117,18 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                 promise.resolve(result)
 
             } catch (e: Exception) {
-                promise.reject("BEGIN_FAILED", "beginCopy failed: ${e.message}", e)
+                operations.remove(opId)
+                if (op.cancelled) {
+                    promise.reject("CANCELLED", "Copy was cancelled")
+                } else {
+                    promise.reject("BEGIN_FAILED", "beginCopy failed: ${e.message}", e)
+                }
             }
         }.start()
     }
 
     /**
-     * Phase 2: Copy the remainder of the file to destPath, computing SHA-256 incrementally.
+     * Copy the file to destPath, computing SHA-256 incrementally.
      * Emits "FileCopierProgress" events with { opId, bytesWritten, totalBytes }.
      *
      * Returns: { hash (hex), bytesWritten }
@@ -100,6 +140,12 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
 
             if (op == null) {
                 promise.reject("UNKNOWN_OP", "No operation found with ID: $opId")
+                return@Thread
+            }
+
+            val inputStream = op.inputStream
+            if (inputStream == null) {
+                promise.reject("NOT_READY", "beginCopy has not completed for operation: $opId")
                 return@Thread
             }
 
@@ -123,14 +169,14 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                 while (true) {
                     if (op.cancelled) {
                         outputStream.close()
-                        op.inputStream.close()
+                        inputStream.close()
                         java.io.File(destPath).delete()
                         operations.remove(opId)
                         promise.reject("CANCELLED", "Copy was cancelled")
                         return@Thread
                     }
 
-                    val read = op.inputStream.read(buffer)
+                    val read = inputStream.read(buffer)
                     if (read == -1) break
 
                     digest.update(buffer, 0, read)
@@ -146,7 +192,7 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                 }
 
                 outputStream.close()
-                op.inputStream.close()
+                inputStream.close()
                 operations.remove(opId)
 
                 val hashBytes = digest.digest()
@@ -160,11 +206,10 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                 promise.resolve(result)
 
             } catch (e: Exception) {
-                try { op.inputStream.close() } catch (_: Exception) {}
+                try { inputStream.close() } catch (_: Exception) {}
                 java.io.File(destPath).delete()
                 operations.remove(opId)
 
-                // If the stream was closed by cancelCopy, report as cancellation
                 if (op.cancelled) {
                     promise.reject("CANCELLED", "Copy was cancelled")
                 } else {
@@ -175,28 +220,28 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
     }
 
     /**
-     * Cancel a pending or in-progress operation.
-     * If between begin and commit: closes the stream immediately.
-     * If commit is running: sets the cancelled flag, the copy loop will stop and clean up.
+     * Cancel an operation at any stage of its lifecycle.
+     * - Before beginCopy: marks cancelled, beginCopy will bail out.
+     * - During beginCopy: marks cancelled, beginCopy checks after stream open.
+     * - Between begin and commit: closes the stream.
+     * - During commitCopy: sets flag, copy loop stops and cleans up.
      */
     @ReactMethod
     fun cancelCopy(opId: String, promise: Promise) {
         val op = operations[opId]
 
         if (op == null) {
-            // Already completed or unknown — nothing to do
             promise.resolve(null)
             return
         }
 
-        // Set the flag — if commitCopy is running, it will see this and abort.
-        // If commitCopy hasn't been called yet, we also close the stream and remove it.
         op.cancelled = true
 
-        // Try to close the stream immediately for the pre-commit case.
-        // If commitCopy is running, it will handle closing after seeing the flag.
-        if (operations.remove(opId) != null) {
-            try { op.inputStream.close() } catch (_: Exception) {}
+        // For the pre-commit case: close stream and remove if we can.
+        // During commitCopy, the copy loop handles cleanup after seeing the flag.
+        val stream = op.inputStream
+        if (stream != null && operations.remove(opId) != null) {
+            try { stream.close() } catch (_: Exception) {}
         }
 
         promise.resolve(null)

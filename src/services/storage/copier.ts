@@ -1,12 +1,12 @@
 /**
  * File Copier Service
  *
- * Two-phase file copy via native module. Handles content:// URIs (from document
+ * Multi-phase file copy via native module. Handles content:// URIs (from document
  * picker, Google Drive, etc.) and file:// URIs uniformly.
  *
- * Phase 1 (beginCopy): Opens the source, reads a fingerprint, returns immediately.
- * Phase 2 (commitCopy/cancelCopy): Copies the file with SHA-256 hashing and progress,
- *         or aborts without writing anything to disk.
+ * createOperation(): Allocates an ID — cancellable from this point.
+ * beginCopy(): Opens the source, reads a fingerprint.
+ * commitCopy()/cancelCopy(): Copies with SHA-256 + progress, or aborts.
  */
 
 import { NativeModules, NativeEventEmitter } from 'react-native'
@@ -16,7 +16,6 @@ import { NativeModules, NativeEventEmitter } from 'react-native'
 // =============================================================================
 
 export interface CopyBeginResult {
-  opId: string
   fileSize: number        // -1 if unknown
   fingerprint: Uint8Array
 }
@@ -34,21 +33,27 @@ export type ProgressCallback = (bytesWritten: number, totalBytes: number) => voi
 
 export class FileCopierService {
   /**
-   * Phase 1: Open the source and read the fingerprint.
+   * Allocate an operation ID. The operation can be cancelled from this point.
+   */
+  createOperation(): string {
+    return NativeFileCopier.createOperation()
+  }
+
+  /**
+   * Open the source and read the fingerprint.
    * No file is created on disk. Call commitCopy or cancelCopy after this.
    */
-  async beginCopy(sourceUri: string): Promise<CopyBeginResult> {
-    const result = await NativeFileCopier.beginCopy(sourceUri)
+  async beginCopy(opId: string, sourceUri: string): Promise<CopyBeginResult> {
+    const result = await NativeFileCopier.beginCopy(opId, sourceUri)
 
     return {
-      opId: result.opId,
       fileSize: result.fileSize,
       fingerprint: base64ToUint8Array(result.fingerprint),
     }
   }
 
   /**
-   * Phase 2a: Copy the file to destPath, computing SHA-256 incrementally.
+   * Copy the file to destPath, computing SHA-256 incrementally.
    * Calls onProgress periodically with (bytesWritten, totalBytes).
    */
   async commitCopy(
@@ -56,7 +61,6 @@ export class FileCopierService {
     destPath: string,
     onProgress?: ProgressCallback,
   ): Promise<CopyCommitResult> {
-    // Subscribe to progress events for this operation
     let subscription: { remove: () => void } | null = null
 
     if (onProgress) {
@@ -82,9 +86,7 @@ export class FileCopierService {
   }
 
   /**
-   * Phase 2b: Cancel a pending or in-progress copy.
-   * If the copy hasn't started, the source stream is closed.
-   * If the copy is running, it stops and the partial output is deleted.
+   * Cancel at any stage: before begin, during begin, between begin/commit, or during commit.
    */
   async cancelCopy(opId: string): Promise<void> {
     await NativeFileCopier.cancelCopy(opId)
@@ -97,8 +99,9 @@ export class FileCopierService {
 // =============================================================================
 
 interface NativeFileCopierInterface {
-  beginCopy(sourceUri: string): Promise<{
-    opId: string
+  createOperation(): string
+
+  beginCopy(opId: string, sourceUri: string): Promise<{
     fileSize: number
     fingerprint: string   // base64
   }>

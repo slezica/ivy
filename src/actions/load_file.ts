@@ -26,15 +26,17 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
     let destPath: string | null = null
 
     try {
-      // Phase 1: Open the source and read fingerprint (no file created yet)
+      // Allocate operation ID first — cancellable from this point
+      const opId = copier.createOperation()
+
       set(state => {
         state.library.status = 'adding'
         state.library.copyProgress = null
+        state.library.copyOpId = opId
       })
 
-      const { opId, fileSize, fingerprint } = await copier.beginCopy(file.uri)
-
-      set(state => { state.library.copyOpId = opId })
+      // Phase 1: Open the source and read fingerprint (no file created yet)
+      const { fileSize, fingerprint } = await copier.beginCopy(opId, file.uri)
 
       // Check for an existing book with the same fingerprint
       const existingBook = db.getBookByFingerprint(fileSize, fingerprint)

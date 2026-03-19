@@ -169,10 +169,10 @@ export function createMockMetadata(overrides: Record<string, jest.Mock> = {}) {
   } as any
 }
 
-export function createMockCopier(overrides: Record<string, jest.Mock> = {}) {
+export function createMockCopier(overrides: Record<string, jest.Mock | (() => any)> = {}) {
   return {
+    createOperation: jest.fn(() => 'op-1'),
     beginCopy: jest.fn(async () => ({
-      opId: 'op-1',
       fileSize: 1024,
       fingerprint: new Uint8Array([1, 2, 3]),
     })),

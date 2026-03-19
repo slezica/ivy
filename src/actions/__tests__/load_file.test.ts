@@ -62,7 +62,7 @@ describe('createLoadFile', () => {
 
       await loadFile(INPUT)
 
-      expect(deps.copier.beginCopy).toHaveBeenCalledWith(INPUT.uri)
+      expect(deps.copier.beginCopy).toHaveBeenCalledWith('op-1', INPUT.uri)
     })
 
     it('checks for existing book by fingerprint from beginCopy', async () => {
