@@ -24,8 +24,8 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
   async (file) => {
     const { db, files, copier, metadata, syncQueue, get, set, fetchBooks, fetchClips, cleanupOrphanedFiles } = deps
 
-    // Reclaim space from orphaned files before copying
-    await cleanupOrphanedFiles()
+    // Reclaim space from orphaned files before copying (best-effort)
+    await cleanupOrphanedFiles().catch(() => {})
 
     let destPath: string | null = null
 
