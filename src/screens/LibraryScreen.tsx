@@ -10,7 +10,6 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store'
-import IconButton from '../components/shared/IconButton'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import InputHeader from '../components/shared/InputHeader'
@@ -315,10 +314,12 @@ export default function LibraryScreen() {
         onClose={() => setIsHeaderMenuOpen(false)}
         onAction={(action) => {
           setIsHeaderMenuOpen(false)
+          if (action === 'add-file') handleLoadFile()
           if (action === 'history') router.push('/sessions')
           if (action === 'settings') router.push('/settings')
         }}
         items={[
+          { key: 'add-file', label: 'Add file', icon: 'add-outline' },
           { key: 'history', label: 'History', icon: 'time-outline' },
           { key: 'settings', label: 'Settings', icon: 'settings-outline' },
         ]}
@@ -338,16 +339,6 @@ export default function LibraryScreen() {
         </Dialog>
       )}
 
-      {/* FAB */}
-      <View style={styles.fabContainer} pointerEvents="box-none">
-        <IconButton
-          iconName="add"
-          onPress={handleLoadFile}
-          testID="fab-add-file"
-          size={56}
-          style={styles.fab}
-        />
-      </View>
     </ScreenArea>
   )
 }
@@ -359,7 +350,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingBottom: 80, // Space for FAB
+    paddingBottom: 16,
   },
   sectionHeader: {
     fontSize: 14,
@@ -438,18 +429,5 @@ const styles = StyleSheet.create({
   menuButton: {
     padding: 0,
     justifyContent: 'flex-start',
-  },
-  fabContainer: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    left: 0,
-    top: 0,
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-    padding: 20,
-  },
-  fab: {
-    // Position is handled by fabContainer
   },
 })
