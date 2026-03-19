@@ -6,5 +6,8 @@ export { FileStorageService } from './files'
 export { FileCopierService } from './copier'
 export type { CopyBeginResult, CopyCommitResult, ProgressCallback } from './copier'
 
+export { FileDownloaderService } from './downloader'
+export type { DownloadResult, DownloadProgressCallback } from './downloader'
+
 export { FilePickerService } from './picker'
 export type { PickedFile } from './picker'

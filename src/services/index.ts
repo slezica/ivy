@@ -6,6 +6,7 @@ import { AudioMetadataService } from './audio'
 import { WhisperService } from './transcription'
 import { FileStorageService } from './storage'
 import { FileCopierService } from './storage'
+import { FileDownloaderService } from './storage'
 import { FilePickerService } from './storage'
 import { TranscriptionQueueService } from './transcription'
 import { SharingService } from './system'
@@ -21,6 +22,7 @@ export type {
   WhisperService,
   FileStorageService,
   FileCopierService,
+  FileDownloaderService,
   FilePickerService,
   TranscriptionQueueService,
   SharingService,
@@ -46,6 +48,8 @@ export type {
   CopyBeginResult,
   CopyCommitResult,
   ProgressCallback,
+  DownloadResult,
+  DownloadProgressCallback,
 } from './storage'
 
 export type {
@@ -85,6 +89,7 @@ export type {
 export const db = new DatabaseService()
 export const files = new FileStorageService()
 export const copier = new FileCopierService()
+export const downloader = new FileDownloaderService()
 export const picker = new FilePickerService()
 export const metadata = new AudioMetadataService()
 export const slicer = new AudioSlicerService()
