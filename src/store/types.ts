@@ -25,7 +25,7 @@ import type { StartTranscription } from '../actions/start_transcription'
 import type { StopTranscription } from '../actions/stop_transcription'
 import type { SyncNow } from '../actions/sync_now'
 import type { AutoSync } from '../actions/auto_sync'
-import type { RefreshSyncStatus } from '../actions/refresh_sync_status'
+import type { FetchSyncStatus } from '../actions/fetch_sync_status'
 import type { UpdateSettings } from '../actions/update_settings'
 import type { FetchSessions } from '../actions/fetch_sessions'
 import type { TrackSession } from '../actions/track_session'
@@ -101,7 +101,7 @@ export interface AppState {
   stopTranscription: StopTranscription
   syncNow: SyncNow
   autoSync: AutoSync
-  refreshSyncStatus: RefreshSyncStatus
+  fetchSyncStatus: FetchSyncStatus
   fetchDownloaderStatus: FetchDownloaderStatus
   updateDownloader: UpdateDownloader
   updateSettings: UpdateSettings

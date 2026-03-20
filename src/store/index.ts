@@ -32,7 +32,7 @@ import { createStartTranscription } from '../actions/start_transcription'
 import { createStopTranscription } from '../actions/stop_transcription'
 import { createSyncNow } from '../actions/sync_now'
 import { createAutoSync } from '../actions/auto_sync'
-import { createRefreshSyncStatus } from '../actions/refresh_sync_status'
+import { createFetchSyncStatus } from '../actions/fetch_sync_status'
 import { createUpdateSettings } from '../actions/update_settings'
 import { createFetchSessions } from '../actions/fetch_sessions'
 import { createTrackSession } from '../actions/track_session'
@@ -93,7 +93,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const stopTranscription = createStopTranscription(deps)
   const syncNow = createSyncNow(deps)
   const autoSync = createAutoSync(deps)
-  const refreshSyncStatus = createRefreshSyncStatus(deps)
+  const fetchSyncStatus = createFetchSyncStatus(deps)
   const fetchDownloaderStatus = createFetchDownloaderStatus(deps)
   const updateDownloader = createUpdateDownloader(deps)
   const updateSettings = createUpdateSettings(deps)
@@ -192,7 +192,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     stopTranscription,
     syncNow,
     autoSync,
-    refreshSyncStatus,
+    fetchSyncStatus,
     fetchDownloaderStatus,
     updateDownloader,
     updateSettings,
