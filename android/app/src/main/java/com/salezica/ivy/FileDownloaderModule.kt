@@ -67,6 +67,7 @@ class FileDownloaderModule(reactContext: ReactApplicationContext) : ReactContext
                     addOption("-x")
                     addOption("--audio-format", "m4a")
                     addOption("--embed-thumbnail")
+                    addOption("--embed-metadata")
                     addOption("--no-mtime")
                     addOption("--no-update")
                 }
