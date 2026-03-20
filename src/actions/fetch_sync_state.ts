@@ -2,15 +2,15 @@ import type { DatabaseService, BackupSyncService } from '../services'
 import type { SetState, Action, ActionFactory } from '../store/types'
 
 
-export interface FetchSyncStatusDeps {
+export interface FetchSyncStateDeps {
   db: DatabaseService
   sync: BackupSyncService
   set: SetState
 }
 
-export type FetchSyncStatus = Action<[]>
+export type FetchSyncState = Action<[]>
 
-export const createFetchSyncStatus: ActionFactory<FetchSyncStatusDeps, FetchSyncStatus> = (deps) => (
+export const createFetchSyncState: ActionFactory<FetchSyncStateDeps, FetchSyncState> = (deps) => (
   async () => {
     const { db, sync, set } = deps
 

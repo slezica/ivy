@@ -32,7 +32,7 @@ import { createStartTranscription } from '../actions/start_transcription'
 import { createStopTranscription } from '../actions/stop_transcription'
 import { createSyncNow } from '../actions/sync_now'
 import { createAutoSync } from '../actions/auto_sync'
-import { createFetchSyncStatus } from '../actions/fetch_sync_status'
+import { createFetchSyncState } from '../actions/fetch_sync_state'
 import { createUpdateSettings } from '../actions/update_settings'
 import { createFetchSessions } from '../actions/fetch_sessions'
 import { createTrackSession } from '../actions/track_session'
@@ -41,7 +41,7 @@ import { createUpdateBook } from '../actions/update_book'
 import { createResetApp } from '../actions/reset_app'
 import { createCleanupOrphanedFiles } from '../actions/cleanup_orphaned_files'
 import { createLoadFromUrl } from '../actions/load_from_url'
-import { createFetchDownloaderStatus } from '../actions/fetch_downloader_status'
+import { createFetchDownloaderState } from '../actions/fetch_downloader_state'
 import { createUpdateDownloader } from '../actions/update_downloader'
 
 
@@ -93,8 +93,8 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const stopTranscription = createStopTranscription(deps)
   const syncNow = createSyncNow(deps)
   const autoSync = createAutoSync(deps)
-  const fetchSyncStatus = createFetchSyncStatus(deps)
-  const fetchDownloaderStatus = createFetchDownloaderStatus(deps)
+  const fetchSyncState = createFetchSyncState(deps)
+  const fetchDownloaderState = createFetchDownloaderState(deps)
   const updateDownloader = createUpdateDownloader(deps)
   const updateSettings = createUpdateSettings(deps)
   const fetchSessions = createFetchSessions(deps)
@@ -192,8 +192,8 @@ export const useStore = create<AppState>()(immer((set, get) => {
     stopTranscription,
     syncNow,
     autoSync,
-    fetchSyncStatus,
-    fetchDownloaderStatus,
+    fetchSyncState,
+    fetchDownloaderState,
     updateDownloader,
     updateSettings,
     fetchSessions,

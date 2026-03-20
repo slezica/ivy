@@ -25,12 +25,12 @@ import type { StartTranscription } from '../actions/start_transcription'
 import type { StopTranscription } from '../actions/stop_transcription'
 import type { SyncNow } from '../actions/sync_now'
 import type { AutoSync } from '../actions/auto_sync'
-import type { FetchSyncStatus } from '../actions/fetch_sync_status'
+import type { FetchSyncState } from '../actions/fetch_sync_state'
 import type { UpdateSettings } from '../actions/update_settings'
 import type { FetchSessions } from '../actions/fetch_sessions'
 import type { TrackSession } from '../actions/track_session'
 import type { UpdateBook } from '../actions/update_book'
-import type { FetchDownloaderStatus } from '../actions/fetch_downloader_status'
+import type { FetchDownloaderState } from '../actions/fetch_downloader_state'
 import type { UpdateDownloader } from '../actions/update_downloader'
 import type { ResetApp } from '../actions/reset_app'
 
@@ -101,8 +101,8 @@ export interface AppState {
   stopTranscription: StopTranscription
   syncNow: SyncNow
   autoSync: AutoSync
-  fetchSyncStatus: FetchSyncStatus
-  fetchDownloaderStatus: FetchDownloaderStatus
+  fetchSyncState: FetchSyncState
+  fetchDownloaderState: FetchDownloaderState
   updateDownloader: UpdateDownloader
   updateSettings: UpdateSettings
   fetchSessions: FetchSessions

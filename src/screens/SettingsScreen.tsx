@@ -8,13 +8,13 @@ import { useStore } from '../store'
 
 export default function SettingsScreen() {
   const router = useRouter()
-  const { settings, updateSettings, sync, syncNow, fetchSyncStatus, downloader, fetchDownloaderStatus, updateDownloader, transcription, startTranscription, stopTranscription, loadFileWithUri, fetchBooks, __DEV_resetApp } = useStore()
+  const { settings, updateSettings, sync, syncNow, fetchSyncState, downloader, fetchDownloaderState, updateDownloader, transcription, startTranscription, stopTranscription, loadFileWithUri, fetchBooks, __DEV_resetApp } = useStore()
 
   useFocusEffect(
     useCallback(() => {
-      fetchSyncStatus()
-      fetchDownloaderStatus()
-    }, [fetchSyncStatus, fetchDownloaderStatus])
+      fetchSyncState()
+      fetchDownloaderState()
+    }, [fetchSyncState, fetchDownloaderState])
   )
 
   const pendingLabel = sync.pendingCount === 1 ? '1 item pending' : `${sync.pendingCount} items pending`
