@@ -5,7 +5,7 @@
  * Active books are shown first, archived books in a separate section.
  */
 
-import { View, Text, StyleSheet, Alert, SectionList, TouchableOpacity, Image, Pressable, AppState, AppStateStatus } from 'react-native'
+import { View, Text, StyleSheet, Alert, SectionList, TouchableOpacity, Image, Pressable, AppState, AppStateStatus, TextInput } from 'react-native'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -15,6 +15,7 @@ import Header from '../components/shared/Header'
 import InputHeader from '../components/shared/InputHeader'
 import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
+import TextButton from '../components/shared/TextButton'
 import Dialog from '../components/shared/Dialog'
 import MetadataEditor from '../components/MetadataEditor'
 import { Color } from '../theme'
@@ -25,12 +26,14 @@ const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, updateBook, sync, autoSync } = useStore()
+  const { loadFileWithPicker, loadFromUrl, fetchBooks, play, books, archiveBook, deleteBook, updateBook, sync, autoSync } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false)
   const [editingBookId, setEditingBookId] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [isUrlDialogOpen, setIsUrlDialogOpen] = useState(false)
+  const [urlInput, setUrlInput] = useState('')
   const lastSyncRef = useRef<number>(0)
 
   useFocusEffect(
@@ -69,6 +72,21 @@ export default function LibraryScreen() {
     } catch (error) {
       console.error(error)
       Alert.alert('Error', 'Failed to load audio file')
+    }
+  }
+
+  const handleDownloadUrl = async () => {
+    const url = urlInput.trim()
+    if (!url) return
+
+    setIsUrlDialogOpen(false)
+    setUrlInput('')
+
+    try {
+      await loadFromUrl(url)
+      fetchBooks()
+    } catch (error) {
+      console.error(error)
     }
   }
 
@@ -315,16 +333,38 @@ export default function LibraryScreen() {
         onAction={(action) => {
           setIsHeaderMenuOpen(false)
           if (action === 'add-file') handleLoadFile()
+          if (action === 'download-url') setIsUrlDialogOpen(true)
           if (action === 'history') router.push('/sessions')
           if (action === 'settings') router.push('/settings')
         }}
         items={[
           { key: 'add-file', label: 'Add file', icon: 'add-outline' },
+          { key: 'download-url', label: 'Download URL', icon: 'cloud-download-outline' },
           { key: 'history', label: 'History', icon: 'time-outline' },
           { key: 'settings', label: 'Settings', icon: 'settings-outline' },
         ]}
       />
 
+
+      <Dialog visible={isUrlDialogOpen} onClose={() => setIsUrlDialogOpen(false)}>
+        <View style={styles.urlDialog}>
+          <Text style={styles.urlDialogTitle}>Download URL</Text>
+          <TextInput
+            style={styles.urlInput}
+            placeholder="Paste a URL..."
+            value={urlInput}
+            onChangeText={setUrlInput}
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect={false}
+            selectTextOnFocus
+          />
+          <View style={styles.urlDialogButtons}>
+            <TextButton label="Cancel" onPress={() => { setIsUrlDialogOpen(false); setUrlInput('') }} style={{ flex: 1 }} />
+            <TextButton label="Download" variant="primary" onPress={handleDownloadUrl} style={{ flex: 1 }} />
+          </View>
+        </View>
+      </Dialog>
 
       {editingBookId && books[editingBookId] && (
         <Dialog visible onClose={() => setEditingBookId(null)}>
@@ -429,5 +469,26 @@ const styles = StyleSheet.create({
   menuButton: {
     padding: 0,
     justifyContent: 'flex-start',
+  },
+  urlDialog: {
+    padding: 16,
+    gap: 16,
+  },
+  urlDialogTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Color.BLACK,
+  },
+  urlInput: {
+    borderWidth: 1,
+    borderColor: Color.GRAY_LIGHT,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: Color.BLACK,
+  },
+  urlDialogButtons: {
+    flexDirection: 'row',
+    gap: 12,
   },
 })
