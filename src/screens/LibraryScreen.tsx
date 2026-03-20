@@ -178,10 +178,18 @@ export default function LibraryScreen() {
   }
 
   const getMenuItems = (): ActionMenuItem[] => {
+    const book = menuBookId ? books[menuBookId] : null
+    const isArchived = book && book.uri === null
+
+    if (isArchived) {
+      return [
+        { key: 'delete', label: 'Remove from library', icon: 'trash-outline', destructive: true },
+      ]
+    }
+
     return [
       { key: 'edit', label: 'Edit details', icon: 'create-outline' },
       { key: 'archive', label: 'Archive', icon: 'archive-outline' },
-      { key: 'delete', label: 'Remove from library', icon: 'trash-outline', destructive: true },
     ]
   }
 
@@ -294,16 +302,13 @@ export default function LibraryScreen() {
                   </Text>
                 </View>
 
-                {/* Menu button - only for active books */}
-                {!isArchived && (
-                  <Pressable
-                    style={styles.menuButton}
-                    onPress={() => handleOpenMenu(item.id)}
-                    hitSlop={8}
-                  >
-                    <Ionicons name="ellipsis-vertical" size={20} color={Color.GRAY_DARK} />
-                  </Pressable>
-                )}
+                <Pressable
+                  style={styles.menuButton}
+                  onPress={() => handleOpenMenu(item.id)}
+                  hitSlop={8}
+                >
+                  <Ionicons name="ellipsis-vertical" size={20} color={Color.GRAY_DARK} />
+                </Pressable>
               </TouchableOpacity>
             )
           }}
