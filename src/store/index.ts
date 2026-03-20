@@ -40,6 +40,7 @@ import { createFinalizeSession } from '../actions/finalize_session'
 import { createUpdateBook } from '../actions/update_book'
 import { createResetApp } from '../actions/reset_app'
 import { createCleanupOrphanedFiles } from '../actions/cleanup_orphaned_files'
+import { createLoadFromUrl } from '../actions/load_from_url'
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
@@ -72,6 +73,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const loadFile = createLoadFile({ ...deps, fetchBooks, fetchClips, cleanupOrphanedFiles })
   const loadFileWithUri = createLoadFileWithUri({ ...deps, loadFile })
   const loadFileWithPicker = createLoadFileWithPicker({ ...deps, loadFile })
+  const loadFromUrl = createLoadFromUrl({ ...deps, fetchBooks, fetchClips, cleanupOrphanedFiles })
   const cancelLoadFile = createCancelLoadFile(deps)
   const loadBook = createLoadBook(deps)
   const play = createPlay({ ...deps, loadBook })
@@ -160,6 +162,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     loadFile,
     loadFileWithUri,
     loadFileWithPicker,
+    loadFromUrl,
     cancelLoadFile,
     archiveBook,
     deleteBook,

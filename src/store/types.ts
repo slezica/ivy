@@ -6,6 +6,7 @@ import type { FetchClips } from '../actions/fetch_clips'
 import type { LoadFile } from '../actions/load_file'
 import type { LoadFileWithUri } from '../actions/load_file_with_uri'
 import type { LoadFileWithPicker } from '../actions/load_file_with_picker'
+import type { LoadFromUrl } from '../actions/load_from_url'
 import type { CancelLoadFile } from '../actions/cancel_load_file'
 import type { ArchiveBook } from '../actions/archive_book'
 import type { DeleteBook } from '../actions/delete_book'
@@ -72,6 +73,7 @@ export interface AppState {
   loadFile: LoadFile
   loadFileWithUri: LoadFileWithUri
   loadFileWithPicker: LoadFileWithPicker
+  loadFromUrl: LoadFromUrl
   cancelLoadFile: CancelLoadFile
   archiveBook: ArchiveBook
   deleteBook: DeleteBook
