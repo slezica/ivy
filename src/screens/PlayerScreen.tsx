@@ -12,7 +12,7 @@ import { MAIN_PLAYER_OWNER_ID } from '../utils'
 import type { Book } from '../services'
 
 export default function PlayerScreen() {
-  const { playback, books, addClip, play, pause, seek, syncPlaybackState } = useStore()
+  const { playback, books, addClip, play, pause, seek, fetchPlaybackState } = useStore()
 
   // Local state - what the main player "remembers"
   const [ownBook, setOwnBook] = useState<Book | null>(null)
@@ -44,8 +44,8 @@ export default function PlayerScreen() {
   // Sync position immediately when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      syncPlaybackState()
-    }, [syncPlaybackState])
+      fetchPlaybackState()
+    }, [fetchPlaybackState])
   )
 
   const handleAddClip = async () => {

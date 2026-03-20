@@ -23,7 +23,7 @@ import { createSeek } from '../actions/seek'
 import { createSeekClip } from '../actions/seek_clip'
 import { createSkipForward } from '../actions/skip_forward'
 import { createSkipBackward } from '../actions/skip_backward'
-import { createSyncPlaybackState } from '../actions/sync_playback_state'
+import { createFetchPlaybackState } from '../actions/fetch_playback_state'
 import { createAddClip } from '../actions/add_clip'
 import { createUpdateClip } from '../actions/update_clip'
 import { createDeleteClip } from '../actions/delete_clip'
@@ -84,7 +84,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const seekClip = createSeekClip({ ...deps, play })
   const skipForward = createSkipForward(deps)
   const skipBackward = createSkipBackward(deps)
-  const syncPlaybackState = createSyncPlaybackState(deps)
+  const fetchPlaybackState = createFetchPlaybackState(deps)
   const updateClip = createUpdateClip(deps)
   const deleteClip = createDeleteClip(deps)
   const shareClip = createShareClip(deps)
@@ -182,7 +182,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     seekClip,
     skipForward,
     skipBackward,
-    syncPlaybackState,
+    fetchPlaybackState,
     fetchClips,
     addClip,
     updateClip,

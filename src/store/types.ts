@@ -16,7 +16,7 @@ import type { Seek } from '../actions/seek'
 import type { SeekClip } from '../actions/seek_clip'
 import type { SkipForward } from '../actions/skip_forward'
 import type { SkipBackward } from '../actions/skip_backward'
-import type { SyncPlaybackState } from '../actions/sync_playback_state'
+import type { FetchPlaybackState } from '../actions/fetch_playback_state'
 import type { AddClip } from '../actions/add_clip'
 import type { UpdateClip } from '../actions/update_clip'
 import type { DeleteClip } from '../actions/delete_clip'
@@ -91,7 +91,7 @@ export interface AppState {
   seekClip: SeekClip
   skipForward: SkipForward
   skipBackward: SkipBackward
-  syncPlaybackState: SyncPlaybackState
+  fetchPlaybackState: FetchPlaybackState
   fetchClips: FetchClips
   addClip: AddClip
   updateClip: UpdateClip

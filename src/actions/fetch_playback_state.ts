@@ -2,14 +2,14 @@ import type { AudioPlayerService } from '../services'
 import type { SetState, Action, ActionFactory } from '../store/types'
 
 
-export interface SyncPlaybackStateDeps {
+export interface FetchPlaybackStateDeps {
   audio: AudioPlayerService
   set: SetState
 }
 
-export type SyncPlaybackState = Action<[]>
+export type FetchPlaybackState = Action<[]>
 
-export const createSyncPlaybackState: ActionFactory<SyncPlaybackStateDeps, SyncPlaybackState> = (deps) => (
+export const createFetchPlaybackState: ActionFactory<FetchPlaybackStateDeps, FetchPlaybackState> = (deps) => (
   async () => {
     const { audio, set } = deps
 
