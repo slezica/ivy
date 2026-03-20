@@ -1,8 +1,9 @@
 import type { FileDownloaderService } from '../services'
-import type { SetState, Action, ActionFactory } from '../store/types'
+import type { GetState, SetState, Action, ActionFactory } from '../store/types'
 
 export interface UpdateDownloaderDeps {
   downloader: FileDownloaderService
+  get: GetState
   set: SetState
 }
 
@@ -12,18 +13,16 @@ export const createUpdateDownloader: ActionFactory<UpdateDownloaderDeps, UpdateD
   async () => {
     const { downloader, set } = deps
 
+    if (deps.get().downloader.status !== 'idle') return
+
     set(state => { state.downloader.status = 'updating' })
 
     try {
-      const result = await downloader.update()
+      await downloader.update()
       const version = await downloader.version()
-
-      set(state => {
-        state.downloader.version = version
-        state.downloader.status = result === 'ALREADY_UP_TO_DATE' ? 'up-to-date' : 'updated'
-      })
-    } catch {
-      set(state => { state.downloader.status = 'error' })
+      set(state => { state.downloader.version = version })
+    } finally {
+      set(state => { state.downloader.status = 'idle' })
     }
   }
 )

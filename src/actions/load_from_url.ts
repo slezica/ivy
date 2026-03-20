@@ -42,10 +42,13 @@ export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (d
       })
     }
 
+    if (get().downloader.status !== 'idle') return
+
     set(state => {
       state.library.status = 'adding'
       state.library.addProgress = null
       state.library.addOpId = opId
+      state.downloader.status = 'downloading'
     })
 
     // Download to a temp directory, then move to app storage
@@ -81,6 +84,7 @@ export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (d
 
         await fetchBooks()
         await fetchClips()
+        set(state => { state.downloader.status = 'idle' })
         setLibrary(lib => {
           lib.status = 'duplicate'
           lib.addProgress = null
@@ -123,6 +127,7 @@ export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (d
 
       await fetchBooks()
       await fetchClips()
+      set(state => { state.downloader.status = 'idle' })
       setLibrary(lib => {
         lib.status = 'idle'
         lib.addProgress = null
@@ -134,6 +139,8 @@ export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (d
       if (downloadedPath) {
         await RNFS.unlink(downloadedPath).catch(() => {})
       }
+
+      set(state => { state.downloader.status = 'idle' })
 
       if (isCancellation(error)) {
         log('Cancelled by user')

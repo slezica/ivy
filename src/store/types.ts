@@ -70,7 +70,7 @@ export interface AppState {
 
   downloader: {
     version: string | null
-    status: 'idle' | 'updating' | 'updated' | 'up-to-date' | 'error'
+    status: 'idle' | 'downloading' | 'updating'
   }
 
   currentSessionBookId: string | null // TODO move out of here
