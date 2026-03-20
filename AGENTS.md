@@ -339,17 +339,6 @@ downloader: {
   status: 'idle' | 'downloading' | 'updating'
 }
 currentSessionBookId: string | null
-
-// Actions
-fetchBooks, loadFile, loadFileWithUri, loadFileWithPicker, loadFromUrl, cancelLoadFile, archiveBook, deleteBook, updateBook
-play, pause, seek, seekClip, skipForward, skipBackward, fetchPlaybackState
-fetchClips, addClip, updateClip, deleteClip, shareClip
-startTranscription, stopTranscription
-syncNow, autoSync, fetchSyncState
-fetchDownloaderState, updateDownloader
-updateSettings
-fetchSessions, trackSession, finalizeSession
-__DEV_resetApp
 ```
 
 
@@ -428,39 +417,6 @@ Run with `npm test` (or `npm test:watch` for watch mode).
 Tests are colocated in `__tests__/` directories next to the code they test. Action tests use shared helpers from `actions/__tests__/helpers.ts` for mock state, services, and immer-compatible `set`.
 
 
-## Utilities
-
-`src/utils/index.ts` exports:
-- `generateId()` - Generates a UUID for new database entities (uses `expo-crypto`)
-- `MAIN_PLAYER_OWNER_ID` - Well-known owner ID for the main player tab (`'main'`)
-- `formatTime(ms)` - Converts milliseconds to `MM:SS` or `H:MM:SS` format
-- `formatDate(timestamp)` - Formats timestamp as relative ("Today", "Yesterday", "X days ago") or locale date
-- `throttle(fn, ms)` - Creates a throttled function that executes at most once per interval
-
-
-## Native Modules
-
-Located in `android/app/src/main/java/com/salezica/ivy/`:
-
-**AudioSlicer**:
-- Kotlin native module for extracting audio segments
-- Wrapped by `services/audio/slicer.ts` (used for sharing and transcription)
-- Interface: `sliceAudio(inputPath, startMs, endMs, outputPath) → Promise<string>`
-
-**AudioMetadata**:
-- Kotlin native module for extracting ID3 metadata (title, artist, artwork, duration)
-- Wrapped by `services/audio/metadata.ts`
-- Interface: `extractMetadata(filePath) → Promise<{ title, artist, artwork, duration }>`
-
-**FileDownloader**:
-- Kotlin native module wrapping `youtubedl-android` (yt-dlp + FFmpeg)
-- Wrapped by `services/storage/downloader.ts`
-- Downloads audio from URLs (YouTube, etc.) as m4a with embedded thumbnail and metadata
-- Lazy-initializes yt-dlp on first use (blocks until ready via CountDownLatch)
-- Interface: `download(opId, url, outputDir) → Promise<{ filePath }>`, `cancelDownload()`, `update()`, `version()`
-- Requires `expo.useLegacyPackaging=true` in `gradle.properties` (yt-dlp's native libs need extraction to disk)
-
-
 ## Adding Features
 
 ### New Action
@@ -479,14 +435,6 @@ Located in `android/app/src/main/java/com/salezica/ivy/`:
 1. Create in `src/screens/`
 2. Add route in `app/(tabs)/`
 3. Update tab bar in `app/(tabs)/_layout.tsx`
-
-
-## Key Patterns
-
-- All I/O goes through services — never call track-player, SQLite, or FileSystem from components
-- Services are stateless; all state lives in the Zustand store
-- All times are milliseconds internally
-- `book.uri` can be null (archived/deleted) — always check before using for playback
 
 
 ## Quick Reference

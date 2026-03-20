@@ -2,23 +2,6 @@
 
 A guide for Ivy's clip (bookmark) system.
 
-## Table of Contents
-
-1. [The Big Picture](#the-big-picture)
-2. [Core Concepts](#core-concepts)
-3. [Architecture Overview](#architecture-overview)
-4. [Creating a Clip](#creating-a-clip)
-5. [Clip Independence](#clip-independence)
-6. [Viewing and Playing Clips](#viewing-and-playing-clips)
-7. [Editing Clips](#editing-clips)
-8. [Deleting and Sharing](#deleting-and-sharing)
-9. [The Clips List](#the-clips-list)
-10. [Integration Points](#integration-points)
-11. [Edge Cases and Robustness](#edge-cases-and-robustness)
-12. [File Map](#file-map)
-
----
-
 ## The Big Picture
 
 A clip is a bookmark into an audiobook — a short audio segment with an optional note and an automatic transcription. Clips let the user mark interesting passages and come back to them later.
@@ -38,6 +21,8 @@ Clips live independently of their source book. Even if the user archives the boo
 ### 1. Every clip has its own audio file
 
 When a clip is created, the relevant segment is extracted from the source book and saved as a standalone audio file at `{DocumentDirectory}/clips/{clipId}.m4a`. All clips are output as `.m4a` regardless of source format — the native slicer remuxes all audio into an MPEG-4 container via MediaMuxer. This file is the clip's permanent audio — it doesn't depend on the source book existing.
+
+The JS side passes a filename prefix (no extension) to the native slicer, which appends `.m4a` and returns the actual path. The JS code stores the native return value in the database, so the correct extension is always what gets persisted.
 
 ### 2. Clips reference their source, but don't require it
 
@@ -88,55 +73,7 @@ The clips system doesn't have a dedicated service — it's built from store acti
 
 ## Creating a Clip
 
-When the user taps "Add Clip" in the player, `addClip(bookId, position)` runs:
-
-### Step 1: Validate
-
-The book must exist in the store and have a URI (can't clip from an archived book).
-
-### Step 2: Calculate duration
-
-The default clip duration is **20 seconds** (`DEFAULT_CLIP_DURATION_MS`). If less than 20 seconds remain in the book, the clip is shortened to fit:
-
-```
-clipDuration = min(20_000, book.duration - position)
-```
-
-### Step 3: Slice audio
-
-The native `AudioSlicerService` extracts the segment from the book's audio file:
-
-```
-source: book.uri
-range:  [position .. position + clipDuration]
-prefix: {DocumentDirectory}/clips/{clipId}
-```
-
-The slicer is a Kotlin native module. It routes all formats through MediaMuxer with `MUXER_OUTPUT_MPEG_4`, which remuxes compressed audio frames into an M4A container without re-encoding. The output is always `.m4a`.
-
-The JS side passes a filename prefix (no extension) to the native module, which appends `.m4a`. The JS code uses the native return value (the actual path), so the correct extension is what gets stored in the database.
-
-### Step 4: Save to database
-
-A new clip record is created:
-
-```
-id:         generated UUID
-source_id:  bookId
-uri:        file path to the extracted audio
-start:      position (milliseconds into the source)
-duration:   clipDuration (milliseconds)
-note:       "" (empty, user can edit later)
-```
-
-### Step 5: Queue for sync and transcription
-
-- `syncQueue.queueChange('clip', clipId, 'upsert')` — ensures the clip reaches other devices
-- `transcription.queueClip(clipId)` — queues automatic transcription of the first 10 seconds
-
-### Step 6: Reload
-
-`fetchClips()` reloads all clips from the database. This is necessary because the database JOIN enriches clips with source file metadata (`ClipWithFile`), and the freshly created clip needs this enrichment.
+The full creation pipeline is in `add_clip.ts`: validate, calculate duration, slice audio, save to database, queue sync and transcription, reload.
 
 ---
 
@@ -178,197 +115,19 @@ interface ClipWithFile extends Clip {
 
 This metadata is preserved in the `files` table even after archiving (soft-delete), so the clip always knows what book it came from, even if the audio is gone.
 
-### Code pattern
-
-Every component that works with clips checks source availability:
-
-```
-hasSourceFile = clip.file_uri !== null
-playbackUri   = hasSourceFile ? clip.file_uri : clip.uri
-duration      = hasSourceFile ? clip.file_duration : clip.duration
-startPosition = hasSourceFile ? clip.start : 0
-```
-
----
-
-## Viewing and Playing Clips
-
-ClipViewer is a read-only modal for examining and playing a clip.
-
-### Playback source selection
-
-ClipViewer picks between two playback modes based on source availability:
-
-**With source:** Plays the full book audio. The timeline shows the entire book duration with the clip range highlighted. Playback starts at `clip.start`. The user can seek anywhere in the book.
-
-**Without source:** Plays the clip's own audio file. The timeline shows only the clip duration. Playback starts at position 0.
-
-### Ownership
-
-ClipViewer generates a stable `ownerId` per clip instance: `clip-viewer-{clipId}`. It checks ownership before syncing from global playback state:
-
-```
-isOwner  = playback.ownerId === ownerId
-isPlaying = isOwner && playback.status === 'playing'
-```
-
-When the user presses play, ClipViewer calls `play()` with its `ownerId`, claiming control of the audio player. When not the owner (e.g., the main player took over), it keeps its local position state so nothing jumps unexpectedly.
-
-### Display
-
-The viewer shows:
-- **Header** — source file title and clip time range
-- **Timeline** — with clip bounds highlighted as a selection
-- **Play/pause button**
-- **Transcription** — if available, displayed in italic quotes
-- **Note** — if the user wrote one
-- **Edit button** — opens ClipEditor (hidden if source is archived)
-
 ---
 
 ## Editing Clips
 
-ClipEditor is a modal for changing a clip's bounds and note. It requires the source book's audio file — if the source is archived, the edit button is hidden entirely.
-
-### What can be edited
-
-- **Bounds** — the start position and duration, via draggable selection handles on the timeline
-- **Note** — free-text, multiline
-
-### What happens on save
-
-`updateClip(clipId, { start, duration, note })` runs:
-
-1. **Detect bounds change** — compares new start/duration against current values
-2. **If bounds changed:**
-   - Validate source file exists (throw if archived)
-   - Re-slice the source audio with new bounds
-   - Replace the clip's audio file with the new slice
-   - Clean up the old file
-   - Clear the transcription (now stale) and re-queue for transcription
-3. **Update database** — write new values plus `updated_at = now`
-4. **Queue for sync** — so other devices get the update
-5. **Update store** — in-memory state reflects changes immediately
-
-Note-only edits skip the re-slice and transcription steps entirely.
-
-### Timeline interaction
-
-The editor's timeline shows the full source book duration. Two draggable handles mark the clip's start and end. The user can:
-- Drag handles to resize the clip
-- Tap the timeline to seek playback
-- Press play to hear the current selection
+Editing requires the source book's audio file — if the source is archived, editing is disabled. The key non-obvious behavior: when bounds change, the source is re-sliced, the old audio file is replaced, and transcription is cleared and re-queued. Note-only edits skip re-slicing and transcription entirely. See `update_clip.ts` for the full flow.
 
 ---
 
-## Deleting and Sharing
-
-### Delete
-
-`deleteClip(clipId)`:
-
-1. Delete the clip's audio file from disk
-2. Delete the database record
-3. Queue a `'delete'` operation for sync
-4. Remove from the store
-
-Deletion is confirmed via a native alert dialog before executing.
-
-### Share
-
-`shareClip(clipId)`:
-
-1. Look up the clip in the store
-2. Call `SharingService.shareClipFile(clip.uri, title)` where title falls back from `clip.note` to `clip.file_name`
-3. The sharing service verifies the file exists, detects MIME type (MP3 or M4A), and opens the native share sheet
-
-Sharing uses the clip's own audio file directly — no temporary file is needed.
-
----
-
-## The Clips List
-
-`ClipsListScreen` shows all clips across all books, sorted newest first.
-
-### Search
-
-A search bar filters clips by matching against:
-- Source file title
-- Source file name
-- Transcription text
-- Note text
-
-Matching is case-insensitive substring search, applied client-side over the in-memory clips.
-
-### Data loading
-
-Clips are fetched on every screen focus via `useFocusEffect` → `fetchClips()`. This ensures the list is fresh when navigating from the player (where a new clip might have just been created).
-
-### Context menu
-
-Each clip has a three-dot menu with actions that adapt to source availability:
-
-| Action | When available | What it does |
-|--------|---------------|--------------|
-| Edit | Source file exists | Opens ClipEditor |
-| Go to source | Source file exists | Loads source in main player at clip start |
-| Share | Always | Opens native share sheet |
-| Delete | Always | Confirmation dialog → hard delete |
-
-### Transcription indicator
-
-If a clip is currently being transcribed (`transcription.pending[clipId]`), the list item shows "Transcribing..." instead of the transcription text.
-
----
-
-## Integration Points
-
-### Sync
-
-Every clip mutation queues a sync operation:
-- `addClip` → `queueChange('clip', clipId, 'upsert')`
-- `updateClip` → `queueChange('clip', clipId, 'upsert')`
-- `deleteClip` → `queueChange('clip', clipId, 'delete')`
-
-When remote changes arrive (via sync `data` event), `fetchClips()` reloads everything. See [docs/SYNC.md](SYNC.md).
-
-### Transcription
-
-Clips are automatically queued for transcription on creation and when bounds change. The transcription system processes the first 10 seconds of the clip's own audio file. See [docs/TRANSCRIPTION.md](TRANSCRIPTION.md).
-
-### Playback
-
-ClipViewer and ClipEditor both participate in the playback ownership system. They generate unique owner IDs and claim the audio player when the user presses play. The main player and any clip component can coexist — only the one that last called `play()` is the owner.
-
----
-
-## Edge Cases and Robustness
-
-### Clip from near the end of a book
-
-If the user creates a clip at position 59:50 in a 60:00 book, the clip duration is capped to 10 seconds (remaining time) instead of the default 20.
-
-### Source archived after clip creation
-
-The clip continues to work — it has its own audio file. The UI adapts by hiding edit and "go to source" options. Metadata (title, artist, filename) is preserved in the database from the JOIN with the `files` table, which retains soft-deleted book records.
-
-### Bounds edit with archived source
-
-`updateClip` throws `"Cannot edit clip bounds: source file has been removed"`. The UI prevents this by hiding the edit button, but the action has its own guard.
-
-### Clip file cleanup
-
-When a clip is deleted, `slicer.cleanup()` deletes its audio file. If the file is already missing (e.g., manually deleted), cleanup handles it silently.
-
-When bounds are edited, the native slicer writes the new slice to the same prefix, overwriting the old file in place (always `.m4a`).
+## Edge Cases
 
 ### Database reload after creation
 
 `addClip` calls `fetchClips()` after database insertion rather than manually constructing a `ClipWithFile`. This ensures the clip has correct source file metadata from the JOIN, avoiding stale or missing data.
-
-### Search across all fields
-
-Search checks title, filename, transcription, and note. This means a user can find a clip by remembering what was said (transcription), what they wrote about it (note), or which book it's from (title/filename).
 
 ---
 

@@ -2,20 +2,6 @@
 
 A guide for Ivy's on-device clip transcription.
 
-## Table of Contents
-
-1. [The Big Picture](#the-big-picture)
-2. [Core Concepts](#core-concepts)
-3. [Architecture Overview](#architecture-overview)
-4. [The Whisper Service](#the-whisper-service)
-5. [The Queue](#the-queue)
-6. [Integration with the Store](#integration-with-the-store)
-7. [Lifecycle: Start, Stop, and Re-queue](#lifecycle-start-stop-and-re-queue)
-8. [Edge Cases and Robustness](#edge-cases-and-robustness)
-9. [File Map](#file-map)
-
----
-
 ## The Big Picture
 
 When a user creates a clip (a bookmarked audio segment), Ivy automatically transcribes it using on-device speech recognition. No server, no internet, no data leaving the phone. The transcription appears in the clip viewer as quoted text.
@@ -123,25 +109,11 @@ A `downloading` flag prevents concurrent download attempts — if two calls race
 
 ### Audio preparation
 
-Whisper requires a very specific input format: **16kHz mono 16-bit PCM WAV**. Most audio files aren't in this format, so the service converts them:
-
-1. **Decode** — `react-native-audio-api` decodes the input file at 16kHz sample rate
-2. **Mix to mono** — if the audio has multiple channels, they're averaged into one
-3. **Convert samples** — float32 samples (range -1.0 to 1.0) are scaled to int16 (range -32768 to 32767), with clamping to prevent overflow
-4. **Build WAV** — a 44-byte WAV header is prepended to the PCM data
-5. **Write** — the result is base64-encoded and written to a temp file
-
-The temp WAV is cleaned up after transcription, regardless of success or failure.
+The service converts input audio to the format Whisper expects (16kHz mono PCM WAV) using `react-native-audio-api` for decoding, then writes a temp WAV file. The temp file is cleaned up after transcription regardless of outcome.
 
 ### Running transcription
 
-With the model loaded and audio prepared:
-
-```
-context.transcribe(wavPath, { language: 'en' }) → text
-```
-
-The result is trimmed and returned. The service emits `status: 'processing'` before and `status: 'idle'` after.
+With the model loaded and audio prepared, it calls `context.transcribe(wavPath, { language: 'en' })`. The result is trimmed and returned. The service emits `status: 'processing'` before and `status: 'idle'` after.
 
 ### Initialization deduplication
 
@@ -185,20 +157,6 @@ processQueue():
 
 The `processing` flag is the key concurrency guard. It ensures only one clip is being transcribed at any time. The flag is reset in a `finally` block to prevent it from getting stuck if a clip fails.
 
-### Processing a single clip
-
-For each clip:
-
-1. Look up the clip in the database
-2. Skip if not found or already has a transcription
-3. Extract the first 10 seconds of the clip's audio (via AudioSlicerService)
-4. Call `whisper.transcribe()` on the extracted audio
-5. Save the transcription to the database
-6. Emit a `finish` event (with the transcription text, or with an error)
-7. Clean up the temp audio file
-
-If any step fails, the error is caught and emitted — but processing continues with the next clip in the queue. One bad clip doesn't stall the whole pipeline.
-
 ### The 10-second limit
 
 Only the first 10 seconds of each clip are transcribed. This is defined by `MAX_TRANSCRIPTION_DURATION_MS = 10000`. The audio slicer extracts `min(clip.duration, 10000)` milliseconds.
@@ -221,74 +179,16 @@ transcription: {
 - `status` reflects the overall pipeline state (shown in Settings)
 - `pending` tracks individual clips (used by UI to show loading indicators)
 
-### Events → State
-
-The store subscribes to three events from the queue service:
-
-| Event | Store update |
-|-------|-------------|
-| `queued` | Sets `pending[clipId] = true` |
-| `finish` | Deletes `pending[clipId]`, calls `updateClip()` if transcription succeeded |
-| `status` | Updates `transcription.status` |
-
-The `status` event has three values:
-- `'idle'` — nothing happening
-- `'downloading'` — Whisper model is being fetched (first use only)
-- `'processing'` — at least one clip is being transcribed
-
-### Actions
-
-Two actions control the transcription lifecycle:
-
-- **`startTranscription()`** — calls `transcription.start()`. This initializes Whisper, queries the database for untranscribed clips, and begins processing.
-- **`stopTranscription()`** — calls `transcription.stop()` and clears `pending` from the store. The queue is emptied immediately, but any clip currently being transcribed will finish (the in-progress transcription isn't interrupted).
-
 ### Automatic queueing
 
-Two other actions integrate with transcription without being "transcription actions":
+Two store actions integrate with transcription as a side effect:
 
 - **`addClip()`** — after creating a clip, calls `transcription.queueClip(clip.id)`. If the service isn't started (feature disabled), this is a no-op.
 - **`updateClip()`** — if the clip's bounds changed (start or duration), clears the transcription, re-extracts audio from the source, and re-queues the clip.
 
 ---
 
-## Lifecycle: Start, Stop, and Re-queue
-
-### App startup
-
-On app launch, the store reads `settings.transcription_enabled`. If true, it calls `transcription.start()`, which:
-
-1. Initializes Whisper (downloading the model if needed)
-2. Queries the database for all clips where `transcription IS NULL`
-3. Queues each one
-
-This means clips created while the feature was disabled are picked up automatically when it's re-enabled.
-
-### User toggles the setting
-
-In Settings, there's a toggle for transcription:
-
-- **Enable** → calls `updateSettings()` then `startTranscription()`. The start process finds any untranscribed clips.
-- **Disable** → calls `updateSettings()` then `stopTranscription()`. The queue is cleared. Any clip mid-transcription finishes, but its result is still saved.
-
-### Settings screen status display
-
-The Settings screen shows contextual status text:
-- `'downloading'` → "Downloading model..."
-- `'processing'` → "Processing..."
-- `'idle'` → nothing shown
-
----
-
 ## Edge Cases and Robustness
-
-### Concurrent initialization
-
-If `initialize()` is called while already in progress, the second call gets the same promise as the first. No duplicate work.
-
-### Concurrent model download
-
-A `downloading` boolean prevents two downloads from running simultaneously. The second call throws an error rather than racing.
 
 ### Processing flag stuck after error
 
@@ -301,22 +201,6 @@ Calling `queueClip()` when the service isn't started is a silent no-op. The clip
 ### Stop while processing
 
 `stop()` clears the queue and resets `started` to false, but does **not** reset `processing`. The currently processing clip isn't interrupted — it runs to completion. The processing loop then exits on its next iteration because the `started` check in the while condition fails, and the `finally` block resets `processing` naturally. This avoids a race where re-starting the service while a clip is still in flight could bypass the concurrency guard.
-
-### Clip not found or already transcribed
-
-`processClip()` re-checks the database before transcribing. If the clip was deleted between queueing and processing, or if it somehow already has a transcription, it's silently skipped.
-
-### Source book archived
-
-Clips have their own audio files separate from the source book. Transcription uses the clip's own file (`clip.uri`), so it works even when the source book has been archived and its file deleted.
-
-### Stereo audio
-
-The WAV conversion mixes multi-channel audio to mono by averaging all channels per sample. This matches Whisper's requirement for single-channel input.
-
-### Sample value overflow
-
-Float-to-int16 conversion clamps values to [-1.0, 1.0] before scaling, preventing integer overflow that could produce audio artifacts or crashes.
 
 ---
 

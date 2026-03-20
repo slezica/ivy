@@ -2,25 +2,6 @@
 
 A guide for Ivy's library, file loading, archiving, and deletion.
 
-## Table of Contents
-
-1. [The Big Picture](#the-big-picture)
-2. [Core Concepts](#core-concepts)
-3. [Architecture Overview](#architecture-overview)
-4. [Adding a Book](#adding-a-book)
-5. [Adding a Book from URL](#adding-a-book-from-url)
-6. [File Fingerprinting](#file-fingerprinting)
-7. [The Three Loading Cases](#the-three-loading-cases)
-8. [Book States](#book-states)
-9. [Archiving](#archiving)
-10. [Deletion](#deletion)
-11. [Restoration](#restoration)
-12. [The Library Screen](#the-library-screen)
-13. [Edge Cases and Robustness](#edge-cases-and-robustness)
-14. [File Map](#file-map)
-
----
-
 ## The Big Picture
 
 A **Book** is Ivy's domain entity for an audiobook or podcast file. The library is a collection of books — each with a saved position, metadata (title, artist, artwork), and an audio file stored in app-owned storage.
@@ -91,37 +72,11 @@ No dedicated "library service" — the actions coordinate the storage, metadata,
 
 ## Adding a Book
 
-When the user picks a file (or one is provided by URI), `loadFile()` runs a multi-step pipeline:
+When the user picks a file (or one is provided by URI), `loadFile()` runs a pipeline: copy to app storage, extract metadata, read fingerprint, then check for duplicates.
 
-### Step 1: Copy to app storage
+**Filename gotcha:** The filename is sanitized to remove characters that break Android's `MediaMetadataRetriever` (colons, brackets, etc.). A timestamp suffix prevents collisions.
 
-```
-library.status = 'adding'  (UI shows "Adding to library..." modal)
-```
-
-The file is copied from its external URI to `{DocumentDirectory}/audio/{name}_{timestamp}.{ext}`. If the source is already a local `file://` path, it's moved instead of copied to save space.
-
-The filename is sanitized — characters that break Android's `MediaMetadataRetriever` (colons, brackets, etc.) are removed. A timestamp suffix prevents collisions.
-
-### Step 2: Read metadata
-
-The native `AudioMetadataService` extracts ID3 tags from the file:
-
-- **title** — track title (may be null)
-- **artist** — artist/author name (may be null)
-- **artwork** — album art as base64 data URI (may be null)
-- **duration** — file length in milliseconds
-
-Metadata extraction is non-critical — if it fails, the book is still added with null metadata and zero duration.
-
-### Step 3: Read fingerprint
-
-`FileStorageService.readFileFingerprint()` reads:
-
-- **fileSize** — exact file size in bytes
-- **fingerprint** — first 4,096 bytes of the file as a `Uint8Array`
-
-### Step 4: Check for existing book
+### Check for existing book
 
 The fingerprint is looked up in the database:
 
@@ -131,7 +86,7 @@ SELECT * FROM files WHERE file_size = ? AND fingerprint = ?
 
 This produces one of three outcomes, each handled differently. See [The Three Loading Cases](#the-three-loading-cases).
 
-### Step 5: Refresh
+### Refresh
 
 After the database is updated, `fetchBooks()` and `fetchClips()` reload all data from the database. The library status returns to `'idle'`.
 
@@ -151,35 +106,12 @@ The "Download URL" option in the library menu lets users add books from YouTube 
 
 ### How it works
 
-1. **Download** — `FileDownloaderService` calls the native `FileDownloaderModule` (which wraps `youtubedl-android`). The file is downloaded to `{CachesDirectory}/downloads/` as m4a with embedded thumbnail and metadata (`--embed-thumbnail --embed-metadata`). Progress events (0–99%) update `library.addProgress`.
+Downloads via `FileDownloaderService` → native `FileDownloaderModule` (wraps `youtubedl-android`). File is downloaded to `{CachesDirectory}/downloads/` as m4a with embedded metadata, then goes through the same fingerprint → three cases → DB logic as `loadFile()`, and finally moved to app storage.
 
-2. **Fingerprint** — `FileStorageService.readFileFingerprint()` reads the downloaded file, same as for local files.
-
-3. **Duplicate check** — Same three-case logic as `loadFile()`: active duplicate → touch + report; archived/deleted match → restore; no match → new book.
-
-4. **Move to app storage** — The downloaded file is moved (not copied) from the cache dir to `{DocumentDirectory}/audio/`.
-
-5. **Metadata extraction** — `AudioMetadataService` reads the embedded metadata (title, artist, artwork, duration) from the file.
-
-### Cancellation
-
-`cancelLoadFile()` handles both file copy and URL download cancellation. It calls `downloader.cancelDownload()` which destroys the active yt-dlp process.
-
-### Native module: FileDownloaderModule
-
-The Kotlin module wraps `youtubedl-android` (yt-dlp + FFmpeg bundled as native libraries). Key details:
+### Native module gotchas
 
 - **Lazy initialization** — yt-dlp and FFmpeg are initialized on first use via `ensureInitialized()`, using a `CountDownLatch` so concurrent calls block until init completes.
 - **Legacy packaging required** — `expo.useLegacyPackaging=true` in `gradle.properties` is required because yt-dlp's native `.so` files must be extracted to disk (not kept compressed in the APK).
-- **Progress** — Emits `FileDownloaderProgress` events with `{ opId, percent }` via `NativeEventEmitter`.
-
-### Settings
-
-The store tracks downloader state in `downloader: { version, status }`. The settings screen displays the current yt-dlp version with an "Update" link. The `fetchDownloaderState` action fetches the version on screen focus; `updateDownloader` runs the update (guarded: only when `status === 'idle'`). Updates target the STABLE channel.
-
-### UI flow
-
-Library menu → "Download URL" → Dialog with text input → "Download" button → `loadFromUrl(url)` → LibraryLoadingDialog shows progress → book appears in library.
 
 ---
 
@@ -201,12 +133,6 @@ The database query uses `file_size` first (indexed, fast integer comparison), th
 ### Why first 4KB?
 
 Audio files of the same content but from different sources typically share identical headers and initial audio frames. 4KB is enough to capture the file format headers and the beginning of the audio data, providing extremely low collision probability while being fast to read.
-
-### What it enables
-
-- **Duplicate detection:** Adding the same file twice reuses the existing book record
-- **Restore from archive:** Adding a file that matches an archived book restores it
-- **Restore from deletion:** Adding a file that matches a deleted (hidden) book restores it
 
 ---
 
@@ -271,14 +197,7 @@ The `getAllBooks()` database query filters by `hidden = 0`, so deleted books don
 
 ## Archiving
 
-Archiving frees disk space while keeping the book visible:
-
-1. **Optimistic update:** Set `book.uri = null` in the store
-2. **Database update:** `UPDATE files SET uri = NULL WHERE id = ?`
-3. **Queue for sync:** `syncQueue.queueChange('book', bookId, 'upsert')`
-4. **Delete file:** Fire-and-forget, non-blocking
-
-If step 2 fails, step 1 is rolled back (uri restored to its previous value). Step 4 never blocks or fails the operation.
+Archiving frees disk space while keeping the book visible. Uses optimistic-update-with-rollback (see Core Concepts).
 
 **After archiving:**
 - The book appears in the "Archived" section of the library
@@ -291,14 +210,7 @@ If step 2 fails, step 1 is rolled back (uri restored to its previous value). Ste
 
 ## Deletion
 
-Deletion hides the book from the library entirely:
-
-1. **Optimistic update:** Remove from `state.books`
-2. **Database update:** `UPDATE files SET uri = NULL, hidden = 1 WHERE id = ?`
-3. **Queue for sync:** `syncQueue.queueChange('book', bookId, 'upsert')`
-4. **Delete file:** Fire-and-forget, non-blocking
-
-If step 2 fails, the entire book object is restored to the store.
+Deletion hides the book from the library entirely. Uses optimistic-update-with-rollback (see Core Concepts).
 
 **After deletion:**
 - The book disappears from the library UI
@@ -315,105 +227,20 @@ Both archive and delete queue an `'upsert'` sync operation, not a `'delete'`. Th
 
 ## Restoration
 
-Restoration is automatic — it happens as a side effect of adding a file that matches a known fingerprint.
+Restoration is automatic — it happens when adding a file that matches a known fingerprint (Case A in the Three Loading Cases). There's no explicit "restore" button.
 
-There's no explicit "restore" button. The flow is:
+Key preservation rules in `db.restoreBook()`:
 
-1. User adds a file (from picker or URI)
-2. `loadFile()` reads the fingerprint
-3. Fingerprint matches an archived or deleted book → Case A
-4. `db.restoreBook()` updates the record:
-   - Sets `uri` to the new file path
-   - Clears `hidden` flag (makes it visible again)
-   - **Preserves metadata** — existing title, artist, artwork win over ID3 tags (protects user edits); falls back to ID3 values when existing fields are null
-   - **Preserves position** (the user's saved playback position)
-5. Queue for sync
-
-The restored book appears in the main library list with its previous position intact.
+- **Metadata** — existing title, artist, artwork win over ID3 tags (protects user edits); falls back to ID3 values only when existing fields are null
+- **Position** — the user's saved playback position is preserved
 
 ---
 
-## The Library Screen
-
-### Layout
-
-The library displays books in two sections:
-
-1. **Active books** — books with audio files, sorted by `updated_at` descending (most recently used first)
-2. **Archived books** — books without audio files (header: "Archived"), same sort order
-
-### Search
-
-A search bar filters across title, filename, and artist. Matching is case-insensitive substring search, applied client-side.
-
-### Book interactions
-
-**Tap an active book:**
-- Calls `play({ fileUri: book.uri, position: book.position, ownerId: MAIN_PLAYER_OWNER_ID })`
-- Navigates to the player tab
-- Playback starts from the saved position
-
-**Tap an archived book:**
-- Shows an alert: "This book has been archived"
-- No playback
-
-**Context menu (active books only):**
-- **Edit details** — opens metadata editor dialog (title, artist), then `updateBook(bookId, updates)`
-- **Archive** — confirmation dialog, then `archiveBook(bookId)`
-- **Remove from library** — confirmation dialog, then `deleteBook(bookId)`
-
-Archived books don't show a context menu.
-
-### Auto-sync
-
-The library screen triggers auto-sync when the app returns to foreground:
-- Must be at least 5 minutes since the last sync attempt
-- Calls `autoSync()` which only runs if sync is enabled and the user is authenticated
-
-### Data loading
-
-Books are fetched on every screen focus via `useFocusEffect` → `fetchBooks()`. This ensures the list reflects changes from other screens (e.g., a book loaded from settings, or clips screen triggering a reload).
-
----
-
-## Edge Cases and Robustness
-
-### Orphaned file cleanup
-
-The `loadFile()` finally block handles every failure mode:
-
-| Failure point | Temp file | Renamed file |
-|---------------|-----------|-------------|
-| Copy fails | Doesn't exist | N/A |
-| Metadata read fails | Deleted | N/A |
-| Fingerprint read fails | Deleted | N/A |
-| DB write fails | Deleted | Deleted (orphan) |
-| Success | Deleted (post-rename) | Kept |
-
-The orphan check: if a renamed file exists but `db.getBookByUri()` returns null, the file is deleted.
-
-### Metadata extraction failure
-
-If the native metadata module fails (unsupported format, corrupt headers), the book is still added with `title: null`, `artist: null`, `artwork: null`, `duration: 0`. The filename is used as the display name. Duration will show as 0 until the audio player loads the file and reports the real duration.
-
-### Position preservation on restore
-
-`db.restoreBook()` explicitly does **not** update the position field. This means a restored book resumes from exactly where the user left off before archiving or deleting.
+## Notes
 
 ### File move optimization
 
 When the source URI is already a local path (starts with `file://` or `/`), `FileStorageService` moves the file instead of copying it. This avoids doubling disk usage for large audiobook files.
-
-### Duplicate detection timing
-
-Fingerprint checking happens **after** the file is copied to app storage. This means even if the file is a duplicate, a temporary copy exists briefly. The cleanup in the `finally` block handles this — the temp file is always deleted.
-
-### Non-blocking file deletion
-
-Both archive and delete perform file deletion asynchronously with `.catch(() => {})`. This means:
-- The UI responds immediately
-- The database is the source of truth, not the filesystem
-- If deletion fails (permissions, disk error), the book state is still correct
 
 ---
 

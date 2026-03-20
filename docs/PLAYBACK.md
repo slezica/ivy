@@ -2,23 +2,6 @@
 
 A guide for Ivy's audio playback architecture.
 
-## Table of Contents
-
-1. [The Big Picture](#the-big-picture)
-2. [Core Concepts](#core-concepts)
-3. [Architecture Overview](#architecture-overview)
-4. [The Audio Player Service](#the-audio-player-service)
-5. [The Ownership Model](#the-ownership-model)
-6. [Playback Actions](#playback-actions)
-7. [The Event Loop](#the-event-loop)
-8. [The Player Screen](#the-player-screen)
-9. [The Timeline Component](#the-timeline-component)
-10. [System Media Controls](#system-media-controls)
-11. [Edge Cases and Robustness](#edge-cases-and-robustness)
-12. [File Map](#file-map)
-
----
-
 ## The Big Picture
 
 Ivy plays audiobooks and podcast clips. Playback is backed by `react-native-track-player` (v5), which provides native audio output, background playback, and system media controls (notification, lock screen, Bluetooth).
@@ -95,9 +78,6 @@ This prevents the timeline from jumping when another component takes over playba
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### 3. Milliseconds everywhere except TrackPlayer
-
-
 ---
 
 ## The Audio Player Service
@@ -114,24 +94,6 @@ This prevents the timeline from jumping when another component takes over playba
 4. Convert the duration from seconds to milliseconds and return it
 
 The polling is necessary because TrackPlayer needs time to probe the audio file's headers.
-
-### Seeking and skipping
-
-- `seek(positionMs)` → converts to seconds, calls `TrackPlayer.seekTo()`
-- `skip(offsetMs)` → gets current position in seconds, applies offset (converted from ms), clamps to `[0, duration]`
-
-### Status events
-
-The service subscribes to two TrackPlayer events:
-
-- **`PlaybackState`** — player started, paused, stopped, etc. Mapped to `'playing' | 'paused'`
-- **`PlaybackProgressUpdated`** — fires every 1 second during playback, with position and duration in seconds. Converted to milliseconds before emitting
-
-Both are unified into a single `'status'` event with the `PlaybackStatus` type:
-
-```typescript
-{ status: 'playing' | 'paused', position: number, duration: number }
-```
 
 ### State mapping
 
@@ -180,9 +142,7 @@ This means clip playback (ClipViewer, ClipEditor) never overwrites the book's sa
 
 ---
 
-## Playback Actions
-
-### `play(context)`
+## The `play(context)` Action
 
 The most important action. Takes a `PlayContext`: `{ fileUri, position, ownerId }`.
 
@@ -198,70 +158,11 @@ The most important action. Takes a `PlayContext`: `{ fileUri, position, ownerId 
 
 On load failure, status reverts to `'paused'` (if a file was previously loaded) or `'idle'` (if nothing was loaded).
 
-### `pause()`
-
-Sets status to `'paused'`, calls `audio.pause()`. Ownership is preserved — the paused component is still the owner.
-
-### `seek(context)`
-
-`{ fileUri, position }` — Only seeks if `fileUri` matches the currently loaded file. This prevents a stale seek from one component affecting another's playback.
-
-### `skipForward()` / `skipBackward()`
-
-Calls `audio.skip()` with `+25000ms` or `-30000ms`. These match the system notification skip intervals.
-
-### `syncPlaybackState()`
-
-Reads the current status from the audio service and writes it to the store. Used when PlayerScreen gains focus, to catch up with state changes that happened while the screen was in the background.
-
 ---
 
-## The Event Loop
+## The Loading State Guard
 
-Here's the complete cycle from user action to screen update:
-
-```
-User presses Play on PlayerScreen
-  ↓
-play({ fileUri: book.uri, position: ownPosition, ownerId: 'main' })
-  ↓
-AudioPlayerService.load(uri, metadata)
-  → TrackPlayer.add(track), poll for duration
-  → returns duration in ms
-  ↓
-AudioPlayerService.seek(position)
-  → TrackPlayer.seekTo(position / 1000)
-  ↓
-AudioPlayerService.play()
-  → TrackPlayer.play()
-  ↓
-TrackPlayer emits PlaybackState event (state = Playing)
-  ↓
-AudioPlayerService maps to 'playing', emits 'status' event (ms values)
-  ↓
-Store's onAudioStatus handler fires:
-  → Updates playback.status (unless 'loading')
-  → Updates playback.position
-  → If main player: updates book position in DB, tracks session
-  ↓
-React re-renders with new playback state
-  ↓
-PlayerScreen sees isOwner=true, syncs ownPosition from playback.position
-  ↓
-Timeline scrolls to new position
-
-  ... 1 second later ...
-
-TrackPlayer emits PlaybackProgressUpdated (position, duration in seconds)
-  ↓
-AudioPlayerService converts to ms, emits 'status' event
-  ↓
-Cycle repeats
-```
-
-### The loading state guard
-
-A critical detail: `onAudioStatus` only updates `playback.status` when the current status is **not** `'loading'`:
+A critical detail in `onAudioStatus`: status updates are ignored while the current status is `'loading'`:
 
 ```typescript
 if (state.playback.status !== 'loading') {
@@ -275,149 +176,13 @@ Position updates still flow through regardless — only the status field is prot
 
 ---
 
-## The Player Screen
-
-PlayerScreen is the main playback UI. It manages its own book selection and position independently of the global playback state.
-
-### Local state
-
-```typescript
-ownBook: Book | null       // The book this screen is showing
-ownPosition: number        // The position this screen remembers
-```
-
-These are separate from `playback.uri` and `playback.position` in the store.
-
-### Adoption
-
-When another action loads a file targeting the main player (e.g., tapping a book in the library calls `play({ ownerId: MAIN_PLAYER_OWNER_ID })`), the PlayerScreen detects this via an effect:
-
-```
-If isOwner AND playback.uri changed → look up the book, adopt it as ownBook
-```
-
-This is how the PlayerScreen learns what to display — it doesn't drive the load, it reacts to ownership.
-
-### Position sync
-
-While PlayerScreen is the owner and its file is loaded, it continuously syncs `ownPosition` from `playback.position`. When it's not the owner (e.g., ClipViewer took over), it stops syncing and keeps its last known position.
-
-### Seek behavior
-
-When the user seeks on the timeline:
-
-1. `ownPosition` is updated immediately (the timeline responds instantly)
-2. If the screen is the owner and the file is loaded, `seek()` is called to move the actual playback position
-3. If the screen is not the owner, only the local position changes (no effect on audio)
-
-This means you can seek on the PlayerScreen while a clip is playing, and nothing happens to the clip. When the PlayerScreen reclaims ownership, it plays from the seeked position.
-
-### Focus sync
-
-When the PlayerScreen gains focus, it calls `syncPlaybackState()` to read the latest status from the audio service. This catches up with any state changes that happened while the screen was in the background (e.g., track finished, notification pause, Bluetooth disconnect).
-
----
-
-## The Timeline Component
-
-The timeline is a GPU-accelerated horizontal scrolling waveform rendered with Skia Canvas.
-
-### Visual structure
-
-```
-  ┌─ time indicator (optional) ──┐
-  │         12:34                │
-  │                              │
-  │  ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▐▌▐▌ ▐▌▐▌    │  ← bars (decorative waveform)
-  │       ▐▌ ▐▌▐▌ ▐█▐▌▐▌▐▌       │
-  │  ▐▌▐▌ ▐▌▐▌ ▐▌ ▐█▐▌ ▐▌▐▌▐▌    │
-  │               ╫              │  ← playhead (center-fixed, 2px)
-  │               ╫              │
-  │                              │
-  │  ○────────────────────○      │  ← selection handles (clips only)
-  └──────────────────────────────┘
-```
-
-The playhead is fixed at the center of the screen. The bars scroll behind it as time progresses. Each bar represents a 5-second segment (`SEGMENT_DURATION`), with configurable width and gap that scale with zoom.
-
-### Three-layer painting
-
-The bars are drawn once as a single Skia path, then painted three times with different clip regions:
-
-1. **Left color** — everything before the playhead (played portion)
-2. **Right color** — everything after the playhead (unplayed portion)
-3. **Selection color** — the clip's range, overwriting both left and right (clips only)
-
-This avoids drawing each bar individually, which would be far too slow for smooth scrolling.
-
-### Bar heights
-
-Heights are computed per visible segment using layered sine waves with pseudo-random variation. This creates a convincing waveform appearance without reading actual audio data. Only visible bars are computed per frame.
-
-### Physics
-
-The timeline physics hook (`useTimelinePhysics`) handles three interaction modes:
-
-**Pan (drag):**
-- Direct 1:1 scroll mapping
-- On release: if velocity exceeds threshold, start momentum
-- Momentum: velocity decays at 0.95× per frame until below 0.5px/frame
-
-**Tap:**
-- Animate to the tapped position with `easeOutCubic` over 200ms
-
-**Selection handle drag (clips):**
-- Moves the start or end handle
-- Minimum 1 second between handles
-- Calls `onSelectionChange` with new bounds
-
-**Pinch-to-zoom (opt-in via `canZoom` prop):**
-- Scales segment width while keeping gap fixed
-- Scroll position recomputed to preserve center time
-- Pan/tap suppressed during and briefly after pinch
-
-All internal tracking uses pixel coordinates (via `timeToX`/`xToTime` conversions). These functions accept `segmentDuration`, `segmentWidth`, and `segmentGap` to support zoom. React re-renders are throttled to every 50ms to maintain 60fps Skia rendering without React overhead.
-
----
-
 ## System Media Controls
 
 System media controls (notification, lock screen, Bluetooth) are handled by a separate **playback service** that runs in a background context.
 
-### Registration
-
-In `index.js`, before any React code loads:
-
-```javascript
-TrackPlayer.registerPlaybackService(() => playbackService)
-```
-
-This registers a function that handles remote events. It runs in its own JavaScript context — it doesn't have access to the store or React components.
-
-### Remote events
-
-The playback service handles:
-
-| Event | Action |
-|-------|--------|
-| `RemotePlay` | `TrackPlayer.play()` |
-| `RemotePause` | `TrackPlayer.pause()` |
-| `RemoteStop` | `TrackPlayer.stop()` |
-| `RemoteSeek` | `TrackPlayer.seekTo(position)` |
-| `RemoteJumpForward` | Seek forward by `event.interval` |
-| `RemoteJumpBackward` | Seek backward by `event.interval` |
-| `RemoteNext` | Jump forward 25 seconds |
-| `RemotePrevious` | Jump backward 30 seconds |
-
-All operations happen in TrackPlayer's native seconds domain. State changes flow back to the app via the same TrackPlayer event system that the AudioPlayerService subscribes to.
-
-### Notification metadata
-
-When `play()` loads a file, it passes metadata (title, artist, artwork) to `audio.load()`. TrackPlayer displays this on the system notification and lock screen. If metadata isn't available, the filename is used.
-
 ### Notification click
 
-Tapping the notification opens a deep link (`ivy://notification.click`). The `+not-found.tsx` catch-all route detects this and redirects to the player tab.
+Tapping the notification opens a deep link (`ivy://notification.click`). This behavior is split across three files: `index.js` registers the playback service, `integration.ts` defines the background event handler, and `+not-found.tsx` catches the deep link and redirects to the player tab.
 
 ---
 
@@ -426,22 +191,6 @@ Tapping the notification opens a deep link (`ivy://notification.click`). The `+n
 ### Load timeout
 
 If TrackPlayer can't return a valid duration within 10 seconds (corrupt file, unsupported format), `load()` throws. The `play()` action catches this and reverts the status to `'paused'` or `'idle'`.
-
-### Stale seeks
-
-`seek()` only acts if the requested `fileUri` matches `playback.uri`. This prevents a delayed seek callback from one component affecting another component's playback.
-
-### Loading state flicker
-
-TrackPlayer emits multiple state events during a load (Ready, Paused, etc.). The store's `onAudioStatus` handler ignores status updates while in `'loading'` state, preventing the UI from flickering between loading and paused.
-
-### Background playback continuity
-
-When the app is backgrounded, TrackPlayer continues playing natively. Progress events still fire. When the app returns to foreground, `syncPlaybackState()` ensures the store catches up with the current position.
-
-### Clip playback and book position
-
-ClipViewer and ClipEditor use their own `ownerId`. The store's `onAudioStatus` handler only updates the book's database position when `ownerId === MAIN_PLAYER_OWNER_ID`. Clip playback never overwrites saved book positions.
 
 ### Skip asymmetry
 
@@ -474,10 +223,5 @@ src/store/
 src/screens/
   PlayerScreen.tsx    → Main player (ownBook, ownPosition, adoption)
 
-src/components/timeline/
-  Timeline.tsx        → GPU-accelerated Skia waveform
-  useTimelinePhysics.ts → Pan, momentum, tap, selection handle, pinch-to-zoom gestures
-  constants.ts        → Layout, physics, animation, zoom constants
-  utils.ts            → timeToX, xToTime, bar heights
-  index.ts            → Barrel exports
+src/components/timeline/  → GPU-accelerated Skia waveform (see code for details)
 ```

@@ -2,24 +2,6 @@
 
 A guide for Ivy's Google Drive sync.
 
-## Table of Contents
-
-1. [The Big Picture](#the-big-picture)
-2. [Core Concepts](#core-concepts)
-3. [Architecture Overview](#architecture-overview)
-4. [The Offline Queue](#the-offline-queue)
-5. [The Sync Manifest](#the-sync-manifest)
-6. [The Sync Flow](#the-sync-flow)
-7. [The Planner](#the-planner)
-8. [Conflict Resolution](#conflict-resolution)
-9. [Google Drive Storage](#google-drive-storage)
-10. [Authentication](#authentication)
-11. [Integration with the Store](#integration-with-the-store)
-12. [Edge Cases and Robustness](#edge-cases-and-robustness)
-13. [File Map](#file-map)
-
----
-
 ## The Big Picture
 
 Ivy is an audiobook app that runs on multiple devices. The sync system's job is to keep book metadata (positions, titles, archive state) and clips (bookmarks with audio snippets) consistent across all of them, using Google Drive as the shared backend.
@@ -130,13 +112,7 @@ Each entry tracks:
 - **attempts** — how many times sync tried and failed (max 3)
 - **last_error** — the most recent failure message
 
-### Processing
-
-At the start of every sync, the queue is drained first. Each item is processed by looking up the current entity in the local database and uploading it. If the entity was deleted locally, the corresponding remote files are found and removed.
-
 Failed items get their `attempts` count incremented. After 3 failures, items are considered "dead" and skipped on future syncs (they can be manually retried via `retryFailed()`).
-
-Successfully processed items are removed from the queue.
 
 ---
 
@@ -165,10 +141,6 @@ The manifest enables **incremental sync** — we only transfer what actually cha
 - **No manifest at all?** → Entity is new to this side; upload or download it
 
 After each successful upload or download, the manifest is updated to reflect the new "last synced" state.
-
-### Cleanup
-
-At the end of a sync, the system scans for **orphaned manifests** — entries where the entity no longer exists locally *and* no longer exists remotely. These are deleted to prevent the manifest table from growing indefinitely.
 
 ---
 
@@ -338,14 +310,6 @@ Files are named `{type}_{uuid}.{ext}`:
 
 The filename regex is: `/^(book|clip)_([a-f0-9-]+)\.(json|mp3|m4a)$/`
 
-### Upload strategy
-
-All uploads use Drive API's **resumable upload protocol**, which is a two-step process:
-1. POST metadata to get an upload URI
-2. PUT content to that URI
-
-Note: while the protocol *supports* resuming interrupted uploads, Ivy does not implement retry/resume logic — if the PUT fails, the upload simply errors. The two-step approach is used because Drive requires it for setting file metadata (parent folder) at upload time.
-
 ### Clip upload safety
 
 Clips involve two files (JSON + audio). If the JSON uploads successfully but the audio upload fails, the JSON file is **rolled back** (deleted) with up to 3 retry attempts. This prevents orphaned JSON files on Drive that would confuse future syncs.
@@ -355,10 +319,6 @@ Audio uploads are also size-capped at **50MB** to prevent out-of-memory errors o
 ### Replace-on-upload
 
 Drive doesn't support in-place file updates in Ivy's usage. Instead, uploads follow a **delete-then-create** pattern: before uploading a new version, the service lists the folder's files, finds the existing one by name, deletes it, and uploads a fresh copy. This means every upload produces a new Drive file ID, which is recorded in the manifest.
-
-### Concurrent folder creation
-
-When the app first syncs, it needs to create the `Ivy/`, `books/`, and `clips/` folders. If multiple operations fire concurrently, they could create duplicate folders. The Drive service prevents this with an in-flight promise cache — if a folder creation is already in progress, subsequent requests wait for the same promise instead of starting their own.
 
 ---
 
@@ -374,16 +334,6 @@ Authentication uses `@react-native-google-signin/google-signin` with the `drive.
 | `autoSync()` | App returns to foreground | **Silent**: skips entirely if not authenticated |
 
 This distinction matters: auto-sync should never pop up a login dialog when the user is just opening the app. If the token is expired or revoked, auto-sync quietly does nothing.
-
-### Token management
-
-The native Google Sign-In library handles token refresh internally. The auth service just calls `getTokens()` and gets a fresh access token. If the session is truly expired (requires re-authentication), `getAccessToken()` returns `null`.
-
-### Race condition prevention
-
-Both `syncNow()` and `autoSync()` set `this.isSyncing = true` **before any async work** and check it as a guard at the top. This prevents concurrent syncs if the user taps the button twice or auto-sync fires while a manual sync is running.
-
-One subtlety: `autoSync()` has an early-exit path — if `getAccessToken()` returns `null` (not authenticated), it resets `isSyncing = false` directly and returns without emitting a status event. This avoids showing sync UI flicker for a sync that never actually started.
 
 ---
 
@@ -423,19 +373,6 @@ If Device A deletes a clip while Device B modifies it (with a later timestamp):
 3. Device A syncs again: downloads the "resurrected" clip
 
 **Result:** Modification wins. There are no tombstones — deletion is simply the absence of the entity. This is a deliberate simplicity tradeoff.
-
-### Books are never deleted from Drive
-
-Because books use soft-delete (`hidden` flag), they always exist in the database and always get synced. A "deleted" book is just a book with `hidden: true` and `uri: null`. This means Device B will always learn about the deletion via the hidden flag during merge, using the **hidden-wins** strategy.
-
-### Offline resilience
-
-Changes queue to SQLite immediately. The queue survives:
-- App restarts
-- Network outages
-- Sign-out / sign-in cycles
-
-Even if sync fails repeatedly, queued items are retried (up to 3 attempts). After that, they're parked until manually retried.
 
 ### Backward compatibility
 
