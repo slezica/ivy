@@ -34,7 +34,6 @@ export default function LibraryLoadingDialog() {
                   <View style={styles.progressTrack}>
                     <View style={[styles.progressFill, { width: `${percent}%` }]} />
                   </View>
-                  <Text style={styles.progressText}>{percent}%</Text>
                 </View>
               )}
               {isActive && (
@@ -93,14 +92,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   progressContainer: {
-    width: '100%',
+    alignSelf: 'stretch',
     alignItems: 'center',
     gap: 8,
+    paddingHorizontal: 4
   },
   progressTrack: {
-    width: '100%',
+    alignSelf: 'stretch',
     height: 4,
-    backgroundColor: Color.GRAY_LIGHT,
+    backgroundColor: Color.GRAY,
     borderRadius: 2,
     overflow: 'hidden',
   },
