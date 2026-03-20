@@ -75,6 +75,7 @@ export function useTimelinePhysics({
   const handleDragStartValueRef = useRef(0)
 
   // Pinch zoom state
+  const isPinchingRef = useRef(false)
   const pinchBaseSegmentDurationRef = useRef(segmentDuration)
 
   // Animation state for tap-to-seek
@@ -284,6 +285,8 @@ export function useTimelinePhysics({
   }, [containerWidth, duration, animateToPosition])
 
   const onPanStart = useCallback((x: number, y: number) => {
+    if (isPinchingRef.current) return
+
     // Check if starting on a handle
     if (selection) {
       const handle = getHandleAtPosition(x, y)
@@ -303,6 +306,8 @@ export function useTimelinePhysics({
   }, [getHandleAtPosition, selection, stopAnimation])
 
   const onPanUpdate = useCallback((translationX: number) => {
+    if (isPinchingRef.current) return
+
     if (draggingHandleRef.current && selection) {
       // Dragging a handle
       const deltaTime = xToTime(translationX, segmentDurationRef.current)
@@ -333,6 +338,8 @@ export function useTimelinePhysics({
   }, [selection, duration, maxScrollOffset, updateDisplayPosition])
 
   const onPanEnd = useCallback((velocityX: number) => {
+    if (isPinchingRef.current) return
+
     if (draggingHandleRef.current) {
       draggingHandleRef.current = null
       return
@@ -368,6 +375,7 @@ export function useTimelinePhysics({
         Gesture.Pinch()
           .runOnJS(true)
           .onStart(() => {
+            isPinchingRef.current = true
             pinchBaseSegmentDurationRef.current = segmentDurationRef.current
             stopAnimation()
           })
@@ -375,6 +383,9 @@ export function useTimelinePhysics({
             // scale > 1 = fingers apart = zoom in = smaller segment duration
             const newDuration = pinchBaseSegmentDurationRef.current / event.scale
             onSegmentDurationChange(newDuration)
+          })
+          .onEnd(() => {
+            isPinchingRef.current = false
           })
       )
     : panTapGesture
