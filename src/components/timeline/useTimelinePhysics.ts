@@ -96,6 +96,7 @@ export function useTimelinePhysics({
 
   // Pinch zoom state
   const isPinchingRef = useRef(false)
+  const pinchEndTimeRef = useRef(0)
   const pinchBaseZoomRef = useRef(1)
 
   // Animation state for tap-to-seek
@@ -255,6 +256,8 @@ export function useTimelinePhysics({
 
   // --- Gesture handlers ---
 
+  const isPinchCooldown = () => isPinchingRef.current || performance.now() - pinchEndTimeRef.current < 200
+
   const handleTouchDown = useCallback((x: number, y: number) => {
     // Check if touching a handle
     if (selection) {
@@ -279,7 +282,7 @@ export function useTimelinePhysics({
   }, [getHandleAtPosition, selection, stopAnimation, onSeek])
 
   const handleTap = useCallback((x: number) => {
-    if (stoppedMomentumRef.current || draggingHandleRef.current) {
+    if (stoppedMomentumRef.current || draggingHandleRef.current || isPinchCooldown()) {
       stoppedMomentumRef.current = false
       draggingHandleRef.current = null
       return
@@ -294,7 +297,7 @@ export function useTimelinePhysics({
   }, [containerWidth, duration, animateToPosition])
 
   const onPanStart = useCallback((x: number, y: number) => {
-    if (isPinchingRef.current) return
+    if (isPinchCooldown()) return
 
     // Check if starting on a handle
     if (selection) {
@@ -315,7 +318,7 @@ export function useTimelinePhysics({
   }, [getHandleAtPosition, selection, stopAnimation])
 
   const onPanUpdate = useCallback((translationX: number) => {
-    if (isPinchingRef.current) return
+    if (isPinchCooldown()) return
 
     if (draggingHandleRef.current && selection) {
       // Dragging a handle
@@ -347,7 +350,7 @@ export function useTimelinePhysics({
   }, [selection, duration, updateDisplayPosition])
 
   const onPanEnd = useCallback((velocityX: number) => {
-    if (isPinchingRef.current) return
+    if (isPinchCooldown()) return
 
     if (draggingHandleRef.current) {
       draggingHandleRef.current = null
@@ -390,7 +393,7 @@ export function useTimelinePhysics({
           })
           .onUpdate((event) => {
             // Compute new zoom, snapped to reduce jitter
-            const rawZoom = pinchBaseZoomRef.current * event.scale
+            const rawZoom = pinchBaseZoomRef.current * (event.scale ** 1.5)
             const newZoom = clamp(Math.round(rawZoom * 20) / 20, MIN_ZOOM, MAX_ZOOM)
             if (newZoom === zoomFactorRef.current) return
 
@@ -403,6 +406,7 @@ export function useTimelinePhysics({
           })
           .onEnd(() => {
             isPinchingRef.current = false
+            pinchEndTimeRef.current = performance.now()
           })
       )
     : panTapGesture

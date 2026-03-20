@@ -392,7 +392,7 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 20,
   },
   listContent: {
     padding: 16,
