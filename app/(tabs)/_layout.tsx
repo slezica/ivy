@@ -1,12 +1,17 @@
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Pressable, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useStore } from '../../src/store'
 import { Color } from '../../src/theme'
+
+const DEFAULT_TAB_BAR_HEIGHT = 49 // taken from Router source
+const TAB_BAR_EXTRA_HEIGHT = 8
 
 export default function TabsLayout() {
   const { playback } = useStore()
   const hasFile = !!playback.uri
+  const insets = useSafeAreaInsets()
 
   return (
     <Tabs
@@ -14,13 +19,11 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: Color.GRAY_LIGHTER,
           borderTopColor: Color.GRAY_BORDER,
-          paddingVertical: 8,
+          height: DEFAULT_TAB_BAR_HEIGHT + TAB_BAR_EXTRA_HEIGHT + insets.bottom,
+          paddingTop: TAB_BAR_EXTRA_HEIGHT / 2
         },
         tabBarActiveTintColor: Color.BLACK,
         tabBarInactiveTintColor: Color.GRAY,
-        tabBarIconStyle: {
-          marginTop: 4,
-        },
       }}
     >
       <Tabs.Screen
