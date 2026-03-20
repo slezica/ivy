@@ -1,8 +1,13 @@
-import { Redirect, useGlobalSearchParams } from 'expo-router'
+import { Redirect, usePathname } from 'expo-router'
 
 /**
- * Catch-all for unmatched routes (e.g., notification deep links).
+ * Catch-all for unmatched routes.
+ * Tapping the playback notification sends a trackplayer:// deep link
+ * with pathname /notification.click — redirect to the player tab.
  */
 export default function NotFound() {
-  return <Redirect href={'/'} />
+  const pathname = usePathname()
+  const isNotificationTap = pathname === '/notification.click'
+
+  return <Redirect href={isNotificationTap ? '/player' : '/'} />
 }
