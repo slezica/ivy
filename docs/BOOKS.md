@@ -175,7 +175,7 @@ The Kotlin module wraps `youtubedl-android` (yt-dlp + FFmpeg bundled as native l
 
 ### Settings
 
-The settings screen shows the current yt-dlp version with an "Update" link. Updates use `YoutubeDL.getInstance().updateYoutubeDL()` targeting the STABLE channel.
+The store tracks downloader state in `downloader: { version, status }`. The settings screen displays the current yt-dlp version with an "Update" link. The `fetchDownloaderState` action fetches the version on screen focus; `updateDownloader` runs the update (guarded: only when `status === 'idle'`). Updates target the STABLE channel.
 
 ### UI flow
 
@@ -426,6 +426,8 @@ src/actions/
   load_file_with_picker.ts → Launch picker → loadFile
   load_from_url.ts       → URL download pipeline (yt-dlp → fingerprint → upsert)
   cancel_load_file.ts    → Cancel active copy or download
+  fetch_downloader_state.ts → Fetch yt-dlp version into store
+  update_downloader.ts   → Update yt-dlp, refresh version
   fetch_books.ts         → Load all non-hidden books into store
   archive_book.ts        → Set uri=null, delete file
   update_book.ts         → Update title/artist, queue sync

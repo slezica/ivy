@@ -320,14 +320,19 @@ sync: {
 }
 settings: { sync_enabled: boolean, transcription_enabled: boolean }
 sessions: Record<string, SessionWithBook>  // Listening history (keyed by id)
+downloader: {
+  version: string | null             // Current yt-dlp version
+  status: 'idle' | 'downloading' | 'updating'
+}
 currentSessionBookId: string | null
 
 // Actions
 fetchBooks, loadFile, loadFileWithUri, loadFileWithPicker, loadFromUrl, cancelLoadFile, archiveBook, deleteBook, updateBook
-play, pause, seek, seekClip, skipForward, skipBackward, syncPlaybackState
+play, pause, seek, seekClip, skipForward, skipBackward, fetchPlaybackState
 fetchClips, addClip, updateClip, deleteClip, shareClip
 startTranscription, stopTranscription
-syncNow, autoSync, refreshSyncStatus
+syncNow, autoSync, fetchSyncState
+fetchDownloaderState, updateDownloader
 updateSettings
 fetchSessions, trackSession, finalizeSession
 __DEV_resetApp
