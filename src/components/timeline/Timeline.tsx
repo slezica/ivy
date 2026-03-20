@@ -92,8 +92,13 @@ export interface TimelineProps {
   selectionEnd?: number
   onSelectionChange?: (start: number, end: number) => void
 
-  // Display (optional)
+  // Zoom (optional)
+  // - Provide segmentDuration to control time per bar
+  // - Also provide onSegmentDurationChange to enable pinch-to-zoom
   segmentDuration?: number
+  onSegmentDurationChange?: (segmentDuration: number) => void
+
+  // Display (optional)
   showTime?: 'top' | 'bottom' | 'hidden'
 }
 
@@ -258,6 +263,7 @@ export function Timeline({
   selectionEnd,
   onSelectionChange,
   segmentDuration = SEGMENT_DURATION,
+  onSegmentDurationChange,
   showTime = 'bottom',
 }: TimelineProps) {
   const [containerWidth, setContainerWidth] = useState(0)
@@ -285,6 +291,7 @@ export function Timeline({
     selection: hasEditableSelection
       ? { start: selectionStart!, end: selectionEnd!, onChange: onSelectionChange! }
       : undefined,
+    onSegmentDurationChange,
   })
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {

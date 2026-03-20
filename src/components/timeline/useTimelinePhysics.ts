@@ -37,13 +37,14 @@ export interface UseTimelinePhysicsOptions {
   externalPosition: number
   onSeek: (position: number) => void
   selection?: SelectionConfig
+  onSegmentDurationChange?: (segmentDuration: number) => void
 }
 
 export interface TimelinePhysicsResult {
   scrollOffsetRef: React.MutableRefObject<number>
   displayPosition: number
   frame: number
-  gesture: ReturnType<typeof Gesture.Race>
+  gesture: ReturnType<typeof Gesture.Race> | ReturnType<typeof Gesture.Simultaneous>
 }
 
 export function useTimelinePhysics({
@@ -54,6 +55,7 @@ export function useTimelinePhysics({
   externalPosition,
   onSeek,
   selection,
+  onSegmentDurationChange,
 }: UseTimelinePhysicsOptions): TimelinePhysicsResult {
   const [frame, setFrame] = useState(0)
   const [displayPosition, setDisplayPosition] = useState(externalPosition)
@@ -71,6 +73,9 @@ export function useTimelinePhysics({
   // Handle drag state
   const draggingHandleRef = useRef<'start' | 'end' | null>(null)
   const handleDragStartValueRef = useRef(0)
+
+  // Pinch zoom state
+  const pinchBaseSegmentDurationRef = useRef(segmentDuration)
 
   // Animation state for tap-to-seek
   const animationRef = useRef<{
@@ -355,7 +360,24 @@ export function useTimelinePhysics({
     .onBegin((event) => handleTouchDown(event.x, event.y))
     .onEnd((event) => handleTap(event.x))
 
-  const gesture = Gesture.Race(panGesture, tapGesture)
+  const panTapGesture = Gesture.Race(panGesture, tapGesture)
+
+  const gesture = onSegmentDurationChange
+    ? Gesture.Simultaneous(
+        panTapGesture,
+        Gesture.Pinch()
+          .runOnJS(true)
+          .onStart(() => {
+            pinchBaseSegmentDurationRef.current = segmentDurationRef.current
+            stopAnimation()
+          })
+          .onUpdate((event) => {
+            // scale > 1 = fingers apart = zoom in = smaller segment duration
+            const newDuration = pinchBaseSegmentDurationRef.current / event.scale
+            onSegmentDurationChange(newDuration)
+          })
+      )
+    : panTapGesture
 
   return {
     scrollOffsetRef,
