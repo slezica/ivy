@@ -183,6 +183,7 @@ export default function LibraryScreen() {
 
     if (isArchived) {
       return [
+        { key: 'edit', label: 'Edit details', icon: 'create-outline' },
         { key: 'delete', label: 'Remove from library', icon: 'trash-outline', destructive: true },
       ]
     }
