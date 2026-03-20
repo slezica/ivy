@@ -3,7 +3,7 @@ import { useStore } from '../store'
 import { Color } from '../theme'
 import TextButton from './shared/TextButton'
 
-export default function LoadingModal() {
+export default function LibraryLoadingDialog() {
   const { library, cancelLoadFile } = useStore()
 
   const isAdding = library.status === 'adding'

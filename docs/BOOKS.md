@@ -179,7 +179,7 @@ The store tracks downloader state in `downloader: { version, status }`. The sett
 
 ### UI flow
 
-Library menu → "Download URL" → Dialog with text input → "Download" button → `loadFromUrl(url)` → LoadingModal shows progress → book appears in library.
+Library menu → "Download URL" → Dialog with text input → "Download" button → `loadFromUrl(url)` → LibraryLoadingDialog shows progress → book appears in library.
 
 ---
 
@@ -436,7 +436,7 @@ src/actions/
 
 src/components/
   MetadataEditor.tsx     → Dialog content for editing book title/artist (shows artwork read-only)
-  LoadingModal.tsx       → Progress modal for adding books (copy or download)
+  LibraryLoadingDialog.tsx → Progress dialog for adding books (copy or download)
 
 src/services/storage/
   database.ts            → Book CRUD, fingerprint lookup, archive/hide/restore

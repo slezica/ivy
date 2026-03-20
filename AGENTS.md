@@ -168,7 +168,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── MetadataEditor.tsx      # Book metadata editing (title, artist; artwork read-only)
   │   ├── ClipViewer.tsx          # Clip playback (own position state, timeline, transcription)
   │   ├── ClipEditor.tsx          # Clip editing (own position state, selection timeline, note)
-  │   ├── LoadingModal.tsx        # "Adding..." / "Loading..." modal
+  │   ├── LibraryLoadingDialog.tsx # "Adding..." / "Loading..." dialog
   │   ├── timeline/               # GPU-accelerated timeline component
   │   │   ├── Timeline.tsx        # Unified timeline (playback + selection)
   │   │   ├── useTimelinePhysics.ts # Scroll/momentum/selection hook
@@ -189,7 +189,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   └── theme.ts
 
 /app
-  ├── _layout.tsx                 # Root (includes LoadingModal)
+  ├── _layout.tsx                 # Root (includes LibraryLoadingDialog)
   ├── +not-found.tsx              # Catch-all redirect (handles notification clicks)
   ├── settings.tsx                # Settings screen route
   ├── sessions.tsx                # Listening history route
