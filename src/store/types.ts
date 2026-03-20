@@ -30,7 +30,7 @@ import type { UpdateSettings } from '../actions/update_settings'
 import type { FetchSessions } from '../actions/fetch_sessions'
 import type { TrackSession } from '../actions/track_session'
 import type { UpdateBook } from '../actions/update_book'
-import type { RefreshDownloaderStatus } from '../actions/refresh_downloader_status'
+import type { FetchDownloaderStatus } from '../actions/fetch_downloader_status'
 import type { UpdateDownloader } from '../actions/update_downloader'
 import type { ResetApp } from '../actions/reset_app'
 
@@ -102,7 +102,7 @@ export interface AppState {
   syncNow: SyncNow
   autoSync: AutoSync
   refreshSyncStatus: RefreshSyncStatus
-  refreshDownloaderStatus: RefreshDownloaderStatus
+  fetchDownloaderStatus: FetchDownloaderStatus
   updateDownloader: UpdateDownloader
   updateSettings: UpdateSettings
   fetchSessions: FetchSessions

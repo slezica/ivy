@@ -41,7 +41,7 @@ import { createUpdateBook } from '../actions/update_book'
 import { createResetApp } from '../actions/reset_app'
 import { createCleanupOrphanedFiles } from '../actions/cleanup_orphaned_files'
 import { createLoadFromUrl } from '../actions/load_from_url'
-import { createRefreshDownloaderStatus } from '../actions/refresh_downloader_status'
+import { createFetchDownloaderStatus } from '../actions/fetch_downloader_status'
 import { createUpdateDownloader } from '../actions/update_downloader'
 
 
@@ -94,7 +94,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const syncNow = createSyncNow(deps)
   const autoSync = createAutoSync(deps)
   const refreshSyncStatus = createRefreshSyncStatus(deps)
-  const refreshDownloaderStatus = createRefreshDownloaderStatus(deps)
+  const fetchDownloaderStatus = createFetchDownloaderStatus(deps)
   const updateDownloader = createUpdateDownloader(deps)
   const updateSettings = createUpdateSettings(deps)
   const fetchSessions = createFetchSessions(deps)
@@ -193,7 +193,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     syncNow,
     autoSync,
     refreshSyncStatus,
-    refreshDownloaderStatus,
+    fetchDownloaderStatus,
     updateDownloader,
     updateSettings,
     fetchSessions,

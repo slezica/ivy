@@ -1,14 +1,14 @@
 import type { FileDownloaderService } from '../services'
 import type { SetState, Action, ActionFactory } from '../store/types'
 
-export interface RefreshDownloaderStatusDeps {
+export interface FetchDownloaderStatusDeps {
   downloader: FileDownloaderService
   set: SetState
 }
 
-export type RefreshDownloaderStatus = Action<[]>
+export type FetchDownloaderStatus = Action<[]>
 
-export const createRefreshDownloaderStatus: ActionFactory<RefreshDownloaderStatusDeps, RefreshDownloaderStatus> = (deps) => (
+export const createFetchDownloaderStatus: ActionFactory<FetchDownloaderStatusDeps, FetchDownloaderStatus> = (deps) => (
   async () => {
     const { downloader, set } = deps
 
