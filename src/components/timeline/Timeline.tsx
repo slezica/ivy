@@ -267,10 +267,6 @@ export function Timeline({
   showTime = 'bottom',
 }: TimelineProps) {
   const [containerWidth, setContainerWidth] = useState(0)
-  const [zoomFactor, setZoomFactor] = useState(1)
-
-  const segmentWidth = SEGMENT_WIDTH * zoomFactor
-  const segmentGap = SEGMENT_GAP * zoomFactor
 
   // Visual selection: paint selection color when color and bounds are provided
   const hasVisualSelection = !!(
@@ -282,24 +278,18 @@ export function Timeline({
   // Editable selection: show handles when onChange callback is also provided
   const hasEditableSelection = hasVisualSelection && !!onSelectionChange
 
-  const totalSegments = Math.ceil(duration / SEGMENT_DURATION)
-  const maxScrollOffset = timeToX(duration, SEGMENT_DURATION, segmentWidth, segmentGap)
-
-  const { scrollOffsetRef, displayPosition, frame, gesture } = useTimelinePhysics({
-    maxScrollOffset,
+  const { scrollOffsetRef, segmentWidth, segmentGap, displayPosition, frame, gesture } = useTimelinePhysics({
     containerWidth,
     duration,
-    segmentDuration: SEGMENT_DURATION,
-    segmentWidth,
-    segmentGap,
     externalPosition: position,
     onSeek,
-    zoomFactor,
     selection: hasEditableSelection
       ? { start: selectionStart!, end: selectionEnd!, onChange: onSelectionChange! }
       : undefined,
-    onZoomChange: canZoom ? setZoomFactor : undefined,
+    canZoom,
   })
+
+  const totalSegments = Math.ceil(duration / SEGMENT_DURATION)
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setContainerWidth(event.nativeEvent.layout.width)
