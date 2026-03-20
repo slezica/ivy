@@ -413,13 +413,13 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   artwork: {
-    width: 60,
-    height: 60,
+    width: 65,
+    height: 65,
     borderRadius: 6,
   },
   artworkPlaceholder: {
-    width: 60,
-    height: 60,
+    width: 65,
+    height: 65,
     borderRadius: 6,
     backgroundColor: Color.GRAY_LIGHT,
     justifyContent: 'center',
