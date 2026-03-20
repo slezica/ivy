@@ -11,11 +11,8 @@ export default function LoadingModal() {
   const isError = library.status === 'error'
   const isVisible = isAdding || isDuplicate || isError
 
-  const progress = library.copyProgress
-  const isCopying = library.copyOpId !== null
-
-  const hasProgress = progress && progress.total > 0
-  const percent = hasProgress ? Math.round((progress.bytes / progress.total) * 100) : null
+  const percent = library.addProgress
+  const isActive = library.addOpId !== null
 
   const dismiss = () => useStore.setState(state => { state.library.status = 'idle' })
 
@@ -32,7 +29,7 @@ export default function LoadingModal() {
             <>
               <ActivityIndicator size="large" color={Color.PRIMARY} />
               <Text style={styles.text}>Adding to library...</Text>
-              {hasProgress && (
+              {percent !== null && (
                 <View style={styles.progressContainer}>
                   <View style={styles.progressTrack}>
                     <View style={[styles.progressFill, { width: `${percent}%` }]} />
@@ -40,7 +37,7 @@ export default function LoadingModal() {
                   <Text style={styles.progressText}>{percent}%</Text>
                 </View>
               )}
-              {isCopying && (
+              {isActive && (
                 <View style={styles.buttons}>
                   <TextButton label="Cancel" onPress={cancelLoadFile} style={{ flex: 1 }} />
                 </View>

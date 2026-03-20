@@ -39,7 +39,7 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
     // If the user cancelled and started a new add, we must not touch state.
     const setLibrary = (updater: (lib: typeof get extends () => infer S ? S extends { library: infer L } ? L : never : never) => void) => {
       set(state => {
-        if (state.library.copyOpId === opId) {
+        if (state.library.addOpId === opId) {
           updater(state.library)
         }
       })
@@ -47,8 +47,8 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
     set(state => {
       state.library.status = 'adding'
-      state.library.copyProgress = null
-      state.library.copyOpId = opId
+      state.library.addProgress = null
+      state.library.addOpId = opId
     })
 
     try {
@@ -71,8 +71,8 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
         await fetchClips()
         setLibrary(lib => {
           lib.status = 'duplicate'
-          lib.copyProgress = null
-          lib.copyOpId = null
+          lib.addProgress = null
+          lib.addOpId = null
         })
         return
       }
@@ -87,7 +87,7 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
       const { hash } = await copier.commitCopy(opId, destPath, (bytes, total) => {
         setLibrary(lib => {
-          lib.copyProgress = { bytes, total }
+          lib.addProgress = total > 0 ? Math.round((bytes / total) * 100) : null
         })
       })
 
@@ -120,8 +120,8 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
       await fetchClips()
       setLibrary(lib => {
         lib.status = 'idle'
-        lib.copyProgress = null
-        lib.copyOpId = null
+        lib.addProgress = null
+        lib.addOpId = null
       })
 
     } catch (error) {
@@ -140,8 +140,8 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
       log('Error:', error)
       setLibrary(lib => {
         lib.status = 'error'
-        lib.copyProgress = null
-        lib.copyOpId = null
+        lib.addProgress = null
+        lib.addOpId = null
       })
     }
   }

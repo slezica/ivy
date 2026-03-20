@@ -12,15 +12,15 @@ export type CancelLoadFile = Action<[]>
 export const createCancelLoadFile: ActionFactory<CancelLoadFileDeps, CancelLoadFile> = (deps) => (
   async () => {
     const { copier, get, set } = deps
-    const opId = get().library.copyOpId
+    const opId = get().library.addOpId
 
     if (!opId) return
 
     // Dismiss immediately — loadFile's catch will handle cleanup in background
     set(state => {
       state.library.status = 'idle'
-      state.library.copyProgress = null
-      state.library.copyOpId = null
+      state.library.addProgress = null
+      state.library.addOpId = null
     })
 
     // Signal native side (non-blocking from the user's perspective)

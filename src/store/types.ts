@@ -41,8 +41,8 @@ export interface AppState {
 
   library: {
     status: 'loading' | 'idle' | 'adding' | 'duplicate' | 'error'
-    copyProgress: { bytes: number; total: number } | null
-    copyOpId: string | null
+    addProgress: number | null  // 0-100 percent
+    addOpId: string | null
   }
 
   playback: {
