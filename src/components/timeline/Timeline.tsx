@@ -93,6 +93,7 @@ export interface TimelineProps {
   onSelectionChange?: (start: number, end: number) => void
 
   // Display (optional)
+  segmentDuration?: number
   showTime?: 'top' | 'bottom' | 'hidden'
 }
 
@@ -106,6 +107,7 @@ function drawTimeline(
   containerWidth: number,
   totalSegments: number,
   duration: number,
+  segmentDuration: number,
   playheadX: number,
   selectionStartX: number | null,
   selectionEndX: number | null,
@@ -120,7 +122,7 @@ function drawTimeline(
 
   // Timeline boundaries - use exact duration for end
   const timelineStartX = 0
-  const timelineEndX = timeToX(duration)
+  const timelineEndX = timeToX(duration, segmentDuration)
 
   // Last segment may have proportional width
   const lastSegmentIndex = totalSegments - 1
@@ -255,6 +257,7 @@ export function Timeline({
   selectionStart,
   selectionEnd,
   onSelectionChange,
+  segmentDuration = SEGMENT_DURATION,
   showTime = 'bottom',
 }: TimelineProps) {
   const [containerWidth, setContainerWidth] = useState(0)
@@ -269,13 +272,14 @@ export function Timeline({
   // Editable selection: show handles when onChange callback is also provided
   const hasEditableSelection = hasVisualSelection && !!onSelectionChange
 
-  const totalSegments = Math.ceil(duration / SEGMENT_DURATION)
-  const maxScrollOffset = timeToX(duration)
+  const totalSegments = Math.ceil(duration / segmentDuration)
+  const maxScrollOffset = timeToX(duration, segmentDuration)
 
   const { scrollOffsetRef, displayPosition, frame, gesture } = useTimelinePhysics({
     maxScrollOffset,
     containerWidth,
     duration,
+    segmentDuration,
     externalPosition: position,
     onSeek,
     selection: hasEditableSelection
@@ -308,8 +312,8 @@ export function Timeline({
     const scrollOffset = scrollOffsetRef.current
     const playheadX = scrollOffset // Playhead is always at scroll position (center-fixed)
 
-    const selStartX = hasVisualSelection ? timeToX(selectionStart!) : null
-    const selEndX = hasVisualSelection ? timeToX(selectionEnd!) : null
+    const selStartX = hasVisualSelection ? timeToX(selectionStart!, segmentDuration) : null
+    const selEndX = hasVisualSelection ? timeToX(selectionEnd!, segmentDuration) : null
 
     try {
       return createPicture(
@@ -324,6 +328,7 @@ export function Timeline({
             containerWidth,
             totalSegments,
             duration,
+            segmentDuration,
             playheadX,
             selStartX,
             selEndX,
@@ -346,7 +351,7 @@ export function Timeline({
       return null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frame, containerWidth, totalSegments, duration, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
+  }, [frame, containerWidth, totalSegments, duration, segmentDuration, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
 
   // Calculate playhead position based on time indicator placement
   const playheadTop = showTime === 'top'

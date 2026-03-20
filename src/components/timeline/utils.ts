@@ -2,7 +2,7 @@
  * Shared utilities for timeline components.
  */
 
-import { SEGMENT_STEP, SEGMENT_DURATION, TIMELINE_HEIGHT } from './constants'
+import { SEGMENT_STEP, TIMELINE_HEIGHT } from './constants'
 
 /**
  * Compute a decorative "waveform" height for a segment.
@@ -24,15 +24,15 @@ export function getSegmentHeight(index: number): number {
 /**
  * Convert time (ms) to x coordinate in timeline space.
  */
-export function timeToX(time: number): number {
-  return (time / SEGMENT_DURATION) * SEGMENT_STEP
+export function timeToX(time: number, segmentDuration: number): number {
+  return (time / segmentDuration) * SEGMENT_STEP
 }
 
 /**
  * Convert x coordinate in timeline space to time (ms).
  */
-export function xToTime(x: number): number {
-  return (x / SEGMENT_STEP) * SEGMENT_DURATION
+export function xToTime(x: number, segmentDuration: number): number {
+  return (x / SEGMENT_STEP) * segmentDuration
 }
 
 /**

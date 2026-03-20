@@ -33,6 +33,7 @@ export interface UseTimelinePhysicsOptions {
   maxScrollOffset: number
   containerWidth: number
   duration: number
+  segmentDuration: number
   externalPosition: number
   onSeek: (position: number) => void
   selection?: SelectionConfig
@@ -49,6 +50,7 @@ export function useTimelinePhysics({
   maxScrollOffset,
   containerWidth,
   duration,
+  segmentDuration,
   externalPosition,
   onSeek,
   selection,
@@ -57,7 +59,10 @@ export function useTimelinePhysics({
   const [displayPosition, setDisplayPosition] = useState(externalPosition)
 
   // Scroll state (refs for 60fps)
-  const scrollOffsetRef = useRef(timeToX(externalPosition))
+  const scrollOffsetRef = useRef(timeToX(externalPosition, segmentDuration))
+  const segmentDurationRef = useRef(segmentDuration)
+  segmentDurationRef.current = segmentDuration
+  const prevSegmentDurationRef = useRef(segmentDuration)
   const velocityRef = useRef(0)
   const isDraggingRef = useRef(false)
   const dragStartOffsetRef = useRef(0)
@@ -122,7 +127,7 @@ export function useTimelinePhysics({
       const { startOffset, targetOffset } = animationRef.current
       scrollOffsetRef.current = startOffset + (targetOffset - startOffset) * easedProgress
 
-      updateDisplayPosition(xToTime(scrollOffsetRef.current))
+      updateDisplayPosition(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
       setFrame(f => f + 1)
 
       if (progress < 1) {
@@ -130,8 +135,8 @@ export function useTimelinePhysics({
       } else {
         animationRef.current = null
         rafIdRef.current = null
-        updateDisplayPosition(xToTime(scrollOffsetRef.current), true) // Force final update
-        onSeek(xToTime(scrollOffsetRef.current))
+        updateDisplayPosition(xToTime(scrollOffsetRef.current, segmentDurationRef.current), true) // Force final update
+        onSeek(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
       }
     }
 
@@ -154,14 +159,14 @@ export function useTimelinePhysics({
         )
         velocityRef.current *= DECELERATION
 
-        updateDisplayPosition(xToTime(scrollOffsetRef.current))
+        updateDisplayPosition(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
         setFrame(f => f + 1)
         rafIdRef.current = requestAnimationFrame(tick)
       } else {
         velocityRef.current = 0
         rafIdRef.current = null
-        updateDisplayPosition(xToTime(scrollOffsetRef.current), true) // Force final update
-        onSeek(xToTime(scrollOffsetRef.current))
+        updateDisplayPosition(xToTime(scrollOffsetRef.current, segmentDurationRef.current), true) // Force final update
+        onSeek(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
       }
     }
 
@@ -172,14 +177,26 @@ export function useTimelinePhysics({
     rafIdRef.current = requestAnimationFrame(tick)
   }, [maxScrollOffset, onSeek, updateDisplayPosition])
 
+  // Recompute scroll offset when segment duration changes (zoom)
+  useEffect(() => {
+    const prev = prevSegmentDurationRef.current
+    if (prev !== segmentDuration) {
+      const currentTime = xToTime(scrollOffsetRef.current, prev)
+      scrollOffsetRef.current = timeToX(currentTime, segmentDuration)
+      prevSegmentDurationRef.current = segmentDuration
+      stopAnimation()
+      setFrame(f => f + 1)
+    }
+  }, [segmentDuration, stopAnimation])
+
   // Sync to external position when idle
   useEffect(() => {
     if (!isDraggingRef.current && rafIdRef.current === null && !draggingHandleRef.current) {
-      scrollOffsetRef.current = timeToX(externalPosition)
+      scrollOffsetRef.current = timeToX(externalPosition, segmentDuration)
       updateDisplayPosition(externalPosition, true) // Always sync when idle
       setFrame(f => f + 1)
     }
-  }, [externalPosition, updateDisplayPosition])
+  }, [externalPosition, segmentDuration, updateDisplayPosition])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -200,8 +217,8 @@ export function useTimelinePhysics({
     // Convert touch to timeline coordinates
     const timelineX = scrollOffsetRef.current + (touchX - halfWidth)
 
-    const startHandleX = timeToX(selection.start)
-    const endHandleX = timeToX(selection.end)
+    const startHandleX = timeToX(selection.start, segmentDurationRef.current)
+    const endHandleX = timeToX(selection.end, segmentDurationRef.current)
 
     // Check distance to each handle circle
     const distToStart = Math.sqrt(
@@ -240,7 +257,7 @@ export function useTimelinePhysics({
     if (rafIdRef.current !== null || animationRef.current !== null) {
       stopAnimation()
       stoppedMomentumRef.current = true
-      onSeek(xToTime(scrollOffsetRef.current))
+      onSeek(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
     } else {
       stoppedMomentumRef.current = false
     }
@@ -255,10 +272,10 @@ export function useTimelinePhysics({
 
     const halfWidth = containerWidth / 2
     const offsetFromCenter = x - halfWidth
-    const tappedTime = xToTime(scrollOffsetRef.current + offsetFromCenter)
+    const tappedTime = xToTime(scrollOffsetRef.current + offsetFromCenter, segmentDurationRef.current)
     const clampedTime = clamp(tappedTime, 0, duration)
 
-    animateToPosition(timeToX(clampedTime))
+    animateToPosition(timeToX(clampedTime, segmentDurationRef.current))
   }, [containerWidth, duration, animateToPosition])
 
   const onPanStart = useCallback((x: number, y: number) => {
@@ -283,7 +300,7 @@ export function useTimelinePhysics({
   const onPanUpdate = useCallback((translationX: number) => {
     if (draggingHandleRef.current && selection) {
       // Dragging a handle
-      const deltaTime = xToTime(translationX)
+      const deltaTime = xToTime(translationX, segmentDurationRef.current)
       const newValue = handleDragStartValueRef.current + deltaTime
 
       if (draggingHandleRef.current === 'start') {
@@ -306,7 +323,7 @@ export function useTimelinePhysics({
       0,
       maxScrollOffset
     )
-    updateDisplayPosition(xToTime(scrollOffsetRef.current))
+    updateDisplayPosition(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
     setFrame(f => f + 1)
   }, [selection, duration, maxScrollOffset, updateDisplayPosition])
 
@@ -322,7 +339,7 @@ export function useTimelinePhysics({
     if (Math.abs(velocityRef.current) > MIN_VELOCITY) {
       startMomentumLoop()
     } else {
-      onSeek(xToTime(scrollOffsetRef.current))
+      onSeek(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
     }
   }, [startMomentumLoop, onSeek])
 
