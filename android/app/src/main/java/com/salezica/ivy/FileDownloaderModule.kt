@@ -66,6 +66,7 @@ class FileDownloaderModule(reactContext: ReactApplicationContext) : ReactContext
                     addOption("-o", "$outputDir/%(title).200B.%(ext)s")
                     addOption("-x")
                     addOption("--audio-format", "m4a")
+                    addOption("--embed-thumbnail")
                     addOption("--no-mtime")
                     addOption("--no-update")
                 }
