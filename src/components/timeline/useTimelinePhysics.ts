@@ -75,7 +75,7 @@ export function useTimelinePhysics({
   const applyZoom = (factor: number) => {
     zoomFactorRef.current = factor
     segmentWidthRef.current = SEGMENT_WIDTH * factor
-    segmentGapRef.current = SEGMENT_GAP * factor
+    segmentGapRef.current = SEGMENT_GAP
   }
 
   // Helper: call timeToX/xToTime with current layout refs
