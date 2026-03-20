@@ -9,6 +9,9 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDL.UpdateChannel
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import com.yausername.ffmpeg.FFmpeg
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val PROGRESS_EVENT = "FileDownloaderProgress"
 
@@ -16,7 +19,33 @@ class FileDownloaderModule(reactContext: ReactApplicationContext) : ReactContext
 
     private var processId = 0L
 
+    // Init yt-dlp lazily, blocking until ready
+    private val initLatch = CountDownLatch(1)
+    private val initStarted = AtomicBoolean(false)
+
     override fun getName(): String = "FileDownloader"
+
+    // Required for NativeEventEmitter
+    @ReactMethod
+    fun addListener(eventName: String) {}
+
+    @ReactMethod
+    fun removeListeners(count: Int) {}
+
+    private fun ensureInitialized() {
+        if (initStarted.compareAndSet(false, true)) {
+            try {
+                YoutubeDL.getInstance().init(reactApplicationContext)
+                FFmpeg.getInstance().init(reactApplicationContext)
+            } catch (e: Exception) {
+                android.util.Log.e("FileDownloader", "Failed to initialize yt-dlp", e)
+            } finally {
+                initLatch.countDown()
+            }
+        } else {
+            initLatch.await()
+        }
+    }
 
     /**
      * Download audio from URL using yt-dlp.
@@ -32,6 +61,7 @@ class FileDownloaderModule(reactContext: ReactApplicationContext) : ReactContext
 
         Thread {
             try {
+                ensureInitialized()
                 val request = YoutubeDLRequest(url).apply {
                     addOption("-o", "$outputDir/%(title).200B.%(ext)s")
                     addOption("-x")
@@ -84,6 +114,7 @@ class FileDownloaderModule(reactContext: ReactApplicationContext) : ReactContext
     fun update(promise: Promise) {
         Thread {
             try {
+                ensureInitialized()
                 val status = YoutubeDL.getInstance().updateYoutubeDL(
                     reactApplicationContext,
                     UpdateChannel.STABLE,
@@ -100,6 +131,7 @@ class FileDownloaderModule(reactContext: ReactApplicationContext) : ReactContext
     fun version(promise: Promise) {
         Thread {
             try {
+                ensureInitialized()
                 val versionInfo = YoutubeDL.getInstance().version(reactApplicationContext)
                 promise.resolve(versionInfo ?: "unknown")
             } catch (e: Exception) {

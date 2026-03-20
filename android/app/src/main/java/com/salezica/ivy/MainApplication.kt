@@ -13,20 +13,10 @@ import com.facebook.react.common.ReleaseLevel
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 import com.facebook.react.defaults.DefaultReactNativeHost
 
-import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.ffmpeg.FFmpeg
-
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-
 class MainApplication : Application(), ReactApplication {
-
-  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
   override val reactNativeHost: ReactNativeHost = ReactNativeHostWrapper(
       this,
@@ -59,16 +49,6 @@ class MainApplication : Application(), ReactApplication {
     }
     loadReactNative(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
-
-    // Initialize yt-dlp and FFmpeg for URL downloads
-    scope.launch {
-      try {
-        YoutubeDL.getInstance().init(this@MainApplication)
-        FFmpeg.getInstance().init(this@MainApplication)
-      } catch (e: Exception) {
-        android.util.Log.e("Ivy", "Failed to initialize yt-dlp", e)
-      }
-    }
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {
