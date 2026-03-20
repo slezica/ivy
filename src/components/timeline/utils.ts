@@ -4,19 +4,11 @@
 
 import { SEGMENT_STEP, SEGMENT_DURATION, TIMELINE_HEIGHT } from './constants'
 
-// Precompute segment heights for performance
-const MAX_PRECOMPUTED_SEGMENTS = 10000
-const SEGMENT_HEIGHTS = new Float32Array(MAX_PRECOMPUTED_SEGMENTS)
-
-for (let i = 0; i < MAX_PRECOMPUTED_SEGMENTS; i++) {
-  SEGMENT_HEIGHTS[i] = computeSegmentHeight(i)
-}
-
 /**
  * Compute a decorative "waveform" height for a segment.
  * Uses layered sine waves plus pseudo-random variation.
  */
-function computeSegmentHeight(index: number): number {
+export function getSegmentHeight(index: number): number {
   const baseHeight = TIMELINE_HEIGHT / 2
   const variation = TIMELINE_HEIGHT / 4
 
@@ -27,17 +19,6 @@ function computeSegmentHeight(index: number): number {
   height += ((index * 7919) % 100) / 100 * 8
 
   return Math.max(12, Math.min(TIMELINE_HEIGHT, height * 0.8))
-}
-
-/**
- * Get the height for a segment at the given index.
- * Uses precomputed values for indices under MAX_PRECOMPUTED_SEGMENTS.
- */
-export function getSegmentHeight(index: number): number {
-  if (index >= 0 && index < MAX_PRECOMPUTED_SEGMENTS) {
-    return SEGMENT_HEIGHTS[index]
-  }
-  return computeSegmentHeight(index)
 }
 
 /**
