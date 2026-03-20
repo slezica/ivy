@@ -105,6 +105,25 @@ export default function SettingsScreen() {
 
       <View style={styles.content}>
         <View style={styles.settingRow}>
+          <Text style={styles.settingLabel}>Auto-transcribe clips</Text>
+
+          <Switch
+            value={settings.transcription_enabled}
+            onValueChange={handleTranscriptionToggle}
+            trackColor={{ false: Color.GRAY, true: Color.PRIMARY }}
+            thumbColor={Color.BLACK}
+          />
+        </View>
+
+        {transcription.status !== 'idle' && (
+          <View style={styles.settingSecondary}>
+            <Text style={styles.secondaryText}>
+              {transcription.status === 'downloading' ? 'Downloading model...' : 'Processing...'}
+            </Text>
+          </View>
+        )}
+
+        <View style={[styles.settingRow, { marginTop: 24 }]}>
           <Text style={styles.settingLabel}>Sync to Google Drive</Text>
 
           <Switch
@@ -135,25 +154,6 @@ export default function SettingsScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-
-        <View style={[styles.settingRow, { marginTop: 24 }]}>
-          <Text style={styles.settingLabel}>Auto-transcribe clips</Text>
-
-          <Switch
-            value={settings.transcription_enabled}
-            onValueChange={handleTranscriptionToggle}
-            trackColor={{ false: Color.GRAY, true: Color.PRIMARY }}
-            thumbColor={Color.BLACK}
-          />
-        </View>
-
-        {transcription.status !== 'idle' && (
-          <View style={styles.settingSecondary}>
-            <Text style={styles.secondaryText}>
-              {transcription.status === 'downloading' ? 'Downloading model...' : 'Processing...'}
-            </Text>
-          </View>
-        )}
 
         <View style={[styles.settingRow, { marginTop: 24 }]}>
           <Text style={styles.settingLabel}>YouTube downloader</Text>
