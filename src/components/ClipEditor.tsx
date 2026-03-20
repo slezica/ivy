@@ -10,14 +10,10 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { useStore } from '../store'
 import { Color } from '../theme'
 import { formatTime } from '../utils'
-import { clamp } from './timeline/utils'
 import Header from './shared/Header'
 import IconButton from './shared/IconButton'
-import { Timeline, SEGMENT_DURATION } from './timeline'
+import { Timeline } from './timeline'
 import type { ClipWithFile } from '../services'
-
-const MIN_SEGMENT_DURATION = 500   // max zoom in: 0.5s per bar
-const MAX_SEGMENT_DURATION = 30000 // max zoom out: 30s per bar
 
 
 interface ClipEditorProps {
@@ -35,7 +31,6 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   const [note, setNote] = useState(clip.note)
   const [selectionStart, setSelectionStart] = useState(clip.start)
   const [selectionEnd, setSelectionEnd] = useState(clip.start + clip.duration)
-  const [segmentDuration, setSegmentDuration] = useState(SEGMENT_DURATION)
 
   // Local state - the position this editor remembers
   const [ownPosition, setOwnPosition] = useState(clip.start)
@@ -116,8 +111,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
         selectionStart={selectionStart}
         selectionEnd={selectionEnd}
         onSelectionChange={handleSelectionChange}
-        segmentDuration={segmentDuration}
-        onSegmentDurationChange={(d) => setSegmentDuration(clamp(d, MIN_SEGMENT_DURATION, MAX_SEGMENT_DURATION))}
+        canZoom
         showTime="hidden"
       />
 

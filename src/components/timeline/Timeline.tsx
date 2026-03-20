@@ -33,6 +33,7 @@
  *   - **Flick** to scroll with momentum
  *   - **Tap** to seek to that position
  *   - **Drag handles** (when selection enabled) to adjust selection bounds
+ *   - **Pinch** (when canZoom) to zoom in/out by scaling bar width
  */
 
 import { useCallback, useMemo, useState } from 'react'
@@ -54,7 +55,7 @@ import { Color } from '../../theme'
 import { formatTime } from '../../utils'
 import {
   SEGMENT_WIDTH,
-  SEGMENT_STEP,
+  SEGMENT_GAP,
   SEGMENT_DURATION,
   TIMELINE_HEIGHT,
   PLAYHEAD_WIDTH,
@@ -93,10 +94,7 @@ export interface TimelineProps {
   onSelectionChange?: (start: number, end: number) => void
 
   // Zoom (optional)
-  // - Provide segmentDuration to control time per bar
-  // - Also provide onSegmentDurationChange to enable pinch-to-zoom
-  segmentDuration?: number
-  onSegmentDurationChange?: (segmentDuration: number) => void
+  canZoom?: boolean
 
   // Display (optional)
   showTime?: 'top' | 'bottom' | 'hidden'
@@ -113,6 +111,8 @@ function drawTimeline(
   totalSegments: number,
   duration: number,
   segmentDuration: number,
+  segmentWidth: number,
+  segmentGap: number,
   playheadX: number,
   selectionStartX: number | null,
   selectionEndX: number | null,
@@ -121,30 +121,31 @@ function drawTimeline(
   selectionPaint: ReturnType<typeof Skia.Paint> | null,
   placeholderPaint: ReturnType<typeof Skia.Paint>
 ) {
+  const segmentStep = segmentWidth + segmentGap
   const halfWidth = containerWidth / 2
   const visibleStartX = scrollOffset - halfWidth
   const visibleEndX = scrollOffset + halfWidth
 
   // Timeline boundaries - use exact duration for end
   const timelineStartX = 0
-  const timelineEndX = timeToX(duration, segmentDuration)
+  const timelineEndX = timeToX(duration, segmentDuration, segmentWidth, segmentGap)
 
   // Last segment may have proportional width
   const lastSegmentIndex = totalSegments - 1
-  const lastBarStartX = lastSegmentIndex * SEGMENT_STEP
-  const lastBarWidth = Math.min(SEGMENT_WIDTH, timelineEndX - lastBarStartX)
+  const lastBarStartX = lastSegmentIndex * segmentStep
+  const lastBarWidth = Math.min(segmentWidth, timelineEndX - lastBarStartX)
 
   // Calculate visible segment range (with small buffer)
-  const startSegment = Math.max(0, Math.floor(visibleStartX / SEGMENT_STEP) - 2)
-  const endSegment = Math.min(totalSegments, Math.ceil(visibleEndX / SEGMENT_STEP) + 2)
+  const startSegment = Math.max(0, Math.floor(visibleStartX / segmentStep) - 2)
+  const endSegment = Math.min(totalSegments, Math.ceil(visibleEndX / segmentStep) + 2)
 
   // 1. Build stencil path with all visible bars
   const barsPath = Skia.Path.Make()
   for (let i = startSegment; i < endSegment; i++) {
-    const x = i * SEGMENT_STEP
+    const x = i * segmentStep
     const height = getSegmentHeight(i)
     const y = (TIMELINE_HEIGHT - height) / 2
-    const width = i === lastSegmentIndex ? lastBarWidth : SEGMENT_WIDTH
+    const width = i === lastSegmentIndex ? lastBarWidth : segmentWidth
     barsPath.addRRect(
       Skia.RRectXY(Skia.XYWHRect(x, y, width, height), 2, 2)
     )
@@ -152,29 +153,29 @@ function drawTimeline(
 
   // 2. Draw placeholder bars on the LEFT (before timeline start)
   if (visibleStartX < timelineStartX) {
-    let x = Math.floor(visibleStartX / SEGMENT_STEP) * SEGMENT_STEP
+    let x = Math.floor(visibleStartX / segmentStep) * segmentStep
     while (x < timelineStartX) {
       const y = (TIMELINE_HEIGHT - PLACEHOLDER_HEIGHT) / 2
       canvas.drawRRect(
-        Skia.RRectXY(Skia.XYWHRect(x, y, SEGMENT_WIDTH, PLACEHOLDER_HEIGHT), 2, 2),
+        Skia.RRectXY(Skia.XYWHRect(x, y, segmentWidth, PLACEHOLDER_HEIGHT), 2, 2),
         placeholderPaint
       )
-      x += SEGMENT_STEP
+      x += segmentStep
     }
   }
 
   // 3. Draw placeholder bars on the RIGHT (after timeline end)
   if (visibleEndX > timelineEndX) {
-    let x = Math.max(timelineEndX, Math.floor(visibleStartX / SEGMENT_STEP) * SEGMENT_STEP)
+    let x = Math.max(timelineEndX, Math.floor(visibleStartX / segmentStep) * segmentStep)
     const placeholderY = (TIMELINE_HEIGHT - PLACEHOLDER_HEIGHT) / 2
     while (x < visibleEndX) {
       if (x >= timelineEndX) {
         canvas.drawRRect(
-          Skia.RRectXY(Skia.XYWHRect(x, placeholderY, SEGMENT_WIDTH, PLACEHOLDER_HEIGHT), 2, 2),
+          Skia.RRectXY(Skia.XYWHRect(x, placeholderY, segmentWidth, PLACEHOLDER_HEIGHT), 2, 2),
           placeholderPaint
         )
       }
-      x += SEGMENT_STEP
+      x += segmentStep
     }
   }
 
@@ -262,11 +263,14 @@ export function Timeline({
   selectionStart,
   selectionEnd,
   onSelectionChange,
-  segmentDuration = SEGMENT_DURATION,
-  onSegmentDurationChange,
+  canZoom = false,
   showTime = 'bottom',
 }: TimelineProps) {
   const [containerWidth, setContainerWidth] = useState(0)
+  const [zoomFactor, setZoomFactor] = useState(1)
+
+  const segmentWidth = SEGMENT_WIDTH * zoomFactor
+  const segmentGap = SEGMENT_GAP * zoomFactor
 
   // Visual selection: paint selection color when color and bounds are provided
   const hasVisualSelection = !!(
@@ -278,20 +282,23 @@ export function Timeline({
   // Editable selection: show handles when onChange callback is also provided
   const hasEditableSelection = hasVisualSelection && !!onSelectionChange
 
-  const totalSegments = Math.ceil(duration / segmentDuration)
-  const maxScrollOffset = timeToX(duration, segmentDuration)
+  const totalSegments = Math.ceil(duration / SEGMENT_DURATION)
+  const maxScrollOffset = timeToX(duration, SEGMENT_DURATION, segmentWidth, segmentGap)
 
   const { scrollOffsetRef, displayPosition, frame, gesture } = useTimelinePhysics({
     maxScrollOffset,
     containerWidth,
     duration,
-    segmentDuration,
+    segmentDuration: SEGMENT_DURATION,
+    segmentWidth,
+    segmentGap,
     externalPosition: position,
     onSeek,
+    zoomFactor,
     selection: hasEditableSelection
       ? { start: selectionStart!, end: selectionEnd!, onChange: onSelectionChange! }
       : undefined,
-    onSegmentDurationChange,
+    onZoomChange: canZoom ? setZoomFactor : undefined,
   })
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -319,8 +326,8 @@ export function Timeline({
     const scrollOffset = scrollOffsetRef.current
     const playheadX = scrollOffset // Playhead is always at scroll position (center-fixed)
 
-    const selStartX = hasVisualSelection ? timeToX(selectionStart!, segmentDuration) : null
-    const selEndX = hasVisualSelection ? timeToX(selectionEnd!, segmentDuration) : null
+    const selStartX = hasVisualSelection ? timeToX(selectionStart!, SEGMENT_DURATION, segmentWidth, segmentGap) : null
+    const selEndX = hasVisualSelection ? timeToX(selectionEnd!, SEGMENT_DURATION, segmentWidth, segmentGap) : null
 
     try {
       return createPicture(
@@ -335,7 +342,9 @@ export function Timeline({
             containerWidth,
             totalSegments,
             duration,
-            segmentDuration,
+            SEGMENT_DURATION,
+            segmentWidth,
+            segmentGap,
             playheadX,
             selStartX,
             selEndX,
@@ -358,7 +367,7 @@ export function Timeline({
       return null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frame, containerWidth, totalSegments, duration, segmentDuration, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
+  }, [frame, containerWidth, totalSegments, duration, segmentWidth, segmentGap, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
 
   // Calculate playhead position based on time indicator placement
   const playheadTop = showTime === 'top'

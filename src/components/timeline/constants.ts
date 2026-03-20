@@ -5,8 +5,11 @@
 // Layout
 export const SEGMENT_WIDTH = 4
 export const SEGMENT_GAP = 2
-export const SEGMENT_STEP = SEGMENT_WIDTH + SEGMENT_GAP
 export const SEGMENT_DURATION = 5000 // 5 seconds per segment
+
+// Zoom bounds (expressed as factor on SEGMENT_WIDTH)
+export const MIN_ZOOM = 1             // SEGMENT_WIDTH * 1 = 4px
+export const MAX_ZOOM = 16            // SEGMENT_WIDTH * 16 = 64px
 export const TIMELINE_HEIGHT = 90
 export const PLAYHEAD_WIDTH = 2
 export const PLACEHOLDER_HEIGHT = 8

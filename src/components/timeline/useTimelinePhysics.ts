@@ -2,8 +2,8 @@
  * useTimelinePhysics
  *
  * Unified physics hook for timeline scroll, momentum, tap-to-seek, and optional
- * selection handle dragging. Uses refs for 60fps animation without React re-render
- * overhead.
+ * selection handle dragging and pinch-to-zoom. Uses refs for 60fps animation
+ * without React re-render overhead.
  */
 
 import { useCallback, useEffect, useState, useRef } from 'react'
@@ -15,6 +15,8 @@ import {
   VELOCITY_SCALE,
   SCROLL_TO_DURATION,
   MIN_SELECTION_DURATION,
+  MIN_ZOOM,
+  MAX_ZOOM,
   TIMELINE_HEIGHT,
 } from './constants'
 import { timeToX, xToTime, clamp } from './utils'
@@ -34,10 +36,13 @@ export interface UseTimelinePhysicsOptions {
   containerWidth: number
   duration: number
   segmentDuration: number
+  segmentWidth: number
+  segmentGap: number
+  zoomFactor: number
   externalPosition: number
   onSeek: (position: number) => void
   selection?: SelectionConfig
-  onSegmentDurationChange?: (segmentDuration: number) => void
+  onZoomChange?: (zoomFactor: number) => void
 }
 
 export interface TimelinePhysicsResult {
@@ -52,19 +57,33 @@ export function useTimelinePhysics({
   containerWidth,
   duration,
   segmentDuration,
+  segmentWidth,
+  segmentGap,
+  zoomFactor,
   externalPosition,
   onSeek,
   selection,
-  onSegmentDurationChange,
+  onZoomChange,
 }: UseTimelinePhysicsOptions): TimelinePhysicsResult {
   const [frame, setFrame] = useState(0)
   const [displayPosition, setDisplayPosition] = useState(externalPosition)
 
-  // Scroll state (refs for 60fps)
-  const scrollOffsetRef = useRef(timeToX(externalPosition, segmentDuration))
+  // Refs for current layout params (used in rAF loops to avoid stale closures)
   const segmentDurationRef = useRef(segmentDuration)
   segmentDurationRef.current = segmentDuration
-  const prevSegmentDurationRef = useRef(segmentDuration)
+  const segmentWidthRef = useRef(segmentWidth)
+  segmentWidthRef.current = segmentWidth
+  const segmentGapRef = useRef(segmentGap)
+  segmentGapRef.current = segmentGap
+
+  // Helper: call timeToX/xToTime with current layout refs
+  const tx = (time: number) => timeToX(time, segmentDurationRef.current, segmentWidthRef.current, segmentGapRef.current)
+  const xt = (x: number) => xToTime(x, segmentDurationRef.current, segmentWidthRef.current, segmentGapRef.current)
+
+  // Scroll state (refs for 60fps)
+  const scrollOffsetRef = useRef(tx(externalPosition))
+  const prevSegmentWidthRef = useRef(segmentWidth)
+  const prevSegmentGapRef = useRef(segmentGap)
   const velocityRef = useRef(0)
   const isDraggingRef = useRef(false)
   const dragStartOffsetRef = useRef(0)
@@ -76,7 +95,7 @@ export function useTimelinePhysics({
 
   // Pinch zoom state
   const isPinchingRef = useRef(false)
-  const pinchBaseSegmentDurationRef = useRef(segmentDuration)
+  const pinchBaseZoomRef = useRef(1)
 
   // Animation state for tap-to-seek
   const animationRef = useRef<{
@@ -133,7 +152,7 @@ export function useTimelinePhysics({
       const { startOffset, targetOffset } = animationRef.current
       scrollOffsetRef.current = startOffset + (targetOffset - startOffset) * easedProgress
 
-      updateDisplayPosition(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
+      updateDisplayPosition(xt(scrollOffsetRef.current))
       setFrame(f => f + 1)
 
       if (progress < 1) {
@@ -141,8 +160,8 @@ export function useTimelinePhysics({
       } else {
         animationRef.current = null
         rafIdRef.current = null
-        updateDisplayPosition(xToTime(scrollOffsetRef.current, segmentDurationRef.current), true) // Force final update
-        onSeek(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
+        updateDisplayPosition(xt(scrollOffsetRef.current), true)
+        onSeek(xt(scrollOffsetRef.current))
       }
     }
 
@@ -165,14 +184,14 @@ export function useTimelinePhysics({
         )
         velocityRef.current *= DECELERATION
 
-        updateDisplayPosition(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
+        updateDisplayPosition(xt(scrollOffsetRef.current))
         setFrame(f => f + 1)
         rafIdRef.current = requestAnimationFrame(tick)
       } else {
         velocityRef.current = 0
         rafIdRef.current = null
-        updateDisplayPosition(xToTime(scrollOffsetRef.current, segmentDurationRef.current), true) // Force final update
-        onSeek(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
+        updateDisplayPosition(xt(scrollOffsetRef.current), true)
+        onSeek(xt(scrollOffsetRef.current))
       }
     }
 
@@ -183,26 +202,28 @@ export function useTimelinePhysics({
     rafIdRef.current = requestAnimationFrame(tick)
   }, [maxScrollOffset, onSeek, updateDisplayPosition])
 
-  // Recompute scroll offset when segment duration changes (zoom)
+  // Recompute scroll offset when segment layout changes (zoom)
   useEffect(() => {
-    const prev = prevSegmentDurationRef.current
-    if (prev !== segmentDuration) {
-      const currentTime = xToTime(scrollOffsetRef.current, prev)
-      scrollOffsetRef.current = timeToX(currentTime, segmentDuration)
-      prevSegmentDurationRef.current = segmentDuration
+    const prevW = prevSegmentWidthRef.current
+    const prevG = prevSegmentGapRef.current
+    if (prevW !== segmentWidth || prevG !== segmentGap) {
+      const currentTime = xToTime(scrollOffsetRef.current, segmentDuration, prevW, prevG)
+      scrollOffsetRef.current = timeToX(currentTime, segmentDuration, segmentWidth, segmentGap)
+      prevSegmentWidthRef.current = segmentWidth
+      prevSegmentGapRef.current = segmentGap
       stopAnimation()
       setFrame(f => f + 1)
     }
-  }, [segmentDuration, stopAnimation])
+  }, [segmentDuration, segmentWidth, segmentGap, stopAnimation])
 
   // Sync to external position when idle
   useEffect(() => {
     if (!isDraggingRef.current && rafIdRef.current === null && !draggingHandleRef.current) {
-      scrollOffsetRef.current = timeToX(externalPosition, segmentDuration)
-      updateDisplayPosition(externalPosition, true) // Always sync when idle
+      scrollOffsetRef.current = timeToX(externalPosition, segmentDuration, segmentWidth, segmentGap)
+      updateDisplayPosition(externalPosition, true)
       setFrame(f => f + 1)
     }
-  }, [externalPosition, segmentDuration, updateDisplayPosition])
+  }, [externalPosition, segmentDuration, segmentWidth, segmentGap, updateDisplayPosition])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -223,8 +244,8 @@ export function useTimelinePhysics({
     // Convert touch to timeline coordinates
     const timelineX = scrollOffsetRef.current + (touchX - halfWidth)
 
-    const startHandleX = timeToX(selection.start, segmentDurationRef.current)
-    const endHandleX = timeToX(selection.end, segmentDurationRef.current)
+    const startHandleX = tx(selection.start)
+    const endHandleX = tx(selection.end)
 
     // Check distance to each handle circle
     const distToStart = Math.sqrt(
@@ -263,7 +284,7 @@ export function useTimelinePhysics({
     if (rafIdRef.current !== null || animationRef.current !== null) {
       stopAnimation()
       stoppedMomentumRef.current = true
-      onSeek(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
+      onSeek(xt(scrollOffsetRef.current))
     } else {
       stoppedMomentumRef.current = false
     }
@@ -278,10 +299,10 @@ export function useTimelinePhysics({
 
     const halfWidth = containerWidth / 2
     const offsetFromCenter = x - halfWidth
-    const tappedTime = xToTime(scrollOffsetRef.current + offsetFromCenter, segmentDurationRef.current)
+    const tappedTime = xt(scrollOffsetRef.current + offsetFromCenter)
     const clampedTime = clamp(tappedTime, 0, duration)
 
-    animateToPosition(timeToX(clampedTime, segmentDurationRef.current))
+    animateToPosition(tx(clampedTime))
   }, [containerWidth, duration, animateToPosition])
 
   const onPanStart = useCallback((x: number, y: number) => {
@@ -310,7 +331,7 @@ export function useTimelinePhysics({
 
     if (draggingHandleRef.current && selection) {
       // Dragging a handle
-      const deltaTime = xToTime(translationX, segmentDurationRef.current)
+      const deltaTime = xt(translationX)
       const newValue = handleDragStartValueRef.current + deltaTime
 
       if (draggingHandleRef.current === 'start') {
@@ -333,7 +354,7 @@ export function useTimelinePhysics({
       0,
       maxScrollOffset
     )
-    updateDisplayPosition(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
+    updateDisplayPosition(xt(scrollOffsetRef.current))
     setFrame(f => f + 1)
   }, [selection, duration, maxScrollOffset, updateDisplayPosition])
 
@@ -351,7 +372,7 @@ export function useTimelinePhysics({
     if (Math.abs(velocityRef.current) > MIN_VELOCITY) {
       startMomentumLoop()
     } else {
-      onSeek(xToTime(scrollOffsetRef.current, segmentDurationRef.current))
+      onSeek(xt(scrollOffsetRef.current))
     }
   }, [startMomentumLoop, onSeek])
 
@@ -369,20 +390,20 @@ export function useTimelinePhysics({
 
   const panTapGesture = Gesture.Race(panGesture, tapGesture)
 
-  const gesture = onSegmentDurationChange
+  const gesture = onZoomChange
     ? Gesture.Simultaneous(
         panTapGesture,
         Gesture.Pinch()
           .runOnJS(true)
           .onStart(() => {
             isPinchingRef.current = true
-            pinchBaseSegmentDurationRef.current = segmentDurationRef.current
+            pinchBaseZoomRef.current = zoomFactor
             stopAnimation()
           })
           .onUpdate((event) => {
-            // scale > 1 = fingers apart = zoom in = smaller segment duration
-            const newDuration = pinchBaseSegmentDurationRef.current / event.scale
-            onSegmentDurationChange(newDuration)
+            // scale > 1 = fingers apart = zoom in = wider bars
+            const newZoom = pinchBaseZoomRef.current * event.scale
+            onZoomChange(clamp(newZoom, MIN_ZOOM, MAX_ZOOM))
           })
           .onEnd(() => {
             isPinchingRef.current = false
