@@ -14,6 +14,20 @@ Ivy is a local-first audiobook/podcast player written in React Native. It can:
 - Auto-sync data and clips to Google Drive
 
 
+## How to Work on Ivy?
+
+The team values clean code, careful architectural decisions and standardized use of git. This last point is especially important.
+
+Git messages are one-liners in the form '<scope>: <change>', without extended descriptions and without attributions. For example, these are good messages:
+        
+        store: add foobar state
+        library: adjust styling of book artwork
+        downloader: fix progress indicator reading -1%
+        ui: refactor dialogs to be generic
+
+Respecting this convention forces you to commit changes in tightly scoped units, and away from large commits with entire features or refactors. Commit as you work to avoid accumulation of changes across scopes.
+
+
 ## Topics
 
 These are in-depth guides to aspects of the application. CRITICAL: before you start working on one of the following topics, read the corresponding guide to learn about it.
