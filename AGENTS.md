@@ -7,7 +7,7 @@
 
 Ivy is a local-first audiobook/podcast player written in React Native. It can:
 
-- Import audio files into its library
+- Import audio files into its library (from local files or URLs via yt-dlp)
 - Play audio files in the library
 - Extract, play and share clips
 - Remember listening sessions
@@ -20,7 +20,7 @@ These are in-depth guides to aspects of the application. CRITICAL: before you st
 
 ### Books and Library
 
-File import, metadata editing, archiving, deletion, and restoration. See **[docs/BOOKS.md](docs/BOOKS.md)** for the full guide.
+File import (local and URL), metadata editing, archiving, deletion, and restoration. See **[docs/BOOKS.md](docs/BOOKS.md)** for the full guide.
 
 **Quick summary:** Files are copied to app-owned storage on import. Each book is fingerprinted (file size + first 4KB) for duplicate detection. Adding a file that matches an archived/deleted book restores it with preserved position. Books use soft-delete (`hidden` flag), never hard-delete.
 
@@ -99,7 +99,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
 - New FileSystem API: `Paths.document`, `Directory`, `File` classes
 - whisper.rn for on-device transcription
 - react-native-safe-area-context (not deprecated SafeAreaView)
-- Native Kotlin modules for audio slicing
+- Native Kotlin modules for audio slicing, metadata, file copy, URL download
+- youtubedl-android 0.18.1 (yt-dlp + FFmpeg for URL downloads)
 
 ## File Structure
 
@@ -109,8 +110,9 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── constants.ts            # Shared constants (durations, paths)
   │   ├── play.ts, pause.ts, ... # Playback actions
   │   ├── add_clip.ts, ...       # Clip actions
-  │   ├── load_file.ts, ...      # Library actions
-  │   └── ...                     # ~28 action files total
+  │   ├── load_file.ts, ...      # Library actions (local files)
+  │   ├── load_from_url.ts       # Library actions (URL download via yt-dlp)
+  │   └── ...                     # ~29 action files total
   ├── store/
   │   ├── index.ts                # All state, action wiring, event listeners
   │   └── types.ts                # Type definitions (AppState, Action, ActionFactory)
@@ -125,6 +127,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── storage/
   │   │   ├── database.ts         # SQLite operations
   │   │   ├── files.ts            # File copying to app storage
+  │   │   ├── copier.ts           # Native file copier (progress, fingerprint, cancel)
+  │   │   ├── downloader.ts       # URL download via yt-dlp native module
   │   │   └── picker.ts           # Document picker
   │   ├── transcription/
   │   │   ├── queue.ts            # Background transcription queue
@@ -145,7 +149,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── PlayerScreen.tsx        # Main player
   │   ├── ClipsListScreen.tsx     # Clip management
   │   ├── SessionsScreen.tsx      # Listening history
-  │   └── SettingsScreen.tsx      # App settings (sync toggle, transcription toggle)
+  │   └── SettingsScreen.tsx      # App settings (sync, transcription, yt-dlp version)
   ├── components/
   │   ├── MetadataEditor.tsx      # Book metadata editing (title, artist; artwork read-only)
   │   ├── ClipViewer.tsx          # Clip playback (own position state, timeline, transcription)
@@ -187,7 +191,11 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── AudioSlicerModule.kt        # Native module for audio slicing
   ├── AudioSlicerPackage.kt       # Native module package registration
   ├── AudioMetadataModule.kt      # Native module for metadata extraction
-  └── AudioMetadataPackage.kt     # Native module package registration
+  ├── AudioMetadataPackage.kt     # Native module package registration
+  ├── FileCopierModule.kt         # Native module for file copy with progress
+  ├── FileCopierPackage.kt        # Native module package registration
+  ├── FileDownloaderModule.kt     # Native module wrapping yt-dlp for URL downloads
+  └── FileDownloaderPackage.kt    # Native module package registration
 
 /maestro                          # Maestro e2e test flows
   ├── smoke-test.yaml             # Empty state verification
@@ -286,7 +294,11 @@ See `store/types.ts` for authoritative type definitions (`AppState` interface).
 
 ```typescript
 // State
-library: { status: 'loading' | 'idle' | 'adding' }
+library: {
+  status: 'loading' | 'idle' | 'adding' | 'duplicate' | 'error'
+  addProgress: number | null     // 0-99 percent (copy or download)
+  addOpId: string | null         // Active operation ID (for cancellation)
+}
 books: Record<string, Book>
 playback: {
   status: 'idle' | 'loading' | 'paused' | 'playing'
@@ -311,7 +323,7 @@ sessions: Record<string, SessionWithBook>  // Listening history (keyed by id)
 currentSessionBookId: string | null
 
 // Actions
-fetchBooks, loadFile, loadFileWithUri, loadFileWithPicker, archiveBook, deleteBook, updateBook
+fetchBooks, loadFile, loadFileWithUri, loadFileWithPicker, loadFromUrl, cancelLoadFile, archiveBook, deleteBook, updateBook
 play, pause, seek, seekClip, skipForward, skipBackward, syncPlaybackState
 fetchClips, addClip, updateClip, deleteClip, shareClip
 startTranscription, stopTranscription
@@ -420,6 +432,14 @@ Located in `android/app/src/main/java/com/salezica/ivy/`:
 - Kotlin native module for extracting ID3 metadata (title, artist, artwork, duration)
 - Wrapped by `services/audio/metadata.ts`
 - Interface: `extractMetadata(filePath) → Promise<{ title, artist, artwork, duration }>`
+
+**FileDownloader**:
+- Kotlin native module wrapping `youtubedl-android` (yt-dlp + FFmpeg)
+- Wrapped by `services/storage/downloader.ts`
+- Downloads audio from URLs (YouTube, etc.) as m4a with embedded thumbnail and metadata
+- Lazy-initializes yt-dlp on first use (blocks until ready via CountDownLatch)
+- Interface: `download(opId, url, outputDir) → Promise<{ filePath }>`, `cancelDownload()`, `update()`, `version()`
+- Requires `expo.useLegacyPackaging=true` in `gradle.properties` (yt-dlp's native libs need extraction to disk)
 
 
 ## Adding Features

@@ -8,15 +8,16 @@ A guide for Ivy's library, file loading, archiving, and deletion.
 2. [Core Concepts](#core-concepts)
 3. [Architecture Overview](#architecture-overview)
 4. [Adding a Book](#adding-a-book)
-5. [File Fingerprinting](#file-fingerprinting)
-6. [The Three Loading Cases](#the-three-loading-cases)
-7. [Book States](#book-states)
-8. [Archiving](#archiving)
-9. [Deletion](#deletion)
-10. [Restoration](#restoration)
-11. [The Library Screen](#the-library-screen)
-12. [Edge Cases and Robustness](#edge-cases-and-robustness)
-13. [File Map](#file-map)
+5. [Adding a Book from URL](#adding-a-book-from-url)
+6. [File Fingerprinting](#file-fingerprinting)
+7. [The Three Loading Cases](#the-three-loading-cases)
+8. [Book States](#book-states)
+9. [Archiving](#archiving)
+10. [Deletion](#deletion)
+11. [Restoration](#restoration)
+12. [The Library Screen](#the-library-screen)
+13. [Edge Cases and Robustness](#edge-cases-and-robustness)
+14. [File Map](#file-map)
 
 ---
 
@@ -69,18 +70,19 @@ Archive and delete actions update the Zustand store immediately (optimistic), th
 ┌──────────────────────────────────────────────────────────────┐
 │                       Store Actions                           │
 │  loadFile · loadFileWithPicker · loadFileWithUri              │
+│  loadFromUrl · cancelLoadFile                                 │
 │  fetchBooks · archiveBook · deleteBook                        │
-└───┬──────────┬──────────┬──────────┬─────────────────────────┘
-    │          │          │          │
-    ▼          ▼          ▼          ▼
-┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
-│  File  │ │Metadata│ │Database│ │  Sync  │
-│Storage │ │Service │ │Service │ │ Queue  │
-└────────┘ └────────┘ └────────┘ └────────┘
-  copy,      title,     upsert,    queue
-  rename,    artist,    archive,   changes
-  delete,    artwork,   hide,
-  fingerprint duration   restore
+└───┬──────────┬──────────┬──────────┬──────────┬─────────────┘
+    │          │          │          │          │
+    ▼          ▼          ▼          ▼          ▼
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────┐
+│  File  │ │Metadata│ │Database│ │  Sync  │ │   File   │
+│Storage │ │Service │ │Service │ │ Queue  │ │Downloader│
+└────────┘ └────────┘ └────────┘ └────────┘ └──────────┘
+  copy,      title,     upsert,    queue      download
+  rename,    artist,    archive,   changes    via yt-dlp
+  delete,    artwork,   hide,                 (YouTube,
+  fingerprint duration   restore               etc.)
 ```
 
 No dedicated "library service" — the actions coordinate the storage, metadata, and database services directly.
@@ -140,6 +142,44 @@ A `finally` block ensures no orphaned files remain:
 - The temporary file (pre-rename) is always deleted
 - If a renamed file exists but has no corresponding database record (DB write failed), it's also deleted
 - Cleanup failures are swallowed — they never affect the operation's outcome
+
+---
+
+## Adding a Book from URL
+
+The "Download URL" option in the library menu lets users add books from YouTube and other yt-dlp-supported sites. This is handled by `loadFromUrl()`, which follows a different pipeline than `loadFile()` but converges on the same fingerprint → three cases → DB logic.
+
+### How it works
+
+1. **Download** — `FileDownloaderService` calls the native `FileDownloaderModule` (which wraps `youtubedl-android`). The file is downloaded to `{CachesDirectory}/downloads/` as m4a with embedded thumbnail and metadata (`--embed-thumbnail --embed-metadata`). Progress events (0–99%) update `library.addProgress`.
+
+2. **Fingerprint** — `FileStorageService.readFileFingerprint()` reads the downloaded file, same as for local files.
+
+3. **Duplicate check** — Same three-case logic as `loadFile()`: active duplicate → touch + report; archived/deleted match → restore; no match → new book.
+
+4. **Move to app storage** — The downloaded file is moved (not copied) from the cache dir to `{DocumentDirectory}/audio/`.
+
+5. **Metadata extraction** — `AudioMetadataService` reads the embedded metadata (title, artist, artwork, duration) from the file.
+
+### Cancellation
+
+`cancelLoadFile()` handles both file copy and URL download cancellation. It calls `downloader.cancelDownload()` which destroys the active yt-dlp process.
+
+### Native module: FileDownloaderModule
+
+The Kotlin module wraps `youtubedl-android` (yt-dlp + FFmpeg bundled as native libraries). Key details:
+
+- **Lazy initialization** — yt-dlp and FFmpeg are initialized on first use via `ensureInitialized()`, using a `CountDownLatch` so concurrent calls block until init completes.
+- **Legacy packaging required** — `expo.useLegacyPackaging=true` in `gradle.properties` is required because yt-dlp's native `.so` files must be extracted to disk (not kept compressed in the APK).
+- **Progress** — Emits `FileDownloaderProgress` events with `{ opId, percent }` via `NativeEventEmitter`.
+
+### Settings
+
+The settings screen shows the current yt-dlp version with an "Update" link. Updates use `YoutubeDL.getInstance().updateYoutubeDL()` targeting the STABLE channel.
+
+### UI flow
+
+Library menu → "Download URL" → Dialog with text input → "Download" button → `loadFromUrl(url)` → LoadingModal shows progress → book appears in library.
 
 ---
 
@@ -384,6 +424,8 @@ src/actions/
   load_file.ts           → Core loading pipeline (copy, metadata, fingerprint, upsert)
   load_file_with_uri.ts  → Thin wrapper: uri + name → loadFile
   load_file_with_picker.ts → Launch picker → loadFile
+  load_from_url.ts       → URL download pipeline (yt-dlp → fingerprint → upsert)
+  cancel_load_file.ts    → Cancel active copy or download
   fetch_books.ts         → Load all non-hidden books into store
   archive_book.ts        → Set uri=null, delete file
   update_book.ts         → Update title/artist, queue sync
@@ -392,22 +434,28 @@ src/actions/
 
 src/components/
   MetadataEditor.tsx     → Dialog content for editing book title/artist (shows artwork read-only)
+  LoadingModal.tsx       → Progress modal for adding books (copy or download)
 
 src/services/storage/
   database.ts            → Book CRUD, fingerprint lookup, archive/hide/restore
   files.ts               → FileStorageService (copy, rename, delete, fingerprint read)
+  copier.ts              → FileCopierService (native file copy with progress + cancel)
+  downloader.ts          → FileDownloaderService (URL download via yt-dlp native module)
   picker.ts              → FilePickerService (expo-document-picker wrapper)
 
 src/services/audio/
   metadata.ts            → AudioMetadataService (native ID3 tag extraction)
 
 src/screens/
-  LibraryScreen.tsx      → Book list with active/archived sections, search, menus
+  LibraryScreen.tsx      → Book list with active/archived sections, search, menus, URL dialog
+  SettingsScreen.tsx     → yt-dlp version display + update
 
 src/store/
   index.ts               → Wires book actions, position sync, auto-sync trigger
   types.ts               → Book type, library status in AppState
 
 android/.../
-  AudioMetadataModule.kt → Native metadata extraction (MediaMetadataRetriever)
+  AudioMetadataModule.kt    → Native metadata extraction (MediaMetadataRetriever)
+  FileCopierModule.kt       → Native file copy with progress, fingerprint, cancellation
+  FileDownloaderModule.kt   → Native yt-dlp wrapper (download, cancel, update, version)
 ```
