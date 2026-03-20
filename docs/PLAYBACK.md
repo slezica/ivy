@@ -338,7 +338,7 @@ The timeline is a GPU-accelerated horizontal scrolling waveform rendered with Sk
   └──────────────────────────────┘
 ```
 
-The playhead is fixed at the center of the screen. The bars scroll behind it as time progresses. Each bar represents a 5-second segment, 4px wide with 2px gaps.
+The playhead is fixed at the center of the screen. The bars scroll behind it as time progresses. Each bar represents a 5-second segment (`SEGMENT_DURATION`), with configurable width and gap that scale with zoom.
 
 ### Three-layer painting
 
@@ -352,7 +352,7 @@ This avoids drawing each bar individually, which would be far too slow for smoot
 
 ### Bar heights
 
-Heights are precomputed for up to 10,000 segments using layered sine waves with pseudo-random variation. This creates a convincing waveform appearance without reading actual audio data. The heights are stored in a `Float32Array` and reused across renders.
+Heights are computed per visible segment using layered sine waves with pseudo-random variation. This creates a convincing waveform appearance without reading actual audio data. Only visible bars are computed per frame.
 
 ### Physics
 
@@ -371,14 +371,12 @@ The timeline physics hook (`useTimelinePhysics`) handles three interaction modes
 - Minimum 1 second between handles
 - Calls `onSelectionChange` with new bounds
 
-All internal tracking uses pixel coordinates (via `timeToX`/`xToTime` conversions). React re-renders are throttled to every 50ms to maintain 60fps Skia rendering without React overhead.
+**Pinch-to-zoom (opt-in via `canZoom` prop):**
+- Scales segment width while keeping gap fixed
+- Scroll position recomputed to preserve center time
+- Pan/tap suppressed during and briefly after pinch
 
-### Conversion functions
-
-```
-timeToX(ms) = (ms / 5000) × 6    — 5s per segment, 6px per segment
-xToTime(px) = (px / 6) × 5000
-```
+All internal tracking uses pixel coordinates (via `timeToX`/`xToTime` conversions). These functions accept `segmentDuration`, `segmentWidth`, and `segmentGap` to support zoom. React re-renders are throttled to every 50ms to maintain 60fps Skia rendering without React overhead.
 
 ---
 
@@ -478,8 +476,8 @@ src/screens/
 
 src/components/timeline/
   Timeline.tsx        → GPU-accelerated Skia waveform
-  useTimelinePhysics.ts → Pan, momentum, tap, selection handle gestures
-  constants.ts        → Layout, physics, animation constants
-  utils.ts            → timeToX, xToTime, precomputed bar heights
+  useTimelinePhysics.ts → Pan, momentum, tap, selection handle, pinch-to-zoom gestures
+  constants.ts        → Layout, physics, animation, zoom constants
+  utils.ts            → timeToX, xToTime, bar heights
   index.ts            → Barrel exports
 ```

@@ -171,9 +171,9 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── LibraryLoadingDialog.tsx # "Adding..." / "Loading..." dialog
   │   ├── timeline/               # GPU-accelerated timeline component
   │   │   ├── Timeline.tsx        # Unified timeline (playback + selection)
-  │   │   ├── useTimelinePhysics.ts # Scroll/momentum/selection hook
-  │   │   ├── constants.ts        # Dimensions, physics, animation timing
-  │   │   ├── utils.ts            # timeToX, xToTime, segment heights
+  │   │   ├── useTimelinePhysics.ts # Scroll/momentum/selection/zoom hook
+  │   │   ├── constants.ts        # Dimensions, physics, animation, zoom constants
+  │   │   ├── utils.ts            # timeToX, xToTime, bar heights
   │   │   └── index.ts            # Barrel exports
   │   └── shared/
   │       ├── ScreenArea.tsx      # Safe area wrapper (react-native-safe-area-context)
