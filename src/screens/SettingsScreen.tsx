@@ -1,24 +1,20 @@
 import { View, Text, StyleSheet, Switch, TouchableOpacity, Alert } from 'react-native'
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback } from 'react'
 import { useFocusEffect, useRouter } from 'expo-router'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import { Color } from '../theme'
 import { useStore } from '../store'
-import { downloader } from '../services'
 
 export default function SettingsScreen() {
   const router = useRouter()
-  const { settings, updateSettings, sync, syncNow, refreshSyncStatus, transcription, startTranscription, stopTranscription, loadFileWithUri, fetchBooks, __DEV_resetApp } = useStore()
-
-  const [ytdlpVersion, setYtdlpVersion] = useState<string | null>(null)
-  const [isUpdatingYtdlp, setIsUpdatingYtdlp] = useState(false)
+  const { settings, updateSettings, sync, syncNow, refreshSyncStatus, downloader, refreshDownloaderStatus, updateDownloader, transcription, startTranscription, stopTranscription, loadFileWithUri, fetchBooks, __DEV_resetApp } = useStore()
 
   useFocusEffect(
     useCallback(() => {
       refreshSyncStatus()
-      downloader.version().then(setYtdlpVersion).catch(() => {})
-    }, [refreshSyncStatus])
+      refreshDownloaderStatus()
+    }, [refreshSyncStatus, refreshDownloaderStatus])
   )
 
   const pendingLabel = sync.pendingCount === 1 ? '1 item pending' : `${sync.pendingCount} items pending`
@@ -28,27 +24,6 @@ export default function SettingsScreen() {
 
     if (enabled && sync.pendingCount > 0) {
       syncNow()
-    }
-  }
-
-  async function handleUpdateYtdlp() {
-    if (isUpdatingYtdlp) return
-    setIsUpdatingYtdlp(true)
-
-    try {
-      const status = await downloader.update()
-      const version = await downloader.version()
-      setYtdlpVersion(version)
-
-      if (status === 'ALREADY_UP_TO_DATE') {
-        Alert.alert('Up to date', 'YouTube downloader is already up to date')
-      } else {
-        Alert.alert('Updated', 'YouTube downloader has been updated')
-      }
-    } catch (error) {
-      Alert.alert('Update failed', 'Could not update the YouTube downloader')
-    } finally {
-      setIsUpdatingYtdlp(false)
     }
   }
 
@@ -161,14 +136,14 @@ export default function SettingsScreen() {
 
         <View style={styles.settingSecondary}>
           <Text style={styles.secondaryText}>
-            {ytdlpVersion ?? '...'}
+            {downloader.version ?? '...'}
           </Text>
 
           <Text style={styles.secondaryText}> · </Text>
 
-          <TouchableOpacity onPress={handleUpdateYtdlp} disabled={isUpdatingYtdlp}>
+          <TouchableOpacity onPress={updateDownloader} disabled={downloader.status === 'updating'}>
             <Text style={styles.linkText}>
-              {isUpdatingYtdlp ? 'Updating...' : 'Update'}
+              {downloader.status === 'updating' ? 'Updating...' : 'Update'}
             </Text>
           </TouchableOpacity>
         </View>

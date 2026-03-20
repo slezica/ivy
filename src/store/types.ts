@@ -30,6 +30,8 @@ import type { UpdateSettings } from '../actions/update_settings'
 import type { FetchSessions } from '../actions/fetch_sessions'
 import type { TrackSession } from '../actions/track_session'
 import type { UpdateBook } from '../actions/update_book'
+import type { RefreshDownloaderStatus } from '../actions/refresh_downloader_status'
+import type { UpdateDownloader } from '../actions/update_downloader'
 import type { ResetApp } from '../actions/reset_app'
 
 
@@ -66,6 +68,11 @@ export interface AppState {
     error: string | null
   }
 
+  downloader: {
+    version: string | null
+    status: 'idle' | 'updating' | 'updated' | 'up-to-date' | 'error'
+  }
+
   currentSessionBookId: string | null // TODO move out of here
 
   // Actions
@@ -95,6 +102,8 @@ export interface AppState {
   syncNow: SyncNow
   autoSync: AutoSync
   refreshSyncStatus: RefreshSyncStatus
+  refreshDownloaderStatus: RefreshDownloaderStatus
+  updateDownloader: UpdateDownloader
   updateSettings: UpdateSettings
   fetchSessions: FetchSessions
   trackSession: TrackSession
