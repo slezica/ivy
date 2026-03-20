@@ -57,8 +57,9 @@ export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (d
     try {
       // Phase 1: Download
       const { filePath } = await downloader.download(url, tempDir, (percent) => {
+        if (percent < 0) return
         setLibrary(lib => {
-          lib.addProgress = Math.round(percent)
+          lib.addProgress = Math.min(Math.round(percent), 99)
         })
       })
 
