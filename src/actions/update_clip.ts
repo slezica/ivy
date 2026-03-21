@@ -51,7 +51,6 @@ export const createUpdateClip: ActionFactory<UpdateClipDeps, UpdateClip> = (deps
         endMs: newStart + newDuration,
       })
 
-      await slicer.cleanup(clip.uri)
       await slicer.move(sliceResult.path, `${CLIPS_DIR}/${id}.m4a`)
 
       newUri = `file://${CLIPS_DIR}/${id}.m4a`

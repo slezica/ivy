@@ -74,13 +74,16 @@ describe('createUpdateClip', () => {
       expect(deps.slicer.move).toHaveBeenCalled()
     })
 
-    it('deletes old clip file after re-slicing', async () => {
+    it('moves temp slice to clip path, replacing old file', async () => {
       const { deps } = createDeps()
       const updateClip = createUpdateClip(deps)
 
       await updateClip('clip-1', { start: 20000 })
 
-      expect(deps.slicer.cleanup).toHaveBeenCalledWith('file:///clips/clip-1.mp3')
+      expect(deps.slicer.move).toHaveBeenCalledWith(
+        '/clips/clip-1.m4a',
+        expect.stringMatching(/clips\/clip-1\.m4a$/),
+      )
     })
 
     it('clears transcription and re-queues', async () => {
