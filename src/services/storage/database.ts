@@ -330,12 +330,14 @@ export class DatabaseService {
     duration: number,
     title: string | null,
     artist: string | null,
-    artwork: string | null
+    artwork: string | null,
+    fileSize: number,
+    fingerprint: Uint8Array
   ): Book {
     const now = Date.now()
     this.db.runSync(
-      'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, title = ?, artist = ?, artwork = ?, hidden = 0 WHERE id = ?',
-      [uri, name, duration, now, title, artist, artwork, id]
+      'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ?, hidden = 0 WHERE id = ?',
+      [uri, name, duration, now, title, artist, artwork, fileSize, fingerprint, id]
     )
     return this.getBookById(id)!
   }

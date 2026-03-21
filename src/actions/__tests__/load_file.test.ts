@@ -188,6 +188,8 @@ describe('createLoadFile', () => {
         'Test Title',
         'Test Artist',
         'data:image/png;base64,abc',
+        1024,
+        new Uint8Array([1, 2, 3]),
       )
     })
 

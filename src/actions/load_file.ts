@@ -108,6 +108,7 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
           existingBook.title ?? title,
           existingBook.artist ?? artist,
           existingBook.artwork ?? artwork,
+          fileSize, fingerprint,
         )
         syncQueue.queueChange('book', existingBook.id, 'upsert')
 

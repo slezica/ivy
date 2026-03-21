@@ -121,6 +121,7 @@ export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (d
           existingBook.title ?? title,
           existingBook.artist ?? artist,
           existingBook.artwork ?? artwork,
+          fileSize, fingerprint,
         )
         syncQueue.queueChange('book', existingBook.id, 'upsert')
       } else {
