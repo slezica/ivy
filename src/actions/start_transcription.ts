@@ -10,6 +10,6 @@ export type StartTranscription = Action<[]>
 
 export const createStartTranscription: ActionFactory<StartTranscriptionDeps, StartTranscription> = (deps) => (
   async () => {
-    deps.transcription.start()
+    await deps.transcription.start()
   }
 )
