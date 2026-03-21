@@ -137,6 +137,7 @@ export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (d
         lib.status = 'idle'
         lib.addProgress = null
         lib.addOpId = null
+        lib.message = null
       })
 
     } catch (error) {

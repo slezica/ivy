@@ -124,6 +124,7 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
         lib.status = 'idle'
         lib.addProgress = null
         lib.addOpId = null
+        lib.message = null
       })
 
     } catch (error) {
