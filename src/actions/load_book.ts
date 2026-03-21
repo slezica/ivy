@@ -21,6 +21,9 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
   async (context) => {
     const { audio, db, set, get } = deps
     const { playback } = get()
+
+    if (playback.status === 'loading') return
+
     const isSameFile = (playback.uri === context.fileUri)
 
     if (!isSameFile) {
