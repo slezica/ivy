@@ -195,8 +195,9 @@ export function createMockSyncQueue(overrides: Record<string, jest.Mock> = {}) {
 export function createMockSlicer(overrides: Record<string, jest.Mock> = {}) {
   return {
     ensureDir: jest.fn(async () => {}),
-    slice: jest.fn(async () => ({ uri: 'file:///clips/clip-1.mp3' })),
+    slice: jest.fn(async () => ({ path: '/clips/clip-1.m4a', uri: 'file:///clips/clip-1.m4a' })),
     cleanup: jest.fn(async () => {}),
+    move: jest.fn(async () => {}),
     ...overrides,
   } as any
 }

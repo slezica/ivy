@@ -66,14 +66,12 @@ describe('createUpdateClip', () => {
 
       await updateClip('clip-1', { start: 20000, duration: 3000 })
 
-      expect(deps.slicer.ensureDir).toHaveBeenCalled()
       expect(deps.slicer.slice).toHaveBeenCalledWith({
         sourceUri: 'file:///audio/book-1.mp3',
         startMs: 20000,
         endMs: 23000,
-        outputPrefix: 'clip-1',
-        outputDir: expect.any(String),
       })
+      expect(deps.slicer.move).toHaveBeenCalled()
     })
 
     it('deletes old clip file after re-slicing', async () => {
@@ -97,16 +95,13 @@ describe('createUpdateClip', () => {
       expect(deps.transcription.queueClip).toHaveBeenCalledWith('clip-1')
     })
 
-    it('updates store uri to new slice result', async () => {
-      const newUri = 'file:///clips/clip-1-new.m4a'
-      const { state, deps } = createDeps({
-        slicer: createMockSlicer({ slice: jest.fn(async () => ({ uri: newUri })) }),
-      })
+    it('updates store uri to moved clip path', async () => {
+      const { state, deps } = createDeps()
       const updateClip = createUpdateClip(deps)
 
       await updateClip('clip-1', { duration: 8000 })
 
-      expect(state.clips['clip-1'].uri).toBe(newUri)
+      expect(state.clips['clip-1'].uri).toMatch(/clips\/clip-1\.m4a$/)
     })
 
     it('uses existing value when only start changes', async () => {
@@ -173,15 +168,14 @@ describe('createUpdateClip', () => {
     })
 
     it('passes new uri to db when bounds changed', async () => {
-      const newUri = 'file:///clips/resliced.m4a'
-      const { deps } = createDeps({
-        slicer: createMockSlicer({ slice: jest.fn(async () => ({ uri: newUri })) }),
-      })
+      const { deps } = createDeps()
       const updateClip = createUpdateClip(deps)
 
       await updateClip('clip-1', { start: 30000 })
 
-      expect(deps.db.updateClip).toHaveBeenCalledWith('clip-1', expect.objectContaining({ uri: newUri }))
+      expect(deps.db.updateClip).toHaveBeenCalledWith('clip-1', expect.objectContaining({
+        uri: expect.stringMatching(/clips\/clip-1\.m4a$/),
+      }))
     })
   })
 })
