@@ -117,7 +117,7 @@ export default function LibraryScreen() {
     const book = books[bookId]
     Alert.alert(
       'Archive Book',
-      `Archive "${book?.title || book?.name}"? The audio file will be deleted but your clips will be preserved.`,
+      `Archive "${book?.title || book?.name}" and delete the file? You can re-add it later`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -140,7 +140,7 @@ export default function LibraryScreen() {
     const book = books[bookId]
     Alert.alert(
       'Remove from Library',
-      `Remove "${book?.title || book?.name}" from your library? The audio file will be deleted. You can restore it by adding the same file again.`,
+      `Remove "${book?.title || book?.name}" from your library completely?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
