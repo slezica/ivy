@@ -83,6 +83,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
       await this.whisper.initialize()
     } catch (error) {
       console.error('[Transcription] Failed to initialize Whisper:', error)
+      this.started = false
       return
     }
 
