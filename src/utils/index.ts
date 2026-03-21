@@ -44,3 +44,23 @@ export function throttle<T extends (...args: any[]) => void>(fn: T, ms: number):
     }
   }) as T
 }
+
+/**
+ * Like throttle, but only suppresses calls with the same arguments as the last call.
+ * Calls with different arguments always go through and reset the timer.
+ */
+export function throttleSameArgs<T extends (...args: any[]) => void>(fn: T, ms: number): T {
+  let lastCall = 0
+  let lastArgs: any[] = []
+
+  return ((...args: Parameters<T>) => {
+    const now = Date.now()
+    const sameArgs = args.length === lastArgs.length && args.every((arg, i) => arg === lastArgs[i])
+
+    if (!sameArgs || now - lastCall >= ms) {
+      lastCall = now
+      lastArgs = args
+      fn(...args)
+    }
+  }) as T
+}

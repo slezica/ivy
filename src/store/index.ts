@@ -4,7 +4,7 @@ import { immer } from 'zustand/middleware/immer'
 import type { PlaybackStatus, SyncStatus, SyncNotification } from '../services'
 import * as services from '../services'
 import { TranscriptionQueueEvents } from '../services/transcription/queue'
-import { MAIN_PLAYER_OWNER_ID, throttle } from '../utils'
+import { MAIN_PLAYER_OWNER_ID, throttle, throttleSameArgs } from '../utils'
 import type { AppState } from './types'
 
 // Action factories
@@ -60,7 +60,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     syncQueue.queueChange('book', bookId, 'upsert')
   }, 30_000)
 
-  const throttledTrackSession = throttle((bookId: string) => {
+  const throttledTrackSession = throttleSameArgs((bookId: string) => {
     trackSession(bookId)
   }, 5_000)
 
