@@ -6,6 +6,7 @@
  */
 
 import TrackPlayer, { Event } from 'react-native-track-player'
+import { SKIP_FORWARD_MS, SKIP_BACKWARD_MS } from '../../actions/constants'
 
 export async function playbackService() {
   console.log('Playback service registered')
@@ -42,13 +43,13 @@ export async function playbackService() {
 
   TrackPlayer.addEventListener(Event.RemoteNext, async () => {
     const progress = await TrackPlayer.getProgress()
-    const newPosition = Math.min(progress.position + 25, progress.duration)
+    const newPosition = Math.min(progress.position + SKIP_FORWARD_MS / 1000, progress.duration)
     TrackPlayer.seekTo(newPosition)
   })
 
   TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
     const progress = await TrackPlayer.getProgress()
-    const newPosition = Math.max(progress.position - 30, 0)
+    const newPosition = Math.max(progress.position - SKIP_BACKWARD_MS / 1000, 0)
     TrackPlayer.seekTo(newPosition)
   })
 }
