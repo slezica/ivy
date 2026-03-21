@@ -82,9 +82,8 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     try {
       await this.whisper.initialize()
     } catch (error) {
-      console.error('[Transcription] Failed to initialize Whisper:', error)
       this.started = false
-      return
+      throw error
     }
 
     const pendingClips = this.database.getClipsNeedingTranscription()

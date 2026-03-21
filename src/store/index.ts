@@ -49,11 +49,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const deps = { set, get, ...services}
   const { db, audio, files, syncQueue, transcription, sync } = services
 
-  // Start transcription service if enabled in settings
   const initialSettings = db.getSettings()
-  if (initialSettings.transcription_enabled) {
-    transcription.start()
-  }
 
   // Throttled helpers
   const queuePositionSync = throttle((bookId: string) => {
@@ -103,6 +99,13 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   // Dev
   const __DEV_resetApp = createResetApp({ db, audio, set })
+
+  // Auto-start transcription if enabled
+  if (initialSettings.transcription_enabled) {
+    startTranscription().catch((error) => {
+      console.error('[Store] Transcription failed to start after retries:', error)
+    })
+  }
 
   // Event listeners -------------------------------------------------------------------------------
 
