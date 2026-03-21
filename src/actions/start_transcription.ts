@@ -1,9 +1,11 @@
 import type { TranscriptionQueueService } from '../services'
-import type { Action, ActionFactory } from '../store/types'
+import type { Action, ActionFactory, SetState, GetState } from '../store/types'
 
 
 export interface StartTranscriptionDeps {
   transcription: TranscriptionQueueService
+  set: SetState
+  get: GetState
 }
 
 export type StartTranscription = Action<[]>
@@ -15,9 +17,13 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export const createStartTranscription: ActionFactory<StartTranscriptionDeps, StartTranscription> = (deps) => (
   async () => {
+    deps.set(state => { state.transcription.status = 'idle' })
+
     let lastError: unknown
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      if (deps.get().transcription.status === 'disabled') return
+
       try {
         await deps.transcription.start()
         return
@@ -31,6 +37,7 @@ export const createStartTranscription: ActionFactory<StartTranscriptionDeps, Sta
       }
     }
 
+    deps.set(state => { state.transcription.status = 'error' })
     throw lastError
   }
 )

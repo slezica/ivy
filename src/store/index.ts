@@ -152,7 +152,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     },
 
     transcription: {
-      status: 'idle',
+      status: initialSettings.transcription_enabled ? 'idle' : 'disabled',
       pending: {},
     },
 
@@ -278,6 +278,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   function onTranscriptionStatus({ status }: TranscriptionQueueEvents['status']) {
     set(state => {
+      if (state.transcription.status === 'disabled' || state.transcription.status === 'error') return
       state.transcription.status = status
     })
   }

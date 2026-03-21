@@ -15,6 +15,7 @@ export const createStopTranscription: ActionFactory<StopTranscriptionDeps, StopT
 
     transcription.stop()
     set(state => {
+      state.transcription.status = 'disabled'
       state.transcription.pending = {}
     })
   }

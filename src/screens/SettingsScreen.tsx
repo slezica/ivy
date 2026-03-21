@@ -90,11 +90,23 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {transcription.status !== 'idle' && (
+        {transcription.status !== 'disabled' && (
           <View style={styles.settingSecondary}>
-            <Text style={styles.secondaryText}>
-              {transcription.status === 'downloading' ? 'Downloading model...' : 'Processing...'}
+            <Text style={transcription.status === 'error' ? styles.errorText : styles.secondaryText}>
+              {transcription.status === 'idle' && 'Ready'}
+              {transcription.status === 'downloading' && 'Downloading...'}
+              {transcription.status === 'processing' && 'Processing...'}
+              {transcription.status === 'error' && 'Download failed'}
             </Text>
+
+            {transcription.status === 'error' && (
+              <>
+                <Text style={styles.secondaryText}> · </Text>
+                <TouchableOpacity onPress={() => startTranscription()}>
+                  <Text style={styles.linkText}>Retry</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         )}
 
