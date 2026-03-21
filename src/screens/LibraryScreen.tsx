@@ -344,8 +344,8 @@ export default function LibraryScreen() {
           if (action === 'settings') router.push('/settings')
         }}
         items={[
-          { key: 'add-file', label: 'Add file', icon: 'add-outline' },
-          { key: 'download-url', label: 'Download URL', icon: 'cloud-download-outline' },
+          { key: 'add-file', label: 'Add from files', icon: 'add-outline' },
+          { key: 'download-url', label: 'Add from URL', icon: 'cloud-download-outline' },
           { key: 'history', label: 'History', icon: 'time-outline' },
           { key: 'settings', label: 'Settings', icon: 'settings-outline' },
         ]}
