@@ -82,6 +82,20 @@ export class AudioSlicerService {
   }
 
   /**
+   * Move a file from one path to another, replacing the destination if it exists.
+   */
+  async move(fromPath: string, toPath: string): Promise<void> {
+    const src = uriToPath(fromPath)
+    const dst = uriToPath(toPath)
+
+    if (await RNFS.exists(dst)) {
+      await RNFS.unlink(dst)
+    }
+
+    await RNFS.moveFile(src, dst)
+  }
+
+  /**
    * Ensure a directory exists, creating it if necessary.
    */
   async ensureDir(dirPath: string): Promise<void> {

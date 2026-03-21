@@ -44,20 +44,17 @@ export const createUpdateClip: ActionFactory<UpdateClipDeps, UpdateClip> = (deps
       const newStart = updates.start ?? clip.start
       const newDuration = updates.duration ?? clip.duration
 
-      // Re-slice using clip's UUID as filename
-      await slicer.ensureDir(CLIPS_DIR)
+      // Slice to temp location, then replace old file on success
       const sliceResult = await slicer.slice({
         sourceUri: clip.file_uri,
         startMs: newStart,
         endMs: newStart + newDuration,
-        outputPrefix: id,
-        outputDir: CLIPS_DIR,
       })
 
-      newUri = sliceResult.uri
-
-      // Delete old clip file
       await slicer.cleanup(clip.uri)
+      await slicer.move(sliceResult.path, `${CLIPS_DIR}/${id}.m4a`)
+
+      newUri = `file://${CLIPS_DIR}/${id}.m4a`
 
       // Clear stale transcription (will re-queue below)
       updates.transcription = null
