@@ -3,7 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 
 import type { PlaybackStatus, SyncStatus, SyncNotification } from '../services'
 import * as services from '../services'
-import { TranscriptionQueueEvents } from '../services/transcription/queue'
+import type { TranscriptionQueueEvents } from '../services/transcription/queue'
 import { MAIN_PLAYER_OWNER_ID, throttle, throttleSameArgs } from '../utils'
 import type { AppState } from './types'
 
@@ -114,7 +114,6 @@ export const useStore = create<AppState>()(immer((set, get) => {
   sync.on('data', onSyncData)
   transcription.on('queued', onTranscriptionQueued)
   transcription.on('finish', onTranscriptionFinish)
-  transcription.on('status', onTranscriptionStatus)
 
   // Auto-load last played book -------------------------------------------------------------------
 
@@ -152,7 +151,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     },
 
     transcription: {
-      status: initialSettings.transcription_enabled ? 'idle' : 'disabled',
+      status: initialSettings.transcription_enabled ? 'starting' : 'off',
       pending: {},
     },
 
@@ -276,12 +275,6 @@ export const useStore = create<AppState>()(immer((set, get) => {
     }
   }
 
-  function onTranscriptionStatus({ status }: TranscriptionQueueEvents['status']) {
-    set(state => {
-      if (state.transcription.status === 'disabled' || state.transcription.status === 'error') return
-      state.transcription.status = status
-    })
-  }
 }))
 
 // Re-export types for consumers

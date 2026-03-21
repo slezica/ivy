@@ -58,7 +58,7 @@ export interface AppState {
   }
 
   transcription: {
-    status: 'disabled' | 'idle' | 'downloading' | 'processing' | 'error'
+    status: 'off' | 'starting' | 'on' | 'error'
     pending: Record<string, true>
   }
 

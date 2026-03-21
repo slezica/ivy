@@ -21,13 +21,10 @@ export interface TranscriptionQueueDeps {
   slicer: AudioSlicerService
 }
 
-export type TranscriptionServiceStatus = 'idle' | 'downloading' | 'processing'
-
 export type TranscriptionQueueEvents = {
   queued: { clipId: string }
   started: { clipId: string }
   finish: { clipId: string; error?: Error, transcription?: string }
-  status: { status: TranscriptionServiceStatus }
 }
 
 // =============================================================================
@@ -35,6 +32,8 @@ export type TranscriptionQueueEvents = {
 // =============================================================================
 
 const MAX_TRANSCRIPTION_DURATION_MS = 10000  // First 10 seconds of clip
+const MAX_START_ATTEMPTS = 3
+const RETRY_DELAYS = [5_000, 15_000, 30_000]
 
 // =============================================================================
 // Service
@@ -47,69 +46,39 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
 
   private queue: string[] = []
   private processing = false
-  private downloading = false
   private started = false
+  private starting: Promise<void> | null = null
 
   constructor(deps: TranscriptionQueueDeps) {
     super()
     this.database = deps.database
     this.whisper = deps.whisper
     this.slicer = deps.slicer
-
-    this.whisper.on('status', ({ status }) => {
-      this.downloading = status === 'downloading'
-      this.emitStatus()
-    })
-  }
-
-  private emitStatus(): void {
-    const status: TranscriptionServiceStatus =
-      this.downloading ? 'downloading' :
-      this.processing ? 'processing' :
-      'idle'
-
-    this.emit('status', { status })
   }
 
   async start(): Promise<void> {
-    if (this.started) {
-      return
-    }
-
-    console.log('[Transcription] Starting service...')
+    // Every call to start() re-asserts intent, even if initialization is
+    // already in flight. This way stop() + start() during init is a no-op:
+    // stop() clears the flag, start() sets it back, and doStart() continues.
     this.started = true
 
+    if (this.starting) {
+      return this.starting
+    }
+
+    this.starting = this.doStart()
+
     try {
-      await this.whisper.initialize()
-    } catch (error) {
-      this.started = false
-      throw error
+      await this.starting
+    } finally {
+      this.starting = null
     }
-
-    const pendingClips = this.database.getClipsNeedingTranscription()
-    console.log('[Transcription] Found', pendingClips.length, 'clips needing transcription')
-
-    for (const clip of pendingClips) {
-      this.queue.push(clip.id)
-    }
-
-    this.processQueue().catch(error => {
-      console.error('[Transcription] Queue processing failed:', error)
-    })
   }
 
   stop(): void {
-    if (!this.started) {
-      return
-    }
-
     console.log('[Transcription] Stopping service...')
     this.started = false
     this.queue = []
-    // Don't reset `processing` here — if processQueue() is mid-await on a clip,
-    // resetting the flag would let a new processQueue() enter concurrently on
-    // re-start. The finally block in processQueue() handles the reset safely.
-    this.emitStatus()
   }
 
   queueClip(clipId: string): void {
@@ -130,6 +99,47 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
   // Private
   // ---------------------------------------------------------------------------
 
+  private async doStart(): Promise<void> {
+    console.log('[Transcription] Starting service...')
+
+    let lastError: unknown
+
+    for (let attempt = 0; attempt < MAX_START_ATTEMPTS; attempt++) {
+      if (!this.started) return
+
+      try {
+        await this.whisper.initialize()
+        break
+      } catch (error) {
+        lastError = error
+        console.error(`[Transcription] Start attempt ${attempt + 1}/${MAX_START_ATTEMPTS} failed:`, error)
+
+        if (attempt < MAX_START_ATTEMPTS - 1) {
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]))
+        }
+      }
+    }
+
+    if (!this.whisper.isReady()) {
+      this.started = false
+      throw lastError
+    }
+
+    // Stopped while initializing
+    if (!this.started) return
+
+    const pendingClips = this.database.getClipsNeedingTranscription()
+    console.log('[Transcription] Found', pendingClips.length, 'clips needing transcription')
+
+    for (const clip of pendingClips) {
+      this.queue.push(clip.id)
+    }
+
+    this.processQueue().catch(error => {
+      console.error('[Transcription] Queue processing failed:', error)
+    })
+  }
+
   private async processQueue(): Promise<void> {
     if (!this.started || this.processing || this.queue.length === 0) {
       return
@@ -141,7 +151,6 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     }
 
     this.processing = true
-    this.emitStatus()
 
     try {
       while (this.queue.length > 0 && this.started) {
@@ -150,7 +159,6 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
       }
     } finally {
       this.processing = false
-      this.emitStatus()
     }
   }
 

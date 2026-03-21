@@ -33,7 +33,7 @@ export const createResetApp: ActionFactory<ResetAppDeps, ResetApp> = (deps) => (
         error: null,
       },
       clips: {},
-      transcription: { status: 'idle', pending: {} },
+      transcription: { status: 'off', pending: {} },
       books: {},
       sessions: {},
       currentSessionBookId: null,

@@ -11,11 +11,9 @@ export type StopTranscription = Action<[]>
 
 export const createStopTranscription: ActionFactory<StopTranscriptionDeps, StopTranscription> = (deps) => (
   async () => {
-    const { transcription, set } = deps
-
-    transcription.stop()
-    set(state => {
-      state.transcription.status = 'disabled'
+    deps.transcription.stop()
+    deps.set(state => {
+      state.transcription.status = 'off'
       state.transcription.pending = {}
     })
   }

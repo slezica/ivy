@@ -193,4 +193,105 @@ describe('TranscriptionQueueService', () => {
       expect(maxConcurrent).toBe(1)
     })
   })
+
+  describe('start/stop lifecycle', () => {
+    // Helper: create a deferred promise for controlling whisper.initialize() timing
+    function createDeferred() {
+      let resolve!: () => void
+      let reject!: (error: Error) => void
+      const promise = new Promise<void>((res, rej) => { resolve = res; reject = rej })
+      return { promise, resolve, reject }
+    }
+
+    it('returns the same promise on concurrent start() calls', async () => {
+      const deps = createMockDeps()
+      const deferred = createDeferred()
+      deps.whisper.initialize = jest.fn(() => deferred.promise)
+
+      const service = new TranscriptionQueueService(deps)
+
+      const p1 = service.start()
+      const p2 = service.start()
+
+      deferred.resolve()
+      await Promise.all([p1, p2])
+
+      expect(deps.whisper.initialize).toHaveBeenCalledTimes(1)
+    })
+
+    it('bails without processing queue when stopped during initialization', async () => {
+      const deps = createMockDeps()
+      const clip = createMockClip('clip-1')
+      deps.database.getClipsNeedingTranscription = jest.fn(() => [clip])
+
+      const deferred = createDeferred()
+      deps.whisper.initialize = jest.fn(() => deferred.promise)
+
+      const service = new TranscriptionQueueService(deps)
+      const startPromise = service.start()
+
+      service.stop()
+      deferred.resolve()
+      await startPromise
+
+      // Queue should not have been processed
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(deps.slicer.slice).not.toHaveBeenCalled()
+    })
+
+    it('continues normally when stop() then start() called during initialization', async () => {
+      const deps = createMockDeps()
+      const clip = createMockClip('clip-1')
+      deps.database.getClipsNeedingTranscription = jest.fn(() => [clip])
+
+      const deferred = createDeferred()
+      deps.whisper.initialize = jest.fn(() => deferred.promise)
+
+      const service = new TranscriptionQueueService(deps)
+      const p1 = service.start()
+
+      // Toggle off then on while initializing
+      service.stop()
+      const p2 = service.start() // re-asserts started, reuses promise
+
+      deferred.resolve()
+      await Promise.all([p1, p2])
+
+      // Should have processed the queue since started was re-asserted
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(deps.slicer.slice).toHaveBeenCalled()
+    })
+
+    it('retries initialization on a fresh start() after failure', async () => {
+      jest.useFakeTimers()
+
+      const deps = createMockDeps()
+
+      // First start: initialize fails all attempts
+      deps.whisper.initialize = jest.fn(() => Promise.reject(new Error('init failed')))
+      deps.whisper.isReady = jest.fn(() => false)
+
+      const service = new TranscriptionQueueService(deps)
+      const firstStart = service.start()
+
+      // Fast-forward through all retry delays
+      for (let i = 0; i < 3; i++) {
+        await Promise.resolve() // let the rejection propagate
+        jest.runAllTimers()
+      }
+
+      await expect(firstStart).rejects.toThrow('init failed')
+
+      // Second start: initialize succeeds
+      deps.whisper.initialize = jest.fn(() => Promise.resolve())
+      deps.whisper.isReady = jest.fn(() => true)
+
+      await service.start()
+
+      // Should succeed — the old failed promise was cleared
+      expect(deps.whisper.initialize).toHaveBeenCalled()
+
+      jest.useRealTimers()
+    })
+  })
 })

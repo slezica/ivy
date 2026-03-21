@@ -90,13 +90,12 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {transcription.status !== 'disabled' && (
+        {transcription.status !== 'off' && (
           <View style={styles.settingSecondary}>
             <Text style={transcription.status === 'error' ? styles.errorText : styles.secondaryText}>
-              {transcription.status === 'idle' && 'Ready'}
-              {transcription.status === 'downloading' && 'Downloading...'}
-              {transcription.status === 'processing' && 'Processing...'}
-              {transcription.status === 'error' && 'Download failed'}
+              {transcription.status === 'starting' && 'Starting...'}
+              {transcription.status === 'on' && 'Ready'}
+              {transcription.status === 'error' && 'Failed to start'}
             </Text>
 
             {transcription.status === 'error' && (
