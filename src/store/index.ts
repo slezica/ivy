@@ -134,7 +134,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     sessions: {},
 
     library: {
-      status: 'loading',
+      status: 'idle',
       addProgress: null,
       addOpId: null,
       message: null,

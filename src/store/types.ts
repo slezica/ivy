@@ -43,7 +43,7 @@ export interface AppState {
   sessions: Record<string, SessionWithBook>
 
   library: {
-    status: 'loading' | 'idle' | 'adding' | 'duplicate' | 'error'
+    status: 'idle' | 'adding' | 'duplicate' | 'error'
     addProgress: number | null  // 0-100 percent
     addOpId: string | null
     message: string | null

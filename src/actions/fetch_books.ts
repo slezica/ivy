@@ -19,6 +19,6 @@ export const createFetchBooks: ActionFactory<FetchBooksDeps, FetchBooks> = (deps
       books[book.id] = book
     }
 
-    set({ books, library: { status: 'idle' } })
+    set({ books })
   }
 )
