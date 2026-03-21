@@ -21,12 +21,12 @@ export const createPlay: ActionFactory<PlayDeps, Play> = (deps) => (
     try {
       await loadBook(context)
 
-      await audio.play()
-
       set(state => {
         state.playback.status = 'playing'
         state.playback.ownerId = context.ownerId
       })
+
+      await audio.play()
 
     } catch (error) {
       set(state => {
