@@ -49,6 +49,7 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
       state.library.status = 'adding'
       state.library.addProgress = null
       state.library.addOpId = opId
+      state.library.message = 'Copying'
     })
 
     try {
@@ -73,6 +74,7 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
           lib.status = 'duplicate'
           lib.addProgress = null
           lib.addOpId = null
+          lib.message = null
         })
         return
       }

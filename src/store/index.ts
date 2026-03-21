@@ -137,6 +137,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
       status: 'loading',
       addProgress: null,
       addOpId: null,
+      message: null,
     },
 
     playback: {

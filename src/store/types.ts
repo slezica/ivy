@@ -46,6 +46,7 @@ export interface AppState {
     status: 'loading' | 'idle' | 'adding' | 'duplicate' | 'error'
     addProgress: number | null  // 0-100 percent
     addOpId: string | null
+    message: string | null
   }
 
   playback: {

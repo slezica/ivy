@@ -36,6 +36,9 @@ export default function LibraryLoadingDialog() {
                   </View>
                 </View>
               )}
+              {library.message && (
+                <Text style={styles.messageText}>{library.message}</Text>
+              )}
               {isActive && (
                 <View style={styles.buttons}>
                   <TextButton label="Cancel" onPress={cancelLoadFile} style={{ flex: 1 }} />
@@ -109,8 +112,9 @@ const styles = StyleSheet.create({
     backgroundColor: Color.PRIMARY,
     borderRadius: 2,
   },
-  progressText: {
+  messageText: {
     fontSize: 13,
+    fontStyle: 'italic',
     color: Color.GRAY_MEDIUM,
   },
 })

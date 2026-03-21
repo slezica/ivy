@@ -48,6 +48,7 @@ export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (d
       state.library.status = 'adding'
       state.library.addProgress = null
       state.library.addOpId = opId
+      state.library.message = 'Downloading'
       state.downloader.status = 'downloading'
     })
 
@@ -63,6 +64,9 @@ export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (d
         if (percent < 0) return
         setLibrary(lib => {
           lib.addProgress = Math.min(Math.round(percent), 99)
+          if (Math.round(percent) >= 100) {
+            lib.message = 'Extracting audio'
+          }
         })
       })
 
@@ -89,6 +93,7 @@ export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (d
           lib.status = 'duplicate'
           lib.addProgress = null
           lib.addOpId = null
+          lib.message = null
         })
         return
       }

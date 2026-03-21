@@ -22,6 +22,7 @@ export const createCancelLoadFile: ActionFactory<CancelLoadFileDeps, CancelLoadF
       state.library.status = 'idle'
       state.library.addProgress = null
       state.library.addOpId = null
+      state.library.message = null
     })
 
     // Signal native side — cancel both copy and download (only one will be active)
