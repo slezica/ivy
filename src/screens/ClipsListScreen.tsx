@@ -168,7 +168,7 @@ export default function ClipsListScreen() {
 
   const getMenuItems = (): ActionMenuItem[] => {
     const clip = menuClipId ? clips[menuClipId] : null
-    const hasSourceFile = clip?.file_uri !== null
+    const hasSourceFile = clip?.file_uri != null
 
     return [
       // Edit and Go to source require source file
