@@ -291,7 +291,7 @@ export default function LibraryScreen() {
                         {formatTime(item.duration)}
                       </Text>
                     )}
-                    {!isArchived && item.position > 0 && (
+                    {!isArchived && item.position > 0 && item.duration > 0 && (
                       <Text style={styles.bookProgress}>
                         • {Math.round((item.position / item.duration) * 100)}% played
                       </Text>
