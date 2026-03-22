@@ -3,6 +3,9 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def packageJson = new groovy.json.JsonSlurper().parse(new File(projectRoot, "package.json"))
+def appVersionName = packageJson.version
+def appVersionCode = appVersionName.tokenize('.').collect { it.toInteger() }.inject(0) { acc, v -> acc * 1000 + v }
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -92,8 +95,8 @@ android {
         applicationId 'com.salezica.ivy'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        versionCode appVersionCode
+        versionName appVersionName
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
