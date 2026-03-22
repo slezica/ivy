@@ -27,7 +27,10 @@ jobs:
         run: echo "${{ secrets.RELEASE_KEYSTORE }}" | base64 -d > android/app/release.keystore
 
       - name: Debug RN config
-        run: npx react-native config
+        run: |
+          npx expo config --type introspect --platform android
+          echo "---"
+          node -e "console.log(require('expo-modules-autolinking/package.json').version)"
 
       - name: Build release APK
         working-directory: android
