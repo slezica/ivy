@@ -1,7 +1,7 @@
 import { createArchiveBook, ArchiveBookDeps } from '../archive_book'
 import {
   createMockBook, createMockState, createImmerSet, createMockGet,
-  createMockDb, createMockFiles, createMockSyncQueue,
+  createMockDb, createMockFiles, createMockSyncQueue, createMockAudio,
 } from './helpers'
 
 
@@ -11,7 +11,10 @@ function createDeps(bookId: string, bookUri: string | null = 'file:///audio/book
   const book = createMockBook({ id: bookId, uri: bookUri })
   const state = createMockState({ books: { [bookId]: book } })
 
+  const audio = createMockAudio({ unload: jest.fn(async () => {}) })
+
   const deps: ArchiveBookDeps = {
+    audio,
     db: createMockDb(),
     files: createMockFiles(),
     syncQueue: createMockSyncQueue(),
@@ -136,6 +139,46 @@ describe('createArchiveBook', () => {
       await expect(archiveBook('book-1')).rejects.toThrow()
 
       expect(deps.files.deleteFile).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('player unload', () => {
+    it('resets playback state when book is currently loaded', async () => {
+      const bookUri = 'file:///audio/book-1.mp3'
+      const { state, deps } = createDeps('book-1', bookUri)
+      state.playback.uri = bookUri
+      state.playback.status = 'playing'
+      state.playback.ownerId = 'main'
+      const archiveBook = createArchiveBook(deps)
+
+      await archiveBook('book-1')
+
+      expect(state.playback.status).toBe('idle')
+      expect(state.playback.uri).toBeNull()
+      expect(state.playback.ownerId).toBeNull()
+    })
+
+    it('calls audio.unload when book is currently loaded', async () => {
+      const bookUri = 'file:///audio/book-1.mp3'
+      const { state, deps } = createDeps('book-1', bookUri)
+      state.playback.uri = bookUri
+      const archiveBook = createArchiveBook(deps)
+
+      await archiveBook('book-1')
+
+      expect(deps.audio.unload).toHaveBeenCalled()
+    })
+
+    it('does not unload when a different book is loaded', async () => {
+      const { state, deps } = createDeps('book-1')
+      state.playback.uri = 'file:///audio/other-book.mp3'
+      state.playback.status = 'playing'
+      const archiveBook = createArchiveBook(deps)
+
+      await archiveBook('book-1')
+
+      expect(state.playback.status).toBe('playing')
+      expect(deps.audio.unload).not.toHaveBeenCalled()
     })
   })
 

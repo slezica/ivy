@@ -147,8 +147,8 @@ describe('createLoadFile', () => {
   // -- Case A: Archived book (fingerprint match, uri is null) -----------------
 
   describe('archived book restore (fingerprint match, uri null)', () => {
-    function depsWithArchivedBook() {
-      const archivedBook = createMockBook({ id: 'archived-1', uri: null })
+    function depsWithArchivedBook(bookOverrides: Partial<Parameters<typeof createMockBook>[0]> = {}) {
+      const archivedBook = createMockBook({ id: 'archived-1', uri: null, ...bookOverrides })
       return createMockDeps({
         db: createMockDb({
           getBookByFingerprint: jest.fn(() => archivedBook),
@@ -174,7 +174,7 @@ describe('createLoadFile', () => {
       )
     })
 
-    it('restores the book with new metadata', async () => {
+    it('restores the book with correct fields', async () => {
       const deps = depsWithArchivedBook()
       const loadFile = createLoadFile(deps)
 
@@ -188,6 +188,29 @@ describe('createLoadFile', () => {
         'Test Title',
         'Test Artist',
         'data:image/png;base64,abc',
+        1024,
+        new Uint8Array([1, 2, 3]),
+      )
+    })
+
+    it('preserves existing metadata over ID3 tags on restore', async () => {
+      const deps = depsWithArchivedBook({
+        title: 'User-Edited Title',
+        artist: 'User-Edited Artist',
+        artwork: 'data:image/png;base64,user-edited',
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.restoreBook).toHaveBeenCalledWith(
+        'archived-1',
+        expect.stringContaining('archived-1'),
+        'Test Book.mp3',
+        60000,
+        'User-Edited Title',
+        'User-Edited Artist',
+        'data:image/png;base64,user-edited',
         1024,
         new Uint8Array([1, 2, 3]),
       )
@@ -320,6 +343,43 @@ describe('createLoadFile', () => {
       await loadFile(INPUT)
 
       expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
+    })
+  })
+
+  // -- Cancellation -----------------------------------------------------------
+
+  describe('cancellation', () => {
+    function createCancellationError() {
+      const error = new Error('Operation cancelled')
+      ;(error as any).code = 'CANCELLED'
+      return error
+    }
+
+    it('resolves silently on cancellation', async () => {
+      const deps = createMockDeps({
+        copier: createMockCopier({
+          beginCopy: jest.fn(async () => { throw createCancellationError() }),
+        }),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await expect(loadFile(INPUT)).resolves.toBeUndefined()
+    })
+
+    it('does not set error status on cancellation', async () => {
+      const state = createMockState()
+      const deps = createMockDeps({
+        copier: createMockCopier({
+          beginCopy: jest.fn(async () => { throw createCancellationError() }),
+        }),
+        set: createImmerSet(state),
+        get: createMockGet(state),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(state.library.status).not.toBe('error')
     })
   })
 
