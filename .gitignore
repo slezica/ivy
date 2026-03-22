@@ -60,3 +60,6 @@ app-example
 
 # Maestro test artifacts
 maestro/screenshots/
+
+# sensitive files
+*.keystore
