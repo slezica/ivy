@@ -260,10 +260,10 @@ function ClipList({ clips, pending, onViewClip, onOpenMenu }: any) {
             </Text>
 
             <View style={styles.clipHeader}>
-              <Text style={styles.clipTime}>{formatTime(item.start)}</Text>
+              <Text style={styles.clipTime}>{formatTime(item.duration)}</Text>
               {item.duration > 0 && (
                 <Text style={styles.clipDuration}>
-                  ({formatTime(item.duration)})
+                  (at {formatTime(item.start)})
                 </Text>
               )}
             </View>
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   clipFileLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: Color.GRAY_DARK,
+    color: Color.PRIMARY,
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
   clipTime: {
     fontSize: 16,
     fontWeight: '600',
-    color: Color.PRIMARY,
+    color: Color.GRAY_DARK,
   },
   clipDuration: {
     fontSize: 14,
