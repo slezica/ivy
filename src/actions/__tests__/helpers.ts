@@ -74,13 +74,15 @@ export function createMockClip(overrides: Partial<ClipWithFile> = {}): ClipWithF
 export function createMockState(overrides: {
   playback?: Partial<AppState['playback']>,
   library?: Partial<AppState['library']>,
+  downloader?: Partial<AppState['downloader']>,
   books?: Record<string, Book>,
   sessions?: Record<string, SessionWithBook>,
   clips?: Record<string, ClipWithFile>,
 } = {}) {
   return {
     playback: createMockPlayback(overrides.playback),
-    library: { status: 'idle' as string, addProgress: null as number | null, addOpId: null as string | null, ...overrides.library },
+    library: { status: 'idle' as string, addProgress: null as number | null, addOpId: null as string | null, message: null as string | null, ...overrides.library },
+    downloader: { status: 'idle' as string, version: null as string | null, ...overrides.downloader },
     books: overrides.books ?? {} as Record<string, Book>,
     sessions: overrides.sessions ?? {} as Record<string, SessionWithBook>,
     clips: overrides.clips ?? {} as Record<string, ClipWithFile>,
@@ -181,6 +183,14 @@ export function createMockCopier(overrides: Record<string, jest.Mock | (() => an
       bytesWritten: 1024,
     })),
     cancelCopy: jest.fn(async () => {}),
+    ...overrides,
+  } as any
+}
+
+export function createMockDownloader(overrides: Record<string, jest.Mock> = {}) {
+  return {
+    download: jest.fn(async () => ({ filePath: '/cache/downloads/downloaded.mp3' })),
+    cancelDownload: jest.fn(async () => {}),
     ...overrides,
   } as any
 }
