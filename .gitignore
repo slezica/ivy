@@ -57,6 +57,11 @@ app-example
 /android/app/src/main/java/com/salezica/*
 !/android/app/src/main/java/com/salezica/ivy
 !/android/gradle.properties
+!/android/build.gradle
+!/android/settings.gradle
+!/android/gradlew
+!/android/gradlew.bat
+!/android/gradle
 
 # Maestro test artifacts
 maestro/screenshots/
