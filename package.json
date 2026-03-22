@@ -11,7 +11,7 @@
     "test": "jest --silent",
     "test:verbose": "jest",
     "test:watch": "jest --watch",
-    "build:android": "cd android && ./gradlew assembleRelease"
+    "build:android": "bash -c 'read -s -p \"Keystore password: \" pw && echo && cd android && RELEASE_KEYSTORE_PASSWORD=\"$pw\" ./gradlew assembleRelease'"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
