@@ -323,7 +323,7 @@ playback: {
 }
 clips: Record<string, ClipWithFile>
 transcription: {
-  status: 'idle' | 'downloading' | 'processing'
+  status: 'off' | 'starting' | 'on' | 'error'
   pending: Record<string, true>   // Clips currently queued/processing
 }
 sync: {

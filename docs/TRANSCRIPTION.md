@@ -64,7 +64,6 @@ Everything happens on-device. The Whisper model runs locally via native bindings
 │    queued → { clipId }              │──────────┘
 │    started → { clipId }             │
 │    finish → { clipId, transcription?, error? }
-│    status → { status }              │
 └───────┬──────────────┬──────────────┘
         │              │
         │ calls        │ calls slice()
@@ -76,8 +75,7 @@ Everything happens on-device. The Whisper model runs locally via native bindings
 │ initialize() │ │                      │
 │ transcribe() │ │  Extracts first 10s  │
 │              │ │  of clip audio       │
-│ Events:      │ └──────────────────────┘
-│  status      │
+│              │ └──────────────────────┘
 └──────────────┘
 ```
 
@@ -113,7 +111,7 @@ The service converts input audio to the format Whisper expects (16kHz mono PCM W
 
 ### Running transcription
 
-With the model loaded and audio prepared, it calls `context.transcribe(wavPath, { language: 'en' })`. The result is trimmed and returned. The service emits `status: 'processing'` before and `status: 'idle'` after.
+With the model loaded and audio prepared, it calls `context.transcribe(wavPath, { language: 'en' })`. The result is trimmed and returned.
 
 ### Initialization deduplication
 
@@ -145,14 +143,12 @@ processQueue():
   if whisper not ready → return
 
   processing = true
-  emit status: 'processing'
 
   while queue is not empty AND started:
     clipId = queue.shift()    // FIFO
     processClip(clipId)
 
   processing = false
-  emit status: 'idle'
 ```
 
 The `processing` flag is the key concurrency guard. It ensures only one clip is being transcribed at any time. The flag is reset in a `finally` block to prevent it from getting stuck if a clip fails.
@@ -171,12 +167,12 @@ This is a practical tradeoff: transcription is CPU-intensive, and most clips are
 
 ```typescript
 transcription: {
-  status: 'idle' | 'downloading' | 'processing'
+  status: 'off' | 'starting' | 'on' | 'error'
   pending: Record<string, true>   // clip IDs currently queued
 }
 ```
 
-- `status` reflects the overall pipeline state (shown in Settings)
+- `status` reflects the service lifecycle: `'off'` (disabled or uninitialized), `'starting'` (initializing, possibly downloading model), `'on'` (ready and processing clips), `'error'` (failed to start). The user's desired state lives in `settings.transcription_enabled`, not here.
 - `pending` tracks individual clips (used by UI to show loading indicators)
 
 ### Automatic queueing
@@ -198,6 +194,10 @@ The `processing` flag is reset in a `finally` block inside `processQueue()`. Eve
 
 Calling `queueClip()` when the service isn't started is a silent no-op. The clip won't be transcribed until the service starts and queries the database for pending clips.
 
+### Start/stop lifecycle
+
+`start()` is idempotent — concurrent calls share the same initialization promise. Each call re-asserts `started = true`, so a `stop()` followed by `start()` during initialization cancels the stop intent. Retry logic (3 attempts with backoff) lives inside the service. After initialization, `doStart()` checks `started` before processing the queue — if `stop()` was called and not re-asserted, it bails.
+
 ### Stop while processing
 
 `stop()` clears the queue and resets `started` to false, but does **not** reset `processing`. The currently processing clip isn't interrupted — it runs to completion. The processing loop then exits on its next iteration because the `started` check in the while condition fails, and the `finally` block resets `processing` naturally. This avoids a race where re-starting the service while a clip is still in flight could bypass the concurrency guard.
@@ -211,14 +211,14 @@ src/services/transcription/
   queue.ts          → TranscriptionQueueService (job queue, sequential processing)
   whisper.ts        → WhisperService (model management, audio conversion, inference)
   __tests__/
-    queue.test.ts   → Error recovery and concurrency tests
+    queue.test.ts   → Error recovery, concurrency, and start/stop lifecycle tests
 
 src/services/audio/
   slicer.ts         → AudioSlicerService (native module wrapper, extracts audio segments)
 
 src/actions/
-  start_transcription.ts  → Starts the transcription service
-  stop_transcription.ts   → Stops the service, clears pending state
+  start_transcription.ts  → Starts the service, transitions status (starting → on/error)
+  stop_transcription.ts   → Stops the service, sets status to 'off'
   add_clip.ts             → Queues new clips for transcription
   update_clip.ts          → Re-queues clips when bounds change
 
