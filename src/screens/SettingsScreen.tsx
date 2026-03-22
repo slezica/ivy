@@ -110,7 +110,7 @@ export default function SettingsScreen() {
         )}
 
         <View style={[styles.settingRow, { marginTop: 24 }]}>
-          <Text style={styles.settingLabel}>Sync to Google Drive</Text>
+          <Text style={styles.settingLabel}>Sync metadata to Drive</Text>
 
           <Switch
             value={settings.sync_enabled}
