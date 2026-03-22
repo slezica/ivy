@@ -1,5 +1,6 @@
-import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, SyncQueueService } from '../services'
+import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, SyncQueueService, Book } from '../services'
 import type { GetState, SetState, Action, ActionFactory } from '../store/types'
+import type { AppState } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
 import type { CleanupOrphanedFiles } from './cleanup_orphaned_files'
@@ -22,28 +23,20 @@ export type LoadFile = Action<[{ uri: string; name: string }]>
 
 export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
   async (file) => {
-    const { db, files, copier, metadata, syncQueue, get, set, fetchBooks, fetchClips, cleanupOrphanedFiles } = deps
-    const log = (...args: any[]) => console.log('[LoadFile]', ...args)
+    const { copier, db, set, fetchBooks, fetchClips, cleanupOrphanedFiles } = deps
 
-    log(`Starting: "${file.name}"`)
-
-    // Reclaim space from orphaned files before copying (best-effort)
-    await cleanupOrphanedFiles().catch(() => {})
-
-    let destPath: string | null = null
-
-    // Allocate operation ID first — cancellable from this point
+    // Unique operation ID for copy operations:
     const opId = copier.createOperation()
 
-    // Helper: only update library state if this operation still owns it.
-    // If the user cancelled and started a new add, we must not touch state.
-    const setLibrary = (updater: (lib: typeof get extends () => infer S ? S extends { library: infer L } ? L : never : never) => void) => {
-      set(state => {
-        if (state.library.addOpId === opId) {
-          updater(state.library)
-        }
-      })
-    }
+    // Helpers for sub-actions:
+    const log = createTaggedLogger()
+    const updateLibrary = createSafeLibraryUpdater(set, opId)
+    const context = { ...deps, opId, updateLibrary, log }
+
+    // Maintenance task, done here for convenience only, not needed for this action specifically:
+    await cleanupOrphanedFiles().catch(() => {})
+
+    log(`Starting: "${file.name}"`)
 
     set(state => {
       state.library.status = 'adding'
@@ -52,109 +45,161 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
       state.library.message = 'Copying'
     })
 
+    // This action takes three possible paths below:
+    // - When this is a duplicate book
+    // - When this is a new book
+    // - When an error occurs
+
     try {
-      // Phase 1: Open the source and read fingerprint (no file created yet)
       const { fileSize, fingerprint } = await copier.beginCopy(opId, file.uri)
-
-      // Check for an existing book with the same fingerprint
       const existingBook = db.getBookByFingerprint(fileSize, fingerprint)
-      log(`Fingerprint lookup: fileSize=${fileSize}, match=${existingBook?.id ?? 'none'}${existingBook ? `, uri=${existingBook.uri ? 'present' : 'null'}, position=${existingBook.position}` : ''}`)
 
-      if (existingBook && existingBook.uri !== null) {
-        // Case B: Active duplicate — don't copy at all
-        log(`Case B: active duplicate of ${existingBook.id}, skipping copy`)
-        await copier.cancelCopy(opId)
-
-        db.touchBook(existingBook.id)
-        syncQueue.queueChange('book', existingBook.id, 'upsert')
-
-        await fetchBooks()
-        await fetchClips()
-        setLibrary(lib => {
-          lib.status = 'duplicate'
-          lib.addProgress = null
-          lib.addOpId = null
-          lib.message = null
-        })
-        return
-      }
-
-      // Case A (restore) or Case C (new book) — we need the file
-      const bookId = existingBook?.id ?? generateId()
-      const extension = getExtension(file.name)
-      const filename = sanitizeFilename(`${bookId}${extension}`)
-
-      await files.ensureAudioDirectory()
-      destPath = `${files.audioDirectoryPath}/${filename}`
-
-      const { hash } = await copier.commitCopy(opId, destPath, (bytes, total) => {
-        setLibrary(lib => {
-          lib.addProgress = total > 0 ? Math.round((bytes / total) * 100) : null
-        })
-      })
-
-      const fileUri = `file://${destPath}`
-
-      // Read metadata from the copied file
-      const fileMeta = await metadata.readMetadata(fileUri)
-      const { title, artist, artwork, duration } = fileMeta
-      const { name } = file
-
-      if (existingBook) {
-        // Case A: Restore archived/deleted book
-        log(`Case A: restoring ${existingBook.id}, preserving position=${existingBook.position}`)
-        db.restoreBook(
-          existingBook.id, fileUri, name, duration,
-          existingBook.title ?? title,
-          existingBook.artist ?? artist,
-          existingBook.artwork ?? artwork,
-          fileSize, fingerprint,
-        )
-        syncQueue.queueChange('book', existingBook.id, 'upsert')
-
+      if (existingBook?.uri) {
+        await handleDuplicate(context, existingBook.id)
       } else {
-        // Case C: New book
-        log(`Case C: new book ${bookId}, position=0`)
-        db.upsertBook(bookId, fileUri, name, duration, 0, title, artist, artwork, fileSize, fingerprint)
-        syncQueue.queueChange('book', bookId, 'upsert')
+        await handleNewBook(context, file, fileSize, fingerprint, existingBook)
       }
-
-      await fetchBooks()
-      await fetchClips()
-      setLibrary(lib => {
-        lib.status = 'idle'
-        lib.addProgress = null
-        lib.addOpId = null
-        lib.message = null
-      })
 
     } catch (error) {
-      // Clean up the destination file if it was created but the DB write failed
-      if (destPath && !db.getBookByUri(`file://${destPath}`)) {
-        await files.deleteFile(`file://${destPath}`).catch(() => {})
-      }
+      await handleError(context, error)
 
-      // User cancellation — silently done (cancelLoadFile already dismissed the UI)
-      if (isCancellation(error)) {
-        log('Cancelled by user')
-        return
-      }
-
-      // Real error — show in dialog (only if we still own state)
-      log('Error:', error)
-      setLibrary(lib => {
-        lib.status = 'error'
-        lib.addProgress = null
-        lib.addOpId = null
-      })
+    } finally {
+      // In all cases, make sure the store has the latest data:
+      await fetchBooks()
+      await fetchClips()
     }
   }
 )
 
 
 // =============================================================================
+// Paths
+// =============================================================================
+
+type Context = LoadFileDeps & {
+  opId: string
+  updateLibrary: SafeLibraryUpdater
+  log: (...args: any[]) => void
+}
+
+async function handleDuplicate(ctx: Context, bookId: string) {
+  const { copier, db, syncQueue, opId, updateLibrary } = ctx
+
+  await copier.cancelCopy(opId)
+
+  db.touchBook(bookId)
+  syncQueue.queueChange('book', bookId, 'upsert')
+
+  updateLibrary(lib => {
+    resetLibrary(lib)
+    lib.status = 'duplicate'
+  })
+}
+
+async function handleNewBook(
+  ctx: Context,
+  file: { uri: string; name: string },
+  fileSize: number,
+  fingerprint: Uint8Array,
+  existingBook: Book | null | undefined,
+) {
+  const { db, files, metadata, syncQueue, updateLibrary } = ctx
+
+  const bookId = existingBook?.id ?? generateId()
+  const destPath = await copyFile(ctx, bookId, file.name)
+  const fileUri = `file://${destPath}`
+
+  try {
+    const { title, artist, artwork, duration } = await metadata.readMetadata(fileUri)
+
+    if (existingBook) {
+      db.restoreBook(
+        existingBook.id, fileUri, file.name, duration,
+        existingBook.title ?? title,
+        existingBook.artist ?? artist,
+        existingBook.artwork ?? artwork,
+        fileSize, fingerprint,
+      )
+
+      syncQueue.queueChange('book', existingBook.id, 'upsert')
+
+    } else {
+      db.upsertBook(bookId, fileUri, file.name, duration, 0, title, artist, artwork, fileSize, fingerprint)
+
+      syncQueue.queueChange('book', bookId, 'upsert')
+    }
+
+    updateLibrary(resetLibrary)
+
+  } catch (error) {
+    // Clean up copied file if we fail after copying but before DB commit
+    if (!db.getBookByUri(fileUri)) {
+      await files.deleteFile(fileUri).catch(() => {})
+    }
+    throw error
+  }
+}
+
+async function handleError(ctx: Context, error: unknown) {
+  const { updateLibrary, log } = ctx
+
+  if (isCancellation(error)) {
+    log('Cancelled by user')
+    return
+  }
+
+  log('Error:', error)
+  updateLibrary(lib => {
+    resetLibrary(lib)
+    lib.status = 'error'
+  })
+}
+
+
+// =============================================================================
 // Helpers
 // =============================================================================
+
+type Library = AppState['library']
+type SafeLibraryUpdater = (updater: (lib: Library) => void) => void
+
+function resetLibrary(lib: Library) {
+  lib.status = 'idle'
+  lib.addProgress = null
+  lib.addOpId = null
+  lib.message = null
+}
+
+function createTaggedLogger() {
+  return (...args: any[]) => console.log('[LoadFile]', ...args)
+}
+
+function createSafeLibraryUpdater(set: SetState, opId: string): SafeLibraryUpdater {
+  return (updater) => {
+    set(state => {
+      if (state.library.addOpId === opId) {
+        updater(state.library)
+      }
+    })
+  }
+}
+
+async function copyFile(ctx: Context, bookId: string, originalName: string): Promise<string> {
+  const { copier, files, opId, updateLibrary } = ctx
+  const extension = getExtension(originalName)
+  const filename = sanitizeFilename(`${bookId}${extension}`)
+
+  await files.ensureAudioDirectory()
+  const destPath = `${files.audioDirectoryPath}/${filename}`
+
+  await copier.commitCopy(opId, destPath, (bytes, total) => {
+    updateLibrary(lib => {
+      lib.addProgress = total > 0 ? Math.round((bytes / total) * 100) : null
+    })
+  })
+
+  return destPath
+}
 
 function getExtension(filename: string): string {
   const dotIndex = filename.lastIndexOf('.')

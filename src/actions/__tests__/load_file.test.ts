@@ -318,7 +318,7 @@ describe('createLoadFile', () => {
       await expect(loadFile(INPUT)).resolves.toBeUndefined()
     })
 
-    it('does not refresh books or clips on failure', async () => {
+    it('still refreshes books and clips on failure (via finally)', async () => {
       const deps = createMockDeps({
         copier: createMockCopier({
           beginCopy: jest.fn(async () => { throw new Error('fail') }),
@@ -328,8 +328,8 @@ describe('createLoadFile', () => {
 
       await loadFile(INPUT)
 
-      expect(deps.fetchBooks).not.toHaveBeenCalled()
-      expect(deps.fetchClips).not.toHaveBeenCalled()
+      expect(deps.fetchBooks).toHaveBeenCalled()
+      expect(deps.fetchClips).toHaveBeenCalled()
     })
 
     it('does not queue sync on failure', async () => {
