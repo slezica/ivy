@@ -102,8 +102,10 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   // Auto-start transcription if enabled
   if (initialSettings.transcription_enabled) {
-    startTranscription().catch((error) => {
-      console.error('[Store] Transcription failed to start after retries:', error)
+    queueMicrotask(() => {
+      startTranscription().catch((error) => {
+        console.error('[Store] Transcription failed to start after retries:', error)
+      })
     })
   }
 
@@ -151,7 +153,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     },
 
     transcription: {
-      status: initialSettings.transcription_enabled ? 'starting' : 'off',
+      status: 'off',
       pending: {},
     },
 
