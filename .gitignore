@@ -40,28 +40,12 @@ app-example
 
 # generated native folders
 /ios
-/android/*
-# Exception: Keep custom native modules and gradle config
-!/android/app
-/android/app/*
-!/android/app/build.gradle
-!/android/app/src
-/android/app/src/*
-!/android/app/src/main
-/android/app/src/main/*
-!/android/app/src/main/java
-/android/app/src/main/java/*
-!/android/app/src/main/java/com
-/android/app/src/main/java/com/*
-!/android/app/src/main/java/com/salezica
-/android/app/src/main/java/com/salezica/*
-!/android/app/src/main/java/com/salezica/ivy
-!/android/gradle.properties
-!/android/build.gradle
-!/android/settings.gradle
-!/android/gradlew
-!/android/gradlew.bat
-!/android/gradle
+
+# android build artifacts (keep everything else)
+/android/.gradle
+/android/app/build
+/android/build
+/android/local.properties
 
 # Maestro test artifacts
 maestro/screenshots/
