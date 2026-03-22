@@ -4,7 +4,8 @@ A local podcast and audiobook player for Android with library management, clips 
 
 ### AI Notice
 
-This project was created using an AI-assisted workflow. Humans took care of design, architecture and decision-making while Claude did most of the writing following specific instructions for each task. This kind of micromanaged collaboration was enormously successful and accelerated the project significantly. Thanks, Claude!
+This project was created with assistance from Claude.
+
 
 ## Development Setup
 
@@ -12,7 +13,6 @@ This project was created using an AI-assisted workflow. Humans took care of desi
 
 - Node.js
 - **Android**: Android Studio with SDK installed, `ANDROID_HOME` environment variable set
-- **iOS**: Xcode (macOS only)
 
 ### Install Dependencies
 
@@ -20,199 +20,21 @@ This project was created using an AI-assisted workflow. Humans took care of desi
 npm install
 ```
 
-### Development Client Setup
-
-This project uses Expo Dev Client (custom development build) instead of Expo Go to support native file streaming and avoid memory issues with large audio files.
-
-#### 1. Install Dev Client Package
+### Run Development Client
 
 ```bash
-npx expo install expo-dev-client
+npm start # prebuilds, builds APK and installs via adb
 ```
 
-#### 2. Generate Native Projects
-
-```bash
-# Android only
-npx expo prebuild --platform android
-
-# iOS only (macOS required)
-npx expo prebuild --platform ios
-
-# Both platforms
-npx expo prebuild
-```
-
-#### 3. Build and Install Development Client (MacOS)
-
-**Android:**
-
-```bash
-# Find Android Studio's bundled JDK
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-
-# Build APK
-(cd android && ./gradlew assembleDebug)
-
-# Install on device (connect via USB or use emulator)
-adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-```
-
-**iOS:**
-
-```bash
-# Build and run on simulator
-npx expo run:ios
-
-# Or build for device
-# Open ios/Ivy.xcworkspace in Xcode
-# Select your device and build
-```
-
-#### 4. Start Development Server
-
-```bash
-npx expo start --dev-client
-```
-
-Open the installed app on your device - it will connect to the Metro bundler automatically.
-
-### Rebuilding After Native Changes
-
-When you add new native dependencies or modify native code:
-
-```bash
-# Android
-cd android && ./gradlew clean && ./gradlew assembleDebug
-adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-
-# iOS
-cd ios && xcodebuild clean
-npx expo run:ios
-```
 
 ## Production Builds
 
-### Local Production Builds
-
-**Android build APK:**
+Build the APK with:
 
 ```bash
-cd android && ./gradlew assembleRelease
-# Output: android/app/build/outputs/apk/release/app-release.apk
+npm run build
 ```
 
-**Android Build and Install:**
-```
-npx expo run:android --variant release
-```
-
-**Android AAB (for Google Play):**
-
-```bash
-cd android && ./gradlew bundleRelease
-# Output: android/app/build/outputs/bundle/release/app-release.aab
-```
-
-**iOS (macOS only):**
-
-```bash
-# Open Xcode
-open ios/Ivy.xcworkspace
-
-# Product > Archive
-# Follow Xcode's distribution workflow
-```
-
-### Cloud Builds with EAS
-
-For easier builds without local setup:
-
-```bash
-# Install EAS CLI
-npm install -g eas-cli
-
-# Configure project
-eas build:configure
-
-# Build for Android
-eas build --platform android
-
-# Build for iOS
-eas build --platform ios
-
-# Build for both
-eas build --platform all
-```
-
-## Tech Stack
-
-- React Native 0.81.5
-- Expo SDK 54
-- Zustand (state management)
-- Expo Router (file-based navigation)
-- expo-audio (playback with 100ms polling)
-- expo-sqlite (persistence)
-- @shopify/react-native-skia (GPU timeline rendering)
-
-## Key Features
-
-- **File Storage**: Copies external files to app-owned storage with chunked streaming to avoid OOM
-- **Resume Position**: Automatically saves and restores playback position
-- **Clips/Bookmarks**: Create time-based clips with notes
-- **GPU Timeline**: Hardware-accelerated timeline with center-fixed playhead
-- **Auto-play**: Resumes from last position on file load
-
-## Development Tools
-
-The Library screen header has dev-only buttons:
-
-- **Sample**: Load bundled test audio file (useful for quick testing)
-- **Reset**: Clear all data (files, clips, sessions)
-
-## E2E Testing
-
-End-to-end tests use [Maestro](https://maestro.mobile.dev/) for UI automation.
-
-### Prerequisites
-
-1. Install Maestro CLI:
-   ```bash
-   curl -Ls "https://get.maestro.mobile.dev" | bash
-   ```
-
-2. Start an Android emulator with the dev client installed
-
-3. Start the Expo dev server:
-   ```bash
-   npx expo start --dev-client
-   ```
-
-### Running Tests
-
-```bash
-# Run all tests
-maestro test maestro/
-
-# Run a specific test
-maestro test maestro/smoke-test.yaml
-maestro test maestro/load-and-play.yaml
-```
-
-### Available Test Flows
-
-| Flow | Description |
-|------|-------------|
-| `smoke-test.yaml` | Verifies empty states on Library and Clips screens |
-| `load-and-play.yaml` | Tests file loading, playback controls, and library persistence |
-| `clip-crud.yaml` | Tests clip creation, note editing, and deletion |
-| `timeline-gestures.yaml` | Tests timeline tap-to-seek, swipe-to-scrub, and flick momentum |
-
-### Writing Tests
-
-Tests are YAML files in the `maestro/` directory. A bundled test audio file (`assets/test/test-audio.mp3`) is available for tests — the "Sample" button loads it without needing the file picker.
-
-See [Maestro documentation](https://maestro.mobile.dev/getting-started/writing-your-first-flow) for flow syntax.
 
 ## License
 
