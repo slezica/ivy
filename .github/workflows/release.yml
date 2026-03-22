@@ -32,7 +32,7 @@ jobs:
           RELEASE_KEYSTORE_PATH: release.keystore
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-        run: chmod +x ./gradlew && ./gradlew assembleRelease
+        run: chmod +x ./gradlew && ./gradlew assembleRelease --info 2>&1 | tail -200
 
       - name: Get version
         id: version
