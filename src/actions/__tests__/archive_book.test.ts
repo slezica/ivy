@@ -81,6 +81,7 @@ describe('createArchiveBook', () => {
     it('throws if book does not exist in store', async () => {
       const state = createMockState({ books: {} })
       const deps: ArchiveBookDeps = {
+        audio: createMockAudio(),
         db: createMockDb(),
         files: createMockFiles(),
         syncQueue: createMockSyncQueue(),
@@ -95,6 +96,7 @@ describe('createArchiveBook', () => {
     it('does not modify state or call db on missing book', async () => {
       const state = createMockState({ books: {} })
       const deps: ArchiveBookDeps = {
+        audio: createMockAudio(),
         db: createMockDb(),
         files: createMockFiles(),
         syncQueue: createMockSyncQueue(),

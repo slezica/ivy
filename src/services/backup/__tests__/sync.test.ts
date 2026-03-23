@@ -220,7 +220,7 @@ describe('BackupSyncService', () => {
       // Drive returns one remote book JSON file
       drive.listFiles.mockImplementation(async (folder: string) => {
         if (folder === 'books') {
-          return [{ id: 'drive-file-1', name: `book_${remoteId}.json`, modifiedTime: new Date(2000).toISOString() }]
+          return [{ id: 'drive-file-1', name: `book_${remoteId}.json`, mimeType: 'application/json', modifiedTime: new Date(2000).toISOString() }]
         }
         return []
       })

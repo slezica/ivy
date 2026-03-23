@@ -1,7 +1,7 @@
 import { createDeleteBook, DeleteBookDeps } from '../delete_book'
 import {
   createMockBook, createMockState, createImmerSet, createMockGet,
-  createMockDb, createMockFiles, createMockSyncQueue,
+  createMockDb, createMockFiles, createMockSyncQueue, createMockAudio,
 } from './helpers'
 
 
@@ -12,6 +12,7 @@ function createDeps(bookId: string, bookUri: string | null = 'file:///audio/book
   const state = createMockState({ books: { [bookId]: book } })
 
   const deps: DeleteBookDeps = {
+    audio: createMockAudio(),
     db: createMockDb(),
     files: createMockFiles(),
     syncQueue: createMockSyncQueue(),
@@ -78,6 +79,7 @@ describe('createDeleteBook', () => {
     it('throws if book does not exist in store', async () => {
       const state = createMockState({ books: {} })
       const deps: DeleteBookDeps = {
+        audio: createMockAudio(),
         db: createMockDb(),
         files: createMockFiles(),
         syncQueue: createMockSyncQueue(),
@@ -92,6 +94,7 @@ describe('createDeleteBook', () => {
     it('does not modify state or call db on missing book', async () => {
       const state = createMockState({ books: {} })
       const deps: DeleteBookDeps = {
+        audio: createMockAudio(),
         db: createMockDb(),
         files: createMockFiles(),
         syncQueue: createMockSyncQueue(),
