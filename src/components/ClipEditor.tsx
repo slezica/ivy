@@ -170,6 +170,7 @@ const styles = StyleSheet.create({
   },
   playButtonContainer: {
     alignItems: 'center',
+    marginTop: -8
   },
   input: {
     borderWidth: 1,
@@ -179,7 +180,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     color: Color.BLACK,
     fontSize: 16,
-    height: 120,
+    height: 100,
     textAlignVertical: 'top',
   },
   buttons: {
