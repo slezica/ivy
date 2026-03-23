@@ -31,7 +31,7 @@ export type TranscriptionQueueEvents = {
 // Constants
 // =============================================================================
 
-const MAX_TRANSCRIPTION_DURATION_MS = 10000  // First 10 seconds of clip
+const MAX_TRANSCRIPTION_DURATION_MS = 60000  // First 60 seconds of clip
 const MAX_START_ATTEMPTS = 3
 const RETRY_DELAYS = [5_000, 15_000, 30_000]
 
