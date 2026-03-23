@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     color: Color.BLACK,
     fontSize: 16,
-    maxHeight: 80,
+    height: 120,
     textAlignVertical: 'top',
   },
   buttons: {
