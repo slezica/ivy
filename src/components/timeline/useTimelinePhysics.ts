@@ -259,8 +259,8 @@ export function useTimelinePhysics({
   const isPinchCooldown = () => isPinchingRef.current || performance.now() - pinchEndTimeRef.current < 200
 
   const handleTouchDown = useCallback((x: number, y: number) => {
-    // Check if touching a handle
-    if (selection) {
+    // Check if touching a handle (not during pinch)
+    if (selection && !isPinchCooldown()) {
       const handle = getHandleAtPosition(x, y)
       if (handle) {
         draggingHandleRef.current = handle
