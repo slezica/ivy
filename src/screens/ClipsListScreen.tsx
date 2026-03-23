@@ -116,6 +116,7 @@ export default function ClipsListScreen() {
   }
 
   const handleCancelEditClip = () => {
+    setViewingClipId(editingClipId)
     setEditingClipId(null)
   }
 
@@ -210,23 +211,21 @@ export default function ClipsListScreen() {
         : <EmptyState title="No clips yet" subtitle="Add clips from the player screen" />
       }
 
-      {viewingClip && (
+      {(viewingClip || editingClip) && (
         <Dialog visible onClose={handleCloseViewClip}>
-          <ClipViewer
-            clip={viewingClip}
-            onClose={handleCloseViewClip}
-            onEdit={() => handleEditClip(viewingClip.id)}
-          />
-        </Dialog>
-      )}
-
-      {editingClip && (
-        <Dialog visible onClose={handleCancelEditClip}>
-          <ClipEditor
-            clip={editingClip}
-            onCancel={handleCancelEditClip}
-            onSave={handleSaveClip}
-          />
+          {editingClip ? (
+            <ClipEditor
+              clip={editingClip}
+              onCancel={handleCancelEditClip}
+              onSave={handleSaveClip}
+            />
+          ) : viewingClip ? (
+            <ClipViewer
+              clip={viewingClip}
+              onClose={handleCloseViewClip}
+              onEdit={() => handleEditClip(viewingClip.id)}
+            />
+          ) : null}
         </Dialog>
       )}
 

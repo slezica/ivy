@@ -177,8 +177,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
+    color: Color.BLACK,
     fontSize: 16,
-    minHeight: 80,
+    maxHeight: 80,
     textAlignVertical: 'top',
   },
   buttons: {

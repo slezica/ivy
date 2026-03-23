@@ -110,14 +110,14 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
       {clip.transcription && (
         <View style={styles.infoSection}>
           <Text style={styles.infoLabel}>Transcription</Text>
-          <Text style={styles.infoText}>&ldquo;{clip.transcription}...&rdquo;</Text>
+          <Text style={styles.infoText} numberOfLines={3}>&ldquo;{clip.transcription}&rdquo;</Text>
         </View>
       )}
 
       {clip.note && (
         <View style={styles.infoSection}>
           <Text style={styles.infoLabel}>Note</Text>
-          <Text style={styles.infoText}>{clip.note}</Text>
+          <Text style={styles.infoText} numberOfLines={3}>{clip.note}</Text>
         </View>
       )}
 
