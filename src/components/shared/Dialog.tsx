@@ -4,7 +4,7 @@
  * Reusable modal wrapper with overlay and centered content.
  */
 
-import { Modal, View, ScrollView, StyleSheet } from 'react-native'
+import { Modal, View, ScrollView, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Color } from '../../theme'
 
@@ -23,19 +23,27 @@ export default function Dialog({ visible, onClose, children }: ModalProps) {
       animationType="fade"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.overlay}>
-        <View style={styles.content}>
-          <ScrollView bounces={false}>
-            {children}
-          </ScrollView>
-        </View>
-      </SafeAreaView>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <SafeAreaView style={styles.overlay}>
+          <View style={styles.content}>
+            <ScrollView bounces={false}>
+              {children}
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </Modal>
   )
 }
 
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   overlay: {
     flex: 1,
     backgroundColor: Color.MODAL_OVERLAY,
