@@ -38,7 +38,6 @@ import { createFetchSessions } from '../actions/fetch_sessions'
 import { createTrackSession } from '../actions/track_session'
 import { createFinalizeSession } from '../actions/finalize_session'
 import { createUpdateBook } from '../actions/update_book'
-import { createResetApp } from '../actions/reset_app'
 import { createCleanupOrphanedFiles } from '../actions/cleanup_orphaned_files'
 import { createLoadFromUrl } from '../actions/load_from_url'
 import { createFetchDownloaderState } from '../actions/fetch_downloader_state'
@@ -96,9 +95,6 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const fetchSessions = createFetchSessions(deps)
   const trackSession = createTrackSession(deps)
   const finalizeSession = createFinalizeSession(deps)
-
-  // Dev
-  const __DEV_resetApp = createResetApp({ db, audio, set })
 
   // Auto-start transcription if enabled
   if (initialSettings.transcription_enabled) {
@@ -203,7 +199,6 @@ export const useStore = create<AppState>()(immer((set, get) => {
     updateSettings,
     fetchSessions,
     trackSession,
-    __DEV_resetApp,
   }
 
   // Event handler functions (hoisted) -------------------------------------------------------------
