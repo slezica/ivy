@@ -112,9 +112,8 @@ android {
         release {
             storeFile file('release.keystore')
             keyAlias 'ivy'
-            def password = System.console()?.readLine('\nKeystore password: ')
-            storePassword password
-            keyPassword password
+            storePassword System.getenv('KEYSTORE_PASSWORD')
+            keyPassword System.getenv('KEYSTORE_PASSWORD')
         }
     }
     buildTypes {

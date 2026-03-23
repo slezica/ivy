@@ -26,13 +26,16 @@ npm install
 npm start # prebuilds, builds APK and installs via adb
 ```
 
-
-## Production Builds
-
-Build the APK with:
+## Debug Build
 
 ```bash
-npm run build
+npm run build:debug
+```
+
+## Production Build
+
+```bash
+npm run build:release
 ```
 
 
