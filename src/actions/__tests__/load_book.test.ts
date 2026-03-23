@@ -60,6 +60,24 @@ describe('createLoadBook', () => {
       expect(draft.playback.ownerId).toBe('main')
     })
 
+    it('clears playback uri before loading to prevent stale position writes', async () => {
+      const { state, deps } = createStatefulDeps({
+        uri: 'file:///audio/old-book.mp3',
+        position: 30000,
+        duration: 60000,
+        ownerId: 'main',
+      })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook(CONTEXT)
+
+      // The first set() call (before audio.load) must clear uri
+      const firstUpdater = (deps.set as jest.Mock).mock.calls[0][0]
+      const draft = createMockState({ playback: { uri: 'file:///audio/old-book.mp3' } })
+      firstUpdater(draft)
+      expect(draft.playback.uri).toBeNull()
+    })
+
     it('loads audio with book metadata', async () => {
       const book = createMockBook({ title: 'My Book', artist: 'Author', artwork: 'art-data' })
       const { deps } = createStatefulDeps({ uri: null }, {

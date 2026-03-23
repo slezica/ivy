@@ -34,6 +34,7 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
 
       set(state => {
         state.playback.status = 'loading'
+        state.playback.uri = null
         state.playback.ownerId = context.ownerId
       })
 
