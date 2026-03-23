@@ -79,12 +79,11 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   }
 
   return (
-    <>
-      <Header
-        title={clip.file_title || clip.file_name}
-        subtitle={`${formatTime(clip.start)} · ${formatTime(clip.duration)}`}
-        noBorder
-      />
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>{clip.file_title || clip.file_name}</Text>
+        <Text style={styles.subtitle}>{`${formatTime(clip.duration)} (at ${formatTime(clip.start)})`}</Text>
+      </View>
 
       <Timeline
         duration={playbackDuration}
@@ -111,7 +110,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
       {clip.transcription && (
         <View style={styles.infoSection}>
           <Text style={styles.infoLabel}>Transcription</Text>
-          <Text style={styles.infoText}>&ldquo;{clip.transcription}&rdquo;</Text>
+          <Text style={styles.infoText}>&ldquo;{clip.transcription}...&rdquo;</Text>
         </View>
       )}
 
@@ -140,20 +139,32 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
           </Text>
         </TouchableOpacity>
       </View>
-    </>
+    </View>
   )
 }
 
 
 const styles = StyleSheet.create({
+  container: {
+    display: 'flex',
+    padding: 20,
+    gap: 20
+  },
+  header: {},
+  title: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Color.BLACK,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: Color.GRAY_DARK,
+    marginTop: 4,
+  },
   playButtonContainer: {
     alignItems: 'center',
-    paddingVertical: 12,
   },
-  infoSection: {
-    marginHorizontal: 20,
-    marginBottom: 16,
-  },
+  infoSection: {},
   infoLabel: {
     fontSize: 12,
     fontWeight: '600',
@@ -170,8 +181,6 @@ const styles = StyleSheet.create({
   buttons: {
     flexDirection: 'row',
     gap: 12,
-    padding: 20,
-    paddingTop: 0,
   },
   button: {
     flex: 1,

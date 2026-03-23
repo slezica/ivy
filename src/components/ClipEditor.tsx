@@ -10,7 +10,6 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { useStore } from '../store'
 import { Color } from '../theme'
 import { formatTime } from '../utils'
-import Header from './shared/Header'
 import IconButton from './shared/IconButton'
 import { Timeline } from './timeline'
 import type { ClipWithFile } from '../services'
@@ -94,12 +93,11 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   }
 
   return (
-    <>
-      <Header
-        title="Edit Clip"
-        subtitle={`${formatTime(selectionStart)} - ${formatTime(selectionEnd)}`}
-        noBorder
-      />
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>{clip.file_title || clip.file_name}</Text>
+        <Text style={styles.subtitle}>{`${formatTime(selectionEnd - selectionStart)} (at ${formatTime(selectionStart)})`}</Text>
+      </View>
 
       <Timeline
         duration={clip.file_duration}
@@ -148,33 +146,44 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
           <Text style={[styles.buttonText, styles.primaryButtonText]}>Save</Text>
         </TouchableOpacity>
       </View>
-    </>
+    </View>
   )
 }
 
 
 const styles = StyleSheet.create({
+  container: {
+    display: 'flex',
+    padding: 20,
+    gap: 20,
+  },
+  header: {},
+  title: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Color.BLACK,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: Color.GRAY_DARK,
+    marginTop: 4,
+  },
   playButtonContainer: {
     alignItems: 'center',
-    paddingVertical: 12,
   },
   input: {
-    marginHorizontal: 20,
     borderWidth: 1,
     borderColor: Color.GRAY_BORDER,
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    marginBottom: 20,
     minHeight: 80,
     textAlignVertical: 'top',
   },
   buttons: {
     flexDirection: 'row',
     gap: 12,
-    padding: 20,
-    paddingTop: 0,
   },
   button: {
     flex: 1,
