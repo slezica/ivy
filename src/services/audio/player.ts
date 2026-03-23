@@ -148,9 +148,14 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
   private async ensureSetup(): Promise<void> {
     if (this.isSetup) return
 
-    await TrackPlayer.setupPlayer({
-      autoHandleInterruptions: true,
-    })
+    try {
+      await TrackPlayer.setupPlayer({
+        autoHandleInterruptions: true,
+      })
+    } catch (error: any) {
+      if (!error?.message?.includes('already been initialized')) throw error
+      // Player was initialized in a previous instance (e.g. dev reload) — safe to continue
+    }
 
     await TrackPlayer.updateOptions({
       android: {
