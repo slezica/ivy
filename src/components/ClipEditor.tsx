@@ -154,7 +154,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
 const styles = StyleSheet.create({
   container: {
     display: 'flex',
-    padding: 20,
+    padding: 16,
     gap: 20,
   },
   header: {},
