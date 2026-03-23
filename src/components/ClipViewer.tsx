@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
+import { View, Text, Pressable, TouchableOpacity, StyleSheet } from 'react-native'
 
 import { useStore } from '../store'
 import { Color } from '../theme'
@@ -33,6 +33,10 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
 
   // Local state - the position this viewer remembers
   const [ownPosition, setOwnPosition] = useState(initialPosition)
+
+  // Expandable text sections
+  const [transcriptionExpanded, setTranscriptionExpanded] = useState(false)
+  const [noteExpanded, setNoteExpanded] = useState(false)
 
   // Stable owner ID for this instance
   const ownerId = useRef(`clip-viewer-${clip.id}`).current
@@ -126,17 +130,17 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
       </View>
 
       {clip.transcription && (
-        <View style={styles.infoSection}>
+        <Pressable style={styles.infoSection} onPress={() => setTranscriptionExpanded(e => !e)}>
           <Text style={styles.infoLabel}>Transcription</Text>
-          <Text style={styles.infoText} numberOfLines={3}>&ldquo;{clip.transcription}&rdquo;</Text>
-        </View>
+          <Text style={styles.infoText} numberOfLines={transcriptionExpanded ? undefined : 4}>&ldquo;{clip.transcription}&rdquo;</Text>
+        </Pressable>
       )}
 
       {clip.note && (
-        <View style={styles.infoSection}>
+        <Pressable style={styles.infoSection} onPress={() => setNoteExpanded(e => !e)}>
           <Text style={styles.infoLabel}>Note</Text>
-          <Text style={styles.infoText} numberOfLines={3}>{clip.note}</Text>
-        </View>
+          <Text style={styles.infoText} numberOfLines={noteExpanded ? undefined : 4}>{clip.note}</Text>
+        </Pressable>
       )}
 
       <View style={styles.buttons}>
