@@ -1,6 +1,5 @@
 import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, SyncQueueService, Book } from '../services'
-import type { GetState, SetState, Action, ActionFactory } from '../store/types'
-import type { AppState } from '../store/types'
+import type { GetState, SetState, Action, ActionFactory, AppState } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
 import type { CleanupOrphanedFiles } from './cleanup_orphaned_files'

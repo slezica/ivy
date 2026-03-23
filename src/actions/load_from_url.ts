@@ -1,6 +1,5 @@
 import type { DatabaseService, FileStorageService, FileDownloaderService, AudioMetadataService, SyncQueueService, Book } from '../services'
-import type { GetState, SetState, Action, ActionFactory } from '../store/types'
-import type { AppState } from '../store/types'
+import type { GetState, SetState, Action, ActionFactory, AppState } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
 import type { CleanupOrphanedFiles } from './cleanup_orphaned_files'
@@ -24,7 +23,7 @@ export type LoadFromUrl = Action<[string]>
 
 export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (deps) => (
   async (url) => {
-    const { db, files, downloader, set, get, fetchBooks, fetchClips, cleanupOrphanedFiles } = deps
+    const { db, files, set, get, fetchBooks, fetchClips, cleanupOrphanedFiles } = deps
 
     if (get().downloader.status !== 'idle') return
 

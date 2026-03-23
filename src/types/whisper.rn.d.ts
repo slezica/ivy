@@ -18,11 +18,11 @@ declare module 'whisper.rn' {
 
   export interface TranscribeResult {
     result: string
-    segments: Array<{
+    segments: {
       text: string
       t0: number
       t1: number
-    }>
+    }[]
     isAborted: boolean
   }
 

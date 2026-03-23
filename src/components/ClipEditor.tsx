@@ -47,7 +47,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   // Stop playback when dismissed
   useEffect(() => {
     return () => { pause() }
-  }, [])
+  }, [pause])
 
   // Sync position from playback when we own playback
   useEffect(() => {

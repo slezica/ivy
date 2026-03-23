@@ -46,7 +46,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   // Stop playback when dismissed
   useEffect(() => {
     return () => { pause() }
-  }, [])
+  }, [pause])
 
   // Sync position from playback when we own playback
   useEffect(() => {

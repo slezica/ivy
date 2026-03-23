@@ -17,6 +17,7 @@ jest.mock('react-native-fs', () => ({
   unlink: jest.fn(async () => {}),
 }))
 
+// eslint-disable-next-line import/first
 import RNFS from 'react-native-fs'
 
 

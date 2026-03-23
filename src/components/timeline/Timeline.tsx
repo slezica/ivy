@@ -54,8 +54,6 @@ import {
 import { Color } from '../../theme'
 import { formatTime } from '../../utils'
 import {
-  SEGMENT_WIDTH,
-  SEGMENT_GAP,
   SEGMENT_DURATION,
   TIMELINE_HEIGHT,
   PLAYHEAD_WIDTH,

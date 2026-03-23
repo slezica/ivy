@@ -44,10 +44,6 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
   private initializing: Promise<void> | null = null
   private downloading = false
 
-  constructor() {
-    super()
-  }
-
   async initialize(): Promise<void> {
     if (this.context) {
       return

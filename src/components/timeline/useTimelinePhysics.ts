@@ -81,7 +81,7 @@ export function useTimelinePhysics({
   // Helper: call timeToX/xToTime with current layout refs
   const tx = (time: number) => timeToX(time, SEGMENT_DURATION, segmentWidthRef.current, segmentGapRef.current)
   const xt = (x: number) => xToTime(x, SEGMENT_DURATION, segmentWidthRef.current, segmentGapRef.current)
-  const maxOffset = () => tx(duration)
+  const maxOffset = useCallback(() => tx(duration), [duration])
 
   // Scroll state (refs for 60fps)
   const scrollOffsetRef = useRef(tx(externalPosition))
@@ -168,7 +168,7 @@ export function useTimelinePhysics({
     }
 
     rafIdRef.current = requestAnimationFrame(tick)
-  }, [onSeek, stopAnimation, updateDisplayPosition])
+  }, [maxOffset, onSeek, stopAnimation, updateDisplayPosition])
 
   // Momentum loop
   const startMomentumLoop = useCallback(() => {
@@ -203,7 +203,7 @@ export function useTimelinePhysics({
     }
     animationRef.current = null
     rafIdRef.current = requestAnimationFrame(tick)
-  }, [onSeek, updateDisplayPosition])
+  }, [maxOffset, onSeek, updateDisplayPosition])
 
   // Sync to external position when idle
   useEffect(() => {
@@ -347,7 +347,7 @@ export function useTimelinePhysics({
     )
     updateDisplayPosition(xt(scrollOffsetRef.current))
     setFrame(f => f + 1)
-  }, [selection, duration, updateDisplayPosition])
+  }, [maxOffset, selection, duration, updateDisplayPosition])
 
   const onPanEnd = useCallback((velocityX: number) => {
     if (isPinchCooldown()) return

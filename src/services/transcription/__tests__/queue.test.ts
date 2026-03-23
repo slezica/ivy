@@ -143,7 +143,7 @@ describe('TranscriptionQueueService', () => {
 
       const service = new TranscriptionQueueService(deps)
 
-      const completedClips: Array<{ clipId: string; transcription: string }> = []
+      const completedClips: { clipId: string; transcription: string }[] = []
       service.on('finish', ({ clipId, transcription }) => {
         if (transcription) completedClips.push({ clipId, transcription })
       })

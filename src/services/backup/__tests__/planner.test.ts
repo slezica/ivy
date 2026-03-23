@@ -1,6 +1,5 @@
 import { planSync, SyncState, RemoteBook, RemoteClip } from '../planner'
 import { Book, Clip, SyncManifestEntry } from '../../storage'
-import { BookBackup, ClipBackup } from '../types'
 
 describe('planSync', () => {
   // Helper to create empty state

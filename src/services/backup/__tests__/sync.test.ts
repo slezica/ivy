@@ -202,7 +202,7 @@ describe('BackupSyncService', () => {
     }
 
     function setupSyncWithRemoteBook(deps: ReturnType<typeof createMockDeps>, remoteId: string) {
-      const { db, drive } = deps
+      const { drive } = deps
       const remoteBookJson = JSON.stringify({
         id: remoteId,
         name: 'Book remote',

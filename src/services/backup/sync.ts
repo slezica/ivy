@@ -728,7 +728,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const localBookIds = new Set(freshLocalBooks.map(b => b.id))
     const localClipIds = new Set(freshLocalClips.map(c => c.id))
 
-    for (const [key, manifest] of state.manifests) {
+    for (const [, manifest] of state.manifests) {
       const existsLocally = manifest.entity_type === 'book'
         ? localBookIds.has(manifest.entity_id)
         : localClipIds.has(manifest.entity_id)
