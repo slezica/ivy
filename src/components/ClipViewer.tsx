@@ -55,6 +55,18 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
     }
   }, [isOwner, isFileLoaded, playback.position])
 
+  // Stop at clip end (once — user can resume past it)
+  const autoPausedRef = useRef(false)
+
+  useEffect(() => {
+    if (!isPlaying) return
+    const clipEnd = hasSourceFile ? clip.start + clip.duration : clip.duration
+    if (ownPosition >= clipEnd && !autoPausedRef.current) {
+      autoPausedRef.current = true
+      pause()
+    }
+  }, [isPlaying, ownPosition])
+
   const handlePlayPause = async () => {
     try {
       if (isPlaying) {
@@ -69,6 +81,12 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   }
 
   const handleSeek = (position: number) => {
+    // Reset auto-pause if seeking back into clip range
+    const clipEnd = hasSourceFile ? clip.start + clip.duration : clip.duration
+    if (position < clipEnd) {
+      autoPausedRef.current = false
+    }
+
     // Always update local position
     setOwnPosition(position)
 
