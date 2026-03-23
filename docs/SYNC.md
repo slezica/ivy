@@ -359,7 +359,7 @@ Three thin actions expose sync to the UI:
 
 - **`syncNow()`** — calls `sync.syncNow()` (fire-and-forget, status flows via events)
 - **`autoSync()`** — only calls `sync.autoSync()` if `settings.sync_enabled`
-- **`refreshSyncStatus()`** — reads `pendingCount` and `lastSyncTime` into the store
+- **`fetchSyncState()`** — reads `pendingCount` and `lastSyncTime` into the store
 
 ---
 

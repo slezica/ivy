@@ -126,7 +126,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── add_clip.ts, ...       # Clip actions
   │   ├── load_file.ts, ...      # Library actions (local files)
   │   ├── load_from_url.ts       # Library actions (URL download via yt-dlp)
-  │   └── ...                     # ~29 action files total
+  │   └── ...                     # ~35 action files total
   ├── store/
   │   ├── index.ts                # All state, action wiring, event listeners
   │   └── types.ts                # Type definitions (AppState, Action, ActionFactory)
@@ -182,6 +182,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │       ├── EmptyState.tsx      # Empty state display
   │       ├── IconButton.tsx      # Circular icon button
   │       ├── ActionMenu.tsx      # Overflow menu (3-dot)
+  │       ├── TextButton.tsx      # Simple text button (primary/default variants)
   │       ├── Dialog.tsx          # Simple dialog/modal component
   │       └── ErrorBoundary.tsx   # React error boundary
   ├── utils/
@@ -309,9 +310,10 @@ See `store/types.ts` for authoritative type definitions (`AppState` interface).
 ```typescript
 // State
 library: {
-  status: 'loading' | 'idle' | 'adding' | 'duplicate' | 'error'
-  addProgress: number | null     // 0-99 percent (copy or download)
+  status: 'idle' | 'adding' | 'duplicate' | 'error'
+  addProgress: number | null     // 0-100 percent (copy or download)
   addOpId: string | null         // Active operation ID (for cancellation)
+  message: string | null         // Status message shown during loading
 }
 books: Record<string, Book>
 playback: {

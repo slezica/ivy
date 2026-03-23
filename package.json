@@ -9,7 +9,9 @@
     "test:verbose": "jest",
     "test:watch": "jest --watch",
     "build:debug": "cd android && ./gradlew assembleDebug",
-    "build:release": "read -p \"Password: \" -s KEYSTORE_PASSWORD && expo prebuild && cd android && KEYSTORE_PASSWORD=\"$KEYSTORE_PASSWORD\" ./gradlew assembleRelease"
+    "build:release": "read -p \"Password: \" -s KEYSTORE_PASSWORD && expo prebuild && cd android && KEYSTORE_PASSWORD=\"$KEYSTORE_PASSWORD\" ./gradlew assembleRelease",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

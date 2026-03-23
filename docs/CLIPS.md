@@ -32,7 +32,7 @@ When the source book is archived or deleted, clips fall back to their own audio 
 
 ### 3. Playback ownership
 
-Both ClipViewer and ClipEditor are playback components — they control the audio player. Each generates a unique `ownerId` and claims ownership when it plays. This prevents conflicts with the main player or other clip viewers. See the playback ownership system in [AGENTS.md](../AGENTS.md).
+Both ClipViewer and ClipEditor are playback components — they control the audio player. Each generates a unique `ownerId` and claims ownership when it plays. This prevents conflicts with the main player or other clip viewers. See the playback ownership system in [PLAYBACK.md](PLAYBACK.md).
 
 ---
 

@@ -56,7 +56,7 @@ This prevents the timeline from jumping when another component takes over playba
 ┌──────────────────────────────────────────────────────────────┐
 │                     Store Actions                            │
 │  play · pause · seek · skipForward · skipBackward            │
-│  syncPlaybackState                                           │
+│  fetchPlaybackState                                          │
 └──────────┬───────────────────────────────────────────────────┘
            │
            ▼
@@ -182,7 +182,7 @@ System media controls (notification, lock screen, Bluetooth) are handled by a se
 
 ### Notification click
 
-Tapping the notification opens a deep link (`ivy://notification.click`). This behavior is split across three files: `index.js` registers the playback service, `integration.ts` defines the background event handler, and `+not-found.tsx` catches the deep link and redirects to the player tab.
+Tapping the notification opens a deep link (`trackplayer://notification.click`). This behavior is split across three files: `index.js` registers the playback service, `integration.ts` defines the background event handler, and `+not-found.tsx` catches the deep link and redirects to the player tab.
 
 ---
 
@@ -213,7 +213,7 @@ src/actions/
   seek.ts             → Seek to position (guarded by fileUri match)
   skip_forward.ts     → Skip +25 seconds
   skip_backward.ts    → Skip -30 seconds
-  sync_playback_state.ts → Read current status into store
+  fetch_playback_state.ts → Read current status into store
   constants.ts        → SKIP_FORWARD_MS (25000), SKIP_BACKWARD_MS (30000)
 
 src/store/
