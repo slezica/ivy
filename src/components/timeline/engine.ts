@@ -24,7 +24,6 @@ import {
   SEGMENT_DURATION,
   DECELERATION,
   MIN_VELOCITY,
-  VELOCITY_SCALE,
   SCROLL_TO_DURATION,
   MIN_SELECTION_DURATION,
   MIN_ZOOM,
@@ -104,7 +103,7 @@ export class TimelinePhysicsEngine {
 
   // --- Scroll position ---
   private _scrollOffset: number
-  private _velocity = 0           // px/frame, used during momentum
+  private _velocity = 0           // px/s, used during momentum (frame-rate independent)
   private _isDragging = false
   private _dragStartOffset = 0    // scroll offset when pan began
 
@@ -137,6 +136,7 @@ export class TimelinePhysicsEngine {
   // `_hasMomentum` tracks whether the momentum loop is active so that `tick()`
   // knows which sub-tick to run.
   private _hasMomentum = false
+  private _lastTickTime = 0  // timestamp of previous tick, for computing dt
 
   // --- Touch state ---
   //
@@ -422,12 +422,13 @@ export class TimelinePhysicsEngine {
       this._updateDisplayPosition(this._xt(this._scrollOffset), now, true)
       this._callbacks.onSeek(this._xt(this._scrollOffset))
     } else {
-      // Normal release — convert gesture velocity to per-frame velocity
-      // and start momentum if fast enough
-      this._velocity = -velocityX * VELOCITY_SCALE
+      // Normal release — gesture velocity is in px/s, keep it in px/s
+      // (frame-rate independent: decay and displacement use real dt)
+      this._velocity = -velocityX
 
       if (Math.abs(this._velocity) > MIN_VELOCITY) {
         this._hasMomentum = true
+        this._lastTickTime = now
       } else {
         this._callbacks.onSeek(this._xt(this._scrollOffset))
       }
@@ -487,11 +488,16 @@ export class TimelinePhysicsEngine {
   }
 
   // =========================================================================
-  // Private: momentum tick
+  // Private: momentum tick (frame-rate independent)
   //
-  // Each frame, the scroll offset advances by the current velocity, then
-  // velocity decays by DECELERATION (0.95). This creates exponential
-  // slow-down. When velocity drops below MIN_VELOCITY, we stop and seek.
+  // Uses real elapsed time (dt) instead of assuming a fixed frame rate.
+  // The motion follows continuous exponential decay:
+  //
+  //   velocity(t) = v0 * DECELERATION^t     (DECELERATION is per-second)
+  //   position(t) = v0 * (DECELERATION^t - 1) / ln(DECELERATION)
+  //
+  // Each tick computes dt from the wall clock, so a 120Hz display and a
+  // 60Hz display produce the same motion curve — just sampled differently.
   // =========================================================================
 
   private _tickMomentum(now: number): boolean {
@@ -501,13 +507,20 @@ export class TimelinePhysicsEngine {
       return false
     }
 
+    // Compute real elapsed time since last tick
+    const dt = Math.min((now - this._lastTickTime) / 1000, 0.1) // seconds, capped at 100ms
+    this._lastTickTime = now
+
     if (Math.abs(this._velocity) > MIN_VELOCITY) {
+      // Advance position by velocity * dt (displacement over this time slice)
       this._scrollOffset = clamp(
-        this._scrollOffset + this._velocity,
+        this._scrollOffset + this._velocity * dt,
         0,
         this._maxOffset()
       )
-      this._velocity *= DECELERATION
+
+      // Decay velocity: v *= DECELERATION^dt
+      this._velocity *= Math.pow(DECELERATION, dt)
 
       this._updateDisplayPosition(this._xt(this._scrollOffset), now)
       this._callbacks.onFrame()

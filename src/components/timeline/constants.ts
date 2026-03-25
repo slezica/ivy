@@ -16,10 +16,13 @@ export const PLACEHOLDER_HEIGHT = 8
 export const TIME_INDICATORS_HEIGHT = 24
 export const TIME_INDICATORS_MARGIN = 8
 
-// Physics
-export const DECELERATION = 0.95 // Velocity multiplier per frame
-export const MIN_VELOCITY = 0.5 // Stop momentum below this
-export const VELOCITY_SCALE = 1 / 60 // Convert gesture velocity (px/s) to px/frame
+// Physics (frame-rate independent — all units are per-second)
+//
+// Momentum uses continuous exponential decay: v(t) = v0 * DECELERATION^t
+// where t is in seconds. Each tick computes dt from the real elapsed time,
+// so the motion feels identical on 60Hz, 120Hz, or variable refresh displays.
+export const DECELERATION = 0.95 ** 60 // ≈ 0.046 — velocity multiplier per second
+export const MIN_VELOCITY = 30          // px/s — stop momentum below this
 
 // Animation
 export const SCROLL_TO_DURATION = 200 // ms for tap-to-seek animation

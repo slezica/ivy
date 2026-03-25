@@ -24,7 +24,6 @@ import {
   SEGMENT_DURATION,
   DECELERATION,
   MIN_VELOCITY,
-  VELOCITY_SCALE,
   SCROLL_TO_DURATION,
   MIN_SELECTION_DURATION,
 } from '../constants'
@@ -235,21 +234,19 @@ describe('TimelinePhysicsEngine', () => {
     it('decays velocity exponentially and stops at MIN_VELOCITY', () => {
       const { engine, callbacks } = createEngine()
 
-      // Start a flick: panEnd with high velocity
+      // Start a flick: panEnd with high velocity (3000 px/s)
       engine.panStart(200, 45, 0)
       engine.panUpdate(-10, 16)
-      engine.panEnd(-3000, 32) // 3000 px/s flick
+      engine.panEnd(-3000, 32)
 
-      const initialVelocity = 3000 * VELOCITY_SCALE // px/frame
-
-      // Tick once and verify decay
+      // Tick once at 16ms later — velocity is in px/s, displacement = v * dt
       const offsetBefore = engine.scrollOffset
-      engine.tick(48)
+      engine.tick(48) // dt = 16ms = 0.016s
       const offsetAfter = engine.scrollOffset
 
-      // Should have moved by approximately the initial velocity
+      // Should have moved by approximately 3000 * 0.016 = 48px
       const moved = Math.abs(offsetAfter - offsetBefore)
-      expect(moved).toBeCloseTo(initialVelocity, 0)
+      expect(moved).toBeCloseTo(3000 * 0.016, 0)
 
       // Run to completion
       const ticks = runTicks(engine, 64)
@@ -257,10 +254,9 @@ describe('TimelinePhysicsEngine', () => {
       // Should have called onSeek exactly once (at the end)
       expect(callbacks.onSeek).toHaveBeenCalledTimes(1)
 
-      // Should take a reasonable number of ticks to stop
-      // (exponential decay with 0.95 factor from ~50 px/frame takes ~70-90 ticks)
+      // Should take a reasonable number of ticks at 16ms intervals to stop
       expect(ticks).toBeGreaterThan(30)
-      expect(ticks).toBeLessThan(200)
+      expect(ticks).toBeLessThan(500)
     })
 
     it('clamps scroll offset to bounds during momentum', () => {
@@ -280,6 +276,35 @@ describe('TimelinePhysicsEngine', () => {
       // Should not exceed max offset
       const maxOffset = tx(10_000)
       expect(engine.scrollOffset).toBeLessThanOrEqual(maxOffset)
+    })
+
+    it('produces the same final position regardless of frame rate', () => {
+      // Simulate the same flick at 60Hz and 120Hz — final position should match.
+      // This is the core property of frame-rate independent physics.
+
+      function flingAndRun(dt: number): number {
+        const { engine } = createEngine()
+        engine.panStart(200, 45, 0)
+        engine.panUpdate(-10, 16)
+        engine.panEnd(-2000, 32)
+
+        // Run ticks at the given interval until momentum stops
+        let t = 32
+        while (engine.tick(t += dt)) { /* advance */ }
+        engine.tick(t) // finalize
+
+        return engine.scrollOffset
+      }
+
+      const at60Hz = flingAndRun(1000 / 60)   // ~16.67ms per frame
+      const at120Hz = flingAndRun(1000 / 120)  // ~8.33ms per frame
+      const at30Hz = flingAndRun(1000 / 30)    // ~33.33ms per frame
+
+      // All three should land at approximately the same position.
+      // Small differences are expected from discrete sampling, but should be
+      // well under 1% of the total distance traveled.
+      expect(Math.abs(at60Hz - at120Hz)).toBeLessThan(at60Hz * 0.01)
+      expect(Math.abs(at60Hz - at30Hz)).toBeLessThan(at60Hz * 0.01)
     })
   })
 
