@@ -4,10 +4,13 @@
  * Reusable modal wrapper with overlay and centered content.
  */
 
-import { Modal, View, ScrollView, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native'
+import { useCallback, useRef } from 'react'
+import { Modal, View, ScrollView, KeyboardAvoidingView, Platform, Animated, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { Ionicons } from '@expo/vector-icons'
 import { Color } from '../../theme'
 
+const SCROLL_MORE_THRESHOLD = 20
 
 interface ModalProps {
   visible: boolean
@@ -16,6 +19,31 @@ interface ModalProps {
 }
 
 export default function Dialog({ visible, onClose, children }: ModalProps) {
+  const opacity = useRef(new Animated.Value(0)).current
+  const canScrollMore = useRef(false)
+
+  const fadeIndicator = useCallback((show: boolean) => {
+    Animated.timing(opacity, {
+      toValue: show ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start()
+  }, [opacity])
+
+  const contentHeight = useRef(0)
+  const layoutHeight = useRef(0)
+  const scrollY = useRef(0)
+
+  const updateIndicator = useCallback(() => {
+    const remaining = contentHeight.current - layoutHeight.current - scrollY.current
+    const shouldShow = remaining > SCROLL_MORE_THRESHOLD
+
+    if (shouldShow !== canScrollMore.current) {
+      canScrollMore.current = shouldShow
+      fadeIndicator(shouldShow)
+    }
+  }, [fadeIndicator])
+
   return (
     <Modal
       visible={visible}
@@ -29,9 +57,19 @@ export default function Dialog({ visible, onClose, children }: ModalProps) {
       >
         <SafeAreaView style={styles.overlay}>
           <View style={styles.content}>
-            <ScrollView bounces={false}>
+            <ScrollView
+              bounces={false}
+              onContentSizeChange={(_, h) => { contentHeight.current = h; updateIndicator() }}
+              onLayout={(e) => { layoutHeight.current = e.nativeEvent.layout.height; updateIndicator() }}
+              onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; updateIndicator() }}
+              scrollEventThrottle={16}
+            >
               {children}
             </ScrollView>
+
+            <Animated.View style={[styles.scrollIndicator, { opacity }]} pointerEvents="none">
+              <Ionicons name="chevron-down" size={18} color={Color.GRAY_DARK} />
+            </Animated.View>
           </View>
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -57,5 +95,16 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     overflow: 'hidden',
+  },
+  scrollIndicator: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 1000,
+    backgroundColor: Color.GRAY_LIGHTER,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 })
