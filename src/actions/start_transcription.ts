@@ -1,5 +1,6 @@
 import type { TranscriptionQueueService } from '../services'
 import type { Action, ActionFactory, SetState } from '../store/types'
+import { createLogger } from '../utils'
 
 
 export interface StartTranscriptionDeps {
@@ -11,20 +12,28 @@ export type StartTranscription = Action<[]>
 
 export const createStartTranscription: ActionFactory<StartTranscriptionDeps, StartTranscription> = (deps) => (
   async () => {
-    deps.set(state => { state.transcription.status = 'starting' })
+    const { transcription, set } = deps
+    const log = createLogger('StartTranscription')
+
+    log('Starting')
+
+    set(state => { state.transcription.status = 'starting' })
 
     try {
-      await deps.transcription.start()
+      await transcription.start()
     } catch {
-      deps.set(state => { state.transcription.status = 'error' })
+      log('Failed to start')
+      set(state => { state.transcription.status = 'error' })
       return
     }
 
     // Only transition to 'on' if we weren't stopped while starting
-    deps.set(state => {
+    set(state => {
       if (state.transcription.status === 'starting') {
         state.transcription.status = 'on'
       }
     })
+
+    log('Started')
   }
 )

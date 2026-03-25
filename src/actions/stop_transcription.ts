@@ -1,5 +1,6 @@
 import type { TranscriptionQueueService } from '../services'
 import type { SetState, Action, ActionFactory } from '../store/types'
+import { createLogger } from '../utils'
 
 
 export interface StopTranscriptionDeps {
@@ -11,8 +12,13 @@ export type StopTranscription = Action<[]>
 
 export const createStopTranscription: ActionFactory<StopTranscriptionDeps, StopTranscription> = (deps) => (
   async () => {
-    deps.transcription.stop()
-    deps.set(state => {
+    const { transcription, set } = deps
+    const log = createLogger('StopTranscription')
+
+    log('Stopping')
+
+    transcription.stop()
+    set(state => {
       state.transcription.status = 'off'
       state.transcription.pending = {}
     })

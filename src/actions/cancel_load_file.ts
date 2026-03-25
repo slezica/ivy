@@ -1,5 +1,6 @@
 import type { FileCopierService, FileDownloaderService } from '../services'
 import type { GetState, SetState, Action, ActionFactory } from '../store/types'
+import { createLogger } from '../utils'
 
 export interface CancelLoadFileDeps {
   copier: FileCopierService
@@ -13,9 +14,13 @@ export type CancelLoadFile = Action<[]>
 export const createCancelLoadFile: ActionFactory<CancelLoadFileDeps, CancelLoadFile> = (deps) => (
   async () => {
     const { copier, downloader, get, set } = deps
+    const log = createLogger('CancelLoadFile')
+
     const opId = get().library.addOpId
 
     if (!opId) return
+
+    log(`Cancelling operation ${opId}`)
 
     // Dismiss immediately — loadFile/loadFromUrl catch will handle cleanup in background
     set(state => {

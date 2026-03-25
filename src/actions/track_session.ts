@@ -1,5 +1,6 @@
 import type { DatabaseService, SessionWithBook } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
+import { createLogger } from '../utils'
 
 
 export interface TrackSessionDeps {
@@ -13,6 +14,8 @@ export type TrackSession = Action<[string]>
 export const createTrackSession: ActionFactory<TrackSessionDeps, TrackSession> = (deps) => (
   async (bookId) => {
     const { db, set, get } = deps
+    const log = createLogger('TrackSession')
+
     const now = Date.now()
     const current = db.getCurrentSession(bookId)
 
@@ -27,6 +30,8 @@ export const createTrackSession: ActionFactory<TrackSessionDeps, TrackSession> =
     } else {
       const book = get().books[bookId]
       if (!book) return
+
+      log(`New session for "${book.name}"`)
 
       const session = db.createSession(bookId)
 

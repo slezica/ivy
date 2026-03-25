@@ -1,5 +1,6 @@
 import type { DatabaseService } from '../services'
 import type { SetState, Action, ActionFactory } from '../store/types'
+import { createLogger } from '../utils'
 import { MIN_SESSION_DURATION_MS } from './constants'
 
 
@@ -13,6 +14,8 @@ export type FinalizeSession = Action<[string]>
 export const createFinalizeSession: ActionFactory<FinalizeSessionDeps, FinalizeSession> = (deps) => (
   async (bookId) => {
     const { db, set } = deps
+    const log = createLogger('FinalizeSession')
+
     const now = Date.now()
     const current = db.getCurrentSession(bookId)
     if (!current) return
@@ -20,7 +23,7 @@ export const createFinalizeSession: ActionFactory<FinalizeSessionDeps, FinalizeS
     const duration = now - current.started_at
 
     if (duration < MIN_SESSION_DURATION_MS) {
-      // Delete zero/short-duration sessions
+      log(`Discarding short session (${duration}ms)`)
       db.deleteSession(current.id)
       set((state) => {
         delete state.sessions[current.id]

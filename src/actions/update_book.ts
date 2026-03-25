@@ -1,5 +1,6 @@
 import type { DatabaseService, SyncQueueService } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
+import { createLogger } from '../utils'
 
 
 export interface UpdateBookDeps {
@@ -19,6 +20,7 @@ export type UpdateBook = Action<[string, UpdateBookUpdates]>
 export const createUpdateBook: ActionFactory<UpdateBookDeps, UpdateBook> = (deps) => (
   async (id, updates) => {
     const { db, syncQueue, set, get } = deps
+    const log = createLogger('UpdateBook')
 
     const { books } = get()
     const book = books[id]
@@ -26,6 +28,8 @@ export const createUpdateBook: ActionFactory<UpdateBookDeps, UpdateBook> = (deps
 
     const newTitle = updates.title !== undefined ? updates.title : book.title
     const newArtist = updates.artist !== undefined ? updates.artist : book.artist
+
+    log(`Updating "${book.name}" metadata`)
 
     db.updateBookMetadata(id, newTitle, newArtist)
     syncQueue.queueChange('book', id, 'upsert')
