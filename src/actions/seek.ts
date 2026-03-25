@@ -1,5 +1,6 @@
 import type { AudioPlayerService } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
+import { createLogger } from '../utils'
 
 
 export interface SeekContext {
@@ -22,7 +23,7 @@ export const createSeek: ActionFactory<SeekDeps, Seek> = (deps) => (
 
     // Only seek if the requested file is currently loaded
     if (playback.uri !== context.fileUri) {
-      console.log('Seek ignored: file not loaded', context.fileUri)
+      createLogger('Seek')('Ignored: file not loaded', context.fileUri)
       return
     }
 

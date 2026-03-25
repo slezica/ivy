@@ -1,5 +1,6 @@
 import type { DatabaseService, AudioSlicerService, SyncQueueService, TranscriptionQueueService } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
+import { createLogger } from '../utils'
 import { CLIPS_DIR } from './constants'
 
 
@@ -24,6 +25,7 @@ export type UpdateClip = Action<[string, UpdateClipUpdates]>
 export const createUpdateClip: ActionFactory<UpdateClipDeps, UpdateClip> = (deps) => (
   async (id, updates) => {
     const { db, slicer, syncQueue, transcription, set, get } = deps
+    const log = createLogger('UpdateClip')
 
     const { clips } = get()
     const clip = clips[id]
@@ -43,6 +45,8 @@ export const createUpdateClip: ActionFactory<UpdateClipDeps, UpdateClip> = (deps
 
       const newStart = updates.start ?? clip.start
       const newDuration = updates.duration ?? clip.duration
+
+      log(`Re-slicing ${id}: ${newStart}ms + ${newDuration}ms`)
 
       // Slice to temp location, then replace old file on success
       const sliceResult = await slicer.slice({
@@ -80,6 +84,7 @@ export const createUpdateClip: ActionFactory<UpdateClipDeps, UpdateClip> = (deps
     // Re-queue for transcription if bounds changed
     if (boundsChanged) {
       transcription.queueClip(id)
+      log(`Bounds changed, re-queued transcription for ${id}`)
     }
   }
 )

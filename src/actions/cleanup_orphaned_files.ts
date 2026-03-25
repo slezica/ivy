@@ -1,5 +1,6 @@
 import type { DatabaseService, FileStorageService } from '../services'
 import type { Action, ActionFactory } from '../store/types'
+import { createLogger } from '../utils'
 import { CLIPS_DIR } from './constants'
 
 export interface CleanupOrphanedFilesDeps {
@@ -25,7 +26,7 @@ export const createCleanupOrphanedFiles: ActionFactory<CleanupOrphanedFilesDeps,
     }
 
     if (orphans.length > 0) {
-      console.log(`[Cleanup] Deleted ${orphans.length} orphaned file(s)`)
+      createLogger('Cleanup')(`Deleted ${orphans.length} orphaned file(s)`)
     }
   }
 )

@@ -7,6 +7,7 @@ import {
 // Mock generateId to return predictable values
 jest.mock('../../utils', () => ({
   generateId: () => 'generated-id-1',
+  createLogger: () => () => {},
 }))
 
 // Mock react-native-fs

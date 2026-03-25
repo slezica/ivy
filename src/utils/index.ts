@@ -64,3 +64,9 @@ export function throttleSameArgs<T extends (...args: any[]) => void>(fn: T, ms: 
     }
   }) as T
 }
+
+export type Logger = (...args: any[]) => void
+
+export function createLogger(tag: string): Logger {
+  return (...args: any[]) => console.log(`[${tag}]`, ...args)
+}

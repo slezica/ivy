@@ -7,6 +7,7 @@ import {
 // Stable ID for assertions
 jest.mock('../../utils', () => ({
   generateId: () => 'generated-id',
+  createLogger: () => () => {},
 }))
 
 

@@ -3,7 +3,7 @@ import type { GetState, SetState, Action, ActionFactory, AppState } from '../sto
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
 import type { CleanupOrphanedFiles } from './cleanup_orphaned_files'
-import { generateId } from '../utils'
+import { generateId, createLogger } from '../utils'
 
 export interface LoadFileDeps {
   db: DatabaseService
@@ -23,12 +23,10 @@ export type LoadFile = Action<[{ uri: string; name: string }]>
 export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
   async (file) => {
     const { copier, db, set, fetchBooks, fetchClips, cleanupOrphanedFiles } = deps
+    const log = createLogger('LoadFile')
 
     // Unique operation ID for copy operations:
     const opId = copier.createOperation()
-
-    // Helpers for sub-actions:
-    const log = createTaggedLogger()
     const updateLibrary = createSafeLibraryUpdater(set, opId)
     const context = { ...deps, opId, updateLibrary, log }
 
@@ -167,10 +165,6 @@ function resetLibrary(lib: Library) {
   lib.addProgress = null
   lib.addOpId = null
   lib.message = null
-}
-
-function createTaggedLogger() {
-  return (...args: any[]) => console.log('[LoadFile]', ...args)
 }
 
 function createSafeLibraryUpdater(set: SetState, opId: string): SafeLibraryUpdater {

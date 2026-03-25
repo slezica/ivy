@@ -1,7 +1,7 @@
 import type { DatabaseService, AudioSlicerService, SyncQueueService, TranscriptionQueueService } from '../services'
 import type { GetState, Action, ActionFactory } from '../store/types'
 import type { FetchClips } from './fetch_clips'
-import { generateId } from '../utils'
+import { generateId, createLogger } from '../utils'
 import { CLIPS_DIR, DEFAULT_CLIP_DURATION_MS } from './constants'
 
 
@@ -19,6 +19,7 @@ export type AddClip = Action<[string, number]>
 export const createAddClip: ActionFactory<AddClipDeps, AddClip> = (deps) => (
   async (bookId, position) => {
     const { db, slicer, syncQueue, transcription, get, fetchClips } = deps
+    const log = createLogger('AddClip')
 
     const { books } = get()
     const book = books[bookId]
@@ -36,6 +37,8 @@ export const createAddClip: ActionFactory<AddClipDeps, AddClip> = (deps) => (
 
     // Generate clip ID upfront and use it for filename
     const clipId = generateId()
+    log(`Slicing ${clipDuration}ms from "${book.name}" at ${position}ms`)
+
     await slicer.ensureDir(CLIPS_DIR)
     const sliceResult = await slicer.slice({
       sourceUri: book.uri,
@@ -62,5 +65,7 @@ export const createAddClip: ActionFactory<AddClipDeps, AddClip> = (deps) => (
 
     // Queue for transcription
     transcription.queueClip(clip.id)
+
+    log(`Created clip ${clipId}`)
   }
 )

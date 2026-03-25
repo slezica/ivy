@@ -1,5 +1,6 @@
 import type { AudioPlayerService, DatabaseService } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
+import { createLogger } from '../utils'
 
 
 export interface LoadBookContext {
@@ -20,6 +21,7 @@ export type LoadBook = Action<[LoadBookContext]>
 export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
   async (context) => {
     const { audio, db, set, get } = deps
+    const log = createLogger('LoadBook')
     const { playback } = get()
 
     if (playback.status === 'loading') return
@@ -31,6 +33,8 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
       if (!bookRecord) {
         throw new Error(`No book or clip found for: ${context.fileUri}`)
       }
+
+      log(`Loading "${bookRecord.title || bookRecord.name}" at ${context.position}ms`)
 
       set(state => {
         state.playback.status = 'loading'
@@ -54,7 +58,11 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
 
       await audio.seek(context.position)
 
+      log(`Loaded (${duration}ms)`)
+
     } else if (playback.position !== context.position) {
+      log(`Seeking to ${context.position}ms`)
+
       set(state => {
         state.playback.position = context.position
         state.playback.ownerId = context.ownerId
