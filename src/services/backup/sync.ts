@@ -31,6 +31,9 @@ import {
   planSync,
 } from './planner'
 import { mergeBook, mergeClip } from './merge'
+import { createLogger } from '../../utils'
+
+const log = createLogger('Sync')
 
 // Re-export types for external consumers
 export * from './types'
@@ -105,7 +108,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         this.setStatus(false, null)
       }
     } catch (error) {
-      console.error('Sync failed:', error)
+      log('Sync failed:', error)
       this.setStatus(false, String(error))
     }
   }
@@ -130,16 +133,16 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const result = await this.performSync()
 
       if (result.conflicts.length > 0) {
-        console.log('Auto-sync conflicts resolved:', result.conflicts)
+        log('Auto-sync conflicts resolved:', result.conflicts)
       }
       if (result.errors.length > 0) {
-        console.warn('Auto-sync errors:', result.errors)
+        log('Auto-sync errors:', result.errors)
         this.setStatus(false, `${result.errors.length} error(s) occurred`)
       } else {
         this.setStatus(false, null)
       }
     } catch (error) {
-      console.error('Auto-sync failed:', error)
+      log('Auto-sync failed:', error)
       this.setStatus(false, String(error))
     }
   }
@@ -195,7 +198,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       result.errors.push(`Sync failed: ${error}`)
     }
 
-    console.log('Sync complete:', result)
+    log('Sync complete:', result)
     return result
   }
 
@@ -244,7 +247,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
         result.set(parsed.id, { backup, fileId: file.id, modifiedAt })
       } catch (error) {
-        console.warn(`Failed to parse remote book ${file.name}:`, error)
+        log(`Failed to parse remote book ${file.name}:`, error)
       }
     }
 
@@ -283,7 +286,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
           modifiedAt,
         })
       } catch (error) {
-        console.warn(`Failed to parse remote clip ${json.name}:`, error)
+        log(`Failed to parse remote clip ${json.name}:`, error)
       }
     }
 
@@ -342,7 +345,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const fingerprint = base64ToUint8Array(remote.backup.fingerprint)
       const fingerprintMatch = this.db.getBookByFingerprint(remote.backup.file_size, fingerprint)
       if (fingerprintMatch && fingerprintMatch.id !== local.id && fingerprintMatch.id !== remote.backup.id) {
-        console.log(`Skipping merge of book ${remote.backup.id}: fingerprint matches existing book ${fingerprintMatch.id}`)
+        log(`Skipping merge of book ${remote.backup.id}: fingerprint matches existing book ${fingerprintMatch.id}`)
         return
       }
 
@@ -373,7 +376,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         resolution,
       })
 
-      console.log(`Merged book conflict: ${local.id}`)
+      log(`Merged book conflict: ${local.id}`)
     } catch (error) {
       result.errors.push(`Failed to merge book ${local.id}: ${error}`)
     }
@@ -419,7 +422,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       })
 
       result.uploaded.books++
-      console.log(`Uploaded book: ${book.id}`)
+      log(`Uploaded book: ${book.id}`)
     } catch (error) {
       result.errors.push(`Failed to upload book ${book.id}: ${error}`)
     }
@@ -434,7 +437,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       // This happens when two devices independently add the same file (each generates its own UUID).
       const existingBook = this.db.getBookByFingerprint(backup.file_size, fingerprint)
       if (existingBook && existingBook.id !== backup.id) {
-        console.log(`Skipping download of book ${backup.id}: fingerprint matches existing book ${existingBook.id}`)
+        log(`Skipping download of book ${backup.id}: fingerprint matches existing book ${existingBook.id}`)
         return
       }
 
@@ -463,7 +466,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       })
 
       notification.booksChanged.push(backup.id)
-      console.log(`Downloaded book: ${backup.id}`)
+      log(`Downloaded book: ${backup.id}`)
     } catch (error) {
       result.errors.push(`Failed to download book ${remote.backup.id}: ${error}`)
     }
@@ -480,7 +483,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       // Clean up manifest
       this.db.deleteManifestEntry('book', bookId)
 
-      console.log(`Deleted book from remote: ${bookId}`)
+      log(`Deleted book from remote: ${bookId}`)
     } catch (error) {
       result.errors.push(`Failed to delete book ${bookId} from Drive: ${error}`)
     }
@@ -517,7 +520,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         resolution,
       })
 
-      console.log(`Merged clip conflict: ${local.id}`)
+      log(`Merged clip conflict: ${local.id}`)
     } catch (error) {
       result.errors.push(`Failed to merge clip ${local.id}: ${error}`)
     }
@@ -583,7 +586,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       })
 
       result.uploaded.clips++
-      console.log(`Uploaded clip: ${clip.id}`)
+      log(`Uploaded clip: ${clip.id}`)
     } catch (error) {
       // Rollback: if JSON uploaded but audio failed, delete JSON to prevent orphans
       if (jsonFileId && !audioFileId) {
@@ -593,7 +596,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
             await this.drive.deleteFile(jsonFileId)
             rollbackSuccess = true
           } catch (rollbackError) {
-            console.warn(`Rollback attempt ${attempt + 1} failed:`, rollbackError)
+            log(`Rollback attempt ${attempt + 1} failed:`, rollbackError)
           }
         }
         if (!rollbackSuccess) {
@@ -648,7 +651,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       })
 
       notification.clipsChanged.push(backup.id)
-      console.log(`Downloaded clip: ${backup.id}`)
+      log(`Downloaded clip: ${backup.id}`)
     } catch (error) {
       result.errors.push(`Failed to download clip ${remote.backup.id}: ${error}`)
     }
@@ -668,7 +671,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       this.db.deleteManifestEntry('clip', clipId)
 
       result.deleted.clips++
-      console.log(`Deleted clip from remote: ${clipId}`)
+      log(`Deleted clip from remote: ${clipId}`)
     } catch (error) {
       result.errors.push(`Failed to delete clip ${clipId} from Drive: ${error}`)
     }

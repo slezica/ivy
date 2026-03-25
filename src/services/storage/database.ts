@@ -7,7 +7,9 @@
 
 import * as SQLite from 'expo-sqlite'
 
-import { generateId } from '../../utils'
+import { generateId, createLogger } from '../../utils'
+
+const log = createLogger('Database')
 
 // =============================================================================
 // Public Interface
@@ -691,7 +693,7 @@ export class DatabaseService {
   // ---------------------------------------------------------------------------
 
   private runMigrations(): void {
-    console.log(`[Database] Running migrations`)
+    log('Running migrations')
 
     // Decide what the next migration to apply is (if any):
     let nextMigration
@@ -708,7 +710,7 @@ export class DatabaseService {
 
     // Run pending migrations:
     for (let i = nextMigration; i < migrations.length; i++) {
-      console.log(`[Database] Running migration ${i}`)
+      log(`Running migration ${i}`)
 
       // Apply! If this throws, we should just fail, nothing else makes sense:
       migrations[i](this.db) 

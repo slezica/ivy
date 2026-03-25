@@ -10,6 +10,9 @@ import { WhisperService } from './whisper'
 import { AudioSlicerService } from '../audio/slicer'
 import { BaseService } from '../base'
 import type { Clip } from '../storage/database'
+import { createLogger } from '../../utils'
+
+const log = createLogger('Transcription')
 
 // =============================================================================
 // Public Interface
@@ -76,22 +79,22 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
   }
 
   stop(): void {
-    console.log('[Transcription] Stopping service...')
+    log('Stopping service')
     this.started = false
     this.queue = []
   }
 
   queueClip(clipId: string): void {
     if (!this.started) {
-      console.log('[Transcription] Service not started, ignoring clip:', clipId)
+      log('Service not started, ignoring clip:', clipId)
       return
     }
 
-    console.log('[Transcription] Queueing clip:', clipId)
+    log('Queueing clip:', clipId)
     this.queue.push(clipId)
     this.emit('queued', { clipId })
     this.processQueue().catch(error => {
-      console.error('[Transcription] Queue processing failed:', error)
+      log('Queue processing failed:', error)
     })
   }
 
@@ -100,7 +103,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
   // ---------------------------------------------------------------------------
 
   private async doStart(): Promise<void> {
-    console.log('[Transcription] Starting service...')
+    log('Starting service')
 
     let lastError: unknown
 
@@ -112,7 +115,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
         break
       } catch (error) {
         lastError = error
-        console.error(`[Transcription] Start attempt ${attempt + 1}/${MAX_START_ATTEMPTS} failed:`, error)
+        log(`Start attempt ${attempt + 1}/${MAX_START_ATTEMPTS} failed:`, error)
 
         if (attempt < MAX_START_ATTEMPTS - 1) {
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]))
@@ -129,14 +132,14 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     if (!this.started) return
 
     const pendingClips = this.database.getClipsNeedingTranscription()
-    console.log('[Transcription] Found', pendingClips.length, 'clips needing transcription')
+    log('Found', pendingClips.length, 'clips needing transcription')
 
     for (const clip of pendingClips) {
       this.queue.push(clip.id)
     }
 
     this.processQueue().catch(error => {
-      console.error('[Transcription] Queue processing failed:', error)
+      log('Queue processing failed:', error)
     })
   }
 
@@ -146,7 +149,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     }
 
     if (!this.whisper.isReady()) {
-      console.log('[Transcription] Whisper not ready, skipping queue processing')
+      log('Whisper not ready, skipping queue processing')
       return
     }
 
@@ -163,13 +166,13 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
   }
 
   private async processClip(clipId: string): Promise<void> {
-    console.log('[Transcription] Processing clip:', clipId)
+    log('Processing clip:', clipId)
 
     const clips = this.database.getClipsNeedingTranscription()
     const clip = clips.find((c) => c.id === clipId)
 
     if (!clip) {
-      console.log('[Transcription] Clip not found or already transcribed:', clipId)
+      log('Clip not found or already transcribed:', clipId)
       return
     }
 
@@ -183,12 +186,12 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
       const transcription = await this.whisper.transcribe(audioPath)
 
       this.database.updateClip(clipId, { transcription })
-      console.log('[Transcription] Completed clip:', clipId, '| Result:', transcription)
+      log('Completed clip:', clipId, '| Result:', transcription)
 
       this.emit('finish', { clipId, transcription })
 
     } catch (error) {
-      console.error('[Transcription] Failed to process clip:', clipId, error)
+      log('Failed to process clip:', clipId, error)
       this.emit('finish', { clipId, error: error as Error })
 
     } finally {
@@ -201,10 +204,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
   private async extractClipAudio(clip: Clip): Promise<string> {
     const durationMs = Math.min(clip.duration, MAX_TRANSCRIPTION_DURATION_MS)
 
-    console.log('[Transcription] Extracting audio for transcription:', {
-      clipId: clip.id,
-      durationMs,
-    })
+    log(`Extracting ${durationMs}ms of audio for clip ${clip.id}`)
 
     // Use clip's own audio file as source, extract first N seconds
     const result = await this.slicer.slice({

@@ -10,6 +10,9 @@
  */
 
 import { NativeModules, NativeEventEmitter } from 'react-native'
+import { createLogger } from '../../utils'
+
+const log = createLogger('FileCopier')
 
 // =============================================================================
 // Public Interface
@@ -44,6 +47,7 @@ export class FileCopierService {
    * No file is created on disk. Call commitCopy or cancelCopy after this.
    */
   async beginCopy(opId: string, sourceUri: string): Promise<CopyBeginResult> {
+    log(`Begin copy ${opId}`)
     const result = await NativeFileCopier.beginCopy(opId, sourceUri)
 
     return {
@@ -61,6 +65,7 @@ export class FileCopierService {
     destPath: string,
     onProgress?: ProgressCallback,
   ): Promise<CopyCommitResult> {
+    log(`Committing copy ${opId} → ${destPath}`)
     let subscription: { remove: () => void } | null = null
 
     if (onProgress) {
@@ -89,6 +94,7 @@ export class FileCopierService {
    * Cancel at any stage: before begin, during begin, between begin/commit, or during commit.
    */
   async cancelCopy(opId: string): Promise<void> {
+    log(`Cancelling copy ${opId}`)
     await NativeFileCopier.cancelCopy(opId)
   }
 }

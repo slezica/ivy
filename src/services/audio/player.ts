@@ -14,6 +14,9 @@ import TrackPlayer, {
 import type { EmitterSubscription } from 'react-native'
 
 import { BaseService } from '../base'
+import { createLogger } from '../../utils'
+
+const log = createLogger('AudioPlayer')
 
 // =============================================================================
 // Public Interface
@@ -47,6 +50,8 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
   private eventSubscriptions: EmitterSubscription[] = []
 
   async load(uri: string, metadata?: TrackMetadata): Promise<number> {
+    log(`Loading: ${metadata?.title || 'unknown'}`)
+
     await this.ensureSetup()
     await TrackPlayer.reset()
 
@@ -124,6 +129,7 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
   }
 
   async unload(): Promise<void> {
+    log('Unloading')
     if (this.isSetup) {
       await TrackPlayer.reset()
     }
@@ -147,6 +153,8 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
 
   private async ensureSetup(): Promise<void> {
     if (this.isSetup) return
+
+    log('Setting up TrackPlayer')
 
     try {
       await TrackPlayer.setupPlayer({

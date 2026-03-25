@@ -8,6 +8,9 @@
  */
 
 import { NativeModules, NativeEventEmitter } from 'react-native'
+import { createLogger } from '../../utils'
+
+const log = createLogger('FileDownloader')
 
 // =============================================================================
 // Public Interface
@@ -49,8 +52,11 @@ export class FileDownloaderService {
       })
     }
 
+    log(`Downloading from ${url}`)
+
     try {
       const result = await NativeFileDownloader.download(opId, url, outputDir)
+      log(`Download complete: ${result.filePath}`)
       return { filePath: result.filePath }
     } finally {
       subscription?.remove()
@@ -61,6 +67,7 @@ export class FileDownloaderService {
    * Cancel any in-progress download.
    */
   async cancelDownload(): Promise<void> {
+    log('Cancelling download')
     await NativeFileDownloader.cancelDownload()
   }
 
@@ -69,6 +76,7 @@ export class FileDownloaderService {
    * Returns a status string like "ALREADY_UP_TO_DATE" or "DONE".
    */
   async update(): Promise<string> {
+    log('Updating yt-dlp')
     return await NativeFileDownloader.update()
   }
 
