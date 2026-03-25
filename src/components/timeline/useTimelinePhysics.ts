@@ -1,37 +1,28 @@
 /**
  * useTimelinePhysics
  *
- * Unified physics hook for timeline scroll, momentum, tap-to-seek, and optional
- * selection handle dragging and pinch-to-zoom. Uses refs for 60fps animation
- * without React re-render overhead.
+ * React hook adapter for TimelinePhysicsEngine. This is a thin bridge between:
+ *
+ *   - React state (frame counter, display position)
+ *   - Gesture handlers (react-native-gesture-handler)
+ *   - requestAnimationFrame (for momentum and animation ticks)
+ *   - The pure physics engine (which has no platform dependencies)
+ *
+ * All physics logic lives in `engine.ts`. This hook just wires it up.
  */
 
 import { useCallback, useEffect, useState, useRef } from 'react'
 import { Gesture } from 'react-native-gesture-handler'
 
 import {
-  SEGMENT_WIDTH,
-  SEGMENT_GAP,
   SEGMENT_DURATION,
-  DECELERATION,
-  MIN_VELOCITY,
-  VELOCITY_SCALE,
-  SCROLL_TO_DURATION,
   MIN_SELECTION_DURATION,
-  MIN_ZOOM,
-  MAX_ZOOM,
-  TIMELINE_HEIGHT,
 } from './constants'
-import { timeToX, xToTime, clamp } from './utils'
+import { TimelinePhysicsEngine } from './engine'
 
-const HANDLE_CIRCLE_RADIUS = 12
-const HANDLE_TOUCH_RADIUS = 24
-const DISPLAY_UPDATE_INTERVAL = 50 // Throttle time display updates to reduce re-renders
-
-// Freeze-on-slowdown: stop updating display when drag velocity drops below this threshold,
-// so finger-lift jitter never reaches the screen
-const FREEZE_VELOCITY = 80 // px/s — below this, user has "found their spot"
-const VELOCITY_SAMPLE_INTERVAL = 16 // ms — sample rate for velocity estimation
+// ============================================================================
+// Types (unchanged — preserves the contract with Timeline.tsx)
+// ============================================================================
 
 export interface SelectionConfig {
   start: number
@@ -59,6 +50,10 @@ export interface TimelinePhysicsResult {
   gesture: ReturnType<typeof Gesture.Race> | ReturnType<typeof Gesture.Simultaneous>
 }
 
+// ============================================================================
+// Hook
+// ============================================================================
+
 export function useTimelinePhysics({
   containerWidth,
   duration,
@@ -67,164 +62,107 @@ export function useTimelinePhysics({
   selection,
   canZoom = false,
 }: UseTimelinePhysicsOptions): TimelinePhysicsResult {
+  // React state that triggers re-renders
   const [frame, setFrame] = useState(0)
   const [displayPosition, setDisplayPosition] = useState(externalPosition)
 
-  // Zoom state — owned by this hook, updated synchronously via ref
-  const zoomFactorRef = useRef(1)
+  // Ref that Timeline.tsx reads during Skia picture creation
+  const scrollOffsetRef = useRef(0)
 
-  // Derived layout from zoom (refs for synchronous access in handlers)
-  const segmentWidthRef = useRef(SEGMENT_WIDTH)
-  const segmentGapRef = useRef(SEGMENT_GAP)
-
-  const applyZoom = (factor: number) => {
-    zoomFactorRef.current = factor
-    segmentWidthRef.current = SEGMENT_WIDTH * factor
-    segmentGapRef.current = SEGMENT_GAP
-  }
-
-  // Helper: call timeToX/xToTime with current layout refs
-  const tx = (time: number) => timeToX(time, SEGMENT_DURATION, segmentWidthRef.current, segmentGapRef.current)
-  const xt = (x: number) => xToTime(x, SEGMENT_DURATION, segmentWidthRef.current, segmentGapRef.current)
-  const maxOffset = useCallback(() => tx(duration), [duration])
-
-  // Scroll state (refs for 60fps)
-  const scrollOffsetRef = useRef(tx(externalPosition))
-  const velocityRef = useRef(0)
-  const isDraggingRef = useRef(false)
-  const dragStartOffsetRef = useRef(0)
+  // The rAF loop handle
   const rafIdRef = useRef<number | null>(null)
 
-  // Handle drag state
-  const draggingHandleRef = useRef<'start' | 'end' | null>(null)
-  const handleDragStartValueRef = useRef(0)
+  // -----------------------------------------------------------------------
+  // Create the engine once. Callbacks bridge engine events to React state.
+  // -----------------------------------------------------------------------
 
-  // Pinch zoom state
-  const isPinchingRef = useRef(false)
-  const pinchEndTimeRef = useRef(0)
-  const pinchBaseZoomRef = useRef(1)
+  const engineRef = useRef<TimelinePhysicsEngine | null>(null)
 
-  // Animation state for tap-to-seek
-  const animationRef = useRef<{
-    startOffset: number
-    targetOffset: number
-    startTime: number
-  } | null>(null)
-
-  // Track if we stopped momentum on this touch
-  const stoppedMomentumRef = useRef(false)
-
-  // Freeze-on-slowdown: track drag velocity to freeze display when user slows down
-  const lastDragSampleRef = useRef<{ time: number; offset: number } | null>(null)
-  const dragFrozenRef = useRef(false)
-  const frozenOffsetRef = useRef(0)
-
-  // Throttle time display updates to reduce React re-renders
-  const lastDisplayUpdateRef = useRef(0)
-  const updateDisplayPosition = useCallback((position: number, force = false) => {
-    const now = performance.now()
-    if (force || now - lastDisplayUpdateRef.current >= DISPLAY_UPDATE_INTERVAL) {
-      lastDisplayUpdateRef.current = now
-      setDisplayPosition(position)
-    }
-  }, [])
-
-  const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3)
-
-  const stopAnimation = useCallback(() => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current)
-      rafIdRef.current = null
-    }
-    velocityRef.current = 0
-    animationRef.current = null
-  }, [])
-
-  // Animated scroll to target position
-  const animateToPosition = useCallback((targetOffset: number) => {
-    stopAnimation()
-
-    animationRef.current = {
-      startOffset: scrollOffsetRef.current,
-      targetOffset: clamp(targetOffset, 0, maxOffset()),
-      startTime: performance.now(),
-    }
-
-    const tick = () => {
-      if (!animationRef.current || isDraggingRef.current || draggingHandleRef.current) {
-        animationRef.current = null
-        rafIdRef.current = null
-        return
+  if (!engineRef.current) {
+    engineRef.current = new TimelinePhysicsEngine(
+      {
+        duration,
+        containerWidth,
+        position: externalPosition,
+        selection: selection ? { start: selection.start, end: selection.end } : undefined,
+        canZoom,
+      },
+      {
+        onSeek,
+        onSelectionChange: selection?.onChange,
+        onFrame: () => {
+          // Sync the ref (read by Skia) and bump the frame counter (triggers re-render)
+          scrollOffsetRef.current = engineRef.current!.scrollOffset
+          setFrame(f => f + 1)
+        },
+        onDisplayPosition: (position) => {
+          setDisplayPosition(position)
+        },
       }
+    )
+    scrollOffsetRef.current = engineRef.current.scrollOffset
+  }
 
-      const elapsed = performance.now() - animationRef.current.startTime
-      const progress = Math.min(elapsed / SCROLL_TO_DURATION, 1)
-      const easedProgress = easeOutCubic(progress)
+  const engine = engineRef.current
 
-      const { startOffset, targetOffset } = animationRef.current
-      scrollOffsetRef.current = startOffset + (targetOffset - startOffset) * easedProgress
+  // -----------------------------------------------------------------------
+  // Keep engine callbacks in sync with latest prop values.
+  //
+  // The engine stores callbacks at construction, but onSeek/onSelectionChange
+  // may change between renders (e.g. when the parent re-renders with new
+  // closures). We use refs to ensure the engine always calls the latest version.
+  // -----------------------------------------------------------------------
 
-      updateDisplayPosition(xt(scrollOffsetRef.current))
-      setFrame(f => f + 1)
+  const onSeekRef = useRef(onSeek)
+  onSeekRef.current = onSeek
 
-      if (progress < 1) {
-        rafIdRef.current = requestAnimationFrame(tick)
+  const onSelectionChangeRef = useRef(selection?.onChange)
+  onSelectionChangeRef.current = selection?.onChange
+
+  // -----------------------------------------------------------------------
+  // rAF tick loop: calls engine.tick() and re-schedules while active
+  // -----------------------------------------------------------------------
+
+  const scheduleTick = useCallback(() => {
+    if (rafIdRef.current !== null) return // already running
+
+    const loop = () => {
+      const needsMore = engine.tick(performance.now())
+      if (needsMore) {
+        rafIdRef.current = requestAnimationFrame(loop)
       } else {
-        animationRef.current = null
         rafIdRef.current = null
-        updateDisplayPosition(xt(scrollOffsetRef.current), true)
-        onSeek(xt(scrollOffsetRef.current))
       }
     }
 
-    rafIdRef.current = requestAnimationFrame(tick)
-  }, [maxOffset, onSeek, stopAnimation, updateDisplayPosition])
+    rafIdRef.current = requestAnimationFrame(loop)
+  }, [engine])
 
-  // Momentum loop
-  const startMomentumLoop = useCallback(() => {
-    const tick = () => {
-      if (isDraggingRef.current || draggingHandleRef.current) {
-        rafIdRef.current = null
-        return
-      }
+  // -----------------------------------------------------------------------
+  // Sync external prop changes to the engine
+  // -----------------------------------------------------------------------
 
-      const max = maxOffset()
-      if (Math.abs(velocityRef.current) > MIN_VELOCITY) {
-        scrollOffsetRef.current = clamp(
-          scrollOffsetRef.current + velocityRef.current,
-          0,
-          max
-        )
-        velocityRef.current *= DECELERATION
-
-        updateDisplayPosition(xt(scrollOffsetRef.current))
-        setFrame(f => f + 1)
-        rafIdRef.current = requestAnimationFrame(tick)
-      } else {
-        velocityRef.current = 0
-        rafIdRef.current = null
-        updateDisplayPosition(xt(scrollOffsetRef.current), true)
-        onSeek(xt(scrollOffsetRef.current))
-      }
-    }
-
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current)
-    }
-    animationRef.current = null
-    rafIdRef.current = requestAnimationFrame(tick)
-  }, [maxOffset, onSeek, updateDisplayPosition])
-
-  // Sync to external position when idle
   useEffect(() => {
-    if (!isDraggingRef.current && rafIdRef.current === null && !draggingHandleRef.current) {
-      scrollOffsetRef.current = tx(externalPosition)
-      updateDisplayPosition(externalPosition, true)
-      setFrame(f => f + 1)
-    }
-  }, [externalPosition, updateDisplayPosition])
+    engine.setContainerWidth(containerWidth)
+  }, [engine, containerWidth])
 
-  // Cleanup on unmount
+  useEffect(() => {
+    engine.setDuration(duration)
+  }, [engine, duration])
+
+  useEffect(() => {
+    engine.setExternalPosition(externalPosition, performance.now())
+    // Sync the ref in case the engine updated the scroll offset
+    scrollOffsetRef.current = engine.scrollOffset
+  }, [engine, externalPosition])
+
+  useEffect(() => {
+    if (selection) {
+      engine.updateSelection(selection.start, selection.end)
+    }
+  }, [engine, selection?.start, selection?.end])
+
+  // Cleanup rAF on unmount
   useEffect(() => {
     return () => {
       if (rafIdRef.current !== null) {
@@ -233,200 +171,32 @@ export function useTimelinePhysics({
     }
   }, [])
 
-  // Check if touch is on a selection handle
-  const getHandleAtPosition = useCallback((touchX: number, touchY: number): 'start' | 'end' | null => {
-    if (!selection) return null
+  // -----------------------------------------------------------------------
+  // Build gesture handlers that delegate to engine methods
+  // -----------------------------------------------------------------------
 
-    const halfWidth = containerWidth / 2
-    const circleY = TIMELINE_HEIGHT - 10 + HANDLE_CIRCLE_RADIUS
-
-    // Convert touch to timeline coordinates
-    const timelineX = scrollOffsetRef.current + (touchX - halfWidth)
-
-    const startHandleX = tx(selection.start)
-    const endHandleX = tx(selection.end)
-
-    // Check distance to each handle circle
-    const distToStart = Math.sqrt(
-      Math.pow(timelineX - startHandleX, 2) + Math.pow(touchY - circleY, 2)
-    )
-    const distToEnd = Math.sqrt(
-      Math.pow(timelineX - endHandleX, 2) + Math.pow(touchY - circleY, 2)
-    )
-
-    if (distToStart <= HANDLE_TOUCH_RADIUS && distToStart <= distToEnd) {
-      return 'start'
-    }
-    if (distToEnd <= HANDLE_TOUCH_RADIUS) {
-      return 'end'
-    }
-
-    return null
-  }, [containerWidth, selection])
-
-  // --- Gesture handlers ---
-
-  const isPinchCooldown = () => isPinchingRef.current || performance.now() - pinchEndTimeRef.current < 200
-
-  const handleTouchDown = useCallback((x: number, y: number) => {
-    // Check if touching a handle (not during pinch)
-    if (selection && !isPinchCooldown()) {
-      const handle = getHandleAtPosition(x, y)
-      if (handle) {
-        draggingHandleRef.current = handle
-        handleDragStartValueRef.current = handle === 'start' ? selection.start : selection.end
-        stopAnimation()
-        stoppedMomentumRef.current = true
-        return
-      }
-    }
-
-    // Not on handle - check if we should stop momentum
-    if (rafIdRef.current !== null || animationRef.current !== null) {
-      stopAnimation()
-      stoppedMomentumRef.current = true
-      onSeek(xt(scrollOffsetRef.current))
-    } else {
-      stoppedMomentumRef.current = false
-    }
-  }, [getHandleAtPosition, selection, stopAnimation, onSeek])
-
-  const handleTap = useCallback((x: number) => {
-    if (stoppedMomentumRef.current || draggingHandleRef.current || isPinchCooldown()) {
-      stoppedMomentumRef.current = false
-      draggingHandleRef.current = null
-      return
-    }
-
-    const halfWidth = containerWidth / 2
-    const offsetFromCenter = x - halfWidth
-    const tappedTime = xt(scrollOffsetRef.current + offsetFromCenter)
-    const clampedTime = clamp(tappedTime, 0, duration)
-
-    animateToPosition(tx(clampedTime))
-  }, [containerWidth, duration, animateToPosition])
-
-  const onPanStart = useCallback((x: number, y: number) => {
-    if (isPinchCooldown()) return
-
-    // Check if starting on a handle
-    if (selection) {
-      const handle = getHandleAtPosition(x, y)
-      if (handle) {
-        draggingHandleRef.current = handle
-        handleDragStartValueRef.current = handle === 'start' ? selection.start : selection.end
-        stopAnimation()
-        return
-      }
-    }
-
-    // Regular pan
-    isDraggingRef.current = true
-    velocityRef.current = 0
-    dragStartOffsetRef.current = scrollOffsetRef.current
-    lastDragSampleRef.current = null
-    dragFrozenRef.current = false
-    stopAnimation()
-  }, [getHandleAtPosition, selection, stopAnimation])
-
-  const onPanUpdate = useCallback((translationX: number) => {
-    if (isPinchCooldown()) return
-
-    if (draggingHandleRef.current && selection) {
-      // Dragging a handle
-      const deltaTime = xt(translationX)
-      const newValue = handleDragStartValueRef.current + deltaTime
-
-      if (draggingHandleRef.current === 'start') {
-        const maxStart = selection.end - MIN_SELECTION_DURATION
-        const clampedStart = clamp(newValue, 0, maxStart)
-        selection.onChange(clampedStart, selection.end)
-      } else {
-        const minEnd = selection.start + MIN_SELECTION_DURATION
-        const clampedEnd = clamp(newValue, minEnd, duration)
-        selection.onChange(selection.start, clampedEnd)
-      }
-
-      setFrame(f => f + 1)
-      return
-    }
-
-    // Regular scroll — always track true position
-    const newOffset = clamp(
-      dragStartOffsetRef.current - translationX,
-      0,
-      maxOffset()
-    )
-
-    // Estimate drag velocity to detect slowdown
-    const now = performance.now()
-    const lastSample = lastDragSampleRef.current
-    if (lastSample && now - lastSample.time >= VELOCITY_SAMPLE_INTERVAL) {
-      const dt = (now - lastSample.time) / 1000 // seconds
-      const dragVelocity = Math.abs(newOffset - lastSample.offset) / dt // px/s
-
-      if (dragVelocity < FREEZE_VELOCITY) {
-        // User is barely moving — freeze display here
-        if (!dragFrozenRef.current) {
-          dragFrozenRef.current = true
-          frozenOffsetRef.current = scrollOffsetRef.current
-          updateDisplayPosition(xt(scrollOffsetRef.current), true)
-        }
-      } else {
-        dragFrozenRef.current = false
-      }
-
-      lastDragSampleRef.current = { time: now, offset: newOffset }
-    } else if (!lastSample) {
-      lastDragSampleRef.current = { time: now, offset: newOffset }
-    }
-
-    scrollOffsetRef.current = newOffset
-
-    if (!dragFrozenRef.current) {
-      updateDisplayPosition(xt(scrollOffsetRef.current))
-      setFrame(f => f + 1)
-    }
-  }, [maxOffset, selection, duration, updateDisplayPosition])
-
-  const onPanEnd = useCallback((velocityX: number) => {
-    if (isPinchCooldown()) return
-
-    if (draggingHandleRef.current) {
-      draggingHandleRef.current = null
-      return
-    }
-
-    isDraggingRef.current = false
-
-    if (dragFrozenRef.current) {
-      // Display was frozen — use the frozen position, discard finger-lift noise
-      scrollOffsetRef.current = frozenOffsetRef.current
-      dragFrozenRef.current = false
-      updateDisplayPosition(xt(scrollOffsetRef.current), true)
-      onSeek(xt(scrollOffsetRef.current))
-    } else {
-      // Normal release — apply momentum if fast enough
-      velocityRef.current = -velocityX * VELOCITY_SCALE
-      if (Math.abs(velocityRef.current) > MIN_VELOCITY) {
-        startMomentumLoop()
-      } else {
-        onSeek(xt(scrollOffsetRef.current))
-      }
-    }
-  }, [startMomentumLoop, onSeek, updateDisplayPosition])
-
-  // Build composed gesture
   const panGesture = Gesture.Pan()
     .runOnJS(true)
-    .onStart((event) => onPanStart(event.x, event.y))
-    .onUpdate((event) => onPanUpdate(event.translationX))
-    .onEnd((event) => onPanEnd(event.velocityX))
+    .onStart((event) => {
+      engine.panStart(event.x, event.y, performance.now())
+    })
+    .onUpdate((event) => {
+      engine.panUpdate(event.translationX, performance.now())
+    })
+    .onEnd((event) => {
+      engine.panEnd(event.velocityX, performance.now())
+      scheduleTick() // momentum may have started
+    })
 
   const tapGesture = Gesture.Tap()
     .runOnJS(true)
-    .onBegin((event) => handleTouchDown(event.x, event.y))
-    .onEnd((event) => handleTap(event.x))
+    .onBegin((event) => {
+      engine.touchDown(event.x, event.y, performance.now())
+    })
+    .onEnd((event) => {
+      engine.tap(event.x, performance.now())
+      scheduleTick() // tap-to-seek animation may have started
+    })
 
   const panTapGesture = Gesture.Race(panGesture, tapGesture)
 
@@ -436,34 +206,25 @@ export function useTimelinePhysics({
         Gesture.Pinch()
           .runOnJS(true)
           .onStart(() => {
-            isPinchingRef.current = true
-            pinchBaseZoomRef.current = zoomFactorRef.current
-            stopAnimation()
+            engine.pinchStart(performance.now())
           })
           .onUpdate((event) => {
-            // Compute new zoom, snapped to reduce jitter
-            const rawZoom = pinchBaseZoomRef.current * (event.scale ** 1.5)
-            const newZoom = clamp(Math.round(rawZoom * 20) / 20, MIN_ZOOM, MAX_ZOOM)
-            if (newZoom === zoomFactorRef.current) return
-
-            // Preserve current time position across zoom change
-            const currentTime = xt(scrollOffsetRef.current)
-            applyZoom(newZoom)
-            scrollOffsetRef.current = tx(currentTime)
-
-            setFrame(f => f + 1)
+            engine.pinchUpdate(event.scale, performance.now())
           })
           .onEnd(() => {
-            isPinchingRef.current = false
-            pinchEndTimeRef.current = performance.now()
+            engine.pinchEnd(performance.now())
           })
       )
     : panTapGesture
 
+  // -----------------------------------------------------------------------
+  // Return the same shape as before — Timeline.tsx sees no change
+  // -----------------------------------------------------------------------
+
   return {
     scrollOffsetRef,
-    segmentWidth: segmentWidthRef.current,
-    segmentGap: segmentGapRef.current,
+    segmentWidth: engine.segmentWidth,
+    segmentGap: engine.segmentGap,
     displayPosition,
     frame,
     gesture,
