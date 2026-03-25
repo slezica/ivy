@@ -73,6 +73,24 @@ export function useTimelinePhysics({
   const rafIdRef = useRef<number | null>(null)
 
   // -----------------------------------------------------------------------
+  // Stable refs for callbacks that may change between renders.
+  //
+  // The engine is created once and stores its callbacks permanently. But
+  // onSeek/onSelectionChange are closures from the parent that capture
+  // state (e.g. the current book URI). If we pass them directly at
+  // construction, the engine would call stale versions forever.
+  //
+  // Solution: pass thin wrappers that dereference these refs, so the
+  // engine always calls the latest closure.
+  // -----------------------------------------------------------------------
+
+  const onSeekRef = useRef(onSeek)
+  onSeekRef.current = onSeek
+
+  const onSelectionChangeRef = useRef(selection?.onChange)
+  onSelectionChangeRef.current = selection?.onChange
+
+  // -----------------------------------------------------------------------
   // Create the engine once. Callbacks bridge engine events to React state.
   // -----------------------------------------------------------------------
 
@@ -88,10 +106,9 @@ export function useTimelinePhysics({
         canZoom,
       },
       {
-        onSeek,
-        onSelectionChange: selection?.onChange,
+        onSeek: (pos) => onSeekRef.current(pos),
+        onSelectionChange: (start, end) => onSelectionChangeRef.current?.(start, end),
         onFrame: () => {
-          // Sync the ref (read by Skia) and bump the frame counter (triggers re-render)
           scrollOffsetRef.current = engineRef.current!.scrollOffset
           setFrame(f => f + 1)
         },
@@ -104,20 +121,6 @@ export function useTimelinePhysics({
   }
 
   const engine = engineRef.current
-
-  // -----------------------------------------------------------------------
-  // Keep engine callbacks in sync with latest prop values.
-  //
-  // The engine stores callbacks at construction, but onSeek/onSelectionChange
-  // may change between renders (e.g. when the parent re-renders with new
-  // closures). We use refs to ensure the engine always calls the latest version.
-  // -----------------------------------------------------------------------
-
-  const onSeekRef = useRef(onSeek)
-  onSeekRef.current = onSeek
-
-  const onSelectionChangeRef = useRef(selection?.onChange)
-  onSelectionChangeRef.current = selection?.onChange
 
   // -----------------------------------------------------------------------
   // rAF tick loop: calls engine.tick() and re-schedules while active
