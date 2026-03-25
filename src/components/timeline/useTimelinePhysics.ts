@@ -11,7 +11,7 @@
  * All physics logic lives in `engine.ts`. This hook just wires it up.
  */
 
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Gesture } from 'react-native-gesture-handler'
 
 import {
@@ -35,6 +35,8 @@ export interface UseTimelinePhysicsOptions {
   duration: number
   externalPosition: number
   onSeek: (position: number) => void
+  /** Called on every visual frame — use to push picture imperatively */
+  onFrame?: () => void
   selection?: SelectionConfig
   canZoom?: boolean
 }
@@ -46,7 +48,6 @@ export interface TimelinePhysicsResult {
   /** Current zoom-scaled segment gap */
   segmentGap: number
   displayPosition: number
-  frame: number
   gesture: ReturnType<typeof Gesture.Race> | ReturnType<typeof Gesture.Simultaneous>
 }
 
@@ -59,11 +60,11 @@ export function useTimelinePhysics({
   duration,
   externalPosition,
   onSeek,
+  onFrame,
   selection,
   canZoom = false,
 }: UseTimelinePhysicsOptions): TimelinePhysicsResult {
-  // React state that triggers re-renders
-  const [frame, setFrame] = useState(0)
+  // React state that triggers re-renders (only for time indicator text)
   const [displayPosition, setDisplayPosition] = useState(externalPosition)
 
   // Ref that Timeline.tsx reads during Skia picture creation
@@ -86,6 +87,9 @@ export function useTimelinePhysics({
 
   const onSeekRef = useRef(onSeek)
   onSeekRef.current = onSeek
+
+  const onFrameRef = useRef(onFrame)
+  onFrameRef.current = onFrame
 
   const onSelectionChangeRef = useRef(selection?.onChange)
   onSelectionChangeRef.current = selection?.onChange
@@ -110,7 +114,7 @@ export function useTimelinePhysics({
         onSelectionChange: (start, end) => onSelectionChangeRef.current?.(start, end),
         onFrame: () => {
           scrollOffsetRef.current = engineRef.current!.scrollOffset
-          setFrame(f => f + 1)
+          onFrameRef.current?.()
         },
         onDisplayPosition: (position) => {
           setDisplayPosition(position)
@@ -229,7 +233,6 @@ export function useTimelinePhysics({
     segmentWidth: engine.segmentWidth,
     segmentGap: engine.segmentGap,
     displayPosition,
-    frame,
     gesture,
   }
 }

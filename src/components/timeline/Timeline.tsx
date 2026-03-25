@@ -36,12 +36,13 @@
  *   - **Pinch** (when canZoom) to zoom in/out by scaling bar width
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { View, Text, StyleSheet, LayoutChangeEvent } from 'react-native'
 import {
   Canvas,
   Picture,
   Skia,
+  SkPicture,
   createPicture,
   SkCanvas,
   ClipOp,
@@ -276,16 +277,7 @@ export function Timeline({
   // Editable selection: show handles when onChange callback is also provided
   const hasEditableSelection = hasVisualSelection && !!onSelectionChange
 
-  const { scrollOffsetRef, segmentWidth, segmentGap, displayPosition, frame, gesture } = useTimelinePhysics({
-    containerWidth,
-    duration,
-    externalPosition: position,
-    onSeek,
-    selection: hasEditableSelection
-      ? { start: selectionStart!, end: selectionEnd!, onChange: onSelectionChange! }
-      : undefined,
-    canZoom,
-  })
+  const canvasRef = useRef<TimelineCanvasHandle>(null)
 
   const totalSegments = Math.ceil(duration / SEGMENT_DURATION)
 
@@ -306,21 +298,26 @@ export function Timeline({
     ? TIMELINE_HEIGHT + HANDLE_CIRCLE_RADIUS * 2
     : TIMELINE_HEIGHT
 
-  // Create picture - rebuilt when frame changes
-  const picture = useMemo(() => {
-    if (containerWidth === 0 || totalSegments === 0) return null
+  // Picture rebuild — creates a new SkPicture and pushes it to the canvas
+  // component. Called from the engine's onFrame (fast path, ~120Hz during
+  // momentum) and from a useEffect on structural changes (slow path).
+  // The ref is reassigned every render so the closure always captures
+  // current values; scrollOffsetRef is a ref so it's always fresh.
+  const rebuildRef = useRef<() => void>(() => {})
 
-    const halfWidth = containerWidth / 2
+  rebuildRef.current = () => {
+    if (containerWidth === 0 || totalSegments === 0) return
+
     const scrollOffset = scrollOffsetRef.current
-    const playheadX = scrollOffset // Playhead is always at scroll position (center-fixed)
+    const halfWidth = containerWidth / 2
+    const playheadX = scrollOffset
 
     const selStartX = hasVisualSelection ? timeToX(selectionStart!, SEGMENT_DURATION, segmentWidth, segmentGap) : null
     const selEndX = hasVisualSelection ? timeToX(selectionEnd!, SEGMENT_DURATION, segmentWidth, segmentGap) : null
 
     try {
-      return createPicture(
+      const pic = createPicture(
         (canvas) => {
-          // Transform: position scrollOffset at center of canvas
           canvas.save()
           canvas.translate(halfWidth - scrollOffset, 0)
 
@@ -350,12 +347,31 @@ export function Timeline({
         },
         { width: containerWidth, height: canvasHeight }
       )
+
+      canvasRef.current?.setPicture(pic)
     } catch (error) {
       console.error('Error creating timeline picture:', error)
-      return null
     }
+  }
+
+  const { scrollOffsetRef, segmentWidth, segmentGap, displayPosition, gesture } = useTimelinePhysics({
+    containerWidth,
+    duration,
+    externalPosition: position,
+    onSeek,
+    onFrame: () => rebuildRef.current(),
+    selection: hasEditableSelection
+      ? { start: selectionStart!, end: selectionEnd!, onChange: onSelectionChange! }
+      : undefined,
+    canZoom,
+  })
+
+  // Rebuild picture when structural parameters change (slow path).
+  // The fast path (scroll/momentum) is handled by the engine's onFrame callback.
+  useEffect(() => {
+    rebuildRef.current()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frame, containerWidth, totalSegments, duration, segmentWidth, segmentGap, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
+  }, [containerWidth, totalSegments, duration, segmentWidth, segmentGap, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
 
   // Calculate playhead position based on time indicator placement
   const playheadTop = showTime === 'top'
@@ -389,9 +405,11 @@ export function Timeline({
       <GestureDetector gesture={gesture}>
         <View style={[styles.timelineContainer, { height: canvasHeight }]} onLayout={handleLayout}>
           {containerWidth > 0 && (
-            <Canvas style={{ width: containerWidth, height: canvasHeight }}>
-              {picture && <Picture picture={picture} />}
-            </Canvas>
+            <TimelineCanvas
+              ref={canvasRef}
+              width={containerWidth}
+              height={canvasHeight}
+            />
           )}
         </View>
       </GestureDetector>
@@ -416,6 +434,46 @@ function createPaint(color: string) {
   paint.setColor(Skia.Color(color))
   return paint
 }
+
+// =============================================================================
+// TimelineCanvas — isolated canvas that only re-renders on picture changes
+//
+// During momentum flings, the engine fires onFrame ~120 times/sec.
+// Previously this re-rendered the entire Timeline (gesture detector, layout,
+// time indicators, etc.), causing 30-50ms spikes from React reconciliation.
+//
+// By isolating the Canvas in its own component with an internal frame counter,
+// only this tiny subtree re-renders on each frame. The parent Timeline only
+// re-renders when displayPosition changes (throttled to 50ms) or props change.
+// =============================================================================
+
+interface TimelineCanvasHandle {
+  setPicture: (picture: SkPicture) => void
+}
+
+const TimelineCanvas = React.memo(React.forwardRef<
+  TimelineCanvasHandle,
+  { width: number; height: number }
+>(function TimelineCanvas({ width, height }, ref) {
+  const [frame, setFrame] = useState(0)
+  const pictureRef = useRef<SkPicture | null>(null)
+
+  useImperativeHandle(ref, () => ({
+    setPicture: (picture: SkPicture) => {
+      pictureRef.current = picture
+      setFrame(f => f + 1)
+    },
+  }))
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const picture = useMemo(() => pictureRef.current, [frame])
+
+  return (
+    <Canvas style={{ width, height }}>
+      {picture && <Picture picture={picture} />}
+    </Canvas>
+  )
+}))
 
 // =============================================================================
 // TimeIndicators
