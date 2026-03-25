@@ -60,3 +60,4 @@ app-example
 
 # Maestro test artifacts
 maestro/screenshots/
+.claude/worktrees/
