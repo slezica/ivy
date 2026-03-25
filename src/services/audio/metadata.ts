@@ -8,6 +8,9 @@
  */
 
 import { NativeModules } from 'react-native'
+import { createLogger } from '../../utils'
+
+const log = createLogger('AudioMetadata')
 
 // =============================================================================
 // Public Interface
@@ -30,12 +33,7 @@ export class AudioMetadataService {
       const filePath = uriToPath(fileUri)
       const metadata = await AudioMetadataModule.extractMetadata(filePath)
 
-      console.log('Metadata extracted:', {
-        title: metadata.title,
-        artist: metadata.artist,
-        hasArtwork: !!metadata.artwork,
-        duration: metadata.duration,
-      })
+      log(`Extracted: "${metadata.title || 'unknown'}" by ${metadata.artist || 'unknown'} (${metadata.duration}ms)`)
 
       return {
         title: metadata.title || null,
@@ -44,7 +42,7 @@ export class AudioMetadataService {
         duration: metadata.duration || 0,
       }
     } catch (error) {
-      console.error('Failed to read metadata:', error)
+      log('Failed to read metadata:', error)
       return {
         title: null,
         artist: null,

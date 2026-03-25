@@ -5,6 +5,9 @@
  */
 
 import * as Sharing from 'expo-sharing'
+import { createLogger } from '../../utils'
+
+const log = createLogger('Sharing')
 
 // =============================================================================
 // Service
@@ -16,7 +19,7 @@ export class SharingService {
    */
   async shareClipFile(clipUri: string, title?: string): Promise<void> {
     try {
-      console.log('[Sharing] Attempting to share:', clipUri)
+      log('Sharing:', clipUri)
 
       if (!(await Sharing.isAvailableAsync())) {
         throw new Error('Sharing is not available on this device')
@@ -26,20 +29,18 @@ export class SharingService {
       const path = clipUri.replace('file://', '')
       const { default: RNFS } = await import('react-native-fs')
       const exists = await RNFS.exists(path)
-      console.log('[Sharing] File exists:', exists, 'at path:', path)
 
       if (!exists) {
         throw new Error(`Clip file not found: ${path}`)
       }
 
       const stat = await RNFS.stat(path)
-      console.log('[Sharing] File size:', stat.size, 'bytes')
+      log(`File: ${stat.size} bytes`)
 
       // Determine MIME type based on file extension
       const isM4a = path.toLowerCase().endsWith('.m4a')
       const mimeType = isM4a ? 'audio/mp4' : 'audio/mpeg'
       const uti = isM4a ? 'public.mpeg-4-audio' : 'public.mp3'
-      console.log('[Sharing] Using MIME type:', mimeType)
 
       await Sharing.shareAsync(clipUri, {
         dialogTitle: title || 'Audio Clip',
@@ -48,7 +49,7 @@ export class SharingService {
       })
 
     } catch (error) {
-      console.error('Error sharing clip:', error)
+      log('Error sharing clip:', error)
       throw error
     }
   }

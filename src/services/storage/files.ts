@@ -7,6 +7,9 @@
 
 import { Paths, Directory } from 'expo-file-system'
 import RNFS from 'react-native-fs'
+import { createLogger } from '../../utils'
+
+const log = createLogger('FileStorage')
 
 // How many bytes to read for fingerprint
 const FINGERPRINT_BYTES = 4096
@@ -86,7 +89,7 @@ export class FileStorageService {
         await RNFS.unlink(path)
       }
     } catch (error) {
-      console.error('Error deleting file:', error)
+      log('Error deleting file:', error)
     }
   }
 

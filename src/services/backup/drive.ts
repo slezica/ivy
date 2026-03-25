@@ -6,6 +6,9 @@
  */
 
 import { GoogleAuthService } from './auth'
+import { createLogger } from '../../utils'
+
+const log = createLogger('GoogleDrive')
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3'
@@ -264,7 +267,7 @@ export class GoogleDriveService {
 
     const searchData = await searchResponse.json()
     if (searchData.files?.length > 0) {
-      console.log(`Found existing folder: ${name}`)
+      log(`Found existing folder: ${name}`)
       return searchData.files[0].id
     }
 
@@ -289,7 +292,7 @@ export class GoogleDriveService {
     }
 
     const createData = await createResponse.json()
-    console.log(`Created folder: ${name}`)
+    log(`Created folder: ${name}`)
     return createData.id
   }
 }

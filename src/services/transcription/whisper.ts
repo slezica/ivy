@@ -12,6 +12,9 @@ import { initWhisper, WhisperContext } from 'whisper.rn'
 import { decodeAudioData } from 'react-native-audio-api'
 import RNFS from 'react-native-fs'
 import { BaseService } from '../base'
+import { createLogger } from '../../utils'
+
+const log = createLogger('Whisper')
 
 // =============================================================================
 // Constants
@@ -71,7 +74,7 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
       throw new Error('Whisper not initialized')
     }
 
-    console.log('[Whisper] Transcribing:', audioPath)
+    log(' Transcribing:', audioPath)
     this.emit('status', { status: 'processing' })
 
     // Convert to Whisper-compatible format (16kHz mono WAV)
@@ -85,7 +88,7 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
       const result = await promise
       const text = result.result.trim()
 
-      console.log('[Whisper] Transcription result:', text)
+      log(' Transcription result:', text)
 
       return text
     } finally {
@@ -110,17 +113,17 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
     try {
       const modelPath = await this.ensureModelDownloaded()
 
-      console.log('[Whisper] Initializing context...')
+      log(' Initializing context...')
       this.context = await initWhisper({ filePath: modelPath })
-      console.log('[Whisper] Context initialized')
+      log(' Context initialized')
     } catch (error) {
-      console.error('[Whisper] Failed to initialize:', error)
+      log(' Failed to initialize:', error)
       throw error
     }
   }
 
   private async convertToWav(audioPath: string): Promise<string> {
-    console.log('[Whisper] Converting to WAV:', audioPath)
+    log(' Converting to WAV:', audioPath)
 
     // Decode audio to 16kHz PCM
     const audioBuffer = await decodeAudioData(audioPath, WHISPER_SAMPLE_RATE)
@@ -144,7 +147,7 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
     const wavPath = `${RNFS.CachesDirectoryPath}/whisper_${Date.now()}.wav`
     await RNFS.writeFile(wavPath, this.arrayBufferToBase64(wavData), 'base64')
 
-    console.log('[Whisper] Converted to WAV:', wavPath)
+    log(' Converted to WAV:', wavPath)
     return wavPath
   }
 
@@ -224,7 +227,7 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
     // Check if model already exists (only the final file, not .download)
     const exists = await RNFS.exists(modelPath)
     if (exists) {
-      console.log('[Whisper] Model already downloaded')
+      log(' Model already downloaded')
       return modelPath
     }
 
@@ -233,7 +236,7 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
       throw new Error('Download already in progress')
     }
 
-    console.log('[Whisper] Downloading model...')
+    log(' Downloading model...')
     this.downloading = true
     this.emit('status', { status: 'downloading' })
 
@@ -258,7 +261,7 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
       // Rename to final path only after successful download
       await RNFS.moveFile(downloadPath, modelPath)
 
-      console.log('[Whisper] Model downloaded successfully')
+      log(' Model downloaded successfully')
       return modelPath
     } catch (error) {
       // Clean up partial download on failure

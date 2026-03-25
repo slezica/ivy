@@ -6,6 +6,9 @@
  */
 
 import { DatabaseService, SyncEntityType, SyncOperation, SyncQueueItem } from '../storage'
+import { createLogger } from '../../utils'
+
+const log = createLogger('SyncQueue')
 
 const MAX_ATTEMPTS = 3
 
@@ -90,13 +93,13 @@ export class SyncQueueService {
         await handler(item)
         this.db.removeFromQueue(item.entity_type, item.entity_id)
         result.processed++
-        console.log(`Processed queue item: ${item.entity_type}:${item.entity_id}`)
+        log(`Processed: ${item.entity_type}:${item.entity_id}`)
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
         this.db.updateQueueItemAttempt(item.entity_type, item.entity_id, errorMessage)
         result.failed++
         result.errors.push(`${item.entity_type}:${item.entity_id}: ${errorMessage}`)
-        console.warn(`Failed to process queue item ${item.entity_type}:${item.entity_id}:`, error)
+        log(`Failed: ${item.entity_type}:${item.entity_id}:`, error)
       }
     }
 
@@ -143,7 +146,7 @@ export class SyncQueueService {
       this.db.queueChange(item.entity_type, item.entity_id, item.operation)
     }
 
-    console.log(`Reset ${failed.length} failed items for retry`)
+    log(`Reset ${failed.length} failed items for retry`)
   }
 }
 

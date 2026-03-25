@@ -5,6 +5,9 @@
  */
 
 import * as DocumentPicker from 'expo-document-picker'
+import { createLogger } from '../../utils'
+
+const log = createLogger('FilePicker')
 
 // =============================================================================
 // Public Interface
@@ -41,7 +44,7 @@ export class FilePickerService {
         name: asset.name,
       }
     } catch (error) {
-      console.error('Error picking audio file:', error)
+      log('Error picking audio file:', error)
       throw error
     }
   }

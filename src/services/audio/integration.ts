@@ -7,17 +7,20 @@
 
 import TrackPlayer, { Event } from 'react-native-track-player'
 import { SKIP_FORWARD_MS, SKIP_BACKWARD_MS } from '../../actions/constants'
+import { createLogger } from '../../utils'
+
+const log = createLogger('PlaybackService')
 
 export async function playbackService() {
-  console.log('Playback service registered')
+  log('Registered')
 
   TrackPlayer.addEventListener(Event.RemotePlay, () => {
-    console.log('Remote play event')
+    log('Remote play')
     TrackPlayer.play()
   })
 
   TrackPlayer.addEventListener(Event.RemotePause, () => {
-    console.log('Remote pause event')
+    log('Remote pause')
     TrackPlayer.pause()
   })
 

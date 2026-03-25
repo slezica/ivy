@@ -12,6 +12,9 @@ import {
   GoogleSignin,
   statusCodes,
 } from '@react-native-google-signin/google-signin'
+import { createLogger } from '../../utils'
+
+const log = createLogger('GoogleAuth')
 
 // Web client ID (also need Android client ID configured in Google Cloud Console)
 const WEB_CLIENT_ID = '883355617581-9rn0rpcbn6oa0034fe4vg650g2vui622.apps.googleusercontent.com'
@@ -35,7 +38,7 @@ class GoogleAuthService {
       offlineAccess: false,
     })
     this.configured = true
-    console.log('GoogleAuth configured')
+    log('Configured')
   }
 
   /**
@@ -67,7 +70,7 @@ class GoogleAuthService {
       if (error.code === statusCodes.SIGN_IN_REQUIRED) {
         return null
       }
-      console.error('Failed to get access token:', error)
+      log('Failed to get access token:', error)
       return null
     }
   }
@@ -83,7 +86,7 @@ class GoogleAuthService {
       if (GoogleSignin.hasPreviousSignIn()) {
         try {
           await GoogleSignin.signInSilently()
-          console.log('Restored previous session')
+          log('Restored previous session')
           return true
         } catch {
           // Fall through to interactive sign-in
@@ -92,17 +95,17 @@ class GoogleAuthService {
 
       // Interactive sign-in
       const result = await GoogleSignin.signIn()
-      console.log('Signed in as:', result.data?.user.email)
+      log('Signed in as:', result.data?.user.email)
       return true
     } catch (error: any) {
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        console.log('Sign-in cancelled')
+        log('Sign-in cancelled')
       } else if (error.code === statusCodes.IN_PROGRESS) {
-        console.log('Sign-in in progress')
+        log('Sign-in in progress')
       } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        console.error('Play Services unavailable')
+        log('Play Services unavailable')
       } else {
-        console.error('Sign-in failed:', error)
+        log('Sign-in failed:', error)
       }
       return false
     }
@@ -114,9 +117,9 @@ class GoogleAuthService {
   async signOut(): Promise<void> {
     try {
       await GoogleSignin.signOut()
-      console.log('Signed out')
+      log('Signed out')
     } catch (error) {
-      console.warn('Sign out failed:', error)
+      log('Sign out failed:', error)
     }
   }
 }

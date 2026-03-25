@@ -7,6 +7,9 @@
 
 import { NativeModules } from 'react-native'
 import RNFS from 'react-native-fs'
+import { createLogger } from '../../utils'
+
+const log = createLogger('AudioSlicer')
 
 // =============================================================================
 // Public Interface
@@ -42,7 +45,7 @@ export class AudioSlicerService {
     const baseDir = outputDir ?? RNFS.CachesDirectoryPath
     const outputPath = `${baseDir}/${prefix}`
 
-    console.log('[AudioSlicer] Slicing:', { inputPath, startMs, endMs, outputPath })
+    log(`Slicing: ${startMs}ms-${endMs}ms → ${outputPath}`)
 
     const resultPath = await AudioSlicer.sliceAudio(
       inputPath,
@@ -58,7 +61,7 @@ export class AudioSlicerService {
       throw new Error('Audio slice completed but output file not found')
     }
 
-    console.log('[AudioSlicer] Slice complete:', normalizedPath)
+    log('Slice complete:', normalizedPath)
 
     return {
       path: normalizedPath,
@@ -77,7 +80,7 @@ export class AudioSlicerService {
         await RNFS.unlink(path)
       }
     } catch (error) {
-      console.warn('[AudioSlicer] Cleanup failed:', error)
+      log('Cleanup failed:', error)
     }
   }
 
