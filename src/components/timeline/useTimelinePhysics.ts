@@ -28,6 +28,11 @@ const HANDLE_CIRCLE_RADIUS = 12
 const HANDLE_TOUCH_RADIUS = 24
 const DISPLAY_UPDATE_INTERVAL = 50 // Throttle time display updates to reduce re-renders
 
+// Freeze-on-slowdown: stop updating display when drag velocity drops below this threshold,
+// so finger-lift jitter never reaches the screen
+const FREEZE_VELOCITY = 80 // px/s — below this, user has "found their spot"
+const VELOCITY_SAMPLE_INTERVAL = 16 // ms — sample rate for velocity estimation
+
 export interface SelectionConfig {
   start: number
   end: number
@@ -108,6 +113,11 @@ export function useTimelinePhysics({
 
   // Track if we stopped momentum on this touch
   const stoppedMomentumRef = useRef(false)
+
+  // Freeze-on-slowdown: track drag velocity to freeze display when user slows down
+  const lastDragSampleRef = useRef<{ time: number; offset: number } | null>(null)
+  const dragFrozenRef = useRef(false)
+  const frozenOffsetRef = useRef(0)
 
   // Throttle time display updates to reduce React re-renders
   const lastDisplayUpdateRef = useRef(0)
@@ -314,6 +324,8 @@ export function useTimelinePhysics({
     isDraggingRef.current = true
     velocityRef.current = 0
     dragStartOffsetRef.current = scrollOffsetRef.current
+    lastDragSampleRef.current = null
+    dragFrozenRef.current = false
     stopAnimation()
   }, [getHandleAtPosition, selection, stopAnimation])
 
@@ -339,14 +351,42 @@ export function useTimelinePhysics({
       return
     }
 
-    // Regular scroll
-    scrollOffsetRef.current = clamp(
+    // Regular scroll — always track true position
+    const newOffset = clamp(
       dragStartOffsetRef.current - translationX,
       0,
       maxOffset()
     )
-    updateDisplayPosition(xt(scrollOffsetRef.current))
-    setFrame(f => f + 1)
+
+    // Estimate drag velocity to detect slowdown
+    const now = performance.now()
+    const lastSample = lastDragSampleRef.current
+    if (lastSample && now - lastSample.time >= VELOCITY_SAMPLE_INTERVAL) {
+      const dt = (now - lastSample.time) / 1000 // seconds
+      const dragVelocity = Math.abs(newOffset - lastSample.offset) / dt // px/s
+
+      if (dragVelocity < FREEZE_VELOCITY) {
+        // User is barely moving — freeze display here
+        if (!dragFrozenRef.current) {
+          dragFrozenRef.current = true
+          frozenOffsetRef.current = scrollOffsetRef.current
+          updateDisplayPosition(xt(scrollOffsetRef.current), true)
+        }
+      } else {
+        dragFrozenRef.current = false
+      }
+
+      lastDragSampleRef.current = { time: now, offset: newOffset }
+    } else if (!lastSample) {
+      lastDragSampleRef.current = { time: now, offset: newOffset }
+    }
+
+    scrollOffsetRef.current = newOffset
+
+    if (!dragFrozenRef.current) {
+      updateDisplayPosition(xt(scrollOffsetRef.current))
+      setFrame(f => f + 1)
+    }
   }, [maxOffset, selection, duration, updateDisplayPosition])
 
   const onPanEnd = useCallback((velocityX: number) => {
@@ -358,14 +398,23 @@ export function useTimelinePhysics({
     }
 
     isDraggingRef.current = false
-    velocityRef.current = -velocityX * VELOCITY_SCALE
 
-    if (Math.abs(velocityRef.current) > MIN_VELOCITY) {
-      startMomentumLoop()
-    } else {
+    if (dragFrozenRef.current) {
+      // Display was frozen — use the frozen position, discard finger-lift noise
+      scrollOffsetRef.current = frozenOffsetRef.current
+      dragFrozenRef.current = false
+      updateDisplayPosition(xt(scrollOffsetRef.current), true)
       onSeek(xt(scrollOffsetRef.current))
+    } else {
+      // Normal release — apply momentum if fast enough
+      velocityRef.current = -velocityX * VELOCITY_SCALE
+      if (Math.abs(velocityRef.current) > MIN_VELOCITY) {
+        startMomentumLoop()
+      } else {
+        onSeek(xt(scrollOffsetRef.current))
+      }
     }
-  }, [startMomentumLoop, onSeek])
+  }, [startMomentumLoop, onSeek, updateDisplayPosition])
 
   // Build composed gesture
   const panGesture = Gesture.Pan()
