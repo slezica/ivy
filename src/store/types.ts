@@ -32,10 +32,12 @@ import type { TrackSession } from '../actions/track_session'
 import type { UpdateBook } from '../actions/update_book'
 import type { FetchDownloaderState } from '../actions/fetch_downloader_state'
 import type { UpdateDownloader } from '../actions/update_downloader'
+import type { InitializeApplication } from '../actions/initialize_application'
 
 
 export interface AppState {
   // State
+  initialized: boolean
   books: Record<string, Book>
   clips: Record<string, ClipWithFile>
   settings: Settings
@@ -107,6 +109,7 @@ export interface AppState {
   updateSettings: UpdateSettings
   fetchSessions: FetchSessions
   trackSession: TrackSession
+  initializeApplication: InitializeApplication
 }
 
 

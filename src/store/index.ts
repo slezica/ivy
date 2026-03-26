@@ -42,6 +42,7 @@ import { createCleanupOrphanedFiles } from '../actions/cleanup_orphaned_files'
 import { createLoadFromUrl } from '../actions/load_from_url'
 import { createFetchDownloaderState } from '../actions/fetch_downloader_state'
 import { createUpdateDownloader } from '../actions/update_downloader'
+import { createInitializeApplication } from '../actions/initialize_application'
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
@@ -95,15 +96,9 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const fetchSessions = createFetchSessions(deps)
   const trackSession = createTrackSession(deps)
   const finalizeSession = createFinalizeSession(deps)
-
-  // Auto-start transcription if enabled
-  if (initialSettings.transcription_enabled) {
-    queueMicrotask(() => {
-      startTranscription().catch((error) => {
-        console.error('[Store] Transcription failed to start after retries:', error)
-      })
-    })
-  }
+  const initializeApplication = createInitializeApplication({
+    ...deps, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription,
+  })
 
   // Event listeners -------------------------------------------------------------------------------
 
@@ -113,21 +108,11 @@ export const useStore = create<AppState>()(immer((set, get) => {
   transcription.on('queued', onTranscriptionQueued)
   transcription.on('finish', onTranscriptionFinish)
 
-  // Auto-load last played book -------------------------------------------------------------------
-
-  const lastPlayed = db.getLastPlayedBook()
-  if (lastPlayed?.uri) {
-    loadBook({
-      fileUri: lastPlayed.uri,
-      position: lastPlayed.position,
-      ownerId: MAIN_PLAYER_OWNER_ID,
-    }).catch(() => {}) // non-critical
-  }
-
   // Initial state ---------------------------------------------------------------------------------
 
   return {
     // State:
+    initialized: false,
     clips: {},
     books: {},
     settings: db.getSettings(),
@@ -199,6 +184,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     updateSettings,
     fetchSessions,
     trackSession,
+    initializeApplication,
   }
 
   // Event handler functions (hoisted) -------------------------------------------------------------
