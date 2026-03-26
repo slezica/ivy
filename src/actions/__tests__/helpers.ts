@@ -22,6 +22,7 @@ export function createMockBook(overrides: Partial<Book> = {}): Book {
     file_size: 1024,
     fingerprint: new Uint8Array([1, 2, 3]),
     hidden: false,
+    chapters: null,
     ...overrides,
   }
 }
@@ -167,6 +168,13 @@ export function createMockMetadata(overrides: Record<string, jest.Mock> = {}) {
       artwork: 'data:image/png;base64,abc',
       duration: 60000,
     })),
+    ...overrides,
+  } as any
+}
+
+export function createMockChapterReader(overrides: Record<string, jest.Mock> = {}) {
+  return {
+    readChapters: jest.fn(async () => []),
     ...overrides,
   } as any
 }

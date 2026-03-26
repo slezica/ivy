@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
-import { View, Text, StyleSheet, Alert } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 
 import { Color } from '../theme'
 import { useStore } from '../store'
 import { Timeline } from '../components/timeline'
 import IconButton from '../components/shared/IconButton'
+import Dialog from '../components/shared/Dialog'
 import ScreenArea from '../components/shared/ScreenArea'
 import EmptyState from '../components/shared/EmptyState'
-import { MAIN_PLAYER_OWNER_ID } from '../utils'
-import type { Book } from '../services'
+import { MAIN_PLAYER_OWNER_ID, formatTime } from '../utils'
+import type { Book, Chapter } from '../services'
 
 export default function PlayerScreen() {
   const { playback, books, addClip, play, pause, seek, fetchPlaybackState } = useStore()
@@ -121,6 +122,14 @@ interface PlayerProps {
 }
 
 function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek }: PlayerProps) {
+  const [chaptersOpen, setChaptersOpen] = useState(false)
+  const chapters = book.chapters ?? []
+
+  const handleChapterPress = (chapter: Chapter) => {
+    onSeek(chapter.start_ms)
+    setChaptersOpen(false)
+  }
+
   return (
     <View style={styles.playerContainer}>
       <View style={styles.spacerTop} />
@@ -153,16 +162,72 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek }: P
           testID="play-pause-button"
         />
 
-        <IconButton
-          iconName="bookmark"
-          onPress={onAddClip}
-          testID="add-clip-button"
-          size={48}
-        />
+        <View style={styles.actionButtons}>
+          <IconButton
+            iconName="bookmark"
+            onPress={onAddClip}
+            testID="add-clip-button"
+            size={48}
+          />
+          <IconButton
+            iconName="list"
+            onPress={() => setChaptersOpen(true)}
+            testID="chapters-button"
+            size={48}
+          />
+        </View>
       </View>
+
+      <Dialog visible={chaptersOpen} onClose={() => setChaptersOpen(false)}>
+        <ChapterList
+          chapters={chapters}
+          position={position}
+          onPress={handleChapterPress}
+        />
+      </Dialog>
 
     <View style={styles.spacerBottom} />
   </View>
+  )
+}
+
+
+// =============================================================================
+// Chapter List
+// =============================================================================
+
+interface ChapterListProps {
+  chapters: Chapter[]
+  position: number
+  onPress: (chapter: Chapter) => void
+}
+
+function ChapterList({ chapters, position, onPress }: ChapterListProps) {
+  return (
+    <View style={styles.chapterList}>
+      <Text style={styles.chapterListTitle}>Chapters</Text>
+      {chapters.length === 0 && (
+        <Text style={styles.chapterEmpty}>No chapters in this file</Text>
+      )}
+      {chapters.map((chapter, index) => {
+        const isCurrent = position >= chapter.start_ms && position < chapter.end_ms
+
+        return (
+          <TouchableOpacity
+            key={index}
+            style={[styles.chapterItem, isCurrent && styles.chapterItemCurrent]}
+            onPress={() => onPress(chapter)}
+          >
+            <Text style={[styles.chapterTitle, isCurrent && styles.chapterTitleCurrent]} numberOfLines={1}>
+              {chapter.title || `Chapter ${index + 1}`}
+            </Text>
+            <Text style={styles.chapterTime}>
+              {formatTime(chapter.start_ms)}
+            </Text>
+          </TouchableOpacity>
+        )
+      })}
+    </View>
   )
 }
 
@@ -202,5 +267,49 @@ const styles = StyleSheet.create({
   playbackControls: {
     alignItems: 'center',
     gap: 24,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  chapterList: {
+    padding: 16,
+    gap: 4,
+  },
+  chapterListTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Color.BLACK,
+    marginBottom: 8,
+  },
+  chapterItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  chapterItemCurrent: {
+    backgroundColor: Color.GRAY_LIGHT,
+  },
+  chapterTitle: {
+    flex: 1,
+    fontSize: 15,
+    color: Color.BLACK,
+  },
+  chapterTitleCurrent: {
+    fontWeight: '600',
+    color: Color.PRIMARY,
+  },
+  chapterEmpty: {
+    fontSize: 15,
+    color: Color.GRAY,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  chapterTime: {
+    fontSize: 13,
+    color: Color.GRAY_DARK,
+    marginLeft: 12,
   },
 })
