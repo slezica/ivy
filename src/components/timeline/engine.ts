@@ -2,7 +2,7 @@
  * TimelinePhysicsEngine
  *
  * Pure physics engine for timeline scroll, momentum, tap-to-seek, selection
- * handle dragging, pinch-to-zoom, and freeze-on-slowdown.
+ * handle dragging, and pinch-to-zoom.
  *
  * This class contains ALL the state and logic that was previously spread across
  * refs and callbacks in the useTimelinePhysics hook. It has:
@@ -46,13 +46,11 @@ const HANDLE_TOUCH_RADIUS = 24
 const DISPLAY_UPDATE_INTERVAL = 50 // ms between display position updates
 
 // ============================================================================
-// Freeze-on-slowdown: when the user's drag velocity drops below this
-// threshold, we "freeze" the displayed position so that involuntary
-// finger-lift movement doesn't cause visible jitter.
+// EMA velocity estimation: smooths noisy drag velocity so the transition
+// to momentum is clean. Alpha controls responsiveness vs smoothness.
 // ============================================================================
 
-const FREEZE_VELOCITY = 80          // px/s — below this, user has "found their spot"
-const VELOCITY_SAMPLE_INTERVAL = 16 // ms — how often we re-estimate drag velocity
+const EMA_ALPHA = 0.35              // lower = smoother, higher = more responsive
 
 // ============================================================================
 // Pinch cooldown: after a pinch ends, ignore pan/tap for this window
@@ -146,17 +144,13 @@ export class TimelinePhysicsEngine {
   // not to seek).
   private _stoppedMomentum = false
 
-  // --- Freeze-on-slowdown ---
+  // --- EMA velocity estimation ---
   //
-  // During a slow drag, the user's finger velocity drops near zero as they
-  // find their target position. The last few pan events before finger lift
-  // introduce jitter. To prevent this, we "freeze" the display once velocity
-  // drops below FREEZE_VELOCITY. The internal scroll offset still tracks the
-  // finger, but the *displayed* position stays locked. On release, we snap
-  // the real offset back to the frozen position.
+  // Smooths drag velocity using an exponential moving average so the
+  // transition from drag to momentum is clean. Raw gesture velocityX is
+  // noisy near finger lift — EMA filters that out naturally.
+  private _emaVelocity = 0
   private _lastDragSample: { time: number; offset: number } | null = null
-  private _dragFrozen = false
-  private _frozenOffset = 0
 
   // --- Display position throttling ---
   //
@@ -320,7 +314,7 @@ export class TimelinePhysicsEngine {
     this._velocity = 0
     this._dragStartOffset = this._scrollOffset
     this._lastDragSample = null
-    this._dragFrozen = false
+    this._emaVelocity = 0
     this._stopAnimation()
   }
 
@@ -328,7 +322,7 @@ export class TimelinePhysicsEngine {
    * Pan gesture updates with new translation from the start point.
    *
    * For handle drags: update the selection bounds.
-   * For scroll drags: update scroll offset with freeze-on-slowdown logic.
+   * For scroll drags: update scroll offset and EMA velocity estimate.
    */
   panUpdate(translationX: number, now: number): void {
     if (this._isPinchCooldown(now)) return
@@ -354,56 +348,35 @@ export class TimelinePhysicsEngine {
 
     // --- Regular scroll mode ---
 
-    // Compute new scroll offset from drag translation
     const newOffset = clamp(
       this._dragStartOffset - translationX,
       0,
       this._maxOffset()
     )
 
-    // Estimate drag velocity for freeze-on-slowdown detection.
-    // We sample at VELOCITY_SAMPLE_INTERVAL intervals to smooth out noise.
+    // Update EMA velocity estimate from drag samples
     const lastSample = this._lastDragSample
 
-    if (lastSample && now - lastSample.time >= VELOCITY_SAMPLE_INTERVAL) {
+    if (lastSample) {
       const dt = (now - lastSample.time) / 1000 // seconds
-      const dragVelocity = Math.abs(newOffset - lastSample.offset) / dt // px/s
-
-      if (dragVelocity < FREEZE_VELOCITY) {
-        // Velocity dropped below threshold — freeze display at current position.
-        // The internal _scrollOffset continues tracking the finger, but the
-        // view stays locked here. This prevents finger-lift jitter from reaching
-        // the screen.
-        if (!this._dragFrozen) {
-          this._dragFrozen = true
-          this._frozenOffset = this._scrollOffset
-          this._updateDisplayPosition(this._xt(this._scrollOffset), now, true)
-        }
-      } else {
-        // Finger is moving fast enough — unfreeze (or stay unfrozen)
-        this._dragFrozen = false
+      if (dt > 0) {
+        const instantVelocity = (newOffset - lastSample.offset) / dt // px/s (signed)
+        this._emaVelocity = EMA_ALPHA * instantVelocity + (1 - EMA_ALPHA) * this._emaVelocity
       }
-
-      this._lastDragSample = { time: now, offset: newOffset }
-    } else if (!lastSample) {
-      // First sample — just record, can't estimate velocity yet
-      this._lastDragSample = { time: now, offset: newOffset }
     }
 
+    this._lastDragSample = { time: now, offset: newOffset }
     this._scrollOffset = newOffset
 
-    // Only update the view if we're not frozen
-    if (!this._dragFrozen) {
-      this._updateDisplayPosition(this._xt(this._scrollOffset), now)
-      this._callbacks.onFrame()
-    }
+    this._updateDisplayPosition(this._xt(this._scrollOffset), now)
+    this._callbacks.onFrame()
   }
 
   /**
-   * Pan gesture ends. Either finalize handle drag, apply momentum, or
-   * snap to frozen position.
+   * Pan gesture ends. Either finalize handle drag or apply momentum
+   * using the EMA-smoothed velocity.
    */
-  panEnd(velocityX: number, now: number): void {
+  panEnd(_velocityX: number, now: number): void {
     if (this._isPinchCooldown(now)) return
 
     // Handle drag ends — just clear state
@@ -414,24 +387,14 @@ export class TimelinePhysicsEngine {
 
     this._isDragging = false
 
-    if (this._dragFrozen) {
-      // Display was frozen — snap to the frozen position, discarding any
-      // finger-lift noise that accumulated after the freeze point
-      this._scrollOffset = this._frozenOffset
-      this._dragFrozen = false
-      this._updateDisplayPosition(this._xt(this._scrollOffset), now, true)
-      this._callbacks.onSeek(this._xt(this._scrollOffset))
-    } else {
-      // Normal release — gesture velocity is in px/s, keep it in px/s
-      // (frame-rate independent: decay and displacement use real dt)
-      this._velocity = -velocityX
+    // Use EMA-smoothed velocity for momentum (ignoring raw gesture velocityX)
+    this._velocity = this._emaVelocity
 
-      if (Math.abs(this._velocity) > MIN_VELOCITY) {
-        this._hasMomentum = true
-        this._lastTickTime = now
-      } else {
-        this._callbacks.onSeek(this._xt(this._scrollOffset))
-      }
+    if (Math.abs(this._velocity) > MIN_VELOCITY) {
+      this._hasMomentum = true
+      this._lastTickTime = now
+    } else {
+      this._callbacks.onSeek(this._xt(this._scrollOffset))
     }
   }
 

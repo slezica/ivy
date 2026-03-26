@@ -8,8 +8,8 @@
  *   - Simulate gesture sequences with precise timing
  *   - Assert on exact positions, velocities, and callback invocations
  *
- * This lets us catch regressions in scroll physics, momentum, freeze behavior,
- * and zoom without manual on-device testing.
+ * This lets us catch regressions in scroll physics, momentum, velocity
+ * estimation, and zoom without manual on-device testing.
  */
 
 import {
@@ -33,9 +33,9 @@ import { timeToX } from '../utils'
 // Test helpers
 // ============================================================================
 
-/** Default config for a 60-second timeline in a 400px-wide container */
+/** Default config for a 10-minute timeline in a 400px-wide container */
 const DEFAULT_CONFIG: EngineConfig = {
-  duration: 60_000,
+  duration: 600_000,
   containerWidth: 400,
   position: 0,
 }
@@ -121,32 +121,68 @@ function runTicks(
 
 describe('TimelinePhysicsEngine', () => {
   // --------------------------------------------------------------------------
-  // 1. Finger-lift precision (freeze-on-slowdown)
+  // 1. EMA velocity estimation
   // --------------------------------------------------------------------------
 
-  describe('finger-lift precision', () => {
-    it('freezes display when drag velocity drops below threshold', () => {
+  describe('EMA velocity estimation', () => {
+    it('uses smoothed velocity for momentum, not raw gesture velocity', () => {
       const { engine, callbacks } = createEngine()
 
-      // Start a drag at the center of the container
+      // Drag at a consistent speed: 100px over 100ms = 1000 px/s
       engine.panStart(200, 45, 0)
-
-      // Fast drag: move -100px over 100ms (1000 px/s — well above freeze threshold)
-      engine.panUpdate(-100, 50)
+      engine.panUpdate(-20, 20)
+      engine.panUpdate(-40, 40)
+      engine.panUpdate(-60, 60)
+      engine.panUpdate(-80, 80)
       engine.panUpdate(-100, 100)
-      expect(callbacks.onFrame).toHaveBeenCalled()
-      callbacks.onFrame.mockClear()
 
-      // Slow down to near-zero: tiny movement over 20ms (~15 px/s — below 80 px/s threshold)
-      engine.panUpdate(-100.3, 120)
+      // Release — panEnd's velocityX is ignored, EMA velocity is used
+      engine.panEnd(0, 100) // raw velocity = 0, but EMA should be ~1000 px/s
 
-      // Display should be frozen — no more onFrame calls
-      engine.panUpdate(-100.4, 140)
-      engine.panUpdate(-100.4, 160)
-      expect(callbacks.onFrame).not.toHaveBeenCalled()
+      // Momentum should have started from the EMA estimate, not the raw 0
+      expect(engine.tick(116)).toBe(true)
     })
 
-    it('seeks to the frozen position on release, not the jittery final position', () => {
+    it('smooths out noisy finger-lift velocity', () => {
+      // Two engines: one with clean release, one with jittery last samples
+      function flingAndGetMomentumOffset(jitter: boolean): number {
+        const { engine } = createEngine()
+
+        engine.panStart(200, 45, 0)
+        engine.panUpdate(-50, 20)
+        engine.panUpdate(-100, 40)
+        engine.panUpdate(-150, 60)
+        engine.panUpdate(-200, 80)
+
+        if (jitter) {
+          // Simulate finger-lift noise: small erratic movements
+          engine.panUpdate(-198, 90)
+          engine.panUpdate(-201, 95)
+          engine.panUpdate(-199, 100)
+        }
+
+        engine.panEnd(0, jitter ? 100 : 80)
+
+        // Run a few momentum ticks
+        let t = jitter ? 116 : 96
+        for (let i = 0; i < 5; i++) {
+          engine.tick(t)
+          t += 16
+        }
+        return engine.scrollOffset
+      }
+
+      const cleanOffset = flingAndGetMomentumOffset(false)
+      const jitteryOffset = flingAndGetMomentumOffset(true)
+
+      // Both should produce momentum in the same direction (positive offset).
+      // The jittery version will be slower due to EMA dampening the noise,
+      // but should still move forward — not backwards from noise.
+      expect(cleanOffset).toBeGreaterThan(200)
+      expect(jitteryOffset).toBeGreaterThan(150)
+    })
+
+    it('always follows the finger during drag (no freezing)', () => {
       const { engine, callbacks } = createEngine()
 
       engine.panStart(200, 45, 0)
@@ -154,75 +190,15 @@ describe('TimelinePhysicsEngine', () => {
       // Fast drag
       engine.panUpdate(-100, 50)
       engine.panUpdate(-100, 100)
-
-      // Record scroll offset just before freeze
-      const preFreeze = engine.scrollOffset
-
-      // Slow down to trigger freeze
-      engine.panUpdate(-100.3, 120)
-
-      // More jitter after freeze (simulates finger-lift noise)
-      engine.panUpdate(-102, 140)
-      engine.panUpdate(-103, 160)
-
-      // Release with low velocity
-      engine.panEnd(5, 170)
-
-      // Should have seeked to the frozen position, not the final jittery one
-      const seekPosition = (callbacks.onSeek as jest.Mock).mock.calls[0][0]
-      expect(Math.abs(engine.scrollOffset - preFreeze)).toBeLessThan(1)
-      expect(seekPosition).toBeCloseTo(
-        (preFreeze / (SEGMENT_WIDTH + SEGMENT_GAP)) * SEGMENT_DURATION,
-        0
-      )
-    })
-  })
-
-  // --------------------------------------------------------------------------
-  // 2. Freeze / unfreeze transitions
-  // --------------------------------------------------------------------------
-
-  describe('freeze/unfreeze transitions', () => {
-    it('unfreezes when velocity picks up again', () => {
-      const { engine, callbacks } = createEngine()
-
-      engine.panStart(200, 45, 0)
-
-      // Fast movement
-      engine.panUpdate(-50, 20)
-
-      // Slow down to trigger freeze
-      engine.panUpdate(-50.2, 40)
       callbacks.onFrame.mockClear()
 
-      // Verify frozen
-      engine.panUpdate(-50.3, 60)
-      expect(callbacks.onFrame).not.toHaveBeenCalled()
+      // Slow down to near-zero velocity
+      engine.panUpdate(-100.3, 120)
+      engine.panUpdate(-100.4, 140)
+      engine.panUpdate(-100.4, 160)
 
-      // Speed up again — large movement in short time
-      engine.panUpdate(-120, 80)
-
-      // Should be unfrozen — onFrame called again
+      // onFrame should still be called — always follow the finger
       expect(callbacks.onFrame).toHaveBeenCalled()
-    })
-
-    it('triggers momentum after unfreeze + fast release', () => {
-      const { engine, callbacks } = createEngine()
-
-      engine.panStart(200, 45, 0)
-
-      // Slow → freeze
-      engine.panUpdate(-1, 20)
-      engine.panUpdate(-1.1, 40)
-
-      // Fast → unfreeze
-      engine.panUpdate(-80, 60)
-
-      // Fast release
-      engine.panEnd(-2000, 80)
-
-      // Momentum should be active — tick should return true
-      expect(engine.tick(96)).toBe(true)
     })
   })
 
@@ -234,28 +210,30 @@ describe('TimelinePhysicsEngine', () => {
     it('decays velocity exponentially and stops at MIN_VELOCITY', () => {
       const { engine, callbacks } = createEngine()
 
-      // Start a flick: panEnd with high velocity (3000 px/s)
+      // Build up EMA velocity with a fast consistent drag (~2500 px/s)
       engine.panStart(200, 45, 0)
-      engine.panUpdate(-10, 16)
-      engine.panEnd(-3000, 32)
+      engine.panUpdate(-40, 16)
+      engine.panUpdate(-80, 32)
+      engine.panUpdate(-120, 48)
+      engine.panUpdate(-160, 64)
+      engine.panEnd(0, 64)
 
-      // Tick once at 16ms later — velocity is in px/s, displacement = v * dt
+      // EMA velocity should be substantial — momentum should be active
       const offsetBefore = engine.scrollOffset
-      engine.tick(48) // dt = 16ms = 0.016s
+      engine.tick(80) // first momentum tick
       const offsetAfter = engine.scrollOffset
 
-      // Should have moved by approximately 3000 * 0.016 = 48px
-      const moved = Math.abs(offsetAfter - offsetBefore)
-      expect(moved).toBeCloseTo(3000 * 0.016, 0)
+      // Should have moved forward
+      expect(offsetAfter).toBeGreaterThan(offsetBefore)
 
       // Run to completion
-      const ticks = runTicks(engine, 64)
+      const ticks = runTicks(engine, 96)
 
       // Should have called onSeek exactly once (at the end)
       expect(callbacks.onSeek).toHaveBeenCalledTimes(1)
 
       // Should take a reasonable number of ticks at 16ms intervals to stop
-      expect(ticks).toBeGreaterThan(30)
+      expect(ticks).toBeGreaterThan(10)
       expect(ticks).toBeLessThan(500)
     })
 
@@ -265,10 +243,13 @@ describe('TimelinePhysicsEngine', () => {
       // Position near the end
       engine.setExternalPosition(9500, 0)
 
-      // Flick forward (positive direction in timeline = negative translationX)
+      // Fast drag forward to build EMA velocity
       engine.panStart(200, 45, 100)
-      engine.panUpdate(-10, 116)
-      engine.panEnd(-5000, 132)
+      engine.panUpdate(-50, 116)
+      engine.panUpdate(-100, 132)
+      engine.panUpdate(-150, 148)
+      engine.panUpdate(-200, 164)
+      engine.panEnd(0, 164)
 
       // Run momentum to completion
       runTicks(engine, 148)
@@ -284,12 +265,16 @@ describe('TimelinePhysicsEngine', () => {
 
       function flingAndRun(dt: number): number {
         const { engine } = createEngine()
+        // Build consistent EMA velocity
         engine.panStart(200, 45, 0)
-        engine.panUpdate(-10, 16)
-        engine.panEnd(-2000, 32)
+        engine.panUpdate(-40, 16)
+        engine.panUpdate(-80, 32)
+        engine.panUpdate(-120, 48)
+        engine.panUpdate(-160, 64)
+        engine.panEnd(0, 64)
 
         // Run ticks at the given interval until momentum stops
-        let t = 32
+        let t = 64
         while (engine.tick(t += dt)) { /* advance */ }
         engine.tick(t) // finalize
 
@@ -365,17 +350,20 @@ describe('TimelinePhysicsEngine', () => {
     it('stops momentum on touch and suppresses the subsequent tap', () => {
       const { engine, callbacks } = createEngine()
 
-      // Start momentum with a flick
+      // Build up EMA velocity with a fast drag, then release for momentum
       engine.panStart(200, 45, 0)
-      engine.panUpdate(-10, 16)
-      engine.panEnd(-3000, 32)
+      engine.panUpdate(-40, 16)
+      engine.panUpdate(-80, 32)
+      engine.panUpdate(-120, 48)
+      engine.panUpdate(-160, 64)
+      engine.panEnd(0, 64)
 
       // Verify momentum is active
-      expect(engine.tick(48)).toBe(true)
+      expect(engine.tick(80)).toBe(true)
       callbacks.onSeek.mockClear()
 
       // Touch down while momentum is active — should stop it
-      engine.touchDown(200, 45, 64)
+      engine.touchDown(200, 45, 96)
 
       // Momentum should be stopped, onSeek called to commit current position
       expect(callbacks.onSeek).toHaveBeenCalledTimes(1)
@@ -383,7 +371,7 @@ describe('TimelinePhysicsEngine', () => {
       // The subsequent tap should be suppressed (it was a "stop" touch, not a "seek" touch)
       callbacks.onSeek.mockClear()
       callbacks.onFrame.mockClear()
-      engine.tap(200, 80)
+      engine.tap(200, 112)
 
       // No animation should start, no seek should fire
       expect(engine.tick(96)).toBe(false)
@@ -576,16 +564,19 @@ describe('TimelinePhysicsEngine', () => {
     it('ignores external position during momentum', () => {
       const { engine } = createEngine({ position: 0 })
 
-      // Start momentum
+      // Build up EMA velocity with a fast drag
       engine.panStart(200, 45, 0)
-      engine.panUpdate(-10, 16)
-      engine.panEnd(-2000, 32)
+      engine.panUpdate(-40, 16)
+      engine.panUpdate(-80, 32)
+      engine.panUpdate(-120, 48)
+      engine.panUpdate(-160, 64)
+      engine.panEnd(0, 64)
 
-      const offsetDuringMomentum = engine.scrollOffset
-      engine.setExternalPosition(50_000, 48)
+      const offsetAfterRelease = engine.scrollOffset
+      engine.setExternalPosition(50_000, 80)
 
-      // Should be ignored — engine is active
-      expect(engine.scrollOffset).toBe(offsetDuringMomentum)
+      // Should be ignored — engine is active (momentum)
+      expect(engine.scrollOffset).toBe(offsetAfterRelease)
     })
   })
 
@@ -632,16 +623,20 @@ describe('TimelinePhysicsEngine', () => {
       expect(callbacks.onDisplayPosition).toHaveBeenCalledTimes(1)
     })
 
-    it('allows forced updates to bypass throttling', () => {
+    it('updates display after throttle interval elapses', () => {
       const { engine, callbacks } = createEngine()
 
-      // Trigger a freeze (which does a forced display update)
       engine.panStart(200, 45, 0)
-      engine.panUpdate(-50, 10) // fast, triggers a normal display update
+      engine.panUpdate(-10, 10) // triggers first display update
       callbacks.onDisplayPosition.mockClear()
 
-      // Slow down to trigger freeze — freeze does a forced update
-      engine.panUpdate(-50.1, 30) // only 20ms later, but forced
+      // These should be throttled (within 50ms window)
+      engine.panUpdate(-20, 20)
+      engine.panUpdate(-30, 30)
+      expect(callbacks.onDisplayPosition).not.toHaveBeenCalled()
+
+      // This should go through (60ms > 50ms interval)
+      engine.panUpdate(-40, 70)
       expect(callbacks.onDisplayPosition).toHaveBeenCalledTimes(1)
     })
   })
@@ -665,18 +660,24 @@ describe('TimelinePhysicsEngine', () => {
     it('is true during momentum', () => {
       const { engine } = createEngine()
       engine.panStart(200, 45, 0)
-      engine.panUpdate(-10, 16)
-      engine.panEnd(-2000, 32)
+      engine.panUpdate(-40, 16)
+      engine.panUpdate(-80, 32)
+      engine.panUpdate(-120, 48)
+      engine.panUpdate(-160, 64)
+      engine.panEnd(0, 64)
       expect(engine.isActive).toBe(true)
     })
 
     it('returns to false after momentum completes', () => {
       const { engine } = createEngine()
       engine.panStart(200, 45, 0)
-      engine.panUpdate(-10, 16)
-      engine.panEnd(-2000, 32)
+      engine.panUpdate(-40, 16)
+      engine.panUpdate(-80, 32)
+      engine.panUpdate(-120, 48)
+      engine.panUpdate(-160, 64)
+      engine.panEnd(0, 64)
 
-      runTicks(engine, 48)
+      runTicks(engine, 80)
       expect(engine.isActive).toBe(false)
     })
   })

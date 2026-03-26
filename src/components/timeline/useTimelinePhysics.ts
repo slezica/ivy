@@ -19,7 +19,6 @@ import {
   MIN_SELECTION_DURATION,
 } from './constants'
 import { TimelinePhysicsEngine } from './engine'
-
 // ============================================================================
 // Types (unchanged — preserves the contract with Timeline.tsx)
 // ============================================================================

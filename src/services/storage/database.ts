@@ -375,16 +375,14 @@ export class DatabaseService {
   }
 
   updateBookPosition(id: string, position: number): void {
-    try {
-      const now = Date.now()
-      this.db.runSync(
-        'UPDATE files SET position = ?, updated_at = ? WHERE id = ?',
-        [position, now, id]
-      )
-    } catch (error) {
+    const now = Date.now()
+    this.db.runAsync(
+      'UPDATE files SET position = ?, updated_at = ? WHERE id = ?',
+      [position, now, id]
+    ).catch((error) => {
       // Silently ignore during app transitions/resets
       console.debug('Failed to update book position (non-critical):', error)
-    }
+    })
   }
 
   archiveBook(id: string): void {
@@ -608,10 +606,12 @@ export class DatabaseService {
   }
 
   updateSessionEndedAt(sessionId: string, endedAt: number): void {
-    this.db.runSync(
+    this.db.runAsync(
       'UPDATE sessions SET ended_at = ? WHERE id = ?',
       [endedAt, sessionId]
-    )
+    ).catch((error) => {
+      console.debug('Failed to update session ended_at (non-critical):', error)
+    })
   }
 
   deleteSession(sessionId: string): void {
