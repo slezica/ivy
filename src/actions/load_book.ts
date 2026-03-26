@@ -1,6 +1,6 @@
 import type { AudioPlayerService, DatabaseService } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
-import { createLogger } from '../utils'
+import { createLogger, MAIN_PLAYER_OWNER_ID } from '../utils'
 
 
 export interface LoadBookContext {
@@ -57,6 +57,10 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
       })
 
       await audio.seek(context.position)
+
+      // Apply per-book speed for main player, 1× for clips
+      const rate = context.ownerId === MAIN_PLAYER_OWNER_ID ? bookRecord.speed / 100 : 1
+      await audio.setRate(rate)
 
       log(`Loaded (${duration}ms)`)
 

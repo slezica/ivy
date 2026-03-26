@@ -32,6 +32,7 @@ import type { TrackSession } from '../actions/track_session'
 import type { UpdateBook } from '../actions/update_book'
 import type { FetchDownloaderState } from '../actions/fetch_downloader_state'
 import type { UpdateDownloader } from '../actions/update_downloader'
+import type { SetSpeed } from '../actions/set_speed'
 import type { InitializeApplication } from '../actions/initialize_application'
 
 
@@ -87,6 +88,7 @@ export interface AppState {
   archiveBook: ArchiveBook
   deleteBook: DeleteBook
   updateBook: UpdateBook
+  setSpeed: SetSpeed
   play: Play
   pause: Pause
   seek: Seek
