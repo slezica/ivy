@@ -123,7 +123,7 @@ interface PlayerProps {
 
 function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek }: PlayerProps) {
   const [chaptersOpen, setChaptersOpen] = useState(false)
-  const hasChapters = book.chapters && book.chapters.length > 0
+  const chapters = book.chapters ?? []
 
   const handleChapterPress = (chapter: Chapter) => {
     onSeek(chapter.start_ms)
@@ -169,20 +169,18 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek }: P
             testID="add-clip-button"
             size={48}
           />
-          {hasChapters && (
-            <IconButton
-              iconName="list"
-              onPress={() => setChaptersOpen(true)}
-              testID="chapters-button"
-              size={48}
-            />
-          )}
+          <IconButton
+            iconName="list"
+            onPress={() => setChaptersOpen(true)}
+            testID="chapters-button"
+            size={48}
+          />
         </View>
       </View>
 
       <Dialog visible={chaptersOpen} onClose={() => setChaptersOpen(false)}>
         <ChapterList
-          chapters={book.chapters!}
+          chapters={chapters}
           position={position}
           onPress={handleChapterPress}
         />
@@ -208,6 +206,9 @@ function ChapterList({ chapters, position, onPress }: ChapterListProps) {
   return (
     <View style={styles.chapterList}>
       <Text style={styles.chapterListTitle}>Chapters</Text>
+      {chapters.length === 0 && (
+        <Text style={styles.chapterEmpty}>No chapters in this file</Text>
+      )}
       {chapters.map((chapter, index) => {
         const isCurrent = position >= chapter.start_ms && position < chapter.end_ms
 
@@ -299,6 +300,12 @@ const styles = StyleSheet.create({
   chapterTitleCurrent: {
     fontWeight: '600',
     color: Color.PRIMARY,
+  },
+  chapterEmpty: {
+    fontSize: 15,
+    color: Color.GRAY,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
   },
   chapterTime: {
     fontSize: 13,
