@@ -19,6 +19,12 @@ export interface Status {
   migration: number
 }
 
+export interface Chapter {
+  title: string | null
+  start_ms: number
+  end_ms: number
+}
+
 export interface Book {
   id: string               // UUID primary key
   uri: string | null       // Local file:// path (null if archived)
@@ -32,6 +38,7 @@ export interface Book {
   file_size: number        // File size in bytes (for fingerprint matching)
   fingerprint: Uint8Array  // First 4KB of file (BLOB)
   hidden: boolean          // Soft-deleted (removed from library)
+  chapters: Chapter[] | null  // From file metadata (not synced)
 }
 
 export interface Clip {
@@ -209,17 +216,26 @@ const migrations: Migration[] = [
     `)
     db.runSync('INSERT OR IGNORE INTO settings (id, sync_enabled) VALUES (1, 0)')
   },
+
+  // Migration 1: Add chapters column to files table
+  (db) => {
+    db.execSync('ALTER TABLE files ADD COLUMN chapters TEXT')
+  },
 ]
 
 // =============================================================================
 // Service
 // =============================================================================
 
-// Raw book row from database (hidden is integer)
-type BookRow = Omit<Book, 'hidden'> & { hidden: number }
+// Raw book row from database (hidden is integer, chapters is JSON string)
+type BookRow = Omit<Book, 'hidden' | 'chapters'> & { hidden: number; chapters: string | null }
 
 function toBook(row: BookRow): Book {
-  return { ...row, hidden: row.hidden === 1 }
+  let chapters: Chapter[] | null = null
+  if (row.chapters) {
+    try { chapters = JSON.parse(row.chapters) } catch {}
+  }
+  return { ...row, hidden: row.hidden === 1, chapters }
 }
 
 export class DatabaseService {
@@ -301,18 +317,21 @@ export class DatabaseService {
     artist?: string | null,
     artwork?: string | null,
     fileSize?: number,
-    fingerprint?: Uint8Array
+    fingerprint?: Uint8Array,
+    chapters?: Chapter[] | null,
   ): Promise<void> {
     const now = Date.now()
+    const chaptersJson = chapters?.length ? JSON.stringify(chapters) : null
     await this.db.runAsync(
-      `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint, chapters)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          uri = excluded.uri, name = excluded.name, duration = excluded.duration,
          position = excluded.position, updated_at = excluded.updated_at,
          title = excluded.title, artist = excluded.artist, artwork = excluded.artwork,
-         file_size = excluded.file_size, fingerprint = excluded.fingerprint`,
-      [id, uri, name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null]
+         file_size = excluded.file_size, fingerprint = excluded.fingerprint,
+         chapters = excluded.chapters`,
+      [id, uri, name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null, chaptersJson]
     )
   }
 
@@ -329,12 +348,14 @@ export class DatabaseService {
     artist: string | null,
     artwork: string | null,
     fileSize: number,
-    fingerprint: Uint8Array
+    fingerprint: Uint8Array,
+    chapters?: Chapter[] | null,
   ): Promise<void> {
     const now = Date.now()
+    const chaptersJson = chapters?.length ? JSON.stringify(chapters) : null
     await this.db.runAsync(
-      'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ?, hidden = 0 WHERE id = ?',
-      [uri, name, duration, now, title, artist, artwork, fileSize, fingerprint, id]
+      'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ?, hidden = 0, chapters = ? WHERE id = ?',
+      [uri, name, duration, now, title, artist, artwork, fileSize, fingerprint, chaptersJson, id]
     )
   }
 
