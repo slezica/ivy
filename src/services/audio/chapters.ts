@@ -19,7 +19,10 @@ export class ChapterReaderService {
   async readChapters(fileUri: string): Promise<Chapter[]> {
     try {
       const filePath = fileUri.replace('file://', '')
+      log(`Reading chapters from: ${filePath}`)
+
       const raw: RawChapter[] = await ChapterReader.readChapters(filePath)
+      log(`Native module returned ${raw?.length ?? 'null'} items`)
 
       if (!raw.length) return []
 
@@ -29,7 +32,7 @@ export class ChapterReaderService {
         end_ms: Math.round(ch.end_ms),
       }))
 
-      log(`Found ${chapters.length} chapters`)
+      log(`Parsed ${chapters.length} chapters:`, chapters.map(c => c.title).join(', '))
       return chapters
 
     } catch (error) {
