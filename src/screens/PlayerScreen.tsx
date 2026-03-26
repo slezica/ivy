@@ -184,6 +184,7 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
             iconName="bookmark"
             onPress={onAddClip}
             testID="add-clip-button"
+            iconColor={Color.BLACK}
             size={48}
           />
           <IconButton
@@ -248,7 +249,6 @@ function SpeedControl({ speed, onChange }: SpeedControlProps) {
       />
       <View style={styles.speedLabels}>
         <Text style={styles.speedLabelText}>0.5×</Text>
-        <Text style={styles.speedLabelText}>1×</Text>
         <Text style={styles.speedLabelText}>2×</Text>
       </View>
     </View>
