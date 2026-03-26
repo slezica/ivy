@@ -39,6 +39,7 @@ export interface Book {
   fingerprint: Uint8Array  // First 4KB of file (BLOB)
   hidden: boolean          // Soft-deleted (removed from library)
   chapters: Chapter[] | null  // From file metadata (not synced)
+  speed: number            // Playback speed as integer percentage (100 = 1.0x)
 }
 
 export interface Clip {
@@ -221,6 +222,11 @@ const migrations: Migration[] = [
   (db) => {
     db.execSync('ALTER TABLE files ADD COLUMN chapters TEXT')
   },
+
+  // Migration 2: Add speed column to files table (integer percentage, 100 = 1.0x)
+  (db) => {
+    db.execSync('ALTER TABLE files ADD COLUMN speed INTEGER NOT NULL DEFAULT 100')
+  },
 ]
 
 // =============================================================================
@@ -235,7 +241,7 @@ function toBook(row: BookRow): Book {
   if (row.chapters) {
     try { chapters = JSON.parse(row.chapters) } catch {}
   }
-  return { ...row, hidden: row.hidden === 1, chapters }
+  return { ...row, hidden: row.hidden === 1, chapters, speed: row.speed ?? 100 }
 }
 
 export class DatabaseService {
@@ -400,6 +406,14 @@ export class DatabaseService {
     })
   }
 
+  async updateBookSpeed(id: string, speed: number): Promise<void> {
+    const now = Date.now()
+    await this.db.runAsync(
+      'UPDATE files SET speed = ?, updated_at = ? WHERE id = ?',
+      [speed, now, id]
+    )
+  }
+
   async archiveBook(id: string): Promise<void> {
     await this.db.runAsync(
       'UPDATE files SET uri = NULL WHERE id = ?',
@@ -523,20 +537,22 @@ export class DatabaseService {
     artwork: string | null,
     fileSize: number,
     fingerprint: Uint8Array,
-    hidden: boolean = false
+    hidden: boolean = false,
+    speed: number = 100
   ): Promise<void> {
     // Insert or update-if-newer in a single statement.
     // The WHERE on the UPDATE branch ensures we only overwrite with newer data.
     await this.db.runAsync(
-      `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint, hidden)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint, hidden, speed)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name, duration = excluded.duration,
          position = excluded.position, updated_at = excluded.updated_at,
          title = excluded.title, artist = excluded.artist, artwork = excluded.artwork,
-         file_size = excluded.file_size, fingerprint = excluded.fingerprint, hidden = excluded.hidden
+         file_size = excluded.file_size, fingerprint = excluded.fingerprint, hidden = excluded.hidden,
+         speed = excluded.speed
        WHERE excluded.updated_at > files.updated_at`,
-      [id, name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint, hidden ? 1 : 0]
+      [id, name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint, hidden ? 1 : 0, speed]
     )
   }
 

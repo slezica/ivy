@@ -107,6 +107,10 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
     await TrackPlayer.seekTo(positionMillis / 1000)  // Convert to seconds
   }
 
+  async setRate(rate: number): Promise<void> {
+    await TrackPlayer.setRate(rate)
+  }
+
   async skip(offsetMillis: number): Promise<void> {
     const progress = await TrackPlayer.getProgress()
     const newPosition = Math.max(0, Math.min(progress.position + offsetMillis / 1000, progress.duration))
