@@ -173,12 +173,6 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
         />
 
         <View style={styles.actionButtons}>
-          <IconButton
-            iconName="bookmark"
-            onPress={onAddClip}
-            testID="add-clip-button"
-            size={48}
-          />
           <TouchableOpacity
             style={styles.speedButton}
             onPress={() => setSpeedOpen(true)}
@@ -186,6 +180,12 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
           >
             <Text style={styles.speedButtonLabel}>{speedLabel}</Text>
           </TouchableOpacity>
+          <IconButton
+            iconName="bookmark"
+            onPress={onAddClip}
+            testID="add-clip-button"
+            size={48}
+          />
           <IconButton
             iconName="list"
             onPress={() => setChaptersOpen(true)}
