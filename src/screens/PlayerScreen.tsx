@@ -355,7 +355,8 @@ const styles = StyleSheet.create({
     color: Color.BLACK,
   },
   speedControl: {
-    padding: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 8,
     alignItems: 'center',
     gap: 8,
   },
@@ -363,6 +364,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: Color.BLACK,
+    marginBottom: 8
   },
   speedControlValue: {
     fontSize: 32,
