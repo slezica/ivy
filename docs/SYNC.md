@@ -155,7 +155,7 @@ Any changes that were queued while offline are pushed first. Each successful que
 ### Step 2: Gather state
 
 Three things are collected sequentially:
-1. **Local state** — all books and clips from the SQLite database (synchronous reads)
+1. **Local state** — all books and clips from the SQLite database (async reads)
 2. **Remote state** — all files listed from Drive's `books/` and `clips/` folders, each downloaded and parsed one by one
 3. **Manifests** — all entries from the `sync_manifest` table, indexed as `"book:id"` or `"clip:id"`
 

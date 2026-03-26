@@ -113,6 +113,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
 - New FileSystem API: `Paths.document`, `Directory`, `File` classes
 - whisper.rn for on-device transcription
 - react-native-safe-area-context (not deprecated SafeAreaView)
+- expo-splash-screen (manual splash control during async initialization)
 - Native Kotlin modules for audio slicing, metadata, file copy, URL download
 - youtubedl-android 0.18.1 (yt-dlp + FFmpeg for URL downloads)
 
@@ -126,6 +127,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── add_clip.ts, ...       # Clip actions
   │   ├── load_file.ts, ...      # Library actions (local files)
   │   ├── load_from_url.ts       # Library actions (URL download via yt-dlp)
+  │   ├── initialize_application.ts # App startup (hydrate store, auto-load, dismiss splash)
   │   └── ...                     # ~35 action files total
   ├── store/
   │   ├── index.ts                # All state, action wiring, event listeners
@@ -190,7 +192,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   └── theme.ts
 
 /app
-  ├── _layout.tsx                 # Root (includes LibraryLoadingDialog)
+  ├── _layout.tsx                 # Root (splash screen control, initialization gate)
   ├── +not-found.tsx              # Catch-all redirect (handles notification clicks)
   ├── settings.tsx                # Settings screen route
   ├── sessions.tsx                # Listening history route
@@ -309,6 +311,7 @@ See `store/types.ts` for authoritative type definitions (`AppState` interface).
 
 ```typescript
 // State
+initialized: boolean               // false until initializeApplication completes
 library: {
   status: 'idle' | 'adding' | 'duplicate' | 'error'
   addProgress: number | null     // 0-100 percent (copy or download)
@@ -360,6 +363,14 @@ Everything internal is **milliseconds**. Convert to MM:SS only at display bounda
 Single Zustand store is the source of truth. Services are stateless. Store uses **immer middleware** for immutable updates via direct mutations:
 - `store/types.ts` - Type definitions (AppState, Action, ActionFactory)
 - `store/index.ts` - All state, action wiring, and event listeners in one place
+
+**Async initialization:** The store is created synchronously with default state (`initialized: false`). The root layout calls `initializeApplication()` on mount, which hydrates the store (books, clips, sessions), auto-loads the last played book, starts transcription if enabled, and sets `initialized: true`. The native splash screen stays visible until initialization completes (via `expo-splash-screen`).
+
+### 4. **Async Database Layer**
+All database methods use expo-sqlite's async API (`runAsync`, `getFirstAsync`, `getAllAsync`) to avoid blocking the UI thread. A few methods are intentionally kept synchronous for store initialization and fire-and-forget writes:
+- **Sync reads:** `getSettings()`, `getLastPlayedBook()`, `getLastSyncTime()`, `getSyncMetadata()`, `getDeviceId()` — tiny single-row lookups used during store init, covered by the splash screen
+- **Sync writes:** `updateBookPosition()`, `updateSessionEndedAt()` — called from event handlers as fire-and-forget (the caller doesn't await them)
+- **Sync utility:** `clearAllData()` — destructive, rarely called
 
 **Action Factories:** Actions are defined in `src/actions/` as factory functions with explicit dependencies. This enables unit testing actions in isolation:
 
