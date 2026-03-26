@@ -23,6 +23,7 @@ export function createMockBook(overrides: Partial<Book> = {}): Book {
     fingerprint: new Uint8Array([1, 2, 3]),
     hidden: false,
     chapters: null,
+    speed: 100,
     ...overrides,
   }
 }
@@ -123,6 +124,7 @@ export function createMockAudio(overrides: Record<string, jest.Mock> = {}) {
     play: jest.fn(async () => {}),
     load: jest.fn(async () => 60000),
     seek: jest.fn(async () => {}),
+    setRate: jest.fn(async () => {}),
     ...overrides,
   } as any
 }

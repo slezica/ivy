@@ -363,7 +363,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         merged.artwork,
         merged.file_size,
         merged.fingerprint,
-        merged.hidden
+        merged.hidden,
+        merged.speed
       )
 
       // Upload merged result
@@ -396,6 +397,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         file_size: book.file_size,
         fingerprint: uint8ArrayToBase64(book.fingerprint),
         hidden: book.hidden,
+        speed: book.speed,
       }
 
       const filename = `book_${book.id}.json`
@@ -452,7 +454,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         backup.artwork,
         backup.file_size,
         fingerprint,
-        backup.hidden ?? false  // Backward compat: old backups may not have hidden field
+        backup.hidden ?? false,  // Backward compat: old backups may not have hidden field
+        backup.speed ?? 100      // Backward compat: old backups may not have speed
       )
 
       // Update manifest

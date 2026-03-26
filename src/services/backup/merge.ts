@@ -41,6 +41,7 @@ export function mergeBook(local: Book, remote: BookBackup): MergeResult<Book> {
     title: localWins ? local.title : remote.title,
     artist: localWins ? local.artist : remote.artist,
     artwork: localWins ? local.artwork : remote.artwork,
+    speed: localWins ? local.speed : (remote.speed ?? local.speed),
     updated_at: Date.now(),
   }
 

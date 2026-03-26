@@ -16,6 +16,8 @@ describe('mergeBook', () => {
     file_size: 1000000,
     fingerprint: new Uint8Array([1, 2, 3, 4]),
     hidden: false,
+    chapters: null,
+    speed: 100,
   }
 
   const baseBackup: BookBackup = {
@@ -30,6 +32,7 @@ describe('mergeBook', () => {
     file_size: 1000000,
     fingerprint: 'AQIDBA==', // base64 of [1,2,3,4]
     hidden: false,
+    speed: 100,
   }
 
   describe('position merge (max wins)', () => {
@@ -115,6 +118,36 @@ describe('mergeBook', () => {
       // Local wins, so we get local's nulls
       expect(merged.title).toBeNull()
       expect(merged.artist).toBeNull()
+    })
+  })
+
+  describe('speed merge (last-write-wins with metadata)', () => {
+    it('uses local speed when local is newer', () => {
+      const local = { ...baseBook, speed: 150, updated_at: 2000 }
+      const remote = { ...baseBackup, speed: 125, updated_at: 1000 }
+
+      const { merged } = mergeBook(local, remote)
+
+      expect(merged.speed).toBe(150)
+    })
+
+    it('uses remote speed when remote is newer', () => {
+      const local = { ...baseBook, speed: 100, updated_at: 1000 }
+      const remote = { ...baseBackup, speed: 150, updated_at: 2000 }
+
+      const { merged } = mergeBook(local, remote)
+
+      expect(merged.speed).toBe(150)
+    })
+
+    it('falls back to local speed when remote has no speed (backward compat)', () => {
+      const local = { ...baseBook, speed: 125, updated_at: 1000 }
+      const remote = { ...baseBackup, updated_at: 2000 }
+      delete (remote as Partial<typeof remote>).speed
+
+      const { merged } = mergeBook(local, remote)
+
+      expect(merged.speed).toBe(125)
     })
   })
 

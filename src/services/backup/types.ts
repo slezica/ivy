@@ -20,6 +20,7 @@ export interface BookBackup {
   file_size: number
   fingerprint: string // base64-encoded
   hidden: boolean     // Soft-deleted (removed from library)
+  speed?: number      // Playback speed as integer percentage (100 = 1.0x). Optional for backward compat.
 }
 
 export interface ClipBackup {
