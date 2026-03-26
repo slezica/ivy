@@ -76,7 +76,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     this.syncQueue = syncQueue
   }
 
-  getPendingCount(): number {
+  async getPendingCount(): Promise<number> {
     return this.syncQueue.getCount()
   }
 
@@ -87,7 +87,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     if (this.isSyncing) return
     this.isSyncing = true  // Set immediately to prevent race conditions
 
-    this.setStatus(true, null)
+    await this.setStatus(true, null)
 
     try {
       await this.auth.initialize()
@@ -95,7 +95,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       if (!this.auth.isAuthenticated()) {
         const signedIn = await this.auth.signIn()
         if (!signedIn) {
-          this.setStatus(false, 'Could not sign in to Google')
+          await this.setStatus(false, 'Could not sign in to Google')
           return
         }
       }
@@ -103,13 +103,13 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const result = await this.performSync()
 
       if (result.errors.length > 0) {
-        this.setStatus(false, `${result.errors.length} error(s) occurred during sync`)
+        await this.setStatus(false, `${result.errors.length} error(s) occurred during sync`)
       } else {
-        this.setStatus(false, null)
+        await this.setStatus(false, null)
       }
     } catch (error) {
       log('Sync failed:', error)
-      this.setStatus(false, String(error))
+      await this.setStatus(false, String(error))
     }
   }
 
@@ -127,7 +127,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       return
     }
 
-    this.setStatus(true, null)
+    await this.setStatus(true, null)
 
     try {
       const result = await this.performSync()
@@ -137,21 +137,21 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       }
       if (result.errors.length > 0) {
         log('Auto-sync errors:', result.errors)
-        this.setStatus(false, `${result.errors.length} error(s) occurred`)
+        await this.setStatus(false, `${result.errors.length} error(s) occurred`)
       } else {
-        this.setStatus(false, null)
+        await this.setStatus(false, null)
       }
     } catch (error) {
       log('Auto-sync failed:', error)
-      this.setStatus(false, String(error))
+      await this.setStatus(false, String(error))
     }
   }
 
-  private setStatus(isSyncing: boolean, error: string | null): void {
+  private async setStatus(isSyncing: boolean, error: string | null): Promise<void> {
     this.isSyncing = isSyncing
     this.emit('status', {
       isSyncing,
-      pendingCount: this.getPendingCount(),
+      pendingCount: await this.getPendingCount(),
       error,
     })
   }
@@ -188,7 +188,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       await this.executePlan(plan, state, result, notification)
 
       // 5. Update last sync time
-      this.db.setLastSyncTime(Date.now())
+      await this.db.setLastSyncTime(Date.now())
 
       // 6. Notify store of external changes
       if (notification.booksChanged.length > 0 || notification.clipsChanged.length > 0) {
@@ -208,8 +208,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
   private async gatherSyncState(): Promise<SyncState> {
     // Fetch local data
-    const localBooks = this.db.getAllBooks()
-    const localClips = this.db.getAllClips()
+    const localBooks = await this.db.getAllBooks()
+    const localClips = await this.db.getAllClips()
 
     // Fetch remote data
     const remoteBookFiles = await this.drive.listFiles('books')
@@ -220,7 +220,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const remoteClips = await this.parseRemoteClips(remoteClipFiles)
 
     // Gather manifests
-    const allManifests = this.db.getAllManifestEntries()
+    const allManifests = await this.db.getAllManifestEntries()
     const manifests = new Map<string, SyncManifestEntry>()
     for (const m of allManifests) {
       manifests.set(`${m.entity_type}:${m.entity_id}`, m)
@@ -331,7 +331,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     }
 
     // Clean up orphaned manifest entries
-    this.cleanupManifests(state)
+    await this.cleanupManifests(state)
   }
 
   // ---------------------------------------------------------------------------
@@ -352,7 +352,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const { merged, resolution } = mergeBook(local, remote.backup)
 
       // Update local database with merged result
-      this.db.restoreBookFromBackup(
+      await this.db.restoreBookFromBackup(
         merged.id,
         merged.name,
         merged.duration,
@@ -412,7 +412,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const remoteUpdatedAt = uploaded.modifiedTime ? new Date(uploaded.modifiedTime).getTime() : book.updated_at
 
       // Update manifest
-      this.db.upsertManifestEntry({
+      await this.db.upsertManifestEntry({
         entity_type: 'book',
         entity_id: book.id,
         local_updated_at: book.updated_at,
@@ -441,7 +441,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         return
       }
 
-      this.db.restoreBookFromBackup(
+      await this.db.restoreBookFromBackup(
         backup.id,
         backup.name,
         backup.duration,
@@ -456,7 +456,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       )
 
       // Update manifest
-      this.db.upsertManifestEntry({
+      await this.db.upsertManifestEntry({
         entity_type: 'book',
         entity_id: backup.id,
         local_updated_at: backup.updated_at,
@@ -481,7 +481,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       if (jsonFileId) await this.drive.deleteFile(jsonFileId)
 
       // Clean up manifest
-      this.db.deleteManifestEntry('book', bookId)
+      await this.db.deleteManifestEntry('book', bookId)
 
       log(`Deleted book from remote: ${bookId}`)
     } catch (error) {
@@ -498,7 +498,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const { merged, resolution } = mergeClip(local, remote.backup)
 
       // Update local database with merged result
-      this.db.restoreClipFromBackup(
+      await this.db.restoreClipFromBackup(
         merged.id,
         merged.source_id,
         merged.uri,
@@ -576,7 +576,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
       // Update manifest
       const remoteUpdatedAt = jsonFile.modifiedTime ? new Date(jsonFile.modifiedTime).getTime() : clip.updated_at
-      this.db.upsertManifestEntry({
+      await this.db.upsertManifestEntry({
         entity_type: 'clip',
         entity_id: clip.id,
         local_updated_at: clip.updated_at,
@@ -628,7 +628,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const localUri = `file://${localAudioPath}`
 
       // Restore to database
-      this.db.restoreClipFromBackup(
+      await this.db.restoreClipFromBackup(
         backup.id,
         backup.source_id,
         localUri,
@@ -641,7 +641,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       )
 
       // Update manifest
-      this.db.upsertManifestEntry({
+      await this.db.upsertManifestEntry({
         entity_type: 'clip',
         entity_id: backup.id,
         local_updated_at: backup.updated_at,
@@ -668,7 +668,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       if (audioFileId) await this.drive.deleteFile(audioFileId)
 
       // Clean up manifest
-      this.db.deleteManifestEntry('clip', clipId)
+      await this.db.deleteManifestEntry('clip', clipId)
 
       result.deleted.clips++
       log(`Deleted clip from remote: ${clipId}`)
@@ -685,7 +685,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const processResult = await this.syncQueue.processQueue(async (item) => {
       if (item.entity_type === 'book') {
         if (item.operation === 'upsert') {
-          const book = this.db.getBookById(item.entity_id)
+          const book = await this.db.getBookById(item.entity_id)
           if (book) await this.executeUploadBook(book, result)
         } else if (item.operation === 'delete') {
           // Find remote book file to delete
@@ -695,7 +695,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         }
       } else if (item.entity_type === 'clip') {
         if (item.operation === 'upsert') {
-          const clip = this.db.getClip(item.entity_id)
+          const clip = await this.db.getClip(item.entity_id)
           if (clip) await this.executeUploadClip(clip, result)
         } else if (item.operation === 'delete') {
           // Find remote files to delete
@@ -724,10 +724,10 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   // Cleanup
   // ---------------------------------------------------------------------------
 
-  private cleanupManifests(state: SyncState): void {
+  private async cleanupManifests(state: SyncState): Promise<void> {
     // Re-fetch local state to avoid using stale data from sync start
-    const freshLocalBooks = this.db.getAllBooks()
-    const freshLocalClips = this.db.getAllClips()
+    const freshLocalBooks = await this.db.getAllBooks()
+    const freshLocalClips = await this.db.getAllClips()
     const localBookIds = new Set(freshLocalBooks.map(b => b.id))
     const localClipIds = new Set(freshLocalClips.map(c => c.id))
 
@@ -741,7 +741,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         : state.remote.clips.has(manifest.entity_id)
 
       if (!existsLocally && !existsRemotely) {
-        this.db.deleteManifestEntry(manifest.entity_type, manifest.entity_id)
+        await this.db.deleteManifestEntry(manifest.entity_type, manifest.entity_id)
       }
     }
   }

@@ -14,8 +14,9 @@ export const createFetchSyncState: ActionFactory<FetchSyncStateDeps, FetchSyncSt
   async () => {
     const { db, sync, set } = deps
 
+    const pendingCount = await sync.getPendingCount()
     set((state) => {
-      state.sync.pendingCount = sync.getPendingCount()
+      state.sync.pendingCount = pendingCount
       state.sync.lastSyncTime = db.getLastSyncTime()
     })
   }

@@ -45,29 +45,29 @@ export class SyncQueueService {
    * Queue a change for later sync.
    * If an item for the same entity already exists, it's replaced.
    */
-  queueChange(entityType: SyncEntityType, entityId: string, operation: SyncOperation): void {
-    this.db.queueChange(entityType, entityId, operation)
+  async queueChange(entityType: SyncEntityType, entityId: string, operation: SyncOperation): Promise<void> {
+    await this.db.queueChange(entityType, entityId, operation)
   }
 
   /**
    * Get all pending items (under max attempts).
    */
-  getPendingItems(): SyncQueueItem[] {
+  async getPendingItems(): Promise<SyncQueueItem[]> {
     return this.db.getPendingQueueItems(MAX_ATTEMPTS)
   }
 
   /**
    * Get all items in the queue, including failed ones.
    */
-  getAllItems(): SyncQueueItem[] {
+  async getAllItems(): Promise<SyncQueueItem[]> {
     return this.db.getAllQueueItems()
   }
 
   /**
    * Get queue statistics.
    */
-  getStats(): QueueStats {
-    const all = this.db.getAllQueueItems()
+  async getStats(): Promise<QueueStats> {
+    const all = await this.db.getAllQueueItems()
     const failed = all.filter(item => item.attempts >= MAX_ATTEMPTS)
     return {
       pending: all.length - failed.length,
@@ -86,17 +86,17 @@ export class SyncQueueService {
       errors: [],
     }
 
-    const items = this.getPendingItems()
+    const items = await this.getPendingItems()
 
     for (const item of items) {
       try {
         await handler(item)
-        this.db.removeFromQueue(item.entity_type, item.entity_id)
+        await this.db.removeFromQueue(item.entity_type, item.entity_id)
         result.processed++
         log(`Processed: ${item.entity_type}:${item.entity_id}`)
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
-        this.db.updateQueueItemAttempt(item.entity_type, item.entity_id, errorMessage)
+        await this.db.updateQueueItemAttempt(item.entity_type, item.entity_id, errorMessage)
         result.failed++
         result.errors.push(`${item.entity_type}:${item.entity_id}: ${errorMessage}`)
         log(`Failed: ${item.entity_type}:${item.entity_id}:`, error)
@@ -109,41 +109,40 @@ export class SyncQueueService {
   /**
    * Remove an item from the queue (after successful sync).
    */
-  removeFromQueue(entityType: SyncEntityType, entityId: string): void {
-    this.db.removeFromQueue(entityType, entityId)
+  async removeFromQueue(entityType: SyncEntityType, entityId: string): Promise<void> {
+    await this.db.removeFromQueue(entityType, entityId)
   }
 
   /**
    * Clear all items from the queue.
    */
-  clearQueue(): void {
-    this.db.clearQueue()
+  async clearQueue(): Promise<void> {
+    await this.db.clearQueue()
   }
 
   /**
    * Get the count of pending items.
    */
-  getCount(): number {
+  async getCount(): Promise<number> {
     return this.db.getQueueCount()
   }
 
   /**
    * Check if an entity has a pending change.
    */
-  hasPendingChange(entityType: SyncEntityType, entityId: string): boolean {
-    return this.db.getQueueItem(entityType, entityId) !== null
+  async hasPendingChange(entityType: SyncEntityType, entityId: string): Promise<boolean> {
+    return (await this.db.getQueueItem(entityType, entityId)) !== null
   }
 
   /**
    * Retry failed items by resetting their attempt count.
    */
-  retryFailed(): void {
-    const all = this.db.getAllQueueItems()
+  async retryFailed(): Promise<void> {
+    const all = await this.db.getAllQueueItems()
     const failed = all.filter(item => item.attempts >= MAX_ATTEMPTS)
 
     for (const item of failed) {
-      // Re-queue resets the attempts to 0
-      this.db.queueChange(item.entity_type, item.entity_id, item.operation)
+      await this.db.queueChange(item.entity_type, item.entity_id, item.operation)
     }
 
     log(`Reset ${failed.length} failed items for retry`)

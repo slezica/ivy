@@ -27,7 +27,7 @@ export const createDeleteClip: ActionFactory<DeleteClipDeps, DeleteClip> = (deps
     await db.deleteClip(id)
 
     // Queue for sync (delete operation)
-    syncQueue.queueChange('clip', id, 'delete')
+    await syncQueue.queueChange('clip', id, 'delete')
 
     set((state) => {
       delete state.clips[id]

@@ -93,7 +93,7 @@ async function handleDuplicate(ctx: Context, downloadedPath: string, bookId: str
   await RNFS.unlink(downloadedPath).catch(() => {})
 
   await db.touchBook(bookId)
-  syncQueue.queueChange('book', bookId, 'upsert')
+  await syncQueue.queueChange('book', bookId, 'upsert')
 
   updateLibrary(lib => {
     resetLibrary(lib)
@@ -118,17 +118,17 @@ async function handleNewBook(
   const { title, artist, artwork, duration } = await metadata.readMetadata(fileUri)
 
   if (existingBook) {
-    db.restoreBook(
+    await db.restoreBook(
       existingBook.id, fileUri, filename, duration,
       existingBook.title ?? title,
       existingBook.artist ?? artist,
       existingBook.artwork ?? artwork,
       fileSize, fingerprint,
     )
-    syncQueue.queueChange('book', existingBook.id, 'upsert')
+    await syncQueue.queueChange('book', existingBook.id, 'upsert')
   } else {
-    db.upsertBook(bookId, fileUri, filename, duration, 0, title, artist, artwork, fileSize, fingerprint)
-    syncQueue.queueChange('book', bookId, 'upsert')
+    await db.upsertBook(bookId, fileUri, filename, duration, 0, title, artist, artwork, fileSize, fingerprint)
+    await syncQueue.queueChange('book', bookId, 'upsert')
   }
 
   updateLibrary(resetLibrary)

@@ -124,7 +124,7 @@ describe('createDeleteBook', () => {
 
     it('restores book in state on sync queue error', async () => {
       const { state, deps, book } = createDeps('book-1')
-      deps.syncQueue.queueChange = jest.fn(() => { throw new Error('queue failed') })
+      deps.syncQueue.queueChange = jest.fn(async () => { throw new Error('queue failed') })
       const deleteBook = createDeleteBook(deps)
 
       await expect(deleteBook('book-1')).rejects.toThrow('queue failed')

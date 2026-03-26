@@ -15,7 +15,7 @@ export const createFetchBooks: ActionFactory<FetchBooksDeps, FetchBooks> = (deps
 
     const books: Record<string, Book> = {}
 
-    for (const book of db.getAllBooks()) {
+    for (const book of await db.getAllBooks()) {
       books[book.id] = book
     }
 

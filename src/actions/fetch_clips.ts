@@ -14,7 +14,7 @@ export const createFetchClips: ActionFactory<FetchClipsDeps, FetchClips> = (deps
     const { db, set } = deps
 
     const clips: Record<string, ClipWithFile> = {}
-    for (const clip of db.getAllClips()) {
+    for (const clip of await db.getAllClips()) {
       clips[clip.id] = clip
     }
 

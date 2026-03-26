@@ -242,8 +242,8 @@ export class DatabaseService {
     return row ? toBook(row) : null
   }
 
-  getBookById(id: string): Book | null {
-    const row = this.db.getFirstSync<BookRow>(
+  async getBookById(id: string): Promise<Book | null> {
+    const row = await this.db.getFirstAsync<BookRow>(
       'SELECT * FROM files WHERE id = ?',
       [id]
     )
@@ -284,14 +284,14 @@ export class DatabaseService {
     return row ? toBook(row) : null
   }
 
-  getAllBooks(): Book[] {
-    const rows = this.db.getAllSync<BookRow>(
+  async getAllBooks(): Promise<Book[]> {
+    const rows = await this.db.getAllAsync<BookRow>(
       'SELECT * FROM files WHERE hidden = 0 ORDER BY updated_at DESC'
     )
     return rows.map(toBook)
   }
 
-  upsertBook(
+  async upsertBook(
     id: string,
     uri: string,
     name: string,
@@ -302,30 +302,25 @@ export class DatabaseService {
     artwork?: string | null,
     fileSize?: number,
     fingerprint?: Uint8Array
-  ): Book {
+  ): Promise<void> {
     const now = Date.now()
-    const existing = this.getBookById(id)
-
-    if (existing) {
-      this.db.runSync(
-        'UPDATE files SET uri = ?, name = ?, duration = ?, position = ?, updated_at = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ? WHERE id = ?',
-        [uri, name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null, id]
-      )
-      return this.getBookById(id)!
-    } else {
-      this.db.runSync(
-        'INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, uri, name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null]
-      )
-      return this.getBookById(id)!
-    }
+    await this.db.runAsync(
+      `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         uri = excluded.uri, name = excluded.name, duration = excluded.duration,
+         position = excluded.position, updated_at = excluded.updated_at,
+         title = excluded.title, artist = excluded.artist, artwork = excluded.artwork,
+         file_size = excluded.file_size, fingerprint = excluded.fingerprint`,
+      [id, uri, name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null]
+    )
   }
 
   /**
    * Restore an archived/hidden book by attaching a new file.
    * Preserves position, updates uri and metadata, clears hidden flag, refreshes updated_at.
    */
-  restoreBook(
+  async restoreBook(
     id: string,
     uri: string,
     name: string,
@@ -335,13 +330,12 @@ export class DatabaseService {
     artwork: string | null,
     fileSize: number,
     fingerprint: Uint8Array
-  ): Book {
+  ): Promise<void> {
     const now = Date.now()
-    this.db.runSync(
+    await this.db.runAsync(
       'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ?, hidden = 0 WHERE id = ?',
       [uri, name, duration, now, title, artist, artwork, fileSize, fingerprint, id]
     )
-    return this.getBookById(id)!
   }
 
   /**
@@ -396,23 +390,23 @@ export class DatabaseService {
   // Clips
   // ---------------------------------------------------------------------------
 
-  getClip(id: string): Clip | null {
-    const result = this.db.getFirstSync<Clip>(
+  async getClip(id: string): Promise<Clip | null> {
+    const result = await this.db.getFirstAsync<Clip>(
       'SELECT * FROM clips WHERE id = ?',
       [id]
     )
     return result || null
   }
 
-  getClipsForBook(bookId: string): Clip[] {
-    return this.db.getAllSync<Clip>(
+  async getClipsForBook(bookId: string): Promise<Clip[]> {
+    return this.db.getAllAsync<Clip>(
       'SELECT * FROM clips WHERE source_id = ? ORDER BY start ASC',
       [bookId]
     )
   }
 
-  getAllClips(): ClipWithFile[] {
-    return this.db.getAllSync<ClipWithFile>(
+  async getAllClips(): Promise<ClipWithFile[]> {
+    return this.db.getAllAsync<ClipWithFile>(
       `SELECT
         clips.*,
         files.uri as file_uri,
@@ -497,7 +491,7 @@ export class DatabaseService {
    * Restore a book from backup. Inserts if new, updates if exists and newer.
    * Does not set uri (file path) - caller must handle file restoration separately.
    */
-  restoreBookFromBackup(
+  async restoreBookFromBackup(
     id: string,
     name: string,
     duration: number,
@@ -509,33 +503,26 @@ export class DatabaseService {
     fileSize: number,
     fingerprint: Uint8Array,
     hidden: boolean = false
-  ): void {
-    const existing = this.getBookById(id)
-
-    if (existing) {
-      // Only update if backup is newer
-      if (updated_at > existing.updated_at) {
-        this.db.runSync(
-          `UPDATE files SET name = ?, duration = ?, position = ?, updated_at = ?,
-           title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ?, hidden = ?
-           WHERE id = ?`,
-          [name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint, hidden ? 1 : 0, id]
-        )
-      }
-    } else {
-      // Insert with specific ID (SQLite allows this even with AUTOINCREMENT)
-      this.db.runSync(
-        `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint, hidden)
-         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint, hidden ? 1 : 0]
-      )
-    }
+  ): Promise<void> {
+    // Insert or update-if-newer in a single statement.
+    // The WHERE on the UPDATE branch ensures we only overwrite with newer data.
+    await this.db.runAsync(
+      `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint, hidden)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name, duration = excluded.duration,
+         position = excluded.position, updated_at = excluded.updated_at,
+         title = excluded.title, artist = excluded.artist, artwork = excluded.artwork,
+         file_size = excluded.file_size, fingerprint = excluded.fingerprint, hidden = excluded.hidden
+       WHERE excluded.updated_at > files.updated_at`,
+      [id, name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint, hidden ? 1 : 0]
+    )
   }
 
   /**
    * Restore a clip from backup. Inserts if new, updates if exists and newer.
    */
-  restoreClipFromBackup(
+  async restoreClipFromBackup(
     id: string,
     sourceId: string,
     uri: string,
@@ -545,34 +532,25 @@ export class DatabaseService {
     transcription: string | null,
     created_at: number,
     updated_at: number
-  ): void {
-    const existing = this.getClip(id)
-
-    if (existing) {
-      // Only update if backup is newer
-      if (updated_at > existing.updated_at) {
-        this.db.runSync(
-          `UPDATE clips SET source_id = ?, uri = ?, start = ?, duration = ?,
-           note = ?, transcription = ?, updated_at = ?
-           WHERE id = ?`,
-          [sourceId, uri, start, duration, note, transcription, updated_at, id]
-        )
-      }
-    } else {
-      // Insert with specific ID
-      this.db.runSync(
-        `INSERT INTO clips (id, source_id, uri, start, duration, note, transcription, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, sourceId, uri, start, duration, note, transcription, created_at, updated_at]
-      )
-    }
+  ): Promise<void> {
+    await this.db.runAsync(
+      `INSERT INTO clips (id, source_id, uri, start, duration, note, transcription, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         source_id = excluded.source_id, uri = excluded.uri,
+         start = excluded.start, duration = excluded.duration,
+         note = excluded.note, transcription = excluded.transcription,
+         updated_at = excluded.updated_at
+       WHERE excluded.updated_at > clips.updated_at`,
+      [id, sourceId, uri, start, duration, note, transcription, created_at, updated_at]
+    )
   }
 
   /**
    * Get all clip IDs currently in the database.
    */
-  getAllClipIds(): string[] {
-    const results = this.db.getAllSync<{ id: string }>('SELECT id FROM clips')
+  async getAllClipIds(): Promise<string[]> {
+    const results = await this.db.getAllAsync<{ id: string }>('SELECT id FROM clips')
     return results.map(r => r.id)
   }
 
@@ -618,8 +596,8 @@ export class DatabaseService {
     await this.db.runAsync('DELETE FROM sessions WHERE id = ?', [sessionId])
   }
 
-  getAllSessions(): SessionWithBook[] {
-    return this.db.getAllSync<SessionWithBook>(
+  async getAllSessions(): Promise<SessionWithBook[]> {
+    return this.db.getAllAsync<SessionWithBook>(
       `SELECT
         sessions.*,
         files.name as book_name,
@@ -722,27 +700,27 @@ export class DatabaseService {
   // Sync Manifest
   // ---------------------------------------------------------------------------
 
-  getManifestEntry(entityType: SyncEntityType, entityId: string): SyncManifestEntry | null {
-    const result = this.db.getFirstSync<SyncManifestEntry>(
+  async getManifestEntry(entityType: SyncEntityType, entityId: string): Promise<SyncManifestEntry | null> {
+    const result = await this.db.getFirstAsync<SyncManifestEntry>(
       'SELECT * FROM sync_manifest WHERE entity_type = ? AND entity_id = ?',
       [entityType, entityId]
     )
     return result || null
   }
 
-  getAllManifestEntries(entityType?: SyncEntityType): SyncManifestEntry[] {
+  async getAllManifestEntries(entityType?: SyncEntityType): Promise<SyncManifestEntry[]> {
     if (entityType) {
-      return this.db.getAllSync<SyncManifestEntry>(
+      return this.db.getAllAsync<SyncManifestEntry>(
         'SELECT * FROM sync_manifest WHERE entity_type = ?',
         [entityType]
       )
     }
-    return this.db.getAllSync<SyncManifestEntry>('SELECT * FROM sync_manifest')
+    return this.db.getAllAsync<SyncManifestEntry>('SELECT * FROM sync_manifest')
   }
 
-  upsertManifestEntry(entry: Omit<SyncManifestEntry, 'synced_at'>): void {
+  async upsertManifestEntry(entry: Omit<SyncManifestEntry, 'synced_at'>): Promise<void> {
     const now = Date.now()
-    this.db.runSync(
+    await this.db.runAsync(
       `INSERT INTO sync_manifest (entity_type, entity_id, local_updated_at, remote_updated_at, remote_file_id, remote_audio_file_id, synced_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(entity_type, entity_id) DO UPDATE SET
@@ -755,8 +733,8 @@ export class DatabaseService {
     )
   }
 
-  deleteManifestEntry(entityType: SyncEntityType, entityId: string): void {
-    this.db.runSync(
+  async deleteManifestEntry(entityType: SyncEntityType, entityId: string): Promise<void> {
+    await this.db.runAsync(
       'DELETE FROM sync_manifest WHERE entity_type = ? AND entity_id = ?',
       [entityType, entityId]
     )
@@ -766,31 +744,31 @@ export class DatabaseService {
   // Sync Queue
   // ---------------------------------------------------------------------------
 
-  getQueueItem(entityType: SyncEntityType, entityId: string): SyncQueueItem | null {
-    const result = this.db.getFirstSync<SyncQueueItem>(
+  async getQueueItem(entityType: SyncEntityType, entityId: string): Promise<SyncQueueItem | null> {
+    const result = await this.db.getFirstAsync<SyncQueueItem>(
       'SELECT * FROM sync_queue WHERE entity_type = ? AND entity_id = ?',
       [entityType, entityId]
     )
     return result || null
   }
 
-  getAllQueueItems(): SyncQueueItem[] {
-    return this.db.getAllSync<SyncQueueItem>(
+  async getAllQueueItems(): Promise<SyncQueueItem[]> {
+    return this.db.getAllAsync<SyncQueueItem>(
       'SELECT * FROM sync_queue ORDER BY queued_at ASC'
     )
   }
 
-  getPendingQueueItems(maxAttempts: number = 3): SyncQueueItem[] {
-    return this.db.getAllSync<SyncQueueItem>(
+  async getPendingQueueItems(maxAttempts: number = 3): Promise<SyncQueueItem[]> {
+    return this.db.getAllAsync<SyncQueueItem>(
       'SELECT * FROM sync_queue WHERE attempts < ? ORDER BY queued_at ASC',
       [maxAttempts]
     )
   }
 
-  queueChange(entityType: SyncEntityType, entityId: string, operation: SyncOperation): void {
+  async queueChange(entityType: SyncEntityType, entityId: string, operation: SyncOperation): Promise<void> {
     const now = Date.now()
     const id = generateId()
-    this.db.runSync(
+    await this.db.runAsync(
       `INSERT INTO sync_queue (id, entity_type, entity_id, operation, queued_at, attempts, last_error)
        VALUES (?, ?, ?, ?, ?, 0, NULL)
        ON CONFLICT(entity_type, entity_id) DO UPDATE SET
@@ -802,26 +780,26 @@ export class DatabaseService {
     )
   }
 
-  updateQueueItemAttempt(entityType: SyncEntityType, entityId: string, error: string | null): void {
-    this.db.runSync(
+  async updateQueueItemAttempt(entityType: SyncEntityType, entityId: string, error: string | null): Promise<void> {
+    await this.db.runAsync(
       'UPDATE sync_queue SET attempts = attempts + 1, last_error = ? WHERE entity_type = ? AND entity_id = ?',
       [error, entityType, entityId]
     )
   }
 
-  removeFromQueue(entityType: SyncEntityType, entityId: string): void {
-    this.db.runSync(
+  async removeFromQueue(entityType: SyncEntityType, entityId: string): Promise<void> {
+    await this.db.runAsync(
       'DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ?',
       [entityType, entityId]
     )
   }
 
-  clearQueue(): void {
-    this.db.runSync('DELETE FROM sync_queue')
+  async clearQueue(): Promise<void> {
+    await this.db.runAsync('DELETE FROM sync_queue')
   }
 
-  getQueueCount(maxAttempts: number = 3): number {
-    const result = this.db.getFirstSync<{ count: number }>(
+  async getQueueCount(maxAttempts: number = 3): Promise<number> {
+    const result = await this.db.getFirstAsync<{ count: number }>(
       'SELECT COUNT(*) as count FROM sync_queue WHERE attempts < ?',
       [maxAttempts]
     )
@@ -840,16 +818,16 @@ export class DatabaseService {
     return result?.value ?? null
   }
 
-  setSyncMetadata(key: string, value: string): void {
-    this.db.runSync(
+  async setSyncMetadata(key: string, value: string): Promise<void> {
+    await this.db.runAsync(
       `INSERT INTO sync_metadata (key, value) VALUES (?, ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       [key, value]
     )
   }
 
-  deleteSyncMetadata(key: string): void {
-    this.db.runSync('DELETE FROM sync_metadata WHERE key = ?', [key])
+  async deleteSyncMetadata(key: string): Promise<void> {
+    await this.db.runAsync('DELETE FROM sync_metadata WHERE key = ?', [key])
   }
 
   getLastSyncTime(): number | null {
@@ -857,16 +835,16 @@ export class DatabaseService {
     return value ? parseInt(value, 10) : null
   }
 
-  setLastSyncTime(timestamp: number): void {
-    this.setSyncMetadata('lastSyncTime', timestamp.toString())
+  async setLastSyncTime(timestamp: number): Promise<void> {
+    await this.setSyncMetadata('lastSyncTime', timestamp.toString())
   }
 
   getDeviceId(): string | null {
     return this.getSyncMetadata('deviceId')
   }
 
-  setDeviceId(deviceId: string): void {
-    this.setSyncMetadata('deviceId', deviceId)
+  async setDeviceId(deviceId: string): Promise<void> {
+    await this.setSyncMetadata('deviceId', deviceId)
   }
 }
 

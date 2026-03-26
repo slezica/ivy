@@ -131,9 +131,9 @@ export function createMockDb(overrides: Record<string, jest.Mock | jest.Mock<any
     getBookByFingerprint: jest.fn(async () => null),
     getBookByUri: jest.fn(async () => null),
     getBookByAnyUri: jest.fn(async () => createMockBook()),
-    getBookById: jest.fn(() => createMockBook()),
-    upsertBook: jest.fn(() => createMockBook()),
-    restoreBook: jest.fn(() => createMockBook()),
+    getBookById: jest.fn(async () => createMockBook()),
+    upsertBook: jest.fn(async () => {}),
+    restoreBook: jest.fn(async () => {}),
     touchBook: jest.fn(async () => {}),
     archiveBook: jest.fn(async () => {}),
     hideBook: jest.fn(async () => {}),
@@ -197,7 +197,7 @@ export function createMockDownloader(overrides: Record<string, jest.Mock> = {}) 
 
 export function createMockSyncQueue(overrides: Record<string, jest.Mock> = {}) {
   return {
-    queueChange: jest.fn(),
+    queueChange: jest.fn(async () => {}),
     ...overrides,
   } as any
 }

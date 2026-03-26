@@ -14,7 +14,7 @@ export const createFetchSessions: ActionFactory<FetchSessionsDeps, FetchSessions
     const { db, set } = deps
 
     const sessions: Record<string, SessionWithBook> = {}
-    for (const session of db.getAllSessions()) {
+    for (const session of await db.getAllSessions()) {
       sessions[session.id] = session
     }
 

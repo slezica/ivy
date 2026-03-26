@@ -24,18 +24,18 @@ describe('BackupSyncService', () => {
   // Mock dependencies
   function createMockDeps() {
     const db: jest.Mocked<DatabaseService> = {
-      getAllBooks: jest.fn(() => []),
-      getAllClips: jest.fn(() => []),
-      getAllManifestEntries: jest.fn(() => []),
+      getAllBooks: jest.fn(async () => []),
+      getAllClips: jest.fn(async () => []),
+      getAllManifestEntries: jest.fn(async () => []),
       getLastSyncTime: jest.fn(() => null),
-      setLastSyncTime: jest.fn(),
-      upsertManifestEntry: jest.fn(),
-      deleteManifestEntry: jest.fn(),
-      getBookById: jest.fn(),
+      setLastSyncTime: jest.fn(async () => {}),
+      upsertManifestEntry: jest.fn(async () => {}),
+      deleteManifestEntry: jest.fn(async () => {}),
+      getBookById: jest.fn(async () => null),
       getBookByFingerprint: jest.fn(async () => null),
-      getClip: jest.fn(),
-      restoreBookFromBackup: jest.fn(),
-      restoreClipFromBackup: jest.fn(),
+      getClip: jest.fn(async () => null),
+      restoreBookFromBackup: jest.fn(async () => {}),
+      restoreClipFromBackup: jest.fn(async () => {}),
     } as any
 
     const drive: jest.Mocked<GoogleDriveService> = {
@@ -53,7 +53,7 @@ describe('BackupSyncService', () => {
     } as any
 
     const syncQueue: jest.Mocked<SyncQueueService> = {
-      getCount: jest.fn(() => 0),
+      getCount: jest.fn(async () => 0),
       processQueue: jest.fn(() => Promise.resolve({ processed: 0, errors: [] })),
     } as any
 
@@ -67,7 +67,7 @@ describe('BackupSyncService', () => {
       let performSyncStarted = 0
 
       // Use db.setLastSyncTime as marker - it's called at the end of performSync
-      db.setLastSyncTime.mockImplementation(() => {
+      db.setLastSyncTime.mockImplementation(async () => {
         performSyncStarted++
       })
 
@@ -94,7 +94,7 @@ describe('BackupSyncService', () => {
       const { db, drive, auth, syncQueue } = createMockDeps()
 
       let syncCompletedCount = 0
-      db.setLastSyncTime.mockImplementation(() => {
+      db.setLastSyncTime.mockImplementation(async () => {
         syncCompletedCount++
       })
 
@@ -137,7 +137,7 @@ describe('BackupSyncService', () => {
       const { db, drive, auth, syncQueue } = createMockDeps()
 
       let syncCompletedCount = 0
-      db.setLastSyncTime.mockImplementation(() => {
+      db.setLastSyncTime.mockImplementation(async () => {
         syncCompletedCount++
       })
 
@@ -166,7 +166,7 @@ describe('BackupSyncService', () => {
       auth.getAccessToken.mockResolvedValue(null)
 
       let syncCompletedCount = 0
-      db.setLastSyncTime.mockImplementation(() => {
+      db.setLastSyncTime.mockImplementation(async () => {
         syncCompletedCount++
       })
 
@@ -235,7 +235,7 @@ describe('BackupSyncService', () => {
       const localBook = createLocalBook('a0a0-a0a0')
 
       // Local state: one book
-      db.getAllBooks.mockReturnValue([localBook])
+      db.getAllBooks.mockResolvedValue([localBook])
 
       // Fingerprint lookup returns the local book (same content, different ID)
       db.getBookByFingerprint.mockResolvedValue(localBook)
@@ -271,7 +271,7 @@ describe('BackupSyncService', () => {
       const { db } = deps
       const localBook = createLocalBook('aabb-ccdd')
 
-      db.getAllBooks.mockReturnValue([localBook])
+      db.getAllBooks.mockResolvedValue([localBook])
       // Fingerprint matches, but it's the same book ID — this is an update, not a duplicate
       db.getBookByFingerprint.mockResolvedValue(localBook)
 

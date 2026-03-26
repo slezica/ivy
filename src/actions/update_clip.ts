@@ -67,7 +67,7 @@ export const createUpdateClip: ActionFactory<UpdateClipDeps, UpdateClip> = (deps
     await db.updateClip(id, { ...updates, uri: newUri })
 
     // Queue for sync
-    syncQueue.queueChange('clip', id, 'upsert')
+    await syncQueue.queueChange('clip', id, 'upsert')
 
     // Update store
     set((state) => {

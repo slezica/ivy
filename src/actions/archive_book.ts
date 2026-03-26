@@ -43,7 +43,7 @@ export const createArchiveBook: ActionFactory<ArchiveBookDeps, ArchiveBook> = (d
       })
 
       await db.archiveBook(bookId)
-      syncQueue.queueChange('book', bookId, 'upsert')
+      await syncQueue.queueChange('book', bookId, 'upsert')
 
     } catch (error) {
       log('Failed, rolling back:', error)

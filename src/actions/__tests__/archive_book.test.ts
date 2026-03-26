@@ -125,7 +125,7 @@ describe('createArchiveBook', () => {
 
     it('restores book uri on sync queue error', async () => {
       const { state, deps } = createDeps('book-1', 'file:///audio/book-1.mp3')
-      deps.syncQueue.queueChange = jest.fn(() => { throw new Error('queue failed') })
+      deps.syncQueue.queueChange = jest.fn(async () => { throw new Error('queue failed') })
       const archiveBook = createArchiveBook(deps)
 
       await expect(archiveBook('book-1')).rejects.toThrow('queue failed')

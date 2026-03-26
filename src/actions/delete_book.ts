@@ -43,7 +43,7 @@ export const createDeleteBook: ActionFactory<DeleteBookDeps, DeleteBook> = (deps
       })
 
       await db.hideBook(bookId)
-      syncQueue.queueChange('book', bookId, 'upsert')
+      await syncQueue.queueChange('book', bookId, 'upsert')
 
     } catch (error) {
       log('Failed, rolling back:', error)

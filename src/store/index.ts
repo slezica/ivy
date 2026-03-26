@@ -52,7 +52,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
   // Throttled helpers
   const queuePositionSync = throttle((bookId: string) => {
-    syncQueue.queueChange('book', bookId, 'upsert')
+    syncQueue.queueChange('book', bookId, 'upsert').catch(() => {})
   }, 30_000)
 
   const throttledTrackSession = throttleSameArgs((bookId: string) => {
@@ -155,7 +155,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
     sync: {
       isSyncing: false,
-      pendingCount: sync.getPendingCount(),
+      pendingCount: 0,
       lastSyncTime: db.getLastSyncTime(),
       error: null,
     },

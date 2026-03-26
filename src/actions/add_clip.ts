@@ -58,7 +58,7 @@ export const createAddClip: ActionFactory<AddClipDeps, AddClip> = (deps) => (
     )
 
     // Queue for sync
-    syncQueue.queueChange('clip', clip.id, 'upsert')
+    await syncQueue.queueChange('clip', clip.id, 'upsert')
 
     // Reload all clips to include file information
     await fetchClips()

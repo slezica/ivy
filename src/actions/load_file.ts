@@ -85,7 +85,7 @@ async function handleDuplicate(ctx: Context, bookId: string) {
   await copier.cancelCopy(opId)
 
   await db.touchBook(bookId)
-  syncQueue.queueChange('book', bookId, 'upsert')
+  await syncQueue.queueChange('book', bookId, 'upsert')
 
   updateLibrary(lib => {
     resetLibrary(lib)
@@ -110,7 +110,7 @@ async function handleNewBook(
     const { title, artist, artwork, duration } = await metadata.readMetadata(fileUri)
 
     if (existingBook) {
-      db.restoreBook(
+      await db.restoreBook(
         existingBook.id, fileUri, file.name, duration,
         existingBook.title ?? title,
         existingBook.artist ?? artist,
@@ -118,12 +118,12 @@ async function handleNewBook(
         fileSize, fingerprint,
       )
 
-      syncQueue.queueChange('book', existingBook.id, 'upsert')
+      await syncQueue.queueChange('book', existingBook.id, 'upsert')
 
     } else {
-      db.upsertBook(bookId, fileUri, file.name, duration, 0, title, artist, artwork, fileSize, fingerprint)
+      await db.upsertBook(bookId, fileUri, file.name, duration, 0, title, artist, artwork, fileSize, fingerprint)
 
-      syncQueue.queueChange('book', bookId, 'upsert')
+      await syncQueue.queueChange('book', bookId, 'upsert')
     }
 
     updateLibrary(resetLibrary)
