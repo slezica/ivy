@@ -1,7 +1,7 @@
 import { createLoadFromUrl, LoadFromUrlDeps } from '../load_from_url'
 import {
   createMockBook, createMockState, createImmerSet, createMockGet,
-  createMockDb, createMockFiles, createMockMetadata, createMockSyncQueue, createMockDownloader,
+  createMockDb, createMockFiles, createMockMetadata, createMockChapterReader, createMockSyncQueue, createMockDownloader,
 } from './helpers'
 
 // Mock generateId to return predictable values
@@ -40,6 +40,7 @@ function createMockDeps(overrides: Partial<LoadFromUrlDeps> = {}): LoadFromUrlDe
     files: createMockFiles(),
     downloader: createMockDownloader(),
     metadata: createMockMetadata(),
+    chapters: createMockChapterReader(),
     syncQueue: createMockSyncQueue(),
     set: createImmerSet(state),
     get: createMockGet(state),
@@ -179,6 +180,7 @@ describe('createLoadFromUrl', () => {
         'data:image/png;base64,abc',
         1024,
         new Uint8Array([1, 2, 3]),
+        [],
       )
     })
 
@@ -237,6 +239,7 @@ describe('createLoadFromUrl', () => {
         'data:image/png;base64,abc',
         1024,
         new Uint8Array([1, 2, 3]),
+        [],
       )
     })
 
@@ -260,6 +263,7 @@ describe('createLoadFromUrl', () => {
         'data:image/png;base64,user-edited',
         1024,
         new Uint8Array([1, 2, 3]),
+        [],
       )
     })
 

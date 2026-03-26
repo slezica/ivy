@@ -1,7 +1,7 @@
 import { createLoadFile, LoadFileDeps } from '../load_file'
 import {
   createMockBook, createMockState, createImmerSet, createMockGet,
-  createMockDb, createMockFiles, createMockMetadata, createMockSyncQueue, createMockCopier,
+  createMockDb, createMockFiles, createMockMetadata, createMockChapterReader, createMockSyncQueue, createMockCopier,
 } from './helpers'
 
 // Mock generateId to return predictable values
@@ -29,6 +29,7 @@ function createMockDeps(overrides: Partial<LoadFileDeps> = {}): LoadFileDeps {
     files: createMockFiles(),
     copier: createMockCopier(),
     metadata: createMockMetadata(),
+    chapters: createMockChapterReader(),
     syncQueue: createMockSyncQueue(),
     set: createImmerSet(state),
     get: createMockGet(state),
@@ -132,6 +133,7 @@ describe('createLoadFile', () => {
         'data:image/png;base64,abc',
         1024,
         new Uint8Array([1, 2, 3]),
+        [],
       )
     })
 
@@ -191,6 +193,7 @@ describe('createLoadFile', () => {
         'data:image/png;base64,abc',
         1024,
         new Uint8Array([1, 2, 3]),
+        [],
       )
     })
 
@@ -214,6 +217,7 @@ describe('createLoadFile', () => {
         'data:image/png;base64,user-edited',
         1024,
         new Uint8Array([1, 2, 3]),
+        [],
       )
     })
 
