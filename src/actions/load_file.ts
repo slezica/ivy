@@ -1,4 +1,4 @@
-import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, SyncQueueService, Book } from '../services'
+import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, ChapterReaderService, SyncQueueService, Book } from '../services'
 import type { GetState, SetState, Action, ActionFactory, AppState } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
@@ -10,6 +10,7 @@ export interface LoadFileDeps {
   files: FileStorageService
   copier: FileCopierService
   metadata: AudioMetadataService
+  chapters: ChapterReaderService
   syncQueue: SyncQueueService
   get: GetState
   set: SetState
@@ -100,14 +101,17 @@ async function handleNewBook(
   fingerprint: Uint8Array,
   existingBook: Book | null | undefined,
 ) {
-  const { db, files, metadata, syncQueue, updateLibrary } = ctx
+  const { db, files, metadata, chapters: chapterReader, syncQueue, updateLibrary } = ctx
 
   const bookId = existingBook?.id ?? generateId()
   const destPath = await copyFile(ctx, bookId, file.name)
   const fileUri = `file://${destPath}`
 
   try {
-    const { title, artist, artwork, duration } = await metadata.readMetadata(fileUri)
+    const [{ title, artist, artwork, duration }, chapters] = await Promise.all([
+      metadata.readMetadata(fileUri),
+      chapterReader.readChapters(fileUri),
+    ])
 
     if (existingBook) {
       await db.restoreBook(
@@ -116,12 +120,13 @@ async function handleNewBook(
         existingBook.artist ?? artist,
         existingBook.artwork ?? artwork,
         fileSize, fingerprint,
+        chapters,
       )
 
       await syncQueue.queueChange('book', existingBook.id, 'upsert')
 
     } else {
-      await db.upsertBook(bookId, fileUri, file.name, duration, 0, title, artist, artwork, fileSize, fingerprint)
+      await db.upsertBook(bookId, fileUri, file.name, duration, 0, title, artist, artwork, fileSize, fingerprint, chapters)
 
       await syncQueue.queueChange('book', bookId, 'upsert')
     }
