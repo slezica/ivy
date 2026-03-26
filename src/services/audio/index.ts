@@ -8,3 +8,5 @@ export type { AudioMetadata } from './metadata'
 
 export { AudioSlicerService } from './slicer'
 export type { SliceOptions, SliceResult } from './slicer'
+
+export { ChapterReaderService } from './chapters'
