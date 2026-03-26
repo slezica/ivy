@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import { useFocusEffect } from 'expo-router'
+import Slider from '@react-native-community/slider'
 
 import { Color } from '../theme'
 import { useStore } from '../store'
@@ -13,7 +14,7 @@ import { MAIN_PLAYER_OWNER_ID, formatTime } from '../utils'
 import type { Book, Chapter } from '../services'
 
 export default function PlayerScreen() {
-  const { playback, books, addClip, play, pause, seek, fetchPlaybackState } = useStore()
+  const { playback, books, addClip, play, pause, seek, setSpeed, fetchPlaybackState } = useStore()
 
   // Local state - what the main player "remembers"
   const [ownBook, setOwnBook] = useState<Book | null>(null)
@@ -41,6 +42,13 @@ export default function PlayerScreen() {
       setOwnPosition(playback.position)
     }
   }, [isOwner, isFileLoaded, playback.position])
+
+  // Keep ownBook in sync with store (e.g. after speed or metadata changes)
+  useEffect(() => {
+    if (ownBook && books[ownBook.id]) {
+      setOwnBook(books[ownBook.id])
+    }
+  }, [books, ownBook?.id])
 
   // Sync position immediately when screen comes into focus
   useFocusEffect(
@@ -104,6 +112,7 @@ export default function PlayerScreen() {
               onPlayPause={handlePlayPause}
               onAddClip={handleAddClip}
               onSeek={handleSeek}
+              onSpeedChange={(speed) => setSpeed(ownBook.id, speed)}
             />
           : <EmptyState title="Not playing" subtitle="Select a book from your library" />
         }
@@ -119,16 +128,20 @@ interface PlayerProps {
   onPlayPause: () => void
   onAddClip: () => void
   onSeek: (position: number) => void
+  onSpeedChange: (speed: number) => void
 }
 
-function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek }: PlayerProps) {
+function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onSpeedChange }: PlayerProps) {
   const [chaptersOpen, setChaptersOpen] = useState(false)
+  const [speedOpen, setSpeedOpen] = useState(false)
   const chapters = book.chapters ?? []
 
   const handleChapterPress = (chapter: Chapter) => {
     onSeek(chapter.start_ms)
     setChaptersOpen(false)
   }
+
+  const speedLabel = book.speed === 100 ? '1×' : `${(book.speed / 100).toFixed(1)}×`
 
   return (
     <View style={styles.playerContainer}>
@@ -169,6 +182,13 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek }: P
             testID="add-clip-button"
             size={48}
           />
+          <TouchableOpacity
+            style={styles.speedButton}
+            onPress={() => setSpeedOpen(true)}
+            testID="speed-button"
+          >
+            <Text style={styles.speedButtonLabel}>{speedLabel}</Text>
+          </TouchableOpacity>
           <IconButton
             iconName="list"
             onPress={() => setChaptersOpen(true)}
@@ -186,8 +206,55 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek }: P
         />
       </Dialog>
 
+      <Dialog visible={speedOpen} onClose={() => setSpeedOpen(false)}>
+        <SpeedControl
+          speed={book.speed}
+          onChange={onSpeedChange}
+        />
+      </Dialog>
+
     <View style={styles.spacerBottom} />
   </View>
+  )
+}
+
+
+// =============================================================================
+// Speed Control
+// =============================================================================
+
+interface SpeedControlProps {
+  speed: number
+  onChange: (speed: number) => void
+}
+
+function SpeedControl({ speed, onChange }: SpeedControlProps) {
+  const [localSpeed, setLocalSpeed] = useState(speed)
+  const displaySpeed = localSpeed / 100
+  const label = localSpeed === 100 ? '1×' : `${displaySpeed.toFixed(1)}×`
+
+  return (
+    <View style={styles.speedControl}>
+      <Text style={styles.speedControlTitle}>Playback Speed</Text>
+      <Text style={styles.speedControlValue}>{label}</Text>
+      <Slider
+        style={styles.speedSlider}
+        minimumValue={50}
+        maximumValue={200}
+        step={10}
+        value={speed}
+        onValueChange={(value) => setLocalSpeed(Math.round(value))}
+        onSlidingComplete={(value) => onChange(Math.round(value))}
+        minimumTrackTintColor={Color.PRIMARY}
+        maximumTrackTintColor={Color.GRAY}
+        thumbTintColor={Color.PRIMARY}
+      />
+      <View style={styles.speedLabels}>
+        <Text style={styles.speedLabelText}>0.5×</Text>
+        <Text style={styles.speedLabelText}>1×</Text>
+        <Text style={styles.speedLabelText}>2×</Text>
+      </View>
+    </View>
   )
 }
 
@@ -271,6 +338,53 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     gap: 16,
+  },
+  speedButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Color.PRIMARY,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: Color.PRIMARY,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  speedButtonLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Color.BLACK,
+  },
+  speedControl: {
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  speedControlTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Color.BLACK,
+  },
+  speedControlValue: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: Color.PRIMARY,
+  },
+  speedSlider: {
+    width: '100%',
+    height: 40,
+  },
+  speedLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 4,
+  },
+  speedLabelText: {
+    fontSize: 12,
+    color: Color.GRAY_DARK,
   },
   chapterList: {
     padding: 16,
