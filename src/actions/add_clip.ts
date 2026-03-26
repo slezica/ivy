@@ -48,7 +48,7 @@ export const createAddClip: ActionFactory<AddClipDeps, AddClip> = (deps) => (
       outputDir: CLIPS_DIR,
     })
 
-    const clip = db.createClip(
+    const clip = await db.createClip(
       clipId,
       bookId,
       sliceResult.uri,

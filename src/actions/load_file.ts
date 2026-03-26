@@ -49,7 +49,7 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
     try {
       const { fileSize, fingerprint } = await copier.beginCopy(opId, file.uri)
-      const existingBook = db.getBookByFingerprint(fileSize, fingerprint)
+      const existingBook = await db.getBookByFingerprint(fileSize, fingerprint)
 
       if (existingBook?.uri) {
         await handleDuplicate(context, existingBook.id)
@@ -84,7 +84,7 @@ async function handleDuplicate(ctx: Context, bookId: string) {
 
   await copier.cancelCopy(opId)
 
-  db.touchBook(bookId)
+  await db.touchBook(bookId)
   syncQueue.queueChange('book', bookId, 'upsert')
 
   updateLibrary(lib => {
@@ -130,7 +130,7 @@ async function handleNewBook(
 
   } catch (error) {
     // Clean up copied file if we fail after copying but before DB commit
-    if (!db.getBookByUri(fileUri)) {
+    if (!(await db.getBookByUri(fileUri))) {
       await files.deleteFile(fileUri).catch(() => {})
     }
     throw error

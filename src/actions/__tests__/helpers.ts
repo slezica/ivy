@@ -128,21 +128,21 @@ export function createMockAudio(overrides: Record<string, jest.Mock> = {}) {
 
 export function createMockDb(overrides: Record<string, jest.Mock | jest.Mock<any>> = {}) {
   return {
-    getBookByFingerprint: jest.fn(() => null),
-    getBookByUri: jest.fn(() => null),
-    getBookByAnyUri: jest.fn(() => createMockBook()),
+    getBookByFingerprint: jest.fn(async () => null),
+    getBookByUri: jest.fn(async () => null),
+    getBookByAnyUri: jest.fn(async () => createMockBook()),
     getBookById: jest.fn(() => createMockBook()),
     upsertBook: jest.fn(() => createMockBook()),
     restoreBook: jest.fn(() => createMockBook()),
-    touchBook: jest.fn(),
-    archiveBook: jest.fn(),
-    hideBook: jest.fn(),
-    getCurrentSession: jest.fn(() => null),
-    createSession: jest.fn(() => createMockSession()),
+    touchBook: jest.fn(async () => {}),
+    archiveBook: jest.fn(async () => {}),
+    hideBook: jest.fn(async () => {}),
+    getCurrentSession: jest.fn(async () => null),
+    createSession: jest.fn(async () => createMockSession()),
     updateSessionEndedAt: jest.fn(),
-    deleteSession: jest.fn(),
-    deleteClip: jest.fn(),
-    updateClip: jest.fn(),
+    deleteSession: jest.fn(async () => {}),
+    deleteClip: jest.fn(async () => {}),
+    updateClip: jest.fn(async () => {}),
     ...overrides,
   } as any
 }

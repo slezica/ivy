@@ -14,7 +14,7 @@ export const createCleanupOrphanedFiles: ActionFactory<CleanupOrphanedFilesDeps,
   async () => {
     const { db, files } = deps
 
-    const knownUris = db.getAllFileUris()
+    const knownUris = await db.getAllFileUris()
 
     const bookFiles = await files.listFiles(files.audioDirectoryPath)
     const clipFiles = await files.listFiles(CLIPS_DIR)

@@ -31,7 +31,7 @@ export const createUpdateBook: ActionFactory<UpdateBookDeps, UpdateBook> = (deps
 
     log(`Updating "${book.name}" metadata`)
 
-    db.updateBookMetadata(id, newTitle, newArtist)
+    await db.updateBookMetadata(id, newTitle, newArtist)
     syncQueue.queueChange('book', id, 'upsert')
 
     set((state) => {

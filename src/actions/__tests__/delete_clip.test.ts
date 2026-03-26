@@ -126,7 +126,7 @@ describe('createDeleteClip', () => {
       const callOrder: string[] = []
       const { deps } = createDeps('clip-1')
       deps.slicer.cleanup = jest.fn(async () => { callOrder.push('cleanup') })
-      deps.db.deleteClip = jest.fn(() => { callOrder.push('db') })
+      deps.db.deleteClip = jest.fn(async () => { callOrder.push('db') })
       const deleteClip = createDeleteClip(deps)
 
       await deleteClip('clip-1')
@@ -137,7 +137,7 @@ describe('createDeleteClip', () => {
     it('queues sync after db delete', async () => {
       const callOrder: string[] = []
       const { deps } = createDeps('clip-1')
-      deps.db.deleteClip = jest.fn(() => { callOrder.push('db') })
+      deps.db.deleteClip = jest.fn(async () => { callOrder.push('db') })
       deps.syncQueue.queueChange = jest.fn(() => { callOrder.push('sync') })
       const deleteClip = createDeleteClip(deps)
 

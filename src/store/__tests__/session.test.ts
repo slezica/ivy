@@ -30,8 +30,8 @@ describe('createTrackSession', () => {
   function createMockDeps(storeState: any): TrackSessionDeps {
     return {
       db: {
-        getCurrentSession: jest.fn(() => null),
-        createSession: jest.fn((bookId: string): Session => ({
+        getCurrentSession: jest.fn(async () => null),
+        createSession: jest.fn(async (bookId: string): Promise<Session> => ({
           id: `session-${bookId}`,
           book_id: bookId,
           started_at: Date.now(),
@@ -111,7 +111,7 @@ describe('createTrackSession', () => {
     }
 
     const deps = createMockDeps(storeState)
-    deps.db.getCurrentSession = jest.fn(() => existingSession)
+    deps.db.getCurrentSession = jest.fn(async () => existingSession)
 
     const trackSession = createTrackSession(deps)
 
@@ -133,7 +133,7 @@ describe('createTrackSession', () => {
 
     const deps = createMockDeps(storeState)
 
-    deps.db.createSession = jest.fn(() => {
+    deps.db.createSession = jest.fn(async () => {
       callOrder.push('createSession')
       return {
         id: 'session-1',

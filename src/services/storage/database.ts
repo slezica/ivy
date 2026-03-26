@@ -234,8 +234,8 @@ export class DatabaseService {
   // Books
   // ---------------------------------------------------------------------------
 
-  getBookByUri(uri: string): Book | null {
-    const row = this.db.getFirstSync<BookRow>(
+  async getBookByUri(uri: string): Promise<Book | null> {
+    const row = await this.db.getFirstAsync<BookRow>(
       'SELECT * FROM files WHERE uri = ?',
       [uri]
     )
@@ -250,8 +250,8 @@ export class DatabaseService {
     return row ? toBook(row) : null
   }
 
-  getBookByFingerprint(fileSize: number, fingerprint: Uint8Array): Book | null {
-    const row = this.db.getFirstSync<BookRow>(
+  async getBookByFingerprint(fileSize: number, fingerprint: Uint8Array): Promise<Book | null> {
+    const row = await this.db.getFirstAsync<BookRow>(
       'SELECT * FROM files WHERE file_size = ? AND fingerprint = ?',
       [fileSize, fingerprint]
     )
@@ -262,13 +262,13 @@ export class DatabaseService {
    * Find a Book by URI - either the book's own URI or one of its clip URIs.
    * Useful for playback where the URI could be a book or a clip's audio file.
    */
-  getBookByAnyUri(uri: string): Book | null {
+  async getBookByAnyUri(uri: string): Promise<Book | null> {
     // First try direct book lookup
-    const book = this.getBookByUri(uri)
+    const book = await this.getBookByUri(uri)
     if (book) return book
 
     // Try to find a clip with this URI and return its source book
-    const row = this.db.getFirstSync<BookRow>(
+    const row = await this.db.getFirstAsync<BookRow>(
       `SELECT files.* FROM files
        INNER JOIN clips ON clips.source_id = files.id
        WHERE clips.uri = ?`,
@@ -348,8 +348,8 @@ export class DatabaseService {
    * Soft-delete a book (remove from library).
    * Sets uri to null and hidden to true. File deletion is caller's responsibility.
    */
-  hideBook(id: string): void {
-    this.db.runSync(
+  async hideBook(id: string): Promise<void> {
+    await this.db.runAsync(
       'UPDATE files SET uri = NULL, hidden = 1 WHERE id = ?',
       [id]
     )
@@ -358,17 +358,17 @@ export class DatabaseService {
   /**
    * Touch an existing book to update updated_at timestamp.
    */
-  touchBook(id: string): void {
+  async touchBook(id: string): Promise<void> {
     const now = Date.now()
-    this.db.runSync(
+    await this.db.runAsync(
       'UPDATE files SET updated_at = ? WHERE id = ?',
       [now, id]
     )
   }
 
-  updateBookMetadata(id: string, title: string | null, artist: string | null): void {
+  async updateBookMetadata(id: string, title: string | null, artist: string | null): Promise<void> {
     const now = Date.now()
-    this.db.runSync(
+    await this.db.runAsync(
       'UPDATE files SET title = ?, artist = ?, updated_at = ? WHERE id = ?',
       [title, artist, now, id]
     )
@@ -385,8 +385,8 @@ export class DatabaseService {
     })
   }
 
-  archiveBook(id: string): void {
-    this.db.runSync(
+  async archiveBook(id: string): Promise<void> {
+    await this.db.runAsync(
       'UPDATE files SET uri = NULL WHERE id = ?',
       [id]
     )
@@ -426,9 +426,9 @@ export class DatabaseService {
     )
   }
 
-  createClip(id: string, sourceId: string, uri: string, start: number, duration: number, note: string): Clip {
+  async createClip(id: string, sourceId: string, uri: string, start: number, duration: number, note: string): Promise<Clip> {
     const now = Date.now()
-    this.db.runSync(
+    await this.db.runAsync(
       'INSERT INTO clips (id, source_id, uri, start, duration, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [id, sourceId, uri, start, duration, note, now, now]
     )
@@ -446,7 +446,7 @@ export class DatabaseService {
     }
   }
 
-  updateClip(id: string, updates: { note?: string; start?: number; duration?: number; uri?: string; transcription?: string | null }): void {
+  async updateClip(id: string, updates: { note?: string; start?: number; duration?: number; uri?: string; transcription?: string | null }): Promise<void> {
     const now = Date.now()
     const setClauses: string[] = ['updated_at = ?']
     const values: (string | number | null)[] = [now]
@@ -473,20 +473,20 @@ export class DatabaseService {
     }
 
     values.push(id)
-    this.db.runSync(
+    await this.db.runAsync(
       `UPDATE clips SET ${setClauses.join(', ')} WHERE id = ?`,
       values
     )
   }
 
-  getClipsNeedingTranscription(): Clip[] {
-    return this.db.getAllSync<Clip>(
+  async getClipsNeedingTranscription(): Promise<Clip[]> {
+    return this.db.getAllAsync<Clip>(
       'SELECT * FROM clips WHERE transcription IS NULL ORDER BY created_at ASC'
     )
   }
 
-  deleteClip(id: string): void {
-    this.db.runSync('DELETE FROM clips WHERE id = ?', [id])
+  async deleteClip(id: string): Promise<void> {
+    await this.db.runAsync('DELETE FROM clips WHERE id = ?', [id])
   }
 
   // ---------------------------------------------------------------------------
@@ -583,9 +583,9 @@ export class DatabaseService {
   /**
    * Get the current active session for a book (most recent, ended within 5 minutes).
    */
-  getCurrentSession(bookId: string): Session | null {
+  async getCurrentSession(bookId: string): Promise<Session | null> {
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
-    const row = this.db.getFirstSync<Session>(
+    const row = await this.db.getFirstAsync<Session>(
       `SELECT * FROM sessions
        WHERE book_id = ? AND ended_at > ?
        ORDER BY started_at DESC
@@ -595,10 +595,10 @@ export class DatabaseService {
     return row ?? null
   }
 
-  createSession(bookId: string): Session {
+  async createSession(bookId: string): Promise<Session> {
     const now = Date.now()
     const id = generateId()
-    this.db.runSync(
+    await this.db.runAsync(
       'INSERT INTO sessions (id, book_id, started_at, ended_at) VALUES (?, ?, ?, ?)',
       [id, bookId, now, now]
     )
@@ -614,8 +614,8 @@ export class DatabaseService {
     })
   }
 
-  deleteSession(sessionId: string): void {
-    this.db.runSync('DELETE FROM sessions WHERE id = ?', [sessionId])
+  async deleteSession(sessionId: string): Promise<void> {
+    await this.db.runAsync('DELETE FROM sessions WHERE id = ?', [sessionId])
   }
 
   getAllSessions(): SessionWithBook[] {
@@ -646,8 +646,8 @@ export class DatabaseService {
     }
   }
 
-  setSettings(settings: Settings): void {
-    this.db.runSync(
+  async setSettings(settings: Settings): Promise<void> {
+    await this.db.runAsync(
       'UPDATE settings SET sync_enabled = ?, transcription_enabled = ? WHERE id = 1',
       [settings.sync_enabled ? 1 : 0, settings.transcription_enabled ? 1 : 0]
     )
@@ -658,15 +658,15 @@ export class DatabaseService {
   // ---------------------------------------------------------------------------
 
   /** Returns all file URIs referenced by books and clips. */
-  getAllFileUris(): Set<string> {
+  async getAllFileUris(): Promise<Set<string>> {
     const uris = new Set<string>()
 
-    const bookRows = this.db.getAllSync<{ uri: string | null }>('SELECT uri FROM files')
+    const bookRows = await this.db.getAllAsync<{ uri: string | null }>('SELECT uri FROM files')
     for (const row of bookRows) {
       if (row.uri) uris.add(row.uri)
     }
 
-    const clipRows = this.db.getAllSync<{ uri: string }>('SELECT uri FROM clips')
+    const clipRows = await this.db.getAllAsync<{ uri: string }>('SELECT uri FROM clips')
     for (const row of clipRows) {
       uris.add(row.uri)
     }

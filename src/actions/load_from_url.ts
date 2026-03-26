@@ -56,7 +56,7 @@ export const createLoadFromUrl: ActionFactory<LoadFromUrlDeps, LoadFromUrl> = (d
       downloadedPath = await downloadFile(context, url, updateLibrary)
 
       const { fileSize, fingerprint } = await files.readFileFingerprint(`file://${downloadedPath}`)
-      const existingBook = db.getBookByFingerprint(fileSize, fingerprint)
+      const existingBook = await db.getBookByFingerprint(fileSize, fingerprint)
 
       if (existingBook?.uri) {
         await handleDuplicate(context, downloadedPath, existingBook.id)
@@ -92,7 +92,7 @@ async function handleDuplicate(ctx: Context, downloadedPath: string, bookId: str
 
   await RNFS.unlink(downloadedPath).catch(() => {})
 
-  db.touchBook(bookId)
+  await db.touchBook(bookId)
   syncQueue.queueChange('book', bookId, 'upsert')
 
   updateLibrary(lib => {

@@ -17,7 +17,7 @@ export const createTrackSession: ActionFactory<TrackSessionDeps, TrackSession> =
     const log = createLogger('TrackSession')
 
     const now = Date.now()
-    const current = db.getCurrentSession(bookId)
+    const current = await db.getCurrentSession(bookId)
 
     if (current) {
       db.updateSessionEndedAt(current.id, now)
@@ -33,7 +33,7 @@ export const createTrackSession: ActionFactory<TrackSessionDeps, TrackSession> =
 
       log(`New session for "${book.name}"`)
 
-      const session = db.createSession(bookId)
+      const session = await db.createSession(bookId)
 
       const sessionWithBook: SessionWithBook = {
         ...session,

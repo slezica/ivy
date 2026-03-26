@@ -343,7 +343,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       // Check if the remote book's fingerprint matches a different local book.
       // This happens when two devices independently add the same file.
       const fingerprint = base64ToUint8Array(remote.backup.fingerprint)
-      const fingerprintMatch = this.db.getBookByFingerprint(remote.backup.file_size, fingerprint)
+      const fingerprintMatch = await this.db.getBookByFingerprint(remote.backup.file_size, fingerprint)
       if (fingerprintMatch && fingerprintMatch.id !== local.id && fingerprintMatch.id !== remote.backup.id) {
         log(`Skipping merge of book ${remote.backup.id}: fingerprint matches existing book ${fingerprintMatch.id}`)
         return
@@ -435,7 +435,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
       // Check if a local book with the same fingerprint already exists under a different ID.
       // This happens when two devices independently add the same file (each generates its own UUID).
-      const existingBook = this.db.getBookByFingerprint(backup.file_size, fingerprint)
+      const existingBook = await this.db.getBookByFingerprint(backup.file_size, fingerprint)
       if (existingBook && existingBook.id !== backup.id) {
         log(`Skipping download of book ${backup.id}: fingerprint matches existing book ${existingBook.id}`)
         return

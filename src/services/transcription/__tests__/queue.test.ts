@@ -13,8 +13,8 @@ describe('TranscriptionQueueService', () => {
   function createMockDeps(): TranscriptionQueueDeps {
     return {
       database: {
-        getClipsNeedingTranscription: jest.fn(() => []),
-        updateClip: jest.fn(),
+        getClipsNeedingTranscription: jest.fn(async () => []),
+        updateClip: jest.fn(async () => {}),
       } as any,
       whisper: {
         initialize: jest.fn(() => Promise.resolve()),
@@ -53,7 +53,7 @@ describe('TranscriptionQueueService', () => {
       // Track which clips are "pending" (not yet transcribed)
       const pendingClips = new Set([clip1.id, clip2.id])
 
-      deps.database.getClipsNeedingTranscription = jest.fn(() => {
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => {
         return [clip1, clip2].filter(c => pendingClips.has(c.id))
       })
 
@@ -63,7 +63,7 @@ describe('TranscriptionQueueService', () => {
         .mockResolvedValue({ uri: 'file:///temp.mp3', path: '/temp.mp3' })
 
       // Mark clip as transcribed when updateClip is called
-      deps.database.updateClip = jest.fn((id: string) => {
+      deps.database.updateClip = jest.fn(async (id: string) => {
         pendingClips.delete(id)
       })
 
@@ -85,11 +85,11 @@ describe('TranscriptionQueueService', () => {
 
       const pendingClips = new Set([clip1.id, clip2.id, clip3.id])
 
-      deps.database.getClipsNeedingTranscription = jest.fn(() => {
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => {
         return [clip1, clip2, clip3].filter(c => pendingClips.has(c.id))
       })
 
-      deps.database.updateClip = jest.fn((id: string) => {
+      deps.database.updateClip = jest.fn(async (id: string) => {
         pendingClips.delete(id)
       })
 
@@ -128,11 +128,11 @@ describe('TranscriptionQueueService', () => {
 
       const pendingClips = new Set([clip1.id, clip2.id])
 
-      deps.database.getClipsNeedingTranscription = jest.fn(() => {
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => {
         return [clip1, clip2].filter(c => pendingClips.has(c.id))
       })
 
-      deps.database.updateClip = jest.fn((id: string) => {
+      deps.database.updateClip = jest.fn(async (id: string) => {
         pendingClips.delete(id)
       })
 
@@ -163,7 +163,7 @@ describe('TranscriptionQueueService', () => {
       const deps = createMockDeps()
       const clip1 = createMockClip('clip-1')
 
-      deps.database.getClipsNeedingTranscription = jest.fn(() => [clip1])
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => [clip1])
 
       let concurrentCalls = 0
       let maxConcurrent = 0
@@ -222,7 +222,7 @@ describe('TranscriptionQueueService', () => {
     it('bails without processing queue when stopped during initialization', async () => {
       const deps = createMockDeps()
       const clip = createMockClip('clip-1')
-      deps.database.getClipsNeedingTranscription = jest.fn(() => [clip])
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => [clip])
 
       const deferred = createDeferred()
       deps.whisper.initialize = jest.fn(() => deferred.promise)
@@ -242,7 +242,7 @@ describe('TranscriptionQueueService', () => {
     it('continues normally when stop() then start() called during initialization', async () => {
       const deps = createMockDeps()
       const clip = createMockClip('clip-1')
-      deps.database.getClipsNeedingTranscription = jest.fn(() => [clip])
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => [clip])
 
       const deferred = createDeferred()
       deps.whisper.initialize = jest.fn(() => deferred.promise)

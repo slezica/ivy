@@ -32,7 +32,7 @@ describe('BackupSyncService', () => {
       upsertManifestEntry: jest.fn(),
       deleteManifestEntry: jest.fn(),
       getBookById: jest.fn(),
-      getBookByFingerprint: jest.fn(() => null),
+      getBookByFingerprint: jest.fn(async () => null),
       getClip: jest.fn(),
       restoreBookFromBackup: jest.fn(),
       restoreClipFromBackup: jest.fn(),
@@ -238,7 +238,7 @@ describe('BackupSyncService', () => {
       db.getAllBooks.mockReturnValue([localBook])
 
       // Fingerprint lookup returns the local book (same content, different ID)
-      db.getBookByFingerprint.mockReturnValue(localBook)
+      db.getBookByFingerprint.mockResolvedValue(localBook)
 
       setupSyncWithRemoteBook(deps, 'b0b0-b0b0')
 
@@ -254,7 +254,7 @@ describe('BackupSyncService', () => {
       const { db } = deps
 
       // No local books, no fingerprint match
-      db.getBookByFingerprint.mockReturnValue(null)
+      db.getBookByFingerprint.mockResolvedValue(null)
 
       setupSyncWithRemoteBook(deps, 'b0b0-b0b0')
 
@@ -273,7 +273,7 @@ describe('BackupSyncService', () => {
 
       db.getAllBooks.mockReturnValue([localBook])
       // Fingerprint matches, but it's the same book ID — this is an update, not a duplicate
-      db.getBookByFingerprint.mockReturnValue(localBook)
+      db.getBookByFingerprint.mockResolvedValue(localBook)
 
       setupSyncWithRemoteBook(deps, 'aabb-ccdd')
 

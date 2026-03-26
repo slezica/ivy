@@ -17,7 +17,7 @@ export const createUpdateSettings: ActionFactory<UpdateSettingsDeps, UpdateSetti
 
     log('Updating settings:', settings)
 
-    db.setSettings(settings)
+    await db.setSettings(settings)
     set({ settings })
   }
 )

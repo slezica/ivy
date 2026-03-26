@@ -42,7 +42,7 @@ export const createArchiveBook: ActionFactory<ArchiveBookDeps, ArchiveBook> = (d
         state.books[bookId].uri = null
       })
 
-      db.archiveBook(bookId)
+      await db.archiveBook(bookId)
       syncQueue.queueChange('book', bookId, 'upsert')
 
     } catch (error) {

@@ -24,7 +24,7 @@ export const createDeleteClip: ActionFactory<DeleteClipDeps, DeleteClip> = (deps
       await slicer.cleanup(clip.uri)
     }
 
-    db.deleteClip(id)
+    await db.deleteClip(id)
 
     // Queue for sync (delete operation)
     syncQueue.queueChange('clip', id, 'delete')

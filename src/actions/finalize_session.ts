@@ -17,14 +17,14 @@ export const createFinalizeSession: ActionFactory<FinalizeSessionDeps, FinalizeS
     const log = createLogger('FinalizeSession')
 
     const now = Date.now()
-    const current = db.getCurrentSession(bookId)
+    const current = await db.getCurrentSession(bookId)
     if (!current) return
 
     const duration = now - current.started_at
 
     if (duration < MIN_SESSION_DURATION_MS) {
       log(`Discarding short session (${duration}ms)`)
-      db.deleteSession(current.id)
+      await db.deleteSession(current.id)
       set((state) => {
         delete state.sessions[current.id]
       })

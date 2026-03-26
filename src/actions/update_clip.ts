@@ -64,7 +64,7 @@ export const createUpdateClip: ActionFactory<UpdateClipDeps, UpdateClip> = (deps
     }
 
     // Update database
-    db.updateClip(id, { ...updates, uri: newUri })
+    await db.updateClip(id, { ...updates, uri: newUri })
 
     // Queue for sync
     syncQueue.queueChange('clip', id, 'upsert')

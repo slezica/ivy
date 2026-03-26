@@ -29,7 +29,7 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
     const isSameFile = (playback.uri === context.fileUri)
 
     if (!isSameFile) {
-      const bookRecord = db.getBookByAnyUri(context.fileUri)
+      const bookRecord = await db.getBookByAnyUri(context.fileUri)
       if (!bookRecord) {
         throw new Error(`No book or clip found for: ${context.fileUri}`)
       }

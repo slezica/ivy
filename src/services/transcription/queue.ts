@@ -131,7 +131,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     // Stopped while initializing
     if (!this.started) return
 
-    const pendingClips = this.database.getClipsNeedingTranscription()
+    const pendingClips = await this.database.getClipsNeedingTranscription()
     log('Found', pendingClips.length, 'clips needing transcription')
 
     for (const clip of pendingClips) {
@@ -168,7 +168,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
   private async processClip(clipId: string): Promise<void> {
     log('Processing clip:', clipId)
 
-    const clips = this.database.getClipsNeedingTranscription()
+    const clips = await this.database.getClipsNeedingTranscription()
     const clip = clips.find((c) => c.id === clipId)
 
     if (!clip) {
@@ -185,7 +185,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
 
       const transcription = await this.whisper.transcribe(audioPath)
 
-      this.database.updateClip(clipId, { transcription })
+      await this.database.updateClip(clipId, { transcription })
       log('Completed clip:', clipId, '| Result:', transcription)
 
       this.emit('finish', { clipId, transcription })

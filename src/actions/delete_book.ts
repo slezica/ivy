@@ -42,7 +42,7 @@ export const createDeleteBook: ActionFactory<DeleteBookDeps, DeleteBook> = (deps
         delete state.books[bookId]
       })
 
-      db.hideBook(bookId)
+      await db.hideBook(bookId)
       syncQueue.queueChange('book', bookId, 'upsert')
 
     } catch (error) {
