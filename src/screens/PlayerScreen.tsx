@@ -14,11 +14,14 @@ import { MAIN_PLAYER_OWNER_ID, formatTime } from '../utils'
 import type { Book, Chapter } from '../services'
 
 export default function PlayerScreen() {
-  const { playback, books, addClip, play, pause, seek, setSpeed, fetchPlaybackState } = useStore()
+  const { playback, addClip, play, pause, seek, setSpeed, fetchPlaybackState } = useStore()
 
-  // Local state - what the main player "remembers"
-  const [ownBook, setOwnBook] = useState<Book | null>(null)
+  // Remember which book we're showing (survives ownership changes)
+  const [ownBookId, setOwnBookId] = useState<string | null>(null)
   const [ownPosition, setOwnPosition] = useState(0)
+
+  // Book data always comes fresh from the store
+  const ownBook = useStore(state => ownBookId ? state.books[ownBookId] ?? null : null)
 
   // Ownership check
   const isOwner = playback.ownerId === MAIN_PLAYER_OWNER_ID
@@ -27,14 +30,15 @@ export default function PlayerScreen() {
   // Adopt book when playback targets the main player
   useEffect(() => {
     if (isOwner && playback.uri && playback.uri !== ownBook?.uri) {
-      // Look up full book record from books map
+      // Look up book ID by matching URI
+      const books = useStore.getState().books
       const book = Object.values(books).find(b => b.uri === playback.uri)
       if (book) {
-        setOwnBook(book)
+        setOwnBookId(book.id)
         setOwnPosition(playback.position)
       }
     }
-  }, [isOwner, playback.uri, playback.position, ownBook?.uri, books])
+  }, [isOwner, playback.uri, playback.position, ownBook?.uri])
 
   // Sync position from playback when we own playback
   useEffect(() => {
@@ -42,13 +46,6 @@ export default function PlayerScreen() {
       setOwnPosition(playback.position)
     }
   }, [isOwner, isFileLoaded, playback.position])
-
-  // Keep ownBook in sync with store (e.g. after speed or metadata changes)
-  useEffect(() => {
-    if (ownBook && books[ownBook.id]) {
-      setOwnBook(books[ownBook.id])
-    }
-  }, [books, ownBook?.id])
 
   // Sync position immediately when screen comes into focus
   useFocusEffect(
