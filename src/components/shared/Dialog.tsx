@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useRef } from 'react'
-import { Modal, View, ScrollView, KeyboardAvoidingView, Platform, Animated, StyleSheet } from 'react-native'
+import { Modal, View, ScrollView, KeyboardAvoidingView, Platform, Animated, Pressable, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { Color } from '../../theme'
@@ -56,6 +56,7 @@ export default function Dialog({ visible, onClose, children }: ModalProps) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <SafeAreaView style={styles.overlay}>
+          <Pressable style={styles.backdrop} onPress={onClose} />
           <View style={styles.content}>
             <ScrollView
               bounces={false}
@@ -84,10 +85,13 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: Color.MODAL_OVERLAY,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Color.MODAL_OVERLAY,
   },
   content: {
     backgroundColor: Color.WHITE,
