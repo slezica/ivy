@@ -4,14 +4,13 @@ import { Color } from '../../theme'
 
 interface HeaderProps {
   title: string
-  subtitle?: string
   children?: React.ReactNode
   noBorder?: boolean
   icon?: keyof typeof Ionicons.glyphMap
   onIconPress?: () => void
 }
 
-export default function Header({ title, subtitle, children, noBorder, icon, onIconPress }: HeaderProps) {
+export default function Header({ title, children, noBorder, icon, onIconPress }: HeaderProps) {
   return (
     <View style={[styles.container, noBorder && styles.noBorder]}>
       {icon && (
@@ -22,7 +21,6 @@ export default function Header({ title, subtitle, children, noBorder, icon, onIc
 
       <View style={styles.titleArea}>
         <Text style={styles.title}>{title}</Text>
-        {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
       </View>
       {children}
     </View>
@@ -47,11 +45,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: Color.BLACK,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Color.GRAY_DARK,
-    marginTop: 4,
   },
   noBorder: {
     borderBottomWidth: 0,
