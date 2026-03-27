@@ -4,6 +4,28 @@
  * Centralized color palette (dark theme).
  */
 
+export const ColorIvy = {
+  // Primary colors
+  PRIMARY: '#7e916c',
+  PRIMARY_CONTRAST: '#191a19',
+  SECONDARY: '#ff6b6b',
+  DESTRUCTIVE: '#ff453a',
+  SELECTION: '#ffd166',
+
+  // Grayscale (dark theme)
+  WHITE: '#191a19',
+  BLACK: '#eeeeee',
+  GRAY_LIGHTER: '#1d1f1d',
+  GRAY_LIGHT: '#313331',
+  GRAY: '#565956',
+  GRAY_DARK: '#7a807a',
+  GRAY_DARKER: '#c4ccc4',
+  GRAY_BORDER: '#38383a',
+
+  // Overlays
+  MODAL_OVERLAY: 'rgba(0, 0, 0, 0.7)',
+}
+
 export const ColorTeal = {
   // Primary colors
   PRIMARY: '#00adb5',
@@ -73,30 +95,7 @@ export const ColorGoldenHour = {
   MODAL_OVERLAY: 'rgba(10, 8, 4, 0.8)',
 }
 
-export const ColorIvy = {
-  // Primary colors
-  PRIMARY: '#4a9e6b',
-  PRIMARY_CONTRAST: '#eef5f0',
-  SECONDARY: '#d4a054',
-  DESTRUCTIVE: '#c9443d',
-  SELECTION: '#7bc88f',
-
-  // Grayscale (dark theme)
-  WHITE: '#101a14',
-  BLACK: '#e4ede7',
-  GRAY_LIGHTER: '#0b140e',
-  GRAY_LIGHT: '#1c2b22',
-  GRAY: '#5a6e60',
-  GRAY_MEDIUM: '#84967a',
-  GRAY_DARK: '#a8b8a0',
-  GRAY_DARKER: '#cdd8c8',
-  GRAY_BORDER: '#2a3d30',
-
-  // Overlays
-  MODAL_OVERLAY: 'rgba(4, 8, 5, 0.8)',
-}
-
-export const ColorIvyContrast = {
+export const ColorGreen = {
   // Primary colors
   PRIMARY: '#4a9e6b',
   PRIMARY_CONTRAST: '#eef5f0',

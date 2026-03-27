@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: Color.GRAY_LIGHTER,
     borderRadius: 8,
-    padding: 10,
+    padding: 12,
     marginBottom: 12,
     gap: 12,
   },
@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
   },
   bookDate: {
     fontSize: 12,
-    color: Color.GRAY_MEDIUM,
+    color: Color.GRAY_DARK,
     marginTop: 2,
   },
   textArchived: {
