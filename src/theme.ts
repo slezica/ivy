@@ -7,7 +7,7 @@
 export const Color = {
   // Primary colors
   PRIMARY: '#00adb5',
-  PRIMARY_CONTRAST: '#222831',
+  PRIMARY_CONTRAST: '#eeeeee',
   SECONDARY: '#ff6b6b',
   DESTRUCTIVE: '#ff453a',
   SELECTION: '#ffd166',
