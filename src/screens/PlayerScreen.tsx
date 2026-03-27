@@ -184,7 +184,6 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
             iconName="bookmark"
             onPress={onAddClip}
             testID="add-clip-button"
-            iconColor={Color.BLACK}
             size={48}
           />
           <IconButton
@@ -352,7 +351,7 @@ const styles = StyleSheet.create({
   speedButtonLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: Color.BLACK,
+    color: Color.PRIMARY_CONTRAST,
   },
   speedControl: {
     paddingVertical: 24,

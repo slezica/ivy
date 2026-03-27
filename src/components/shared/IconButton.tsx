@@ -22,7 +22,7 @@ export default function IconButton({
   testID,
   size = 64,
   backgroundColor = Color.PRIMARY,
-  iconColor = Color.BLACK,
+  iconColor = Color.PRIMARY_CONTRAST,
   style,
 }: IconButtonProps) {
   // Calculate icon size as 50% of button size for balanced appearance
