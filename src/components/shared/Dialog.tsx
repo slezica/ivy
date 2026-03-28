@@ -8,7 +8,7 @@ import { useCallback, useRef } from 'react'
 import { Modal, View, ScrollView, KeyboardAvoidingView, Platform, Animated, Pressable, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
-import { Color } from '../../theme'
+import { Color, Space } from '../../theme'
 
 const SCROLL_MORE_THRESHOLD = 20
 
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: Space.DIALOG_PADDING,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   },
   content: {
     backgroundColor: Color.BACKGROUND,
-    borderRadius: 12,
+    borderRadius: Space.BORDER_RADIUS,
     width: '100%',
     maxWidth: 400,
     overflow: 'hidden',

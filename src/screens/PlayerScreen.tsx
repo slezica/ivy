@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import Slider from '@react-native-community/slider'
 
-import { Color } from '../theme'
+import { Color, Space } from '../theme'
 import { useStore } from '../store'
 import { Timeline } from '../components/timeline'
 import IconButton from '../components/shared/IconButton'
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
   },
   chapterItemCurrent: {
     backgroundColor: Color.BACKGROUND_3,

@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, Modal, ActivityIndicator } from 'react-native'
 import { useStore } from '../store'
-import { Color } from '../theme'
+import { Color, Space } from '../theme'
 import TextButton from './shared/TextButton'
 
 export default function LibraryLoadingDialog() {
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
   },
   content: {
     backgroundColor: Color.BACKGROUND,
-    borderRadius: 12,
+    borderRadius: Space.BORDER_RADIUS,
     padding: 16,
     alignItems: 'center',
     gap: 16,

@@ -45,6 +45,10 @@ export const Color = ColorTeal
 
 
 export const Space = {
+  SCREEN_PADDING: 16,
+  DIALOG_PADDING: 20,
+  BORDER_RADIUS: 8,
+  CARD_PADDING: 12,
   CARD_LIST_GAP: 16,
   CARD_LINE_GAP: 6,
   PARAGRAPH_LINE_HEIGHT: 22,

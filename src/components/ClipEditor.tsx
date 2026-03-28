@@ -8,7 +8,7 @@ import { useState, useRef, useEffect } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 
 import { useStore } from '../store'
-import { Color } from '../theme'
+import { Color, Space } from '../theme'
 import { formatTime } from '../utils'
 import IconButton from './shared/IconButton'
 import { Timeline } from './timeline'
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: Color.BORDER,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
     paddingVertical: 12,
     paddingHorizontal: 16,
     color: Color.TEXT,
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
     alignItems: 'center',
   },
   secondaryButton: {

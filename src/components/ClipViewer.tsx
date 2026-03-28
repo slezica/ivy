@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
     alignItems: 'center',
   },
   secondaryButton: {

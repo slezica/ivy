@@ -3,7 +3,7 @@ import { useCallback } from 'react'
 import { useFocusEffect, useRouter } from 'expo-router'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
-import { Color } from '../theme'
+import { Color, Space } from '../theme'
 import { useStore } from '../store'
 
 export default function SettingsScreen() {

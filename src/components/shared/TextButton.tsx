@@ -1,5 +1,5 @@
 import { TouchableOpacity, Text, StyleSheet, ViewStyle } from 'react-native'
-import { Color } from '../../theme'
+import { Color, Space } from '../../theme'
 
 type Variant = 'primary' | 'secondary'
 
@@ -30,7 +30,7 @@ const styles = StyleSheet.create({
   button: {
     paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
     alignItems: 'center',
   },
   label: {

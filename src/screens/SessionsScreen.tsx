@@ -92,25 +92,25 @@ function SessionItem({ session }: SessionItemProps) {
 
 const styles = StyleSheet.create({
   listContent: {
-    padding: 16,
+    padding: Space.SCREEN_PADDING,
   },
   sessionItem: {
     flexDirection: 'row',
     backgroundColor: Color.BACKGROUND_2,
-    borderRadius: 8,
-    padding: 10,
+    borderRadius: Space.BORDER_RADIUS,
+    padding: Space.CARD_PADDING,
     marginBottom: 12,
     gap: 12,
   },
   artwork: {
     width: 48,
     height: 48,
-    borderRadius: 6,
+    borderRadius: Space.BORDER_RADIUS,
   },
   artworkPlaceholder: {
     width: 48,
     height: 48,
-    borderRadius: 6,
+    borderRadius: Space.BORDER_RADIUS,
     backgroundColor: Color.BACKGROUND_3,
     justifyContent: 'center',
     alignItems: 'center',
@@ -134,6 +134,5 @@ const styles = StyleSheet.create({
   sessionMeta: {
     fontSize: 13,
     color: Color.TEXT_3,
-    marginTop: 2,
   },
 })

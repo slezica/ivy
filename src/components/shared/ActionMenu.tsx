@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, Modal, Pressable, TouchableOpacity } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { Color } from '../../theme'
+import { Color, Space } from '../../theme'
 
 export interface ActionMenuItem {
   key: string
@@ -62,11 +62,11 @@ const styles = StyleSheet.create({
     backgroundColor: Color.BACKDROP,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: Space.DIALOG_PADDING,
   },
   content: {
     backgroundColor: Color.BACKGROUND,
-    borderRadius: 12,
+    borderRadius: Space.BORDER_RADIUS,
     width: '100%',
     maxWidth: 300,
     overflow: 'hidden',

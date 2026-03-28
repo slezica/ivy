@@ -7,7 +7,7 @@
 
 import { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet } from 'react-native'
-import { Color } from '../theme'
+import { Color, Space } from '../theme'
 import type { Book } from '../services'
 
 
@@ -81,12 +81,12 @@ const styles = StyleSheet.create({
   artwork: {
     width: 120,
     height: 120,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
   },
   artworkPlaceholder: {
     width: 120,
     height: 120,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
     backgroundColor: Color.BACKGROUND_3,
     justifyContent: 'center',
     alignItems: 'center',
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: Color.BACKGROUND_2,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
     padding: 12,
     fontSize: 16,
     color: Color.TEXT,
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     padding: 14,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
     alignItems: 'center',
     backgroundColor: Color.BACKGROUND_3,
   },

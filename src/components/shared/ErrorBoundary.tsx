@@ -1,6 +1,6 @@
 import React from 'react'
 import { View, Text, StyleSheet, Pressable } from 'react-native'
-import { Color } from '../../theme'
+import { Color, Space } from '../../theme'
 
 interface Props {
   children: React.ReactNode
@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     backgroundColor: Color.PRIMARY,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
   },
   buttonText: {
     color: Color.BACKGROUND,

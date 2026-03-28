@@ -395,8 +395,8 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   listContent: {
-    padding: 16,
-    paddingBottom: 16,
+    padding: Space.SCREEN_PADDING,
+    paddingBottom: Space.SCREEN_PADDING,
   },
   sectionHeader: {
     fontSize: 14,
@@ -410,8 +410,8 @@ const styles = StyleSheet.create({
   bookItem: {
     flexDirection: 'row',
     backgroundColor: Color.BACKGROUND_2,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: Space.BORDER_RADIUS,
+    padding: Space.CARD_PADDING,
     marginBottom: Space.CARD_LIST_GAP,
     gap: 12,
   },
@@ -421,12 +421,12 @@ const styles = StyleSheet.create({
   artwork: {
     width: 65,
     height: 65,
-    borderRadius: 6,
+    borderRadius: Space.BORDER_RADIUS,
   },
   artworkPlaceholder: {
     width: 65,
     height: 65,
-    borderRadius: 6,
+    borderRadius: Space.BORDER_RADIUS,
     backgroundColor: Color.BACKGROUND_3,
     justifyContent: 'center',
     alignItems: 'center',
@@ -467,7 +467,6 @@ const styles = StyleSheet.create({
   bookDate: {
     fontSize: 12,
     color: Color.TEXT_2,
-    marginTop: 2,
   },
   textArchived: {
     color: Color.TEXT_DISABLED,
@@ -488,7 +487,7 @@ const styles = StyleSheet.create({
   urlInput: {
     borderWidth: 1,
     borderColor: Color.BACKGROUND_3,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
     padding: 12,
     fontSize: 16,
     color: Color.TEXT,

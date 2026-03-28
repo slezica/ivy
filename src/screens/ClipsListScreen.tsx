@@ -295,23 +295,23 @@ function ClipList({ clips, pending, onViewClip, onOpenMenu }: any) {
 
 const styles = StyleSheet.create({
   listContent: {
-    padding: 16,
+    padding: Space.SCREEN_PADDING,
   },
   clipItem: {
     flexDirection: 'row',
     backgroundColor: Color.BACKGROUND_2,
-    borderRadius: 8,
+    borderRadius: Space.BORDER_RADIUS,
+    padding: Space.CARD_PADDING,
     marginBottom: Space.CARD_LIST_GAP,
   },
   clipContent: {
     flex: 1,
-    padding: 16,
+    gap: Space.CARD_LINE_GAP,
   },
   clipFileLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: Color.PRIMARY,
-    marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -319,7 +319,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
   },
   clipTime: {
     fontSize: 16,
@@ -332,9 +331,7 @@ const styles = StyleSheet.create({
   },
   clipTranscription: {
     fontSize: 14,
-    fontStyle: 'italic',
     color: Color.TEXT_2,
-    marginTop: 4,
   },
   clipNote: {
     fontSize: 14,
@@ -342,7 +339,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   menuButton: {
-    padding: 16,
+    padding: 0,
     justifyContent: 'flex-start',
   },
 })
