@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   },
   sessionItem: {
     flexDirection: 'row',
-    backgroundColor: Color.GRAY_LIGHTER,
+    backgroundColor: Color.BACKGROUND_2,
     borderRadius: 8,
     padding: 10,
     marginBottom: 12,
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 6,
-    backgroundColor: Color.GRAY_LIGHT,
+    backgroundColor: Color.BACKGROUND_3,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -125,15 +125,15 @@ const styles = StyleSheet.create({
   bookName: {
     fontSize: 15,
     fontWeight: '600',
-    color: Color.BLACK,
+    color: Color.TEXT,
   },
   bookArtist: {
     fontSize: 13,
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
   },
   sessionMeta: {
     fontSize: 13,
-    color: Color.GRAY_MEDIUM,
+    color: Color.TEXT_3,
     marginTop: 2,
   },
 })

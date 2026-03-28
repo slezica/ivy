@@ -234,11 +234,11 @@ export default function LibraryScreen() {
         : <Header title="Library">
             <View style={styles.headerButtons}>
               <TouchableOpacity onPress={handleOpenSearch}>
-                <Ionicons name="search" size={24} color={Color.BLACK} />
+                <Ionicons name="search" size={24} color={Color.TEXT} />
               </TouchableOpacity>
 
               <TouchableOpacity onPress={() => setIsHeaderMenuOpen(true)}>
-                <Ionicons name="ellipsis-vertical" size={24} color={Color.BLACK} />
+                <Ionicons name="ellipsis-vertical" size={24} color={Color.TEXT} />
               </TouchableOpacity>
             </View>
           </Header>
@@ -308,7 +308,7 @@ export default function LibraryScreen() {
                   onPress={() => handleOpenMenu(item.id)}
                   hitSlop={8}
                 >
-                  <Ionicons name="ellipsis-vertical" size={20} color={Color.GRAY_DARK} />
+                  <Ionicons name="ellipsis-vertical" size={20} color={Color.TEXT_2} />
                 </Pressable>
               </TouchableOpacity>
             )
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 14,
     fontWeight: '600',
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
     marginTop: 16,
     marginBottom: 12,
     textTransform: 'uppercase',
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
   },
   bookItem: {
     flexDirection: 'row',
-    backgroundColor: Color.GRAY_LIGHTER,
+    backgroundColor: Color.BACKGROUND_2,
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     width: 65,
     height: 65,
     borderRadius: 6,
-    backgroundColor: Color.GRAY_LIGHT,
+    backgroundColor: Color.BACKGROUND_3,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -444,11 +444,11 @@ const styles = StyleSheet.create({
   bookName: {
     fontSize: 16,
     fontWeight: '600',
-    color: Color.BLACK,
+    color: Color.TEXT,
   },
   bookArtist: {
     fontSize: 14,
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
     fontWeight: '500',
   },
   bookMetadata: {
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
   },
   bookDuration: {
     fontSize: 14,
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
   },
   bookProgress: {
     fontSize: 14,
@@ -466,11 +466,11 @@ const styles = StyleSheet.create({
   },
   bookDate: {
     fontSize: 12,
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
     marginTop: 2,
   },
   textArchived: {
-    color: Color.GRAY,
+    color: Color.TEXT_DISABLED,
   },
   menuButton: {
     padding: 0,
@@ -483,15 +483,15 @@ const styles = StyleSheet.create({
   urlDialogTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: Color.BLACK,
+    color: Color.TEXT,
   },
   urlInput: {
     borderWidth: 1,
-    borderColor: Color.GRAY_LIGHT,
+    borderColor: Color.BACKGROUND_3,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    color: Color.BLACK,
+    color: Color.TEXT,
   },
   urlDialogButtons: {
     flexDirection: 'row',

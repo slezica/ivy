@@ -17,13 +17,13 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         tabBarStyle: {
-          backgroundColor: Color.GRAY_LIGHTER,
-          borderTopColor: Color.GRAY_BORDER,
+          backgroundColor: Color.BACKGROUND_2,
+          borderTopColor: Color.BORDER,
           height: DEFAULT_TAB_BAR_HEIGHT + TAB_BAR_EXTRA_HEIGHT + insets.bottom,
           paddingTop: TAB_BAR_EXTRA_HEIGHT / 2
         },
-        tabBarActiveTintColor: Color.BLACK,
-        tabBarInactiveTintColor: Color.GRAY,
+        tabBarActiveTintColor: Color.TEXT,
+        tabBarInactiveTintColor: Color.TEXT_DISABLED,
       }}
     >
       <Tabs.Screen

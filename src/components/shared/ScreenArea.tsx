@@ -17,6 +17,6 @@ export default function ScreenArea({ children }: ScreenAreaProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Color.WHITE,
+    backgroundColor: Color.BACKGROUND,
   },
 })

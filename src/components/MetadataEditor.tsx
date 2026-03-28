@@ -46,7 +46,7 @@ export default function MetadataEditor({ book, onSave, onCancel }: MetadataEdito
           value={title}
           onChangeText={setTitle}
           placeholder="Title"
-          placeholderTextColor={Color.GRAY}
+          placeholderTextColor={Color.TEXT_DISABLED}
           autoFocus
         />
         <TextInput
@@ -54,7 +54,7 @@ export default function MetadataEditor({ book, onSave, onCancel }: MetadataEdito
           value={artist}
           onChangeText={setArtist}
           placeholder="Artist"
-          placeholderTextColor={Color.GRAY}
+          placeholderTextColor={Color.TEXT_DISABLED}
         />
       </View>
 
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 8,
-    backgroundColor: Color.GRAY_LIGHT,
+    backgroundColor: Color.BACKGROUND_3,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -99,13 +99,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   input: {
-    backgroundColor: Color.GRAY_LIGHTER,
+    backgroundColor: Color.BACKGROUND_2,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    color: Color.BLACK,
+    color: Color.TEXT,
     borderWidth: 1,
-    borderColor: Color.GRAY_BORDER,
+    borderColor: Color.BORDER,
   },
   buttons: {
     flexDirection: 'row',
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 8,
     alignItems: 'center',
-    backgroundColor: Color.GRAY_LIGHT,
+    backgroundColor: Color.BACKGROUND_3,
   },
   buttonSave: {
     backgroundColor: Color.PRIMARY,
@@ -125,11 +125,11 @@ const styles = StyleSheet.create({
   buttonTextCancel: {
     fontSize: 16,
     fontWeight: '600',
-    color: Color.BLACK,
+    color: Color.TEXT,
   },
   buttonTextSave: {
     fontSize: 16,
     fontWeight: '600',
-    color: Color.WHITE,
+    color: Color.BACKGROUND,
   },
 })

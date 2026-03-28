@@ -159,7 +159,7 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
         duration={book.duration}
         position={position}
         onSeek={onSeek}
-        leftColor={Color.GRAY}
+        leftColor={Color.TEXT_DISABLED}
         rightColor={Color.PRIMARY}
         showTime='top'
       />
@@ -243,7 +243,7 @@ function SpeedControl({ speed, onChange }: SpeedControlProps) {
         onValueChange={(value) => setLocalSpeed(Math.round(value))}
         onSlidingComplete={(value) => onChange(Math.round(value))}
         minimumTrackTintColor={Color.PRIMARY}
-        maximumTrackTintColor={Color.GRAY}
+        maximumTrackTintColor={Color.TEXT_DISABLED}
         thumbTintColor={Color.PRIMARY}
       />
       <View style={styles.speedLabels}>
@@ -318,14 +318,14 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     textAlign: 'center',
-    color: Color.BLACK,
+    color: Color.TEXT,
     lineHeight: 28,
   },
   artist: {
     fontSize: 16,
     fontWeight: '500',
     textAlign: 'center',
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
   },
   playbackControls: {
     alignItems: 'center',
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
   speedControlTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: Color.BLACK,
+    color: Color.TEXT,
     marginBottom: 8
   },
   speedControlValue: {
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   },
   speedLabelText: {
     fontSize: 12,
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
   },
   chapterList: {
     padding: 16,
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   chapterListTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: Color.BLACK,
+    color: Color.TEXT,
     marginBottom: 8,
   },
   chapterItem: {
@@ -402,12 +402,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   chapterItemCurrent: {
-    backgroundColor: Color.GRAY_LIGHT,
+    backgroundColor: Color.BACKGROUND_3,
   },
   chapterTitle: {
     flex: 1,
     fontSize: 15,
-    color: Color.BLACK,
+    color: Color.TEXT,
   },
   chapterTitleCurrent: {
     fontWeight: '600',
@@ -415,13 +415,13 @@ const styles = StyleSheet.create({
   },
   chapterEmpty: {
     fontSize: 15,
-    color: Color.GRAY,
+    color: Color.TEXT_DISABLED,
     paddingVertical: 12,
     paddingHorizontal: 12,
   },
   chapterTime: {
     fontSize: 13,
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
     marginLeft: 12,
   },
 })

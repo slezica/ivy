@@ -69,7 +69,7 @@ export default function Dialog({ visible, onClose, children }: ModalProps) {
             </ScrollView>
 
             <Animated.View style={[styles.scrollIndicator, { opacity }]} pointerEvents="none">
-              <Ionicons name="chevron-down" size={18} color={Color.GRAY_DARK} />
+              <Ionicons name="chevron-down" size={18} color={Color.TEXT_2} />
             </Animated.View>
           </View>
         </SafeAreaView>
@@ -91,10 +91,10 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: Color.MODAL_OVERLAY,
+    backgroundColor: Color.BACKDROP,
   },
   content: {
-    backgroundColor: Color.WHITE,
+    backgroundColor: Color.BACKGROUND,
     borderRadius: 12,
     width: '100%',
     maxWidth: 400,
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 1000,
-    backgroundColor: Color.GRAY_LIGHTER,
+    backgroundColor: Color.BACKGROUND_2,
     alignItems: 'center',
     justifyContent: 'center',
   },

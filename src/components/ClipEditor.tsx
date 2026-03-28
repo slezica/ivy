@@ -118,14 +118,14 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
           iconName={isPlaying ? 'pause' : 'play'}
           onPress={handlePlayPause}
           size={48}
-          backgroundColor={isLoading ? Color.GRAY : Color.PRIMARY}
+          backgroundColor={isLoading ? Color.TEXT_DISABLED : Color.PRIMARY}
         />
       </View>
 
       <TextInput
         style={styles.input}
         placeholder="Add note (optional)"
-        placeholderTextColor={Color.GRAY}
+        placeholderTextColor={Color.TEXT_DISABLED}
         value={note}
         onChangeText={setNote}
         multiline
@@ -161,11 +161,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Color.BLACK,
+    color: Color.TEXT,
   },
   subtitle: {
     fontSize: 14,
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
     marginTop: 4,
   },
   playButtonContainer: {
@@ -174,11 +174,11 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: Color.GRAY_BORDER,
+    borderColor: Color.BORDER,
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    color: Color.BLACK,
+    color: Color.TEXT,
     fontSize: 16,
     height: 100,
     textAlignVertical: 'top',
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryButton: {
-    backgroundColor: Color.GRAY_LIGHTER,
+    backgroundColor: Color.BACKGROUND_2,
   },
   primaryButton: {
     backgroundColor: Color.PRIMARY,
@@ -202,9 +202,9 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Color.GRAY_DARKER,
+    color: Color.TEXT_MUTED,
   },
   primaryButtonText: {
-    color: Color.WHITE,
+    color: Color.BACKGROUND,
   },
 })

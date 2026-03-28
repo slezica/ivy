@@ -71,12 +71,12 @@ export default function LibraryLoadingDialog() {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: Color.MODAL_OVERLAY,
+    backgroundColor: Color.BACKDROP,
     justifyContent: 'center',
     alignItems: 'center',
   },
   content: {
-    backgroundColor: Color.WHITE,
+    backgroundColor: Color.BACKGROUND,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 16,
-    color: Color.BLACK,
+    color: Color.TEXT,
     fontWeight: '500',
   },
   progressContainer: {
@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
   progressTrack: {
     alignSelf: 'stretch',
     height: 4,
-    backgroundColor: Color.GRAY,
+    backgroundColor: Color.TEXT_DISABLED,
     borderRadius: 2,
     overflow: 'hidden',
   },
@@ -115,6 +115,6 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 13,
     fontStyle: 'italic',
-    color: Color.GRAY_MEDIUM,
+    color: Color.TEXT_3,
   },
 })

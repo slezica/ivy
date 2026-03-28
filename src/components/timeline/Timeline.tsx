@@ -290,7 +290,7 @@ export function Timeline({
     left: createPaint(leftColor),
     right: createPaint(rightColor),
     selection: selectionColor ? createPaint(selectionColor) : null,
-    placeholder: createPaint(Color.GRAY),
+    placeholder: createPaint(Color.TEXT_DISABLED),
   }), [leftColor, rightColor, selectionColor])
 
   // Canvas height increases when selection handles are shown
@@ -520,8 +520,8 @@ const styles = StyleSheet.create({
   playhead: {
     width: PLAYHEAD_WIDTH,
     height: '100%',
-    backgroundColor: Color.BLACK,
-    shadowColor: Color.BLACK,
+    backgroundColor: Color.TEXT,
+    shadowColor: Color.TEXT,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 2,
@@ -536,12 +536,12 @@ const styles = StyleSheet.create({
   },
   timeCurrent: {
     fontSize: 16,
-    color: Color.BLACK,
+    color: Color.TEXT,
     fontWeight: '600',
   },
   timeTotal: {
     fontSize: 16,
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
     textAlign: 'right',
     flex: 1,
   },

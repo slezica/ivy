@@ -42,10 +42,10 @@ const styles = StyleSheet.create({
 const variantStyles = {
   primary: StyleSheet.create({
     button: { backgroundColor: Color.PRIMARY },
-    label: { color: Color.WHITE },
+    label: { color: Color.BACKGROUND },
   }),
   secondary: StyleSheet.create({
-    button: { backgroundColor: Color.GRAY_LIGHTER },
-    label: { color: Color.GRAY_DARKER },
+    button: { backgroundColor: Color.BACKGROUND_2 },
+    label: { color: Color.TEXT_MUTED },
   }),
 }

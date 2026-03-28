@@ -48,8 +48,8 @@ export default function SettingsScreen() {
           <Switch
             value={settings.transcription_enabled}
             onValueChange={handleTranscriptionToggle}
-            trackColor={{ false: Color.GRAY, true: Color.PRIMARY }}
-            thumbColor={Color.BLACK}
+            trackColor={{ false: Color.TEXT_DISABLED, true: Color.PRIMARY }}
+            thumbColor={Color.TEXT}
           />
         </View>
 
@@ -78,8 +78,8 @@ export default function SettingsScreen() {
           <Switch
             value={settings.sync_enabled}
             onValueChange={handleSyncToggle}
-            trackColor={{ false: Color.GRAY, true: Color.PRIMARY }}
-            thumbColor={Color.BLACK}
+            trackColor={{ false: Color.TEXT_DISABLED, true: Color.PRIMARY }}
+            thumbColor={Color.TEXT}
           />
         </View>
 
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 18,
-    color: Color.BLACK,
+    color: Color.TEXT,
   },
   settingSecondary: {
     flexDirection: 'row',
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   },
   secondaryText: {
     fontSize: 14,
-    color: Color.GRAY_MEDIUM,
+    color: Color.TEXT_3,
   },
   errorText: {
     fontSize: 14,

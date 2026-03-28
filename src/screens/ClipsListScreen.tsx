@@ -193,7 +193,7 @@ export default function ClipsListScreen() {
 
         : <Header title="Clips">
             <TouchableOpacity onPress={handleOpenSearch}>
-              <Ionicons name="search" size={24} color={Color.BLACK} />
+              <Ionicons name="search" size={24} color={Color.TEXT} />
             </TouchableOpacity>
           </Header>
       }
@@ -284,7 +284,7 @@ function ClipList({ clips, pending, onViewClip, onOpenMenu }: any) {
             hitSlop={8}
             testID="clip-menu-button"
           >
-            <Ionicons name="ellipsis-vertical" size={20} color={Color.GRAY_DARK} />
+            <Ionicons name="ellipsis-vertical" size={20} color={Color.TEXT_2} />
           </Pressable>
         </TouchableOpacity>
       )}
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   },
   clipItem: {
     flexDirection: 'row',
-    backgroundColor: Color.GRAY_LIGHTER,
+    backgroundColor: Color.BACKGROUND_2,
     borderRadius: 8,
     marginBottom: 16,
   },
@@ -324,21 +324,21 @@ const styles = StyleSheet.create({
   clipTime: {
     fontSize: 16,
     fontWeight: '600',
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
   },
   clipDuration: {
     fontSize: 14,
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
   },
   clipTranscription: {
     fontSize: 14,
     fontStyle: 'italic',
-    color: Color.GRAY_DARK,
+    color: Color.TEXT_2,
     marginTop: 4,
   },
   clipNote: {
     fontSize: 14,
-    color: Color.GRAY_DARKER,
+    color: Color.TEXT_MUTED,
     marginTop: 4,
   },
   menuButton: {

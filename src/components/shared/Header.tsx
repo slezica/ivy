@@ -15,7 +15,7 @@ export default function Header({ title, children, noBorder, icon, onIconPress }:
     <View style={[styles.container, noBorder && styles.noBorder]}>
       {icon && (
         <TouchableOpacity onPress={onIconPress} style={styles.iconButton}>
-          <Ionicons name={icon} size={24} color={Color.BLACK} />
+          <Ionicons name={icon} size={24} color={Color.TEXT} />
         </TouchableOpacity>
       )}
 
@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Color.GRAY_LIGHT,
+    borderBottomColor: Color.BACKGROUND_3,
   },
   titleArea: {
     flex: 1,
@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Color.BLACK,
+    color: Color.TEXT,
   },
   noBorder: {
     borderBottomWidth: 0,

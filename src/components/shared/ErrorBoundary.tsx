@@ -55,18 +55,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Color.WHITE,
+    backgroundColor: Color.BACKGROUND,
     padding: 24,
     gap: 16,
   },
   title: {
     fontSize: 20,
     fontWeight: '600',
-    color: Color.BLACK,
+    color: Color.TEXT,
   },
   subtitle: {
     fontSize: 14,
-    color: Color.GRAY_MEDIUM,
+    color: Color.TEXT_3,
     textAlign: 'center',
   },
   button: {
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   buttonText: {
-    color: Color.WHITE,
+    color: Color.BACKGROUND,
     fontSize: 16,
     fontWeight: '600',
   },

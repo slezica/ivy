@@ -39,7 +39,7 @@ export default function ActionMenu({ visible, onClose, onAction, items }: Action
               <Ionicons
                 name={item.icon}
                 size={20}
-                color={item.destructive ? Color.DESTRUCTIVE : Color.BLACK}
+                color={item.destructive ? Color.DESTRUCTIVE : Color.TEXT}
               />
 
               <Text style={[
@@ -59,13 +59,13 @@ export default function ActionMenu({ visible, onClose, onAction, items }: Action
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: Color.MODAL_OVERLAY,
+    backgroundColor: Color.BACKDROP,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   content: {
-    backgroundColor: Color.WHITE,
+    backgroundColor: Color.BACKGROUND,
     borderRadius: 12,
     width: '100%',
     maxWidth: 300,
@@ -79,12 +79,12 @@ const styles = StyleSheet.create({
   },
   itemBorder: {
     borderTopWidth: 1,
-    borderTopColor: Color.GRAY_LIGHT,
+    borderTopColor: Color.BACKGROUND_3,
   },
   itemDestructive: {},
   itemText: {
     fontSize: 16,
-    color: Color.BLACK,
+    color: Color.TEXT,
   },
   itemTextDestructive: {
     color: Color.DESTRUCTIVE,

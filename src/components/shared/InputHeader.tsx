@@ -18,14 +18,14 @@ export default function InputHeader({ value, onChangeText, onClose, placeholder 
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={Color.GRAY_DARK}
+        placeholderTextColor={Color.TEXT_2}
         autoCapitalize="none"
         autoCorrect={false}
         autoFocus
       />
 
       <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-        <Ionicons name="close" size={24} color={Color.BLACK} />
+        <Ionicons name="close" size={24} color={Color.TEXT} />
       </TouchableOpacity>
     </View>
   )
@@ -39,12 +39,12 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Color.GRAY_LIGHT,
+    borderBottomColor: Color.BACKGROUND_3,
   },
   input: {
     flex: 1,
     fontSize: 18,
-    color: Color.BLACK,
+    color: Color.TEXT,
     paddingVertical: 4,
   },
   closeButton: {
