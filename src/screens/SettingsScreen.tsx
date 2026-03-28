@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   settingSecondary: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 4,
   },
   secondaryText: {
     fontSize: 14,
