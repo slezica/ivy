@@ -331,7 +331,10 @@ const styles = StyleSheet.create({
   },
   clipTranscription: {
     fontSize: 14,
+    fontStyle: 'italic',
+    lineHeight: Space.PARAGRAPH_LINE_HEIGHT,
     color: Color.TEXT_2,
+    marginTop: 4
   },
   clipNote: {
     fontSize: 14,
