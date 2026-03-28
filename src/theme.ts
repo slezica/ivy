@@ -26,7 +26,7 @@ export const ColorGreen = {
   DESTRUCTIVE: '#FF453A',
   SELECTION: '#8aaa6c',
 
-  BACKGROUND: '#191919',
+  BACKGROUND: '#2a2a2a',
   BACKGROUND_2: '#212121',
   BACKGROUND_3: '#393939',
 
