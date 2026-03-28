@@ -37,7 +37,6 @@ export default function IconButton({
           height: size,
           borderRadius: size / 2,
           backgroundColor,
-          shadowColor: backgroundColor
         },
         style,
       ]}
@@ -54,9 +53,6 @@ const styles = StyleSheet.create({
   button: {
     justifyContent: 'center',
     alignItems: 'center',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
     elevation: 4,
   },
 })
