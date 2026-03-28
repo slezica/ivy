@@ -41,7 +41,7 @@ export const ColorGreen = {
 }
 
 
-export const Color = ColorTeal
+export const Color = ColorGreen
 
 
 export const Space = {
