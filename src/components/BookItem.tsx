@@ -10,15 +10,6 @@ interface BookItemProps {
   onOpenMenu: (bookId: string) => void
 }
 
-function getRemainingLabel(book: Book): string {
-  const remaining = book.duration - book.position
-  const percentLeft = remaining / book.duration
-
-  if (remaining < 60_000 && percentLeft < 0.01) return 'Finished'
-  if (book.position === 0) return formatDuration(book.duration)
-  return `${formatDuration(remaining)} left`
-}
-
 export default function BookItem({ book, onPress, onOpenMenu }: BookItemProps) {
   const isArchived = book.uri === null
 
@@ -50,9 +41,7 @@ export default function BookItem({ book, onPress, onOpenMenu }: BookItemProps) {
           </Text>
         )}
         {book.duration > 0 && (
-          <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>
-            {getRemainingLabel(book)}
-          </Text>
+          <BookProgress book={book} isArchived={isArchived} />
         )}
       </View>
 
@@ -64,6 +53,28 @@ export default function BookItem({ book, onPress, onOpenMenu }: BookItemProps) {
         <Ionicons name="ellipsis-vertical" size={20} color={Color.TEXT_2} />
       </Pressable>
     </TouchableOpacity>
+  )
+}
+
+function BookProgress({ book, isArchived }: { book: Book; isArchived: boolean }) {
+  const remaining = book.duration - book.position
+  const percentLeft = remaining / book.duration
+
+  if (remaining < 60_000 && percentLeft < 0.01) {
+    return <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>Finished</Text>
+  }
+
+  if (book.position === 0) {
+    return <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>{formatDuration(book.duration)}</Text>
+  }
+
+  const percent = Math.round((book.position / book.duration) * 100)
+
+  return (
+    <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>
+      <Text style={[styles.bookProgress, isArchived && styles.textArchived]}>{percent}%</Text>
+      {' • '}{formatDuration(remaining)} left
+    </Text>
   )
 }
 
@@ -80,8 +91,8 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   artwork: {
-    width: 65,
-    height: 65,
+    width: 72,
+    height: 72,
     borderRadius: Space.BORDER_RADIUS,
   },
   artworkPlaceholder: {
@@ -114,7 +125,10 @@ const styles = StyleSheet.create({
   },
   bookDuration: {
     fontSize: 14,
-    color: Color.TEXT_2,
+    color: Color.PRIMARY,
+  },
+  bookProgress: {
+    color: Color.PRIMARY,
   },
   textArchived: {
     color: Color.TEXT_DISABLED,
