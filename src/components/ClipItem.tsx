@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Color, Space } from '../theme'
-import { formatTime } from '../utils'
+import { formatTime, formatDuration } from '../utils'
 import type { ClipWithFile } from '../services'
 
 interface ClipItemProps {
@@ -25,7 +25,7 @@ export default function ClipItem({ clip, isPending, onView, onOpenMenu }: ClipIt
         </Text>
 
         <View style={styles.clipHeader}>
-          <Text style={styles.clipTime}>{formatTime(clip.duration)}</Text>
+          <Text style={styles.clipTime}>{formatDuration(clip.duration, { seconds: true })}</Text>
           {clip.duration > 0 && (
             <Text style={styles.clipDuration}>
               (at {formatTime(clip.start)})
