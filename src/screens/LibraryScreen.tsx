@@ -5,7 +5,7 @@
  * Active books are shown first, archived books in a separate section.
  */
 
-import { View, Text, StyleSheet, Alert, SectionList, TouchableOpacity, Image, Pressable, AppState, AppStateStatus, TextInput } from 'react-native'
+import { View, Text, StyleSheet, Alert, SectionList, TouchableOpacity, AppState, AppStateStatus, TextInput } from 'react-native'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -18,9 +18,10 @@ import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import TextButton from '../components/shared/TextButton'
 import Dialog from '../components/shared/Dialog'
 import MetadataEditor from '../components/MetadataEditor'
+import BookItem from '../components/BookItem'
 import { Color, Space } from '../theme'
 import type { Book } from '../services'
-import { formatTime, formatDate, MAIN_PLAYER_OWNER_ID } from '../utils'
+import { MAIN_PLAYER_OWNER_ID } from '../utils'
 
 const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -254,65 +255,13 @@ export default function LibraryScreen() {
               ? <Text style={styles.sectionHeader}>{section.title}</Text>
               : null
           )}
-          renderItem={({ item }) => {
-            const isArchived = item.uri === null
-            return (
-              <TouchableOpacity
-                style={[styles.bookItem, isArchived && styles.bookItemArchived]}
-                onPress={() => handleBookPress(item)}
-                activeOpacity={0.7}
-              >
-                {/* Artwork */}
-                {item.artwork ? (
-                  <Image
-                    source={{ uri: item.artwork }}
-                    style={[styles.artwork, isArchived && styles.artworkArchived]}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={[styles.artworkPlaceholder, isArchived && styles.artworkArchived]}>
-                    <Text style={styles.artworkPlaceholderIcon}>🎵</Text>
-                  </View>
-                )}
-
-                {/* Book Info */}
-                <View style={styles.bookInfo}>
-                  <Text style={[styles.bookName, isArchived && styles.textArchived]} numberOfLines={1}>
-                    {item.title || item.name}
-                  </Text>
-                  {item.artist && (
-                    <Text style={[styles.bookArtist, isArchived && styles.textArchived]} numberOfLines={1}>
-                      {item.artist}
-                    </Text>
-                  )}
-                  <View style={styles.bookMetadata}>
-                    {item.duration > 0 && (
-                      <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>
-                        {formatTime(item.duration)}
-                      </Text>
-                    )}
-                    {!isArchived && item.position > 0 && item.duration > 0 && (
-                      <Text style={styles.bookProgress}>
-                        • {Math.round((item.position / item.duration) * 100)}% played
-                      </Text>
-                    )}
-                  </View>
-
-                  <Text style={[styles.bookDate, isArchived && styles.textArchived]}>
-                    {formatDate(item.updated_at)}
-                  </Text>
-                </View>
-
-                <Pressable
-                  style={styles.menuButton}
-                  onPress={() => handleOpenMenu(item.id)}
-                  hitSlop={8}
-                >
-                  <Ionicons name="ellipsis-vertical" size={20} color={Color.TEXT_2} />
-                </Pressable>
-              </TouchableOpacity>
-            )
-          }}
+          renderItem={({ item }) => (
+            <BookItem
+              book={item}
+              onPress={handleBookPress}
+              onOpenMenu={handleOpenMenu}
+            />
+          )}
         />
       ) : searchQuery ? (
         <EmptyState
@@ -406,74 +355,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-  },
-  bookItem: {
-    flexDirection: 'row',
-    backgroundColor: Color.BACKGROUND_2,
-    borderRadius: Space.BORDER_RADIUS,
-    padding: Space.CARD_PADDING,
-    marginBottom: Space.CARD_LIST_GAP,
-    gap: 12,
-  },
-  bookItemArchived: {
-    opacity: 0.6,
-  },
-  artwork: {
-    width: 65,
-    height: 65,
-    borderRadius: Space.BORDER_RADIUS,
-  },
-  artworkPlaceholder: {
-    width: 65,
-    height: 65,
-    borderRadius: Space.BORDER_RADIUS,
-    backgroundColor: Color.BACKGROUND_3,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  artworkPlaceholderIcon: {
-    fontSize: 24,
-  },
-  artworkArchived: {
-    opacity: 0.7,
-  },
-  bookInfo: {
-    flex: 1,
-    gap: Space.CARD_LINE_GAP,
-  },
-  bookName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Color.TEXT,
-  },
-  bookArtist: {
-    fontSize: 14,
-    color: Color.TEXT_2,
-    fontWeight: '500',
-  },
-  bookMetadata: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  bookDuration: {
-    fontSize: 14,
-    color: Color.TEXT_2,
-  },
-  bookProgress: {
-    fontSize: 14,
-    color: Color.PRIMARY,
-  },
-  bookDate: {
-    fontSize: 12,
-    color: Color.TEXT_2,
-  },
-  textArchived: {
-    color: Color.TEXT_DISABLED,
-  },
-  menuButton: {
-    padding: 0,
-    justifyContent: 'flex-start',
   },
   urlDialog: {
     padding: 16,

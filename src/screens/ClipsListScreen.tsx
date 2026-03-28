@@ -6,13 +6,10 @@
  */
 
 import {
-  View,
-  Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
   Alert,
-  Pressable,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useState, useCallback, useMemo } from 'react'
@@ -28,7 +25,7 @@ import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import Dialog from '../components/shared/Dialog'
 import ClipViewer from '../components/ClipViewer'
 import ClipEditor from '../components/ClipEditor'
-import { formatTime } from '../utils'
+import ClipItem from '../components/ClipItem'
 
 
 export default function ClipsListScreen() {
@@ -247,46 +244,12 @@ function ClipList({ clips, pending, onViewClip, onOpenMenu }: any) {
       keyExtractor={(item) => item.id}
       contentContainerStyle={styles.listContent}
       renderItem={({ item }) => (
-        <TouchableOpacity
-          style={styles.clipItem}
-          onPress={() => onViewClip(item.id)}
-          activeOpacity={0.7}
-          testID="clip-card"
-        >
-          <View style={styles.clipContent}>
-            <Text style={styles.clipFileLabel} numberOfLines={1}>
-              {item.file_title || item.file_name}
-            </Text>
-
-            <View style={styles.clipHeader}>
-              <Text style={styles.clipTime}>{formatTime(item.duration)}</Text>
-              {item.duration > 0 && (
-                <Text style={styles.clipDuration}>
-                  (at {formatTime(item.start)})
-                </Text>
-              )}
-            </View>
-            {pending[item.id] ? (
-              <Text style={styles.clipTranscription} numberOfLines={2}>
-                Transcribing...
-              </Text>
-            ) : null}
-            {item.transcription ? (
-              <Text style={styles.clipTranscription} numberOfLines={2}>
-                &ldquo;{item.transcription} ...&rdquo;
-              </Text>
-            ) : null}
-          </View>
-
-          <Pressable
-            style={styles.menuButton}
-            onPress={() => onOpenMenu(item.id)}
-            hitSlop={8}
-            testID="clip-menu-button"
-          >
-            <Ionicons name="ellipsis-vertical" size={20} color={Color.TEXT_2} />
-          </Pressable>
-        </TouchableOpacity>
+        <ClipItem
+          clip={item}
+          isPending={!!pending[item.id]}
+          onView={onViewClip}
+          onOpenMenu={onOpenMenu}
+        />
       )}
     />
   )
@@ -296,53 +259,5 @@ function ClipList({ clips, pending, onViewClip, onOpenMenu }: any) {
 const styles = StyleSheet.create({
   listContent: {
     padding: Space.SCREEN_PADDING,
-  },
-  clipItem: {
-    flexDirection: 'row',
-    backgroundColor: Color.BACKGROUND_2,
-    borderRadius: Space.BORDER_RADIUS,
-    padding: Space.CARD_PADDING,
-    marginBottom: Space.CARD_LIST_GAP,
-  },
-  clipContent: {
-    flex: 1,
-    gap: Space.CARD_LINE_GAP,
-  },
-  clipFileLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Color.PRIMARY,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  clipHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  clipTime: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Color.TEXT_2,
-  },
-  clipDuration: {
-    fontSize: 14,
-    color: Color.TEXT_2,
-  },
-  clipTranscription: {
-    fontSize: 14,
-    fontStyle: 'italic',
-    lineHeight: Space.PARAGRAPH_LINE_HEIGHT,
-    color: Color.TEXT_2,
-    marginTop: 4
-  },
-  clipNote: {
-    fontSize: 14,
-    color: Color.TEXT_MUTED,
-    marginTop: 4,
-  },
-  menuButton: {
-    padding: 0,
-    justifyContent: 'flex-start',
   },
 })
