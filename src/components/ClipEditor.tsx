@@ -103,8 +103,8 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
         duration={clip.file_duration}
         position={ownPosition}
         onSeek={handleSeek}
-        leftColor={Color.PRIMARY}
-        rightColor={Color.PRIMARY}
+        leftColor={Color.TEXT_DISABLED}
+        rightColor={Color.TEXT_DISABLED}
         selectionColor={Color.SELECTION}
         selectionStart={selectionStart}
         selectionEnd={selectionEnd}
