@@ -18,7 +18,7 @@ import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import TextButton from '../components/shared/TextButton'
 import Dialog from '../components/shared/Dialog'
 import MetadataEditor from '../components/MetadataEditor'
-import { Color } from '../theme'
+import { Color, Space } from '../theme'
 import type { Book } from '../services'
 import { formatTime, formatDate, MAIN_PLAYER_OWNER_ID } from '../utils'
 
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     backgroundColor: Color.BACKGROUND_2,
     borderRadius: 8,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: Space.CARD_LIST_GAP,
     gap: 12,
   },
   bookItemArchived: {
@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
   },
   bookInfo: {
     flex: 1,
-    gap: 4,
+    gap: Space.CARD_LINE_GAP,
   },
   bookName: {
     fontSize: 16,

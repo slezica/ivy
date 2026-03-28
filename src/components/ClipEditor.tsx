@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   container: {
     display: 'flex',
     padding: 16,
-    gap: 20,
+    gap: 24,
   },
   header: {},
   title: {
@@ -186,6 +186,7 @@ const styles = StyleSheet.create({
   buttons: {
     flexDirection: 'row',
     gap: 12,
+    paddingTop: 8,
   },
   button: {
     flex: 1,

@@ -43,3 +43,10 @@ export const ColorGreen = {
 
 export const Color = ColorTeal
 
+
+export const Space = {
+  CARD_LIST_GAP: 16,
+  CARD_LINE_GAP: 6,
+  PARAGRAPH_LINE_HEIGHT: 22,
+  TITLE_SUBTITLE_GAP: 8
+}

@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from 'react'
 import { View, Text, Pressable, TouchableOpacity, StyleSheet } from 'react-native'
 
 import { useStore } from '../store'
-import { Color } from '../theme'
+import { Color, Space } from '../theme'
 import { formatTime } from '../utils'
 import Header from './shared/Header'
 import IconButton from './shared/IconButton'
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   container: {
     display: 'flex',
     padding: 16,
-    gap: 20
+    gap: 24,
   },
   header: {},
   title: {
@@ -198,11 +198,12 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 15,
     color: Color.TEXT_MUTED,
-    lineHeight: 22,
+    lineHeight: Space.PARAGRAPH_LINE_HEIGHT,
   },
   buttons: {
     flexDirection: 'row',
     gap: 12,
+    paddingTop: 8,
   },
   button: {
     flex: 1,

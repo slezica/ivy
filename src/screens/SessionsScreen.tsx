@@ -5,7 +5,7 @@ import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import { useStore } from '../store'
-import { Color } from '../theme'
+import { Color, Space } from '../theme'
 import { formatTime } from '../utils'
 import type { SessionWithBook } from '../services'
 
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   },
   sessionInfo: {
     flex: 1,
-    gap: 2,
+    gap: Space.CARD_LINE_GAP,
   },
   bookName: {
     fontSize: 15,

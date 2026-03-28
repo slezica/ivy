@@ -19,7 +19,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { useRouter, useFocusEffect } from 'expo-router'
 
 import { useStore } from '../store'
-import { Color } from '../theme'
+import { Color, Space } from '../theme'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import InputHeader from '../components/shared/InputHeader'
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: Color.BACKGROUND_2,
     borderRadius: 8,
-    marginBottom: 16,
+    marginBottom: Space.CARD_LIST_GAP,
   },
   clipContent: {
     flex: 1,
