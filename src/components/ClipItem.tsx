@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     gap: Space.CARD_LINE_GAP,
   },
   clipFileLabel: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: Color.PRIMARY,
     textTransform: 'uppercase',
@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
     lineHeight: Space.PARAGRAPH_LINE_HEIGHT,
-    color: Color.TEXT_2,
+    color: Color.TEXT,
     marginTop: 4,
   },
   menuButton: {
