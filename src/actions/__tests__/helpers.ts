@@ -34,6 +34,7 @@ export function createMockSession(overrides: Partial<SessionWithBook> = {}): Ses
     book_id: 'book-1',
     started_at: 1000,
     ended_at: 2000,
+    updated_at: 2000,
     book_name: 'Test Book.mp3',
     book_title: 'Test Title',
     book_artist: 'Test Artist',

@@ -11,7 +11,7 @@
  */
 
 import RNFS from 'react-native-fs'
-import { DatabaseService, Book, Clip, SyncManifestEntry } from '../storage'
+import { DatabaseService, Book, Clip, Session, SyncManifestEntry } from '../storage'
 import { GoogleDriveService, DriveFile } from './drive'
 import { GoogleAuthService } from './auth'
 import { SyncQueueService } from './queue'
@@ -19,6 +19,7 @@ import { BaseService } from '../base'
 import {
   BookBackup,
   ClipBackup,
+  SessionBackup,
   SyncResult,
   SyncNotification,
   SyncStatus,
@@ -28,9 +29,10 @@ import {
   SyncPlan,
   RemoteBook,
   RemoteClip,
+  RemoteSession,
   planSync,
 } from './planner'
-import { mergeBook, mergeClip } from './merge'
+import { mergeBook, mergeClip, mergeSession } from './merge'
 import { createLogger } from '../../utils'
 
 const log = createLogger('Sync')
@@ -39,10 +41,10 @@ const log = createLogger('Sync')
 export * from './types'
 
 // Filename format: {type}_{id}.{ext}
-const FILENAME_REGEX = /^(book|clip)_([a-f0-9-]+)\.(json|mp3|m4a)$/
+const FILENAME_REGEX = /^(book|clip|session)_([a-f0-9-]+)\.(json|mp3|m4a)$/
 
 interface ParsedFilename {
-  type: 'book' | 'clip'
+  type: 'book' | 'clip' | 'session'
   id: string
   extension: 'json' | 'mp3' | 'm4a'
 }
@@ -162,9 +164,9 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
   private async performSync(): Promise<SyncResult> {
     const result: SyncResult = {
-      uploaded: { books: 0, clips: 0 },
-      downloaded: { books: 0, clips: 0 },
-      deleted: { clips: 0 },
+      uploaded: { books: 0, clips: 0, sessions: 0 },
+      downloaded: { books: 0, clips: 0, sessions: 0 },
+      deleted: { clips: 0, sessions: 0 },
       conflicts: [],
       errors: [],
     }
@@ -172,6 +174,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const notification: SyncNotification = {
       booksChanged: [],
       clipsChanged: [],
+      sessionsChanged: [],
     }
 
     try {
@@ -191,7 +194,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       await this.db.setLastSyncTime(Date.now())
 
       // 6. Notify store of external changes
-      if (notification.booksChanged.length > 0 || notification.clipsChanged.length > 0) {
+      if (notification.booksChanged.length > 0 || notification.clipsChanged.length > 0 || notification.sessionsChanged.length > 0) {
         this.emit('data', notification)
       }
     } catch (error) {
@@ -210,14 +213,17 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     // Fetch local data
     const localBooks = await this.db.getAllBooks()
     const localClips = await this.db.getAllClips()
+    const localSessions = await this.db.getAllSessionsRaw()
 
     // Fetch remote data
     const remoteBookFiles = await this.drive.listFiles('books')
     const remoteClipFiles = await this.drive.listFiles('clips')
+    const remoteSessionFiles = await this.drive.listFiles('sessions')
 
     // Download and parse remote backups
     const remoteBooks = await this.parseRemoteBooks(remoteBookFiles)
     const remoteClips = await this.parseRemoteClips(remoteClipFiles)
+    const remoteSessions = await this.parseRemoteSessions(remoteSessionFiles)
 
     // Gather manifests
     const allManifests = await this.db.getAllManifestEntries()
@@ -227,8 +233,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     }
 
     return {
-      local: { books: localBooks, clips: localClips },
-      remote: { books: remoteBooks, clips: remoteClips },
+      local: { books: localBooks, clips: localClips, sessions: localSessions },
+      remote: { books: remoteBooks, clips: remoteClips, sessions: remoteSessions },
       manifests,
     }
   }
@@ -293,6 +299,27 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     return result
   }
 
+  private async parseRemoteSessions(files: DriveFile[]): Promise<Map<string, RemoteSession>> {
+    const result = new Map<string, RemoteSession>()
+
+    for (const file of files) {
+      const parsed = parseFilename(file.name)
+      if (!parsed || parsed.type !== 'session' || parsed.extension !== 'json') continue
+
+      try {
+        const content = await this.drive.downloadFile(file.id, false) as string
+        const backup: SessionBackup = JSON.parse(content)
+        const modifiedAt = file.modifiedTime ? new Date(file.modifiedTime).getTime() : 0
+
+        result.set(parsed.id, { backup, fileId: file.id, modifiedAt })
+      } catch (error) {
+        log(`Failed to parse remote session ${file.name}:`, error)
+      }
+    }
+
+    return result
+  }
+
   // ---------------------------------------------------------------------------
   // Plan Execution
   // ---------------------------------------------------------------------------
@@ -328,6 +355,21 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     }
     for (const del of plan.clips.deletes) {
       await this.executeDeleteClip(del.clipId, del.jsonFileId, del.audioFileId, result)
+    }
+
+    // Execute session operations
+    for (const { local, remote } of plan.sessions.merges) {
+      await this.executeMergeSession(local, remote, result, notification)
+    }
+    for (const { session } of plan.sessions.uploads) {
+      await this.executeUploadSession(session, result)
+    }
+    for (const { remote } of plan.sessions.downloads) {
+      await this.executeDownloadSession(remote, result, notification)
+      result.downloaded.sessions++
+    }
+    for (const del of plan.sessions.deletes) {
+      await this.executeDeleteSession(del.sessionId, del.fileId, result)
     }
 
     // Clean up orphaned manifest entries
@@ -681,6 +723,121 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   }
 
   // ---------------------------------------------------------------------------
+  // Session Execution
+  // ---------------------------------------------------------------------------
+
+  private async executeMergeSession(local: Session, remote: RemoteSession, result: SyncResult, notification: SyncNotification): Promise<void> {
+    try {
+      const { merged, resolution } = mergeSession(local, remote.backup)
+
+      await this.db.restoreSessionFromBackup(
+        merged.id,
+        merged.book_id,
+        merged.started_at,
+        merged.ended_at,
+        merged.updated_at
+      )
+
+      await this.executeUploadSession(merged, result)
+
+      notification.sessionsChanged.push(local.id)
+      result.conflicts.push({
+        entityType: 'session',
+        entityId: local.id,
+        resolution,
+      })
+
+      log(`Merged session conflict: ${local.id}`)
+    } catch (error) {
+      result.errors.push(`Failed to merge session ${local.id}: ${error}`)
+    }
+  }
+
+  private async executeUploadSession(session: Session, result: SyncResult): Promise<void> {
+    try {
+      const backup: SessionBackup = {
+        id: session.id,
+        book_id: session.book_id,
+        started_at: session.started_at,
+        ended_at: session.ended_at,
+        updated_at: session.updated_at,
+      }
+
+      const filename = `session_${session.id}.json`
+      const content = JSON.stringify(backup, null, 2)
+
+      // Delete existing file first
+      const remoteFiles = await this.drive.listFiles('sessions')
+      const existingFile = remoteFiles.find(f => f.name === filename)
+      if (existingFile) {
+        await this.drive.deleteFile(existingFile.id)
+      }
+
+      const uploaded = await this.drive.uploadFile('sessions', filename, content)
+      const remoteUpdatedAt = uploaded.modifiedTime ? new Date(uploaded.modifiedTime).getTime() : session.updated_at
+
+      await this.db.upsertManifestEntry({
+        entity_type: 'session',
+        entity_id: session.id,
+        local_updated_at: session.updated_at,
+        remote_updated_at: remoteUpdatedAt,
+        remote_file_id: uploaded.id,
+        remote_audio_file_id: null,
+      })
+
+      result.uploaded.sessions++
+      log(`Uploaded session: ${session.id}`)
+    } catch (error) {
+      result.errors.push(`Failed to upload session ${session.id}: ${error}`)
+    }
+  }
+
+  private async executeDownloadSession(remote: RemoteSession, result: SyncResult, notification: SyncNotification): Promise<void> {
+    try {
+      const backup = remote.backup
+
+      await this.db.restoreSessionFromBackup(
+        backup.id,
+        backup.book_id,
+        backup.started_at,
+        backup.ended_at,
+        backup.updated_at
+      )
+
+      await this.db.upsertManifestEntry({
+        entity_type: 'session',
+        entity_id: backup.id,
+        local_updated_at: backup.updated_at,
+        remote_updated_at: remote.modifiedAt,
+        remote_file_id: remote.fileId,
+        remote_audio_file_id: null,
+      })
+
+      notification.sessionsChanged.push(backup.id)
+      log(`Downloaded session: ${backup.id}`)
+    } catch (error) {
+      result.errors.push(`Failed to download session ${remote.backup.id}: ${error}`)
+    }
+  }
+
+  private async executeDeleteSession(
+    sessionId: string,
+    fileId: string | null,
+    result: SyncResult
+  ): Promise<void> {
+    try {
+      if (fileId) await this.drive.deleteFile(fileId)
+
+      await this.db.deleteManifestEntry('session', sessionId)
+
+      result.deleted.sessions++
+      log(`Deleted session from remote: ${sessionId}`)
+    } catch (error) {
+      result.errors.push(`Failed to delete session ${sessionId} from Drive: ${error}`)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Queue Processing (for offline changes)
   // ---------------------------------------------------------------------------
 
@@ -715,6 +872,15 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
             result
           )
         }
+      } else if (item.entity_type === 'session') {
+        if (item.operation === 'upsert') {
+          const session = await this.db.getSessionById(item.entity_id)
+          if (session) await this.executeUploadSession(session, result)
+        } else if (item.operation === 'delete') {
+          const remoteFiles = await this.drive.listFiles('sessions')
+          const jsonFile = remoteFiles.find(f => f.name === `session_${item.entity_id}.json`)
+          await this.executeDeleteSession(item.entity_id, jsonFile?.id ?? null, result)
+        }
       }
     })
 
@@ -731,17 +897,25 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     // Re-fetch local state to avoid using stale data from sync start
     const freshLocalBooks = await this.db.getAllBooks()
     const freshLocalClips = await this.db.getAllClips()
+    const freshLocalSessions = await this.db.getAllSessionsRaw()
     const localBookIds = new Set(freshLocalBooks.map(b => b.id))
     const localClipIds = new Set(freshLocalClips.map(c => c.id))
+    const localSessionIds = new Set(freshLocalSessions.map(s => s.id))
 
     for (const [, manifest] of state.manifests) {
-      const existsLocally = manifest.entity_type === 'book'
-        ? localBookIds.has(manifest.entity_id)
-        : localClipIds.has(manifest.entity_id)
+      let existsLocally: boolean
+      let existsRemotely: boolean
 
-      const existsRemotely = manifest.entity_type === 'book'
-        ? state.remote.books.has(manifest.entity_id)
-        : state.remote.clips.has(manifest.entity_id)
+      if (manifest.entity_type === 'book') {
+        existsLocally = localBookIds.has(manifest.entity_id)
+        existsRemotely = state.remote.books.has(manifest.entity_id)
+      } else if (manifest.entity_type === 'clip') {
+        existsLocally = localClipIds.has(manifest.entity_id)
+        existsRemotely = state.remote.clips.has(manifest.entity_id)
+      } else {
+        existsLocally = localSessionIds.has(manifest.entity_id)
+        existsRemotely = state.remote.sessions.has(manifest.entity_id)
+      }
 
       if (!existsLocally && !existsRemotely) {
         await this.db.deleteManifestEntry(manifest.entity_type, manifest.entity_id)
@@ -759,7 +933,7 @@ function parseFilename(name: string): ParsedFilename | null {
   if (!match) return null
 
   return {
-    type: match[1] as 'book' | 'clip',
+    type: match[1] as 'book' | 'clip' | 'session',
     id: match[2],
     extension: match[3] as 'json' | 'mp3' | 'm4a',
   }

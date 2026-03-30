@@ -15,7 +15,7 @@ Ivy automatically tracks how long the user listens to each book. Every time the 
 - Clip playback (ClipViewer, ClipEditor) — only the main player creates sessions
 - Position changes or seeks — sessions record wall-clock time, not audio position
 
-**Sessions are local-only** — they're not synced to Google Drive.
+**Sessions are synced** to Google Drive, just like books and clips. Each device contributes its own sessions; conflicts are resolved by taking the widest time range (min start, max end). Sessions can be deleted, and deletions propagate across devices.
 
 ---
 

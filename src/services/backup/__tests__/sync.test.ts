@@ -26,6 +26,7 @@ describe('BackupSyncService', () => {
     const db: jest.Mocked<DatabaseService> = {
       getAllBooks: jest.fn(async () => []),
       getAllClips: jest.fn(async () => []),
+      getAllSessionsRaw: jest.fn(async () => []),
       getAllManifestEntries: jest.fn(async () => []),
       getLastSyncTime: jest.fn(() => null),
       setLastSyncTime: jest.fn(async () => {}),
@@ -34,8 +35,10 @@ describe('BackupSyncService', () => {
       getBookById: jest.fn(async () => null),
       getBookByFingerprint: jest.fn(async () => null),
       getClip: jest.fn(async () => null),
+      getSessionById: jest.fn(async () => null),
       restoreBookFromBackup: jest.fn(async () => {}),
       restoreClipFromBackup: jest.fn(async () => {}),
+      restoreSessionFromBackup: jest.fn(async () => {}),
     } as any
 
     const drive: jest.Mocked<GoogleDriveService> = {

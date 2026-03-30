@@ -36,8 +36,12 @@ describe('createTrackSession', () => {
           book_id: bookId,
           started_at: Date.now(),
           ended_at: Date.now(),
+          updated_at: Date.now(),
         })),
         updateSessionEndedAt: jest.fn(),
+      } as any,
+      syncQueue: {
+        queueChange: jest.fn(async () => {}),
       } as any,
       set: jest.fn((updater: any) => {
         if (typeof updater === 'function') {
@@ -94,6 +98,7 @@ describe('createTrackSession', () => {
       book_id: 'book-1',
       started_at: 1000,
       ended_at: 1000,
+      updated_at: 1000,
     }
 
     const storeState: any = {

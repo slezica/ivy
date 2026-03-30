@@ -241,6 +241,9 @@ export const useStore = create<AppState>()(immer((set, get) => {
     if (notification.clipsChanged.length > 0) {
       fetchClips()
     }
+    if (notification.sessionsChanged.length > 0) {
+      fetchSessions()
+    }
   }
 
   function onTranscriptionQueued({ clipId }: TranscriptionQueueEvents['queued']) {

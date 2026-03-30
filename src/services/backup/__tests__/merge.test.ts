@@ -1,6 +1,6 @@
-import { mergeBook, mergeClip } from '../merge'
-import { Book, Clip } from '../../storage'
-import { BookBackup, ClipBackup } from '../types'
+import { mergeBook, mergeClip, mergeSession } from '../merge'
+import { Book, Clip, Session } from '../../storage'
+import { BookBackup, ClipBackup, SessionBackup } from '../types'
 
 describe('mergeBook', () => {
   const baseBook: Book = {
@@ -425,6 +425,152 @@ describe('mergeClip', () => {
       mergeClip(local, baseBackup)
 
       expect(local.note).toBe(originalNote)
+    })
+  })
+})
+
+describe('mergeSession', () => {
+  const baseSession: Session = {
+    id: 'session-1',
+    book_id: 'book-1',
+    started_at: 1000,
+    ended_at: 5000,
+    updated_at: 5000,
+  }
+
+  const baseBackup: SessionBackup = {
+    id: 'session-1',
+    book_id: 'book-1',
+    started_at: 1000,
+    ended_at: 5000,
+    updated_at: 5000,
+  }
+
+  describe('started_at merge (min wins)', () => {
+    it('uses local started_at when local is earlier', () => {
+      const local = { ...baseSession, started_at: 1000 }
+      const remote = { ...baseBackup, started_at: 2000 }
+
+      const { merged } = mergeSession(local, remote)
+
+      expect(merged.started_at).toBe(1000)
+    })
+
+    it('uses remote started_at when remote is earlier', () => {
+      const local = { ...baseSession, started_at: 2000 }
+      const remote = { ...baseBackup, started_at: 1000 }
+
+      const { merged } = mergeSession(local, remote)
+
+      expect(merged.started_at).toBe(1000)
+    })
+
+    it('handles equal started_at', () => {
+      const local = { ...baseSession, started_at: 1000 }
+      const remote = { ...baseBackup, started_at: 1000 }
+
+      const { merged } = mergeSession(local, remote)
+
+      expect(merged.started_at).toBe(1000)
+    })
+  })
+
+  describe('ended_at merge (max wins)', () => {
+    it('uses local ended_at when local is later', () => {
+      const local = { ...baseSession, ended_at: 8000 }
+      const remote = { ...baseBackup, ended_at: 5000 }
+
+      const { merged } = mergeSession(local, remote)
+
+      expect(merged.ended_at).toBe(8000)
+    })
+
+    it('uses remote ended_at when remote is later', () => {
+      const local = { ...baseSession, ended_at: 5000 }
+      const remote = { ...baseBackup, ended_at: 8000 }
+
+      const { merged } = mergeSession(local, remote)
+
+      expect(merged.ended_at).toBe(8000)
+    })
+
+    it('handles equal ended_at', () => {
+      const local = { ...baseSession, ended_at: 5000 }
+      const remote = { ...baseBackup, ended_at: 5000 }
+
+      const { merged } = mergeSession(local, remote)
+
+      expect(merged.ended_at).toBe(5000)
+    })
+  })
+
+  describe('combined scenarios', () => {
+    it('widens the time range from both sides', () => {
+      const local = { ...baseSession, started_at: 2000, ended_at: 8000 }
+      const remote = { ...baseBackup, started_at: 1000, ended_at: 10000 }
+
+      const { merged } = mergeSession(local, remote)
+
+      expect(merged.started_at).toBe(1000)
+      expect(merged.ended_at).toBe(10000)
+    })
+
+    it('takes earlier start from remote, later end from local', () => {
+      const local = { ...baseSession, started_at: 2000, ended_at: 10000 }
+      const remote = { ...baseBackup, started_at: 1000, ended_at: 8000 }
+
+      const { merged } = mergeSession(local, remote)
+
+      expect(merged.started_at).toBe(1000)
+      expect(merged.ended_at).toBe(10000)
+    })
+  })
+
+  describe('preserves identity', () => {
+    it('keeps book_id from local', () => {
+      const { merged } = mergeSession(baseSession, baseBackup)
+
+      expect(merged.book_id).toBe('book-1')
+    })
+
+    it('keeps id from local', () => {
+      const { merged } = mergeSession(baseSession, baseBackup)
+
+      expect(merged.id).toBe('session-1')
+    })
+  })
+
+  describe('updated_at handling', () => {
+    it('sets updated_at to current time', () => {
+      const before = Date.now()
+      const { merged } = mergeSession(baseSession, baseBackup)
+      const after = Date.now()
+
+      expect(merged.updated_at).toBeGreaterThanOrEqual(before)
+      expect(merged.updated_at).toBeLessThanOrEqual(after)
+    })
+  })
+
+  describe('resolution message', () => {
+    it('includes the merged time range', () => {
+      const local = { ...baseSession, started_at: 2000, ended_at: 8000 }
+      const remote = { ...baseBackup, started_at: 1000, ended_at: 10000 }
+
+      const { resolution } = mergeSession(local, remote)
+
+      expect(resolution).toContain('1000')
+      expect(resolution).toContain('10000')
+    })
+  })
+
+  describe('immutability', () => {
+    it('does not modify the original local session', () => {
+      const local = { ...baseSession }
+      const originalEndedAt = local.ended_at
+
+      mergeSession(local, { ...baseBackup, ended_at: 99999 })
+
+      expect(local.ended_at).toBe(originalEndedAt)
     })
   })
 })

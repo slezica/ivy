@@ -1,12 +1,12 @@
-import { planSync, SyncState, RemoteBook, RemoteClip } from '../planner'
-import { Book, Clip, SyncManifestEntry } from '../../storage'
+import { planSync, SyncState, RemoteBook, RemoteClip, RemoteSession } from '../planner'
+import { Book, Clip, Session, SyncManifestEntry } from '../../storage'
 
 describe('planSync', () => {
   // Helper to create empty state
   function emptyState(): SyncState {
     return {
-      local: { books: [], clips: [] },
-      remote: { books: new Map(), clips: new Map() },
+      local: { books: [], clips: [], sessions: [] },
+      remote: { books: new Map(), clips: new Map(), sessions: new Map() },
       manifests: new Map(),
     }
   }
@@ -87,7 +87,7 @@ describe('planSync', () => {
 
   // Helper to create a manifest entry
   function createManifest(
-    type: 'book' | 'clip',
+    type: 'book' | 'clip' | 'session',
     id: string,
     local_updated_at: number,
     remote_updated_at: number
@@ -414,6 +414,144 @@ describe('planSync', () => {
       expect(plan.books.uploads).toHaveLength(1)
       expect(plan.books.downloads).toHaveLength(0)
       expect(plan.books.merges).toHaveLength(0)
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Session sync planning
+  // ---------------------------------------------------------------------------
+
+  function createSession(id: string, updated_at: number): Session {
+    return {
+      id,
+      book_id: 'book-1',
+      started_at: 1000,
+      ended_at: 5000,
+      updated_at,
+    }
+  }
+
+  function createRemoteSession(id: string, updated_at: number, modifiedAt: number): RemoteSession {
+    return {
+      backup: {
+        id,
+        book_id: 'book-1',
+        started_at: 1000,
+        ended_at: 5000,
+        updated_at,
+      },
+      fileId: `file-${id}`,
+      modifiedAt,
+    }
+  }
+
+  describe('session sync planning', () => {
+    describe('uploads', () => {
+      it('uploads new local sessions (no manifest)', () => {
+        const state = emptyState()
+        state.local.sessions = [createSession('s-1', 1000)]
+
+        const plan = planSync(state)
+
+        expect(plan.sessions.uploads).toHaveLength(1)
+        expect(plan.sessions.uploads[0].session.id).toBe('s-1')
+      })
+
+      it('uploads locally changed sessions', () => {
+        const state = emptyState()
+        state.local.sessions = [createSession('s-1', 2000)]
+        state.manifests.set('session:s-1', createManifest('session', 's-1', 1000, 1000))
+
+        const plan = planSync(state)
+
+        expect(plan.sessions.uploads).toHaveLength(1)
+      })
+
+      it('does not upload unchanged sessions', () => {
+        const state = emptyState()
+        state.local.sessions = [createSession('s-1', 1000)]
+        state.manifests.set('session:s-1', createManifest('session', 's-1', 1000, 1000))
+
+        const plan = planSync(state)
+
+        expect(plan.sessions.uploads).toHaveLength(0)
+      })
+    })
+
+    describe('downloads', () => {
+      it('downloads new remote sessions (no manifest)', () => {
+        const state = emptyState()
+        state.remote.sessions.set('s-1', createRemoteSession('s-1', 1000, 1000))
+
+        const plan = planSync(state)
+
+        expect(plan.sessions.downloads).toHaveLength(1)
+        expect(plan.sessions.downloads[0].remote.backup.id).toBe('s-1')
+      })
+
+      it('downloads remotely changed sessions', () => {
+        const state = emptyState()
+        state.local.sessions = [createSession('s-1', 1000)]
+        state.remote.sessions.set('s-1', createRemoteSession('s-1', 2000, 2000))
+        state.manifests.set('session:s-1', createManifest('session', 's-1', 1000, 1000))
+
+        const plan = planSync(state)
+
+        expect(plan.sessions.downloads).toHaveLength(1)
+      })
+    })
+
+    describe('merges', () => {
+      it('merges when both local and remote changed', () => {
+        const state = emptyState()
+        state.local.sessions = [createSession('s-1', 2000)]
+        state.remote.sessions.set('s-1', createRemoteSession('s-1', 2000, 2000))
+        state.manifests.set('session:s-1', createManifest('session', 's-1', 1000, 1000))
+
+        const plan = planSync(state)
+
+        expect(plan.sessions.merges).toHaveLength(1)
+        expect(plan.sessions.uploads).toHaveLength(0)
+        expect(plan.sessions.downloads).toHaveLength(0)
+      })
+    })
+
+    describe('deletes', () => {
+      it('deletes remote sessions that were deleted locally', () => {
+        const state = emptyState()
+        // Remote exists, manifest exists, but no local session
+        state.remote.sessions.set('s-1', createRemoteSession('s-1', 1000, 1000))
+        state.manifests.set('session:s-1', createManifest('session', 's-1', 1000, 1000))
+
+        const plan = planSync(state)
+
+        expect(plan.sessions.deletes).toHaveLength(1)
+        expect(plan.sessions.deletes[0].sessionId).toBe('s-1')
+        expect(plan.sessions.deletes[0].fileId).toBe('file-s-1')
+      })
+
+      it('does not delete new remote sessions (no manifest)', () => {
+        const state = emptyState()
+        // Remote exists, no manifest, no local → new from other device
+        state.remote.sessions.set('s-1', createRemoteSession('s-1', 1000, 1000))
+
+        const plan = planSync(state)
+
+        expect(plan.sessions.deletes).toHaveLength(0)
+        expect(plan.sessions.downloads).toHaveLength(1)
+      })
+
+      it('does not download sessions that were deleted locally', () => {
+        const state = emptyState()
+        state.remote.sessions.set('s-1', createRemoteSession('s-1', 2000, 2000))
+        state.manifests.set('session:s-1', createManifest('session', 's-1', 1000, 1000))
+        // No local session — deleted
+
+        const plan = planSync(state)
+
+        expect(plan.sessions.downloads).toHaveLength(0)
+        expect(plan.sessions.deletes).toHaveLength(1)
+      })
     })
   })
 })

@@ -1,7 +1,7 @@
 import { createTrackSession, TrackSessionDeps } from '../track_session'
 import {
   createMockBook, createMockSession, createMockState, createMockGet, createImmerSet,
-  createMockDb,
+  createMockDb, createMockSyncQueue,
 } from './helpers'
 
 
@@ -32,6 +32,7 @@ function createDeps(overrides: {
       getCurrentSession: jest.fn(() => currentSession),
       createSession: jest.fn(() => createMockSession({ id: 'new-session', book_id: bookId })),
     }),
+    syncQueue: createMockSyncQueue(),
     set,
     get: createMockGet(state),
   }
@@ -71,6 +72,15 @@ describe('createTrackSession', () => {
 
       expect(deps.db.createSession).not.toHaveBeenCalled()
     })
+
+    it('queues session for sync', async () => {
+      const { deps } = createDeps({ hasCurrentSession: true })
+      const trackSession = createTrackSession(deps)
+
+      await trackSession('book-1')
+
+      expect(deps.syncQueue.queueChange).toHaveBeenCalledWith('session', 'session-1', 'upsert')
+    })
   })
 
   describe('no existing session (create)', () => {
@@ -106,6 +116,15 @@ describe('createTrackSession', () => {
       await trackSession('nonexistent')
 
       expect(deps.db.createSession).not.toHaveBeenCalled()
+    })
+
+    it('does not queue sync on creation (only on extend)', async () => {
+      const { deps } = createDeps()
+      const trackSession = createTrackSession(deps)
+
+      await trackSession('book-1')
+
+      expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
     })
   })
 })

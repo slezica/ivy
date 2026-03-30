@@ -5,8 +5,8 @@
  * No I/O, no side effects - just data transformation.
  */
 
-import { Book, Clip } from '../storage'
-import { BookBackup, ClipBackup } from './types'
+import { Book, Clip, Session } from '../storage'
+import { BookBackup, ClipBackup, SessionBackup } from './types'
 
 // -----------------------------------------------------------------------------
 // Types
@@ -81,6 +81,33 @@ export function mergeClip(local: Clip, remote: ClipBackup): MergeResult<Clip> {
   const resolution = notesConflicted
     ? 'Notes concatenated with conflict marker'
     : `Bounds: ${localWins ? 'local' : 'remote'} wins`
+
+  return { merged, resolution }
+}
+
+// -----------------------------------------------------------------------------
+// Session Merge
+// -----------------------------------------------------------------------------
+
+/**
+ * Merge a local session with a remote backup.
+ *
+ * Strategy:
+ * - started_at: min (earlier boundary wins)
+ * - ended_at: max (longer session wins)
+ */
+export function mergeSession(local: Session, remote: SessionBackup): MergeResult<Session> {
+  const mergedStartedAt = Math.min(local.started_at, remote.started_at)
+  const mergedEndedAt = Math.max(local.ended_at, remote.ended_at)
+
+  const merged: Session = {
+    ...local,
+    started_at: mergedStartedAt,
+    ended_at: mergedEndedAt,
+    updated_at: Date.now(),
+  }
+
+  const resolution = `Time range: ${mergedStartedAt}–${mergedEndedAt} (min start, max end)`
 
   return { merged, resolution }
 }

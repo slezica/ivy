@@ -67,6 +67,7 @@ export interface Session {
   book_id: string
   started_at: number
   ended_at: number
+  updated_at: number
 }
 
 export interface SessionWithBook extends Session {
@@ -82,7 +83,7 @@ export interface Settings {
 }
 
 // Sync-related interfaces
-export type SyncEntityType = 'book' | 'clip'
+export type SyncEntityType = 'book' | 'clip' | 'session'
 export type SyncOperation = 'upsert' | 'delete'
 
 export interface SyncManifestEntry {
@@ -226,6 +227,12 @@ const migrations: Migration[] = [
   // Migration 2: Add speed column to files table (integer percentage, 100 = 1.0x)
   (db) => {
     db.execSync('ALTER TABLE files ADD COLUMN speed INTEGER NOT NULL DEFAULT 100')
+  },
+
+  // Migration 3: Add updated_at column to sessions table (for sync)
+  (db) => {
+    db.execSync('ALTER TABLE sessions ADD COLUMN updated_at INTEGER')
+    db.execSync('UPDATE sessions SET updated_at = ended_at WHERE updated_at IS NULL')
   },
 ]
 
@@ -614,16 +621,16 @@ export class DatabaseService {
     const now = Date.now()
     const id = generateId()
     await this.db.runAsync(
-      'INSERT INTO sessions (id, book_id, started_at, ended_at) VALUES (?, ?, ?, ?)',
-      [id, bookId, now, now]
+      'INSERT INTO sessions (id, book_id, started_at, ended_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      [id, bookId, now, now, now]
     )
-    return { id, book_id: bookId, started_at: now, ended_at: now }
+    return { id, book_id: bookId, started_at: now, ended_at: now, updated_at: now }
   }
 
   updateSessionEndedAt(sessionId: string, endedAt: number): void {
     this.db.runAsync(
-      'UPDATE sessions SET ended_at = ? WHERE id = ?',
-      [endedAt, sessionId]
+      'UPDATE sessions SET ended_at = ?, updated_at = ? WHERE id = ?',
+      [endedAt, Date.now(), sessionId]
     ).catch((error) => {
       console.debug('Failed to update session ended_at (non-critical):', error)
     })
@@ -631,6 +638,38 @@ export class DatabaseService {
 
   async deleteSession(sessionId: string): Promise<void> {
     await this.db.runAsync('DELETE FROM sessions WHERE id = ?', [sessionId])
+  }
+
+  async getSessionById(id: string): Promise<Session | null> {
+    const row = await this.db.getFirstAsync<Session>(
+      'SELECT * FROM sessions WHERE id = ?',
+      [id]
+    )
+    return row ?? null
+  }
+
+  async getAllSessionsRaw(): Promise<Session[]> {
+    return this.db.getAllAsync<Session>('SELECT * FROM sessions')
+  }
+
+  async restoreSessionFromBackup(
+    id: string,
+    bookId: string,
+    startedAt: number,
+    endedAt: number,
+    updatedAt: number
+  ): Promise<void> {
+    await this.db.runAsync(
+      `INSERT INTO sessions (id, book_id, started_at, ended_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         book_id = excluded.book_id,
+         started_at = excluded.started_at,
+         ended_at = excluded.ended_at,
+         updated_at = excluded.updated_at
+       WHERE excluded.updated_at > sessions.updated_at`,
+      [id, bookId, startedAt, endedAt, updatedAt]
+    )
   }
 
   async getAllSessions(): Promise<SessionWithBook[]> {

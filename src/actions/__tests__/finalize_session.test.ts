@@ -2,7 +2,7 @@ import { createFinalizeSession, FinalizeSessionDeps } from '../finalize_session'
 import { MIN_SESSION_DURATION_MS } from '../constants'
 import {
   createMockSession, createMockState, createImmerSet,
-  createMockDb,
+  createMockDb, createMockSyncQueue,
 } from './helpers'
 
 
@@ -28,13 +28,14 @@ function createDeps(overrides: {
   })
 
   const db = createMockDb({
-    getCurrentSession: jest.fn(() => hasSession ? { id: sessionId, book_id: bookId, started_at: startedAt, ended_at: 0 } : null),
+    getCurrentSession: jest.fn(() => hasSession ? { id: sessionId, book_id: bookId, started_at: startedAt, ended_at: 0, updated_at: 0 } : null),
   })
 
   jest.spyOn(Date, 'now').mockReturnValue(now)
 
   const deps: FinalizeSessionDeps = {
     db,
+    syncQueue: createMockSyncQueue(),
     set: createImmerSet(state),
   }
 
@@ -92,6 +93,15 @@ describe('createFinalizeSession', () => {
 
       expect(db.updateSessionEndedAt).not.toHaveBeenCalled()
     })
+
+    it('queues sync delete for discarded sessions', async () => {
+      const { deps } = createDeps(shortSessionOpts)
+      const finalizeSession = createFinalizeSession(deps)
+
+      await finalizeSession('book-1')
+
+      expect(deps.syncQueue.queueChange).toHaveBeenCalledWith('session', 'session-1', 'delete')
+    })
   })
 
   describe('long enough session (at or above threshold)', () => {
@@ -122,6 +132,15 @@ describe('createFinalizeSession', () => {
       await finalizeSession('book-1')
 
       expect(db.deleteSession).not.toHaveBeenCalled()
+    })
+
+    it('queues session for sync', async () => {
+      const { deps } = createDeps(longSessionOpts)
+      const finalizeSession = createFinalizeSession(deps)
+
+      await finalizeSession('book-1')
+
+      expect(deps.syncQueue.queueChange).toHaveBeenCalledWith('session', 'session-1', 'upsert')
     })
   })
 

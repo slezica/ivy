@@ -5,8 +5,8 @@
  * Takes current state, returns a plan. No I/O, no side effects.
  */
 
-import { Book, Clip, SyncManifestEntry } from '../storage'
-import { BookBackup, ClipBackup } from './types'
+import { Book, Clip, Session, SyncManifestEntry } from '../storage'
+import { BookBackup, ClipBackup, SessionBackup } from './types'
 
 // -----------------------------------------------------------------------------
 // Input: Sync State
@@ -26,16 +26,24 @@ export interface RemoteClip {
   modifiedAt: number
 }
 
+export interface RemoteSession {
+  backup: SessionBackup
+  fileId: string
+  modifiedAt: number
+}
+
 export interface SyncState {
   local: {
     books: Book[]
     clips: Clip[]
+    sessions: Session[]
   }
   remote: {
     books: Map<string, RemoteBook>
     clips: Map<string, RemoteClip>
+    sessions: Map<string, RemoteSession>
   }
-  manifests: Map<string, SyncManifestEntry> // key: "book:id" or "clip:id"
+  manifests: Map<string, SyncManifestEntry> // key: "book:id", "clip:id", or "session:id"
 }
 
 // -----------------------------------------------------------------------------
@@ -74,6 +82,24 @@ export interface ClipDelete {
   audioFileId: string | null
 }
 
+export interface SessionUpload {
+  session: Session
+}
+
+export interface SessionDownload {
+  remote: RemoteSession
+}
+
+export interface SessionMerge {
+  local: Session
+  remote: RemoteSession
+}
+
+export interface SessionDelete {
+  sessionId: string
+  fileId: string | null
+}
+
 export interface SyncPlan {
   books: {
     uploads: BookUpload[]
@@ -85,6 +111,12 @@ export interface SyncPlan {
     downloads: ClipDownload[]
     merges: ClipMerge[]
     deletes: ClipDelete[]
+  }
+  sessions: {
+    uploads: SessionUpload[]
+    downloads: SessionDownload[]
+    merges: SessionMerge[]
+    deletes: SessionDelete[]
   }
 }
 
@@ -99,6 +131,7 @@ export function planSync(state: SyncState): SyncPlan {
   return {
     books: planBookSync(state),
     clips: planClipSync(state),
+    sessions: planSessionSync(state),
   }
 }
 
@@ -208,6 +241,61 @@ function planClipSync(state: SyncState): SyncPlan['clips'] {
         clipId,
         jsonFileId: remote.jsonFileId,
         audioFileId: remote.audioFileId,
+      })
+    }
+  }
+
+  return { uploads, downloads, merges, deletes }
+}
+
+function planSessionSync(state: SyncState): SyncPlan['sessions'] {
+  const uploads: SessionUpload[] = []
+  const downloads: SessionDownload[] = []
+  const merges: SessionMerge[] = []
+  const deletes: SessionDelete[] = []
+
+  const localSessionsMap = new Map(state.local.sessions.map(s => [s.id, s]))
+  const localSessionIds = new Set(state.local.sessions.map(s => s.id))
+
+  // PUSH: Check each local session for uploads/merges
+  for (const session of state.local.sessions) {
+    const manifest = state.manifests.get(`session:${session.id}`)
+    const remote = state.remote.sessions.get(session.id)
+
+    if (!manifest) {
+      uploads.push({ session })
+    } else if (session.updated_at > (manifest.local_updated_at ?? 0)) {
+      if (remote && hasRemoteChanged(remote.modifiedAt, manifest)) {
+        merges.push({ local: session, remote })
+      } else {
+        uploads.push({ session })
+      }
+    }
+  }
+
+  // PULL: Check each remote session for downloads
+  for (const [sessionId, remote] of state.remote.sessions) {
+    const manifest = state.manifests.get(`session:${sessionId}`)
+    const localSession = localSessionsMap.get(sessionId)
+
+    if (!manifest) {
+      downloads.push({ remote })
+    } else if (!localSession) {
+      // Had manifest but deleted locally → skip (DELETE pass handles it)
+    } else if (hasRemoteChanged(remote.modifiedAt, manifest)) {
+      if (localSession.updated_at <= (manifest.local_updated_at ?? 0)) {
+        downloads.push({ remote })
+      }
+    }
+  }
+
+  // DELETE: Remote sessions that were deleted locally
+  for (const [sessionId, remote] of state.remote.sessions) {
+    const manifest = state.manifests.get(`session:${sessionId}`)
+    if (manifest && !localSessionIds.has(sessionId)) {
+      deletes.push({
+        sessionId,
+        fileId: remote.fileId,
       })
     }
   }

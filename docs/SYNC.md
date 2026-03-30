@@ -9,10 +9,10 @@ Ivy is an audiobook app that runs on multiple devices. The sync system's job is 
 **What gets synced:**
 - Book metadata — positions, titles, artists, artwork, archive/delete state
 - Clips — metadata as JSON, audio as M4A (legacy clips may use MP3)
+- Sessions — listening history (time ranges per book)
 
 **What does NOT get synced:**
 - Full audiobook files (too large; users re-add from source)
-- Listening sessions (local-only analytics)
 
 The system is **offline-first**: the user can make changes with no network at all. Those changes are queued locally and pushed to Drive whenever a sync happens next.
 
@@ -275,6 +275,16 @@ My original note
 Edit from other device
 ```
 
+### Session merge strategy
+
+| Field | Strategy | Rationale |
+|-------|----------|-----------|
+| `started_at` | **Min value wins** | Earlier boundary is more accurate |
+| `ended_at` | **Max value wins** | The user listened longer on one device |
+| `book_id` | **Keep local** | Should always be identical |
+
+Sessions follow the clip deletion model: deleting a session locally removes it from Drive on next sync. New sessions from other devices (no manifest) are downloaded, not deleted.
+
 ### After merging
 
 The merged entity is:
@@ -299,6 +309,8 @@ My Drive/
     clips/                      ← JSON + audio pair per clip
       clip_def456-789xyz.json
       clip_def456-789xyz.m4a
+    sessions/                   ← One JSON file per session
+      session_aabb1122-ccdd.json
 ```
 
 ### File naming convention
@@ -307,8 +319,9 @@ Files are named `{type}_{uuid}.{ext}`:
 - `book_<id>.json` — book metadata
 - `clip_<id>.json` — clip metadata
 - `clip_<id>.m4a` — clip audio (legacy clips may use `.mp3`)
+- `session_<id>.json` — session metadata
 
-The filename regex is: `/^(book|clip)_([a-f0-9-]+)\.(json|mp3|m4a)$/`
+The filename regex is: `/^(book|clip|session)_([a-f0-9-]+)\.(json|mp3|m4a)$/`
 
 ### Clip upload safety
 
@@ -351,7 +364,7 @@ The sync service emits `status` events containing `{ isSyncing, pendingCount, er
 
 ### 3. Data notifications (sync service → store)
 
-After downloading or merging entities, the sync service emits a `data` event with the IDs of changed books and clips. The store re-fetches the affected data from the database, keeping the in-memory state fresh.
+After downloading or merging entities, the sync service emits a `data` event with the IDs of changed books, clips, and sessions. The store re-fetches the affected data from the database, keeping the in-memory state fresh.
 
 ### Store actions
 
