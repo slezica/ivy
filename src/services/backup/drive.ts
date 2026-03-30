@@ -17,6 +17,7 @@ const ROOT_FOLDER_NAME = 'Ivy'
 const FOLDERS = {
   books: 'books',
   clips: 'clips',
+  sessions: 'sessions',
 } as const
 
 export type BackupFolder = keyof typeof FOLDERS
@@ -34,6 +35,7 @@ export class GoogleDriveService {
   private folderIds: Record<BackupFolder, string | null> = {
     books: null,
     clips: null,
+    sessions: null,
   }
   // Track in-flight folder creation to prevent duplicate folders from concurrent requests
   private folderPromises: Record<string, Promise<string> | null> = {}
@@ -191,7 +193,7 @@ export class GoogleDriveService {
    */
   resetCache(): void {
     this.rootFolderId = null
-    this.folderIds = { books: null, clips: null }
+    this.folderIds = { books: null, clips: null, sessions: null }
   }
 
   // ---------------------------------------------------------------------------
@@ -230,6 +232,11 @@ export class GoogleDriveService {
   }
 
   private async createFolderStructure(folder: BackupFolder): Promise<string> {
+    const folderName = FOLDERS[folder]
+    if (!folderName) {
+      throw new Error(`Unknown backup folder: ${String(folder)}`)
+    }
+
     // Ensure root folder exists (with its own lock)
     if (!this.rootFolderId) {
       const rootKey = 'folder:root'
@@ -242,7 +249,7 @@ export class GoogleDriveService {
 
     // Create subfolder
     this.folderIds[folder] = await this.findOrCreateFolder(
-      FOLDERS[folder],
+      folderName,
       this.rootFolderId
     )
 
@@ -296,4 +303,3 @@ export class GoogleDriveService {
     return createData.id
   }
 }
-
