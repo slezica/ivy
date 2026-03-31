@@ -42,7 +42,7 @@ File import (local and URL), metadata editing, archiving, deletion, and restorat
 - `book.uri` can be null — always check before using for playback (null = archived or deleted)
 - Use `book.id` (UUID) as the stable identifier, not `uri` (which changes on restore)
 - Archive/delete are optimistic with rollback — update store first, then DB
-- Every book mutation must queue for sync (`syncQueue.queueChange`)
+- Every book mutation must queue for sync (`db.queueChange`)
 - On restore, existing metadata (title/artist/artwork) wins over ID3 tags — protects user edits
 
 ### Playback
@@ -67,7 +67,7 @@ Bookmarks with their own audio files. See **[docs/CLIPS.md](docs/CLIPS.md)** for
 **Key rules for working with clips:**
 - Check `clip.file_uri !== null` before enabling edit or "go to source"
 - Use `clip.file_uri` (source) when available, fall back to `clip.uri` (clip's own file)
-- Every clip mutation must queue for sync (`syncQueue.queueChange`)
+- Every clip mutation must queue for sync (`db.queueChange`)
 - `note` and `transcription` are separate fields — don't conflate them
 
 ### Transcription
@@ -81,13 +81,13 @@ On-device automatic clip transcription using Whisper. See **[docs/TRANSCRIPTION.
 
 Automatic listening activity tracking. See **[docs/SESSIONS.md](docs/SESSIONS.md)** for the full guide.
 
-**Quick summary:** Main player playback creates sessions (time ranges per book) → `ended_at` updated every 5s while playing → finalized on pause (sessions < 1s are deleted). 5-minute resume window prevents fragmentation. Local-only, not synced.
+**Quick summary:** Main player playback creates sessions (time ranges per book) → `ended_at` updated every 5s while playing → finalized on pause (sessions < 1s are deleted). 5-minute resume window prevents fragmentation. Sessions are synced across devices.
 
 ### Sync and Backup
 
 Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC.md)** for the full guide.
 
-**Quick summary:** Store actions queue changes to SQLite → sync drains queue and does manifest-based incremental push/pull → conflicts resolved by pure merge functions → store notified of remote changes via events.
+**Quick summary:** Store actions queue changes to a local outbox → sync pulls remote changes via Drive's change feed (incremental, not full crawl) → per-entity reconciliation with deterministic merge rules → outbox drained with update-in-place uploads and stale detection → store notified of remote changes via events.
 
 
 ## Project Overview
@@ -151,13 +151,11 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   │   └── whisper.ts          # On-device speech-to-text (whisper.rn)
   │   ├── backup/
   │   │   ├── auth.ts             # Google OAuth (@react-native-google-signin)
-  │   │   ├── drive.ts            # Google Drive REST API wrapper
-  │   │   ├── queue.ts            # Offline change queue (persists pending sync ops)
-  │   │   ├── sync.ts             # Sync orchestrator (state → plan → execute)
-  │   │   ├── planner.ts          # Pure sync planning (what ops are needed)
-  │   │   ├── merge.ts            # Pure conflict resolution (book/clip merge)
+  │   │   ├── drive.ts            # Google Drive REST API (upload, download, changes, update-in-place)
+  │   │   ├── sync.ts             # Sync engine (pull via change feed, push via outbox, per-entity reconcile)
+  │   │   ├── merge.ts            # Pure conflict resolution (book/clip/session merge)
   │   │   ├── types.ts            # Shared backup types
-  │   │   └── __tests__/          # Unit tests for planner and merge
+  │   │   └── __tests__/          # Unit tests for merge and sync
   │   └── system/
   │       └── sharing.ts          # Share clips via native share sheet
   ├── screens/
@@ -232,12 +230,15 @@ name TEXT
 duration INTEGER               -- milliseconds
 position INTEGER               -- milliseconds (resume position)
 updated_at INTEGER             -- timestamp (last modification)
+updated_by TEXT                -- device ID that last modified this entity
 title TEXT
 artist TEXT
 artwork TEXT                   -- base64 data URI
 file_size INTEGER              -- File size in bytes (indexed for fast lookup)
 fingerprint BLOB               -- First 4KB of file (for exact matching)
 hidden INTEGER NOT NULL DEFAULT 0  -- Soft-deleted (1 = removed from library)
+chapters TEXT                  -- JSON array of chapter metadata
+speed INTEGER NOT NULL DEFAULT 100  -- Playback speed (100 = 1.0x)
 ```
 
 **clips table:**
@@ -251,6 +252,7 @@ note TEXT
 transcription TEXT             -- Auto-generated from audio (Whisper)
 created_at INTEGER
 updated_at INTEGER
+updated_by TEXT                -- device ID that last modified this entity
 ```
 
 **sessions table** (listening history):
@@ -259,30 +261,40 @@ id TEXT PRIMARY KEY            -- UUID
 book_id TEXT NOT NULL          -- References files.id
 started_at INTEGER NOT NULL    -- Timestamp when session began
 ended_at INTEGER NOT NULL      -- Timestamp when session ended (updated during playback)
+updated_at INTEGER
+updated_by TEXT                -- device ID that last modified this entity
 ```
 
-**sync_manifest table** (tracks last-synced state per entity):
+**sync_manifest table** (transport metadata — maps entities to Drive file IDs):
 ```sql
-entity_type TEXT NOT NULL      -- 'book' | 'clip'
+entity_type TEXT NOT NULL      -- 'book' | 'clip' | 'session'
 entity_id TEXT NOT NULL
-local_updated_at INTEGER       -- Local timestamp at last sync
-remote_updated_at INTEGER      -- Remote timestamp at last sync
+local_updated_at INTEGER       -- Legacy field (not used by new sync engine)
+remote_updated_at INTEGER      -- Legacy field (not used by new sync engine)
 remote_file_id TEXT            -- Drive file ID (JSON)
 remote_audio_file_id TEXT      -- Drive file ID (audio, clips only)
 synced_at INTEGER NOT NULL
 PRIMARY KEY (entity_type, entity_id)
 ```
 
-**sync_queue table** (offline operation queue):
+**sync_queue table** (outbox — pending changes to push):
 ```sql
 id TEXT PRIMARY KEY
-entity_type TEXT NOT NULL      -- 'book' | 'clip'
+entity_type TEXT NOT NULL      -- 'book' | 'clip' | 'session'
 entity_id TEXT NOT NULL
 operation TEXT NOT NULL        -- 'upsert' | 'delete'
 queued_at INTEGER NOT NULL
+updated_at_when_queued INTEGER  -- Entity's updated_at when queued (stale detection)
 attempts INTEGER DEFAULT 0     -- Retry count (max 3)
 last_error TEXT
 UNIQUE(entity_type, entity_id) -- One pending op per entity
+```
+
+**sync_checkpoint table** (Drive changes cursor):
+```sql
+id INTEGER PRIMARY KEY CHECK (id = 1)
+last_page_token TEXT           -- Drive changes.list page token
+last_full_reconcile_at INTEGER -- Timestamp of last full reconcile
 ```
 
 **sync_metadata table** (key-value sync state):
