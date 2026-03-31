@@ -67,14 +67,14 @@ These may become appropriate later, but they are not required to make sync fast 
 Each synced entity should include:
 
 - `updated_at: number`
-- `device_id: string`
+- `updated_by: string` (device ID)
 
 ### Meaning
 
 - `updated_at` is the primary version marker for sync comparison
-- `device_id` identifies the device that produced the current state
+- `updated_by` identifies the device that produced the current state
 
-`device_id` is not intended to establish causality. It is only a deterministic tie-breaker when timestamps alone are insufficient or ambiguous.
+`updated_by` is not intended to establish causality. It is only a deterministic tie-breaker when timestamps alone are insufficient or ambiguous.
 
 ### New Sync Tables
 
@@ -94,7 +94,7 @@ This stores the Drive changes cursor.
 - `entity_type TEXT NOT NULL`
 - `entity_id TEXT NOT NULL`
 - `operation TEXT NOT NULL`
-- `updated_at_at_enqueue INTEGER NOT NULL`
+- `updated_at_when_queued INTEGER NOT NULL`
 - `queued_at INTEGER NOT NULL`
 - `attempts INTEGER DEFAULT 0`
 - `last_error TEXT`
@@ -131,7 +131,19 @@ Each JSON payload must include:
 - `id`
 - synced entity fields
 - `updated_at`
-- `device_id`
+- `updated_by`
+
+## Drive Upload Strategy: Update In-Place
+
+The current sync system uses a delete-then-create pattern for every upload, which means Drive file IDs change on every push. The new protocol should use Drive's update API (`PATCH /upload/drive/v3/files/{fileId}`) to modify files in place when a `remote_file_id` is already known.
+
+Benefits:
+
+- Stable file IDs across versions (manifest mappings don't churn)
+- One request instead of list + delete + create
+- Cleaner `changes.list` feed (one update event instead of a delete + create pair)
+
+Create-new remains the path for entities with no known remote file ID (first upload). Update-in-place is the path for all subsequent pushes.
 
 ## Local Mutation Rules
 
@@ -142,7 +154,7 @@ Whenever a synced entity changes locally:
 3. Set `device_id = deviceId`.
 4. Upsert an outbox item for that entity.
 
-The outbox item should store the entity's `updated_at_at_enqueue`.
+The outbox item should store the entity's `updated_at_when_queued`.
 
 That field matters for same-device concurrency: if an upload finishes for an older entity timestamp, but the local entity has already advanced, the upload must be treated as stale and the outbox entry must remain or be refreshed.
 
@@ -214,7 +226,7 @@ Useful cases:
 
 ### Case 1: Same logical version
 
-If local and remote payloads carry the same `updated_at`, same `device_id`, and equivalent synced fields, do nothing.
+If local and remote payloads carry the same `updated_at`, same `updated_by`, and equivalent synced fields, do nothing.
 
 ### Case 2: Remote is ahead
 
@@ -231,7 +243,7 @@ If both sides changed and neither obviously dominates, run the entity-specific m
 This protocol does not attempt to encode full ancestry. It uses:
 
 - `updated_at`
-- `device_id`
+- `updated_by`
 
 as a practical comparison stack. That is less precise than vector clocks, but much simpler.
 
@@ -308,7 +320,7 @@ Ivy needs a deterministic total order for ambiguous cases.
 Use:
 
 1. later `updated_at` wins when one side is clearly newer
-2. if still tied, lexicographically larger `device_id` wins
+2. if still tied, lexicographically larger `updated_by` wins
 
 That final rule is arbitrary, but convergence requires an arbitrary rule somewhere. All devices must make the same choice when faced with the same pair of states.
 
@@ -390,9 +402,9 @@ The key idea is to preserve transport continuity while replacing decision-making
 
 Ship migrations that:
 
-- add `device_id` where needed for synced entities
+- add `updated_by` where needed for synced entities
 - add `sync_checkpoint`
-- add `updated_at_at_enqueue` to the queue or create `sync_outbox`
+- add `updated_at_when_queued` to the queue or create `sync_outbox`
 - keep current manifest rows in place
 
 At this stage:
@@ -406,7 +418,7 @@ At this stage:
 Before the new sync loop becomes active, all sync-relevant local actions should:
 
 - stamp `updated_at`
-- stamp `device_id`
+- stamp `updated_by`
 - enqueue outbox-compatible entries
 
 This ensures that once the new engine is enabled, locally modified entities already carry the metadata it needs.
@@ -435,7 +447,7 @@ Existing `sync_queue` items must be migrated cleanly.
 
 Recommended approach:
 
-- if `sync_queue` is adapted in place, backfill `updated_at_at_enqueue` from the entity's current `updated_at`
+- if `sync_queue` is adapted in place, backfill `updated_at_when_queued` from the entity's current `updated_at`
 - if `sync_outbox` is a new table, copy pending queue rows into it during migration
 - preserve `attempts` and `last_error`
 
@@ -511,7 +523,7 @@ If the new engine misbehaves:
 
 - disable the feature flag
 - fall back to the old planner path temporarily
-- preserve newly written `updated_at` and `device_id` fields
+- preserve newly written `updated_at` and `updated_by` fields
 - do not delete queue/outbox rows during rollback
 
 Because remote files remain per-entity JSON objects in both designs, rollback should be operationally possible as long as old code is still present.
@@ -549,17 +561,17 @@ It keeps only the minimum pieces needed for an efficient eventually-consistent s
 
 ### Phase 1: Schema
 
-- add `device_id` to books, clips, and sessions
+- add `updated_by` to books, clips, and sessions
 - add `sync_checkpoint`
 - replace or adapt `sync_queue` into `sync_outbox`
-- add `updated_at_at_enqueue` to the outbox shape
+- add `updated_at_when_queued` to the outbox shape
 - simplify manifest usage to remote file ID storage
 
 ### Phase 2: Local Mutation Path
 
 - update every sync-relevant action to stamp `updated_at`
-- stamp `device_id`
-- enqueue outbox entries with `updated_at_at_enqueue`
+- stamp `updated_by`
+- enqueue outbox entries with `updated_at_when_queued`
 
 ### Phase 3: Drive Changes Integration
 
@@ -580,7 +592,7 @@ It keeps only the minimum pieces needed for an efficient eventually-consistent s
 
 ### Phase 6: Migration and Safety
 
-- support entities missing `device_id` by defaulting old records
+- support entities missing `updated_by` by defaulting old records
 - add a recovery path to rebuild checkpoint state
 - add integration tests for same-device and cross-device concurrency
 
