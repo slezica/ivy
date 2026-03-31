@@ -7,6 +7,12 @@ import type { TranscriptionQueueEvents } from '../services/transcription/queue'
 import { MAIN_PLAYER_OWNER_ID, throttle, throttleSameArgs } from '../utils'
 import type { AppState } from './types'
 
+// Thin shim so action deps that expect syncQueue keep working
+const syncQueue = {
+  queueChange: services.db.queueChange.bind(services.db),
+  getCount: services.db.getQueueCount.bind(services.db),
+}
+
 // Action factories
 import { createFetchBooks } from '../actions/fetch_books'
 import { createFetchClips } from '../actions/fetch_clips'
@@ -47,14 +53,14 @@ import { createInitializeApplication } from '../actions/initialize_application'
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
-  const deps = { set, get, ...services}
-  const { db, audio, files, syncQueue, transcription, sync } = services
+  const deps = { set, get, ...services, syncQueue }
+  const { db, audio, files, transcription, sync } = services
 
   const initialSettings = db.getSettings()
 
   // Throttled helpers
   const queuePositionSync = throttle((bookId: string) => {
-    syncQueue.queueChange('book', bookId, 'upsert').catch(() => {})
+    db.queueChange('book', bookId, 'upsert').catch(() => {})
   }, 30_000)
 
   const throttledTrackSession = throttleSameArgs((bookId: string) => {

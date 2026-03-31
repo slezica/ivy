@@ -1,5 +1,5 @@
 export { DatabaseService } from './database'
-export type { Book, Chapter, Clip, ClipWithFile, Session, SessionWithBook, Settings, SyncEntityType, SyncOperation, SyncManifestEntry, SyncQueueItem } from './database'
+export type { Book, Chapter, Clip, ClipWithFile, Session, SessionWithBook, Settings, SyncEntityType, SyncOperation, SyncManifestEntry, SyncOutboxItem, SyncCheckpoint } from './database'
 
 export { FileStorageService } from './files'
 

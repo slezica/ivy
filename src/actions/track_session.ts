@@ -1,5 +1,4 @@
-import type { DatabaseService, SessionWithBook } from '../services'
-import type { SyncQueueService } from '../services/backup/queue'
+import type { DatabaseService, SessionWithBook, SyncQueueService } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
 import { createLogger } from '../utils'
 

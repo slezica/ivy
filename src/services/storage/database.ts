@@ -32,6 +32,7 @@ export interface Book {
   duration: number         // milliseconds
   position: number         // milliseconds (resume position)
   updated_at: number       // timestamp (last position update or modification)
+  updated_by: string | null // device ID that last modified this entity
   title: string | null
   artist: string | null
   artwork: string | null   // base64 data URI
@@ -52,6 +53,7 @@ export interface Clip {
   transcription: string | null  // Auto-generated from audio
   created_at: number
   updated_at: number
+  updated_by: string | null // device ID that last modified this entity
 }
 
 export interface ClipWithFile extends Clip {
@@ -68,6 +70,7 @@ export interface Session {
   started_at: number
   ended_at: number
   updated_at: number
+  updated_by: string | null // device ID that last modified this entity
 }
 
 export interface SessionWithBook extends Session {
@@ -89,21 +92,27 @@ export type SyncOperation = 'upsert' | 'delete'
 export interface SyncManifestEntry {
   entity_type: SyncEntityType
   entity_id: string
-  local_updated_at: number | null   // Local timestamp at last sync
-  remote_updated_at: number | null  // Remote timestamp at last sync
+  local_updated_at: number | null   // Legacy (unused by new sync engine)
+  remote_updated_at: number | null  // Legacy (unused by new sync engine)
   remote_file_id: string | null     // Drive file ID (JSON)
-  remote_audio_file_id: string | null // Drive file ID (MP3, clips only)
+  remote_audio_file_id: string | null // Drive file ID (audio, clips only)
   synced_at: number
 }
 
-export interface SyncQueueItem {
+export interface SyncOutboxItem {
   id: string
   entity_type: SyncEntityType
   entity_id: string
   operation: SyncOperation
+  updated_at_when_queued: number     // Entity's updated_at when queued (for stale detection)
   queued_at: number
   attempts: number
   last_error: string | null
+}
+
+export interface SyncCheckpoint {
+  last_page_token: string | null
+  last_full_reconcile_at: number | null
 }
 
 // =============================================================================
@@ -234,6 +243,29 @@ const migrations: Migration[] = [
     db.execSync('ALTER TABLE sessions ADD COLUMN updated_at INTEGER')
     db.execSync('UPDATE sessions SET updated_at = ended_at WHERE updated_at IS NULL')
   },
+
+  // Migration 4: New sync protocol — add updated_by, sync_checkpoint, outbox fields
+  (db) => {
+    // Add updated_by to all synced entity tables
+    db.execSync('ALTER TABLE files ADD COLUMN updated_by TEXT')
+    db.execSync('ALTER TABLE clips ADD COLUMN updated_by TEXT')
+    db.execSync('ALTER TABLE sessions ADD COLUMN updated_by TEXT')
+
+    // Sync checkpoint (Drive changes cursor)
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS sync_checkpoint (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        last_page_token TEXT,
+        last_full_reconcile_at INTEGER
+      )
+    `)
+    db.execSync('INSERT OR IGNORE INTO sync_checkpoint (id) VALUES (1)')
+
+    // Add updated_at_when_queued to sync_queue for stale upload detection
+    db.execSync('ALTER TABLE sync_queue ADD COLUMN updated_at_when_queued INTEGER')
+    // Backfill: use current timestamp for existing queue items
+    db.execSync('UPDATE sync_queue SET updated_at_when_queued = queued_at WHERE updated_at_when_queued IS NULL')
+  },
 ]
 
 // =============================================================================
@@ -253,6 +285,23 @@ function toBook(row: BookRow): Book {
 
 export class DatabaseService {
   private db: SQLite.SQLiteDatabase
+  private _deviceId: string | null = null
+
+  /** Stable device identifier, generated on first access and persisted. */
+  get deviceId(): string {
+    if (!this._deviceId) {
+      this._deviceId = this.getSyncMetadata('deviceId')
+      if (!this._deviceId) {
+        this._deviceId = generateId()
+        this.db.runSync(
+          `INSERT INTO sync_metadata (key, value) VALUES (?, ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+          ['deviceId', this._deviceId]
+        )
+      }
+    }
+    return this._deviceId
+  }
 
   constructor() {
     this.db = SQLite.openDatabaseSync('audioplayer.db')
@@ -336,15 +385,15 @@ export class DatabaseService {
     const now = Date.now()
     const chaptersJson = chapters?.length ? JSON.stringify(chapters) : null
     await this.db.runAsync(
-      `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint, chapters)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO files (id, uri, name, duration, position, updated_at, updated_by, title, artist, artwork, file_size, fingerprint, chapters)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          uri = excluded.uri, name = excluded.name, duration = excluded.duration,
-         position = excluded.position, updated_at = excluded.updated_at,
+         position = excluded.position, updated_at = excluded.updated_at, updated_by = excluded.updated_by,
          title = excluded.title, artist = excluded.artist, artwork = excluded.artwork,
          file_size = excluded.file_size, fingerprint = excluded.fingerprint,
          chapters = excluded.chapters`,
-      [id, uri, name, duration, position, now, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null, chaptersJson]
+      [id, uri, name, duration, position, now, this.deviceId, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null, chaptersJson]
     )
   }
 
@@ -367,8 +416,8 @@ export class DatabaseService {
     const now = Date.now()
     const chaptersJson = chapters?.length ? JSON.stringify(chapters) : null
     await this.db.runAsync(
-      'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ?, hidden = 0, chapters = ? WHERE id = ?',
-      [uri, name, duration, now, title, artist, artwork, fileSize, fingerprint, chaptersJson, id]
+      'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, updated_by = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ?, hidden = 0, chapters = ? WHERE id = ?',
+      [uri, name, duration, now, this.deviceId, title, artist, artwork, fileSize, fingerprint, chaptersJson, id]
     )
   }
 
@@ -377,9 +426,10 @@ export class DatabaseService {
    * Sets uri to null and hidden to true. File deletion is caller's responsibility.
    */
   async hideBook(id: string): Promise<void> {
+    const now = Date.now()
     await this.db.runAsync(
-      'UPDATE files SET uri = NULL, hidden = 1 WHERE id = ?',
-      [id]
+      'UPDATE files SET uri = NULL, hidden = 1, updated_at = ?, updated_by = ? WHERE id = ?',
+      [now, this.deviceId, id]
     )
   }
 
@@ -389,24 +439,24 @@ export class DatabaseService {
   async touchBook(id: string): Promise<void> {
     const now = Date.now()
     await this.db.runAsync(
-      'UPDATE files SET updated_at = ? WHERE id = ?',
-      [now, id]
+      'UPDATE files SET updated_at = ?, updated_by = ? WHERE id = ?',
+      [now, this.deviceId, id]
     )
   }
 
   async updateBookMetadata(id: string, title: string | null, artist: string | null): Promise<void> {
     const now = Date.now()
     await this.db.runAsync(
-      'UPDATE files SET title = ?, artist = ?, updated_at = ? WHERE id = ?',
-      [title, artist, now, id]
+      'UPDATE files SET title = ?, artist = ?, updated_at = ?, updated_by = ? WHERE id = ?',
+      [title, artist, now, this.deviceId, id]
     )
   }
 
   updateBookPosition(id: string, position: number): void {
     const now = Date.now()
     this.db.runAsync(
-      'UPDATE files SET position = ?, updated_at = ? WHERE id = ?',
-      [position, now, id]
+      'UPDATE files SET position = ?, updated_at = ?, updated_by = ? WHERE id = ?',
+      [position, now, this.deviceId, id]
     ).catch((error) => {
       // Silently ignore during app transitions/resets
       console.debug('Failed to update book position (non-critical):', error)
@@ -416,15 +466,16 @@ export class DatabaseService {
   async updateBookSpeed(id: string, speed: number): Promise<void> {
     const now = Date.now()
     await this.db.runAsync(
-      'UPDATE files SET speed = ?, updated_at = ? WHERE id = ?',
-      [speed, now, id]
+      'UPDATE files SET speed = ?, updated_at = ?, updated_by = ? WHERE id = ?',
+      [speed, now, this.deviceId, id]
     )
   }
 
   async archiveBook(id: string): Promise<void> {
+    const now = Date.now()
     await this.db.runAsync(
-      'UPDATE files SET uri = NULL WHERE id = ?',
-      [id]
+      'UPDATE files SET uri = NULL, updated_at = ?, updated_by = ? WHERE id = ?',
+      [now, this.deviceId, id]
     )
   }
 
@@ -465,8 +516,8 @@ export class DatabaseService {
   async createClip(id: string, sourceId: string, uri: string, start: number, duration: number, note: string): Promise<Clip> {
     const now = Date.now()
     await this.db.runAsync(
-      'INSERT INTO clips (id, source_id, uri, start, duration, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, sourceId, uri, start, duration, note, now, now]
+      'INSERT INTO clips (id, source_id, uri, start, duration, note, created_at, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, sourceId, uri, start, duration, note, now, now, this.deviceId]
     )
 
     return {
@@ -479,13 +530,14 @@ export class DatabaseService {
       transcription: null,
       created_at: now,
       updated_at: now,
+      updated_by: this.deviceId,
     }
   }
 
   async updateClip(id: string, updates: { note?: string; start?: number; duration?: number; uri?: string; transcription?: string | null }): Promise<void> {
     const now = Date.now()
-    const setClauses: string[] = ['updated_at = ?']
-    const values: (string | number | null)[] = [now]
+    const setClauses: string[] = ['updated_at = ?', 'updated_by = ?']
+    const values: (string | number | null)[] = [now, this.deviceId]
 
     if (updates.note !== undefined) {
       setClauses.push('note = ?')
@@ -539,6 +591,7 @@ export class DatabaseService {
     duration: number,
     position: number,
     updated_at: number,
+    updated_by: string | null,
     title: string | null,
     artist: string | null,
     artwork: string | null,
@@ -547,19 +600,17 @@ export class DatabaseService {
     hidden: boolean = false,
     speed: number = 100
   ): Promise<void> {
-    // Insert or update-if-newer in a single statement.
-    // The WHERE on the UPDATE branch ensures we only overwrite with newer data.
     await this.db.runAsync(
-      `INSERT INTO files (id, uri, name, duration, position, updated_at, title, artist, artwork, file_size, fingerprint, hidden, speed)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO files (id, uri, name, duration, position, updated_at, updated_by, title, artist, artwork, file_size, fingerprint, hidden, speed)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name, duration = excluded.duration,
-         position = excluded.position, updated_at = excluded.updated_at,
+         position = excluded.position, updated_at = excluded.updated_at, updated_by = excluded.updated_by,
          title = excluded.title, artist = excluded.artist, artwork = excluded.artwork,
          file_size = excluded.file_size, fingerprint = excluded.fingerprint, hidden = excluded.hidden,
          speed = excluded.speed
        WHERE excluded.updated_at > files.updated_at`,
-      [id, name, duration, position, updated_at, title, artist, artwork, fileSize, fingerprint, hidden ? 1 : 0, speed]
+      [id, name, duration, position, updated_at, updated_by, title, artist, artwork, fileSize, fingerprint, hidden ? 1 : 0, speed]
     )
   }
 
@@ -575,18 +626,19 @@ export class DatabaseService {
     note: string,
     transcription: string | null,
     created_at: number,
-    updated_at: number
+    updated_at: number,
+    updated_by: string | null = null
   ): Promise<void> {
     await this.db.runAsync(
-      `INSERT INTO clips (id, source_id, uri, start, duration, note, transcription, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO clips (id, source_id, uri, start, duration, note, transcription, created_at, updated_at, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          source_id = excluded.source_id, uri = excluded.uri,
          start = excluded.start, duration = excluded.duration,
          note = excluded.note, transcription = excluded.transcription,
-         updated_at = excluded.updated_at
+         updated_at = excluded.updated_at, updated_by = excluded.updated_by
        WHERE excluded.updated_at > clips.updated_at`,
-      [id, sourceId, uri, start, duration, note, transcription, created_at, updated_at]
+      [id, sourceId, uri, start, duration, note, transcription, created_at, updated_at, updated_by]
     )
   }
 
@@ -621,16 +673,17 @@ export class DatabaseService {
     const now = Date.now()
     const id = generateId()
     await this.db.runAsync(
-      'INSERT INTO sessions (id, book_id, started_at, ended_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-      [id, bookId, now, now, now]
+      'INSERT INTO sessions (id, book_id, started_at, ended_at, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, bookId, now, now, now, this.deviceId]
     )
-    return { id, book_id: bookId, started_at: now, ended_at: now, updated_at: now }
+    return { id, book_id: bookId, started_at: now, ended_at: now, updated_at: now, updated_by: this.deviceId }
   }
 
   updateSessionEndedAt(sessionId: string, endedAt: number): void {
+    const now = Date.now()
     this.db.runAsync(
-      'UPDATE sessions SET ended_at = ?, updated_at = ? WHERE id = ?',
-      [endedAt, Date.now(), sessionId]
+      'UPDATE sessions SET ended_at = ?, updated_at = ?, updated_by = ? WHERE id = ?',
+      [endedAt, now, this.deviceId, sessionId]
     ).catch((error) => {
       console.debug('Failed to update session ended_at (non-critical):', error)
     })
@@ -657,18 +710,20 @@ export class DatabaseService {
     bookId: string,
     startedAt: number,
     endedAt: number,
-    updatedAt: number
+    updatedAt: number,
+    updatedBy: string | null = null
   ): Promise<void> {
     await this.db.runAsync(
-      `INSERT INTO sessions (id, book_id, started_at, ended_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO sessions (id, book_id, started_at, ended_at, updated_at, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          book_id = excluded.book_id,
          started_at = excluded.started_at,
          ended_at = excluded.ended_at,
-         updated_at = excluded.updated_at
+         updated_at = excluded.updated_at,
+         updated_by = excluded.updated_by
        WHERE excluded.updated_at > sessions.updated_at`,
-      [id, bookId, startedAt, endedAt, updatedAt]
+      [id, bookId, startedAt, endedAt, updatedAt, updatedBy]
     )
   }
 
@@ -739,7 +794,10 @@ export class DatabaseService {
     this.db.runSync('DELETE FROM sync_manifest')
     this.db.runSync('DELETE FROM sync_queue')
     this.db.runSync('DELETE FROM sync_metadata')
+    this.db.runSync('DELETE FROM sync_checkpoint WHERE id = 1')
+    this.db.runSync('INSERT OR IGNORE INTO sync_checkpoint (id) VALUES (1)')
     this.db.runSync('UPDATE settings SET sync_enabled = 0 WHERE id = 1')
+    this._deviceId = null
   }
 
   // ---------------------------------------------------------------------------
@@ -817,61 +875,23 @@ export class DatabaseService {
   }
 
   // ---------------------------------------------------------------------------
-  // Sync Queue
+  // Sync Queue / Outbox
   // ---------------------------------------------------------------------------
-
-  async getQueueItem(entityType: SyncEntityType, entityId: string): Promise<SyncQueueItem | null> {
-    const result = await this.db.getFirstAsync<SyncQueueItem>(
-      'SELECT * FROM sync_queue WHERE entity_type = ? AND entity_id = ?',
-      [entityType, entityId]
-    )
-    return result || null
-  }
-
-  async getAllQueueItems(): Promise<SyncQueueItem[]> {
-    return this.db.getAllAsync<SyncQueueItem>(
-      'SELECT * FROM sync_queue ORDER BY queued_at ASC'
-    )
-  }
-
-  async getPendingQueueItems(maxAttempts: number = 3): Promise<SyncQueueItem[]> {
-    return this.db.getAllAsync<SyncQueueItem>(
-      'SELECT * FROM sync_queue WHERE attempts < ? ORDER BY queued_at ASC',
-      [maxAttempts]
-    )
-  }
 
   async queueChange(entityType: SyncEntityType, entityId: string, operation: SyncOperation): Promise<void> {
     const now = Date.now()
     const id = generateId()
     await this.db.runAsync(
-      `INSERT INTO sync_queue (id, entity_type, entity_id, operation, queued_at, attempts, last_error)
-       VALUES (?, ?, ?, ?, ?, 0, NULL)
+      `INSERT INTO sync_queue (id, entity_type, entity_id, operation, queued_at, updated_at_when_queued, attempts, last_error)
+       VALUES (?, ?, ?, ?, ?, ?, 0, NULL)
        ON CONFLICT(entity_type, entity_id) DO UPDATE SET
          operation = excluded.operation,
          queued_at = excluded.queued_at,
+         updated_at_when_queued = excluded.updated_at_when_queued,
          attempts = 0,
          last_error = NULL`,
-      [id, entityType, entityId, operation, now]
+      [id, entityType, entityId, operation, now, now]
     )
-  }
-
-  async updateQueueItemAttempt(entityType: SyncEntityType, entityId: string, error: string | null): Promise<void> {
-    await this.db.runAsync(
-      'UPDATE sync_queue SET attempts = attempts + 1, last_error = ? WHERE entity_type = ? AND entity_id = ?',
-      [error, entityType, entityId]
-    )
-  }
-
-  async removeFromQueue(entityType: SyncEntityType, entityId: string): Promise<void> {
-    await this.db.runAsync(
-      'DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ?',
-      [entityType, entityId]
-    )
-  }
-
-  async clearQueue(): Promise<void> {
-    await this.db.runAsync('DELETE FROM sync_queue')
   }
 
   async getQueueCount(maxAttempts: number = 3): Promise<number> {
@@ -921,6 +941,62 @@ export class DatabaseService {
 
   async setDeviceId(deviceId: string): Promise<void> {
     await this.setSyncMetadata('deviceId', deviceId)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sync Checkpoint
+  // ---------------------------------------------------------------------------
+
+  getCheckpoint(): SyncCheckpoint {
+    const row = this.db.getFirstSync<SyncCheckpoint>(
+      'SELECT last_page_token, last_full_reconcile_at FROM sync_checkpoint WHERE id = 1'
+    )
+    return row ?? { last_page_token: null, last_full_reconcile_at: null }
+  }
+
+  async setCheckpointPageToken(token: string): Promise<void> {
+    await this.db.runAsync(
+      'UPDATE sync_checkpoint SET last_page_token = ? WHERE id = 1',
+      [token]
+    )
+  }
+
+  async setCheckpointFullReconcile(timestamp: number): Promise<void> {
+    await this.db.runAsync(
+      'UPDATE sync_checkpoint SET last_full_reconcile_at = ? WHERE id = 1',
+      [timestamp]
+    )
+  }
+
+  async clearCheckpoint(): Promise<void> {
+    await this.db.runAsync(
+      'UPDATE sync_checkpoint SET last_page_token = NULL, last_full_reconcile_at = NULL WHERE id = 1'
+    )
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sync Outbox (adapted from sync_queue)
+  // ---------------------------------------------------------------------------
+
+  async getOutboxItems(maxAttempts: number = 3): Promise<SyncOutboxItem[]> {
+    return this.db.getAllAsync<SyncOutboxItem>(
+      'SELECT * FROM sync_queue WHERE attempts < ? ORDER BY queued_at ASC',
+      [maxAttempts]
+    )
+  }
+
+  async removeOutboxItem(entityType: SyncEntityType, entityId: string): Promise<void> {
+    await this.db.runAsync(
+      'DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ?',
+      [entityType, entityId]
+    )
+  }
+
+  async updateOutboxItemAttempt(entityType: SyncEntityType, entityId: string, error: string | null): Promise<void> {
+    await this.db.runAsync(
+      'UPDATE sync_queue SET attempts = attempts + 1, last_error = ? WHERE entity_type = ? AND entity_id = ?',
+      [error, entityType, entityId]
+    )
   }
 }
 

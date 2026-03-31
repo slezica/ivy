@@ -3,6 +3,9 @@
  *
  * Pure functions for merging local and remote entities during sync conflicts.
  * No I/O, no side effects - just data transformation.
+ *
+ * Version comparison uses (updated_at, updated_by) where updated_by is a
+ * deterministic tie-breaker when timestamps match.
  */
 
 import { Book, Clip, Session } from '../storage'
@@ -18,6 +21,30 @@ export interface MergeResult<T> {
 }
 
 // -----------------------------------------------------------------------------
+// Version Comparison
+// -----------------------------------------------------------------------------
+
+/**
+ * Determine which side "wins" for last-writer-wins fields.
+ * Returns true if local wins, false if remote wins.
+ *
+ * Primary: higher updated_at wins.
+ * Tie-breaker: lexicographically larger updated_by wins.
+ */
+function localWins(
+  localUpdatedAt: number,
+  localUpdatedBy: string | null,
+  remoteUpdatedAt: number,
+  remoteUpdatedBy: string | null,
+): boolean {
+  if (localUpdatedAt !== remoteUpdatedAt) {
+    return localUpdatedAt > remoteUpdatedAt
+  }
+  // Tie-break: larger device ID wins. Null sorts lower than any string.
+  return (localUpdatedBy ?? '') >= (remoteUpdatedBy ?? '')
+}
+
+// -----------------------------------------------------------------------------
 // Book Merge
 // -----------------------------------------------------------------------------
 
@@ -27,26 +54,27 @@ export interface MergeResult<T> {
  * Strategy:
  * - hidden: hidden-wins (if either side is hidden, result is hidden)
  * - position: max value wins (user progressed further on one device)
- * - metadata (title, artist, artwork): last-write-wins based on updated_at
+ * - metadata (title, artist, artwork, speed): last-writer-wins
  */
 export function mergeBook(local: Book, remote: BookBackup): MergeResult<Book> {
   const mergedHidden = local.hidden || (remote.hidden ?? false)
   const mergedPosition = Math.max(local.position, remote.position)
-  const localWins = local.updated_at >= remote.updated_at
+  const lww = localWins(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)
 
   const merged: Book = {
     ...local,
     hidden: mergedHidden,
     position: mergedPosition,
-    title: localWins ? local.title : remote.title,
-    artist: localWins ? local.artist : remote.artist,
-    artwork: localWins ? local.artwork : remote.artwork,
-    speed: localWins ? local.speed : (remote.speed ?? local.speed),
+    title: lww ? local.title : remote.title,
+    artist: lww ? local.artist : remote.artist,
+    artwork: lww ? local.artwork : remote.artwork,
+    speed: lww ? local.speed : (remote.speed ?? local.speed),
     updated_at: Date.now(),
+    updated_by: lww ? local.updated_by : remote.updated_by,
   }
 
   const hiddenNote = mergedHidden ? ', hidden: true' : ''
-  const resolution = `Position: ${mergedPosition}ms (max), metadata: ${localWins ? 'local' : 'remote'} wins${hiddenNote}`
+  const resolution = `Position: ${mergedPosition}ms (max), metadata: ${lww ? 'local' : 'remote'} wins${hiddenNote}`
 
   return { merged, resolution }
 }
@@ -59,28 +87,34 @@ export function mergeBook(local: Book, remote: BookBackup): MergeResult<Book> {
  * Merge a local clip with a remote backup.
  *
  * Strategy:
- * - note: concatenate with conflict marker if both have different non-empty notes
- * - start, duration: last-write-wins based on updated_at
- * - transcription: prefer non-null (either side)
+ * - note: last-writer-wins
+ * - start, duration: last-writer-wins
+ * - transcription: prefer non-null; if both non-null, last-writer-wins
  */
 export function mergeClip(local: Clip, remote: ClipBackup): MergeResult<Clip> {
-  const localWins = local.updated_at >= remote.updated_at
+  const lww = localWins(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)
 
-  const mergedNote = mergeNotes(local.note, remote.note)
-  const notesConflicted = mergedNote !== local.note && mergedNote !== remote.note
+  // Transcription: prefer non-null, then LWW
+  let mergedTranscription: string | null
+  if (local.transcription && !remote.transcription) {
+    mergedTranscription = local.transcription
+  } else if (!local.transcription && remote.transcription) {
+    mergedTranscription = remote.transcription
+  } else {
+    mergedTranscription = lww ? local.transcription : remote.transcription
+  }
 
   const merged: Clip = {
     ...local,
-    note: mergedNote,
-    start: localWins ? local.start : remote.start,
-    duration: localWins ? local.duration : remote.duration,
-    transcription: local.transcription ?? remote.transcription,
+    note: lww ? local.note : remote.note,
+    start: lww ? local.start : remote.start,
+    duration: lww ? local.duration : remote.duration,
+    transcription: mergedTranscription,
     updated_at: Date.now(),
+    updated_by: lww ? local.updated_by : remote.updated_by,
   }
 
-  const resolution = notesConflicted
-    ? 'Notes concatenated with conflict marker'
-    : `Bounds: ${localWins ? 'local' : 'remote'} wins`
+  const resolution = `All fields: ${lww ? 'local' : 'remote'} wins (LWW)`
 
   return { merged, resolution }
 }
@@ -104,33 +138,11 @@ export function mergeSession(local: Session, remote: SessionBackup): MergeResult
     ...local,
     started_at: mergedStartedAt,
     ended_at: mergedEndedAt,
-    updated_at: Date.now(),
+    updated_at: Math.max(local.updated_at, remote.updated_at),
+    updated_by: local.updated_at >= remote.updated_at ? local.updated_by : remote.updated_by,
   }
 
   const resolution = `Time range: ${mergedStartedAt}–${mergedEndedAt} (min start, max end)`
 
   return { merged, resolution }
-}
-
-/**
- * Merge two notes, concatenating with a conflict marker if they differ.
- */
-function mergeNotes(localNote: string, remoteNote: string): string {
-  // If same, return as-is
-  if (localNote === remoteNote) {
-    return localNote
-  }
-
-  // If one is empty, use the other
-  if (!localNote) return remoteNote
-  if (!remoteNote) return localNote
-
-  // Both have content and differ - concatenate with marker
-  const timestamp = new Date().toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-
-  return `${localNote}\n\n--- Conflict (${timestamp}) ---\n${remoteNote}`
 }

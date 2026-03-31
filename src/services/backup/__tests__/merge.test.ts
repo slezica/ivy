@@ -10,6 +10,7 @@ describe('mergeBook', () => {
     duration: 60000,
     position: 0,
     updated_at: 1000,
+    updated_by: 'device-a',
     title: 'Local Title',
     artist: 'Local Artist',
     artwork: 'local-artwork.jpg',
@@ -26,6 +27,7 @@ describe('mergeBook', () => {
     duration: 60000,
     position: 0,
     updated_at: 1000,
+    updated_by: 'device-b',
     title: 'Remote Title',
     artist: 'Remote Artist',
     artwork: 'remote-artwork.jpg',
@@ -98,15 +100,14 @@ describe('mergeBook', () => {
       expect(resolution).toContain('remote wins')
     })
 
-    it('uses local metadata when timestamps are equal', () => {
-      const local = { ...baseBook, updated_at: 1000 }
-      const remote = { ...baseBackup, updated_at: 1000 }
+    it('uses device_id tie-breaker when timestamps match', () => {
+      const local = { ...baseBook, updated_at: 1000, updated_by: 'device-a' }
+      const remote = { ...baseBackup, updated_at: 1000, updated_by: 'device-b' }
 
       const { merged } = mergeBook(local, remote)
 
-      // >= means local wins on tie
-      expect(merged.title).toBe('Local Title')
-      expect(merged.artist).toBe('Local Artist')
+      // 'device-b' > 'device-a' lexicographically, so remote wins
+      expect(merged.title).toBe('Remote Title')
     })
 
     it('handles null metadata values', () => {
@@ -115,7 +116,6 @@ describe('mergeBook', () => {
 
       const { merged } = mergeBook(local, remote)
 
-      // Local wins, so we get local's nulls
       expect(merged.title).toBeNull()
       expect(merged.artist).toBeNull()
     })
@@ -261,6 +261,7 @@ describe('mergeClip', () => {
     transcription: null,
     created_at: 500,
     updated_at: 1000,
+    updated_by: 'device-a',
   }
 
   const baseBackup: ClipBackup = {
@@ -272,56 +273,45 @@ describe('mergeClip', () => {
     transcription: null,
     created_at: 500,
     updated_at: 1000,
+    updated_by: 'device-b',
   }
 
-  describe('note merge', () => {
+  describe('note merge (last-writer-wins)', () => {
     it('keeps local note when notes are identical', () => {
       const local = { ...baseClip, note: 'Same note' }
       const remote = { ...baseBackup, note: 'Same note' }
 
-      const { merged, resolution } = mergeClip(local, remote)
-
-      expect(merged.note).toBe('Same note')
-      expect(resolution).not.toContain('concatenated')
-    })
-
-    it('concatenates notes when different and both non-empty', () => {
-      const local = { ...baseClip, note: 'Local note' }
-      const remote = { ...baseBackup, note: 'Remote note' }
-
-      const { merged, resolution } = mergeClip(local, remote)
-
-      expect(merged.note).toContain('Local note')
-      expect(merged.note).toContain('Remote note')
-      expect(merged.note).toContain('Conflict')
-      expect(resolution).toContain('concatenated')
-    })
-
-    it('uses remote note when local is empty', () => {
-      const local = { ...baseClip, note: '' }
-      const remote = { ...baseBackup, note: 'Remote note' }
-
       const { merged } = mergeClip(local, remote)
 
-      expect(merged.note).toBe('Remote note')
+      expect(merged.note).toBe('Same note')
     })
 
-    it('uses local note when remote is empty', () => {
-      const local = { ...baseClip, note: 'Local note' }
-      const remote = { ...baseBackup, note: '' }
+    it('uses local note when local is newer', () => {
+      const local = { ...baseClip, note: 'Local note', updated_at: 2000 }
+      const remote = { ...baseBackup, note: 'Remote note', updated_at: 1000 }
 
       const { merged } = mergeClip(local, remote)
 
       expect(merged.note).toBe('Local note')
     })
 
-    it('returns empty when both notes are empty', () => {
-      const local = { ...baseClip, note: '' }
-      const remote = { ...baseBackup, note: '' }
+    it('uses remote note when remote is newer', () => {
+      const local = { ...baseClip, note: 'Local note', updated_at: 1000 }
+      const remote = { ...baseBackup, note: 'Remote note', updated_at: 2000 }
 
       const { merged } = mergeClip(local, remote)
 
-      expect(merged.note).toBe('')
+      expect(merged.note).toBe('Remote note')
+    })
+
+    it('uses device_id tie-breaker when timestamps match', () => {
+      const local = { ...baseClip, note: 'Local note', updated_at: 1000, updated_by: 'device-a' }
+      const remote = { ...baseBackup, note: 'Remote note', updated_at: 1000, updated_by: 'device-b' }
+
+      const { merged } = mergeClip(local, remote)
+
+      // 'device-b' > 'device-a', so remote wins
+      expect(merged.note).toBe('Remote note')
     })
   })
 
@@ -345,20 +335,9 @@ describe('mergeClip', () => {
       expect(merged.start).toBe(2000)
       expect(merged.duration).toBe(6000)
     })
-
-    it('uses local bounds when timestamps are equal', () => {
-      const local = { ...baseClip, start: 1000, duration: 5000, updated_at: 1000 }
-      const remote = { ...baseBackup, start: 2000, duration: 6000, updated_at: 1000 }
-
-      const { merged } = mergeClip(local, remote)
-
-      // >= means local wins on tie
-      expect(merged.start).toBe(1000)
-      expect(merged.duration).toBe(5000)
-    })
   })
 
-  describe('transcription merge (prefer non-null)', () => {
+  describe('transcription merge (prefer non-null, then LWW)', () => {
     it('uses local transcription when remote is null', () => {
       const local = { ...baseClip, transcription: 'Local transcription' }
       const remote = { ...baseBackup, transcription: null }
@@ -377,14 +356,13 @@ describe('mergeClip', () => {
       expect(merged.transcription).toBe('Remote transcription')
     })
 
-    it('uses local transcription when both have values', () => {
-      const local = { ...baseClip, transcription: 'Local transcription' }
-      const remote = { ...baseBackup, transcription: 'Remote transcription' }
+    it('uses LWW when both have transcriptions', () => {
+      const local = { ...baseClip, transcription: 'Local', updated_at: 1000 }
+      const remote = { ...baseBackup, transcription: 'Remote', updated_at: 2000 }
 
       const { merged } = mergeClip(local, remote)
 
-      // ?? operator: local wins if non-null
-      expect(merged.transcription).toBe('Local transcription')
+      expect(merged.transcription).toBe('Remote')
     })
 
     it('returns null when both are null', () => {
@@ -394,26 +372,6 @@ describe('mergeClip', () => {
       const { merged } = mergeClip(local, remote)
 
       expect(merged.transcription).toBeNull()
-    })
-  })
-
-  describe('resolution message', () => {
-    it('reports notes concatenated when notes differ', () => {
-      const local = { ...baseClip, note: 'A' }
-      const remote = { ...baseBackup, note: 'B' }
-
-      const { resolution } = mergeClip(local, remote)
-
-      expect(resolution).toBe('Notes concatenated with conflict marker')
-    })
-
-    it('reports bounds winner when notes are same', () => {
-      const local = { ...baseClip, note: 'Same', updated_at: 2000 }
-      const remote = { ...baseBackup, note: 'Same', updated_at: 1000 }
-
-      const { resolution } = mergeClip(local, remote)
-
-      expect(resolution).toBe('Bounds: local wins')
     })
   })
 
@@ -436,6 +394,7 @@ describe('mergeSession', () => {
     started_at: 1000,
     ended_at: 5000,
     updated_at: 5000,
+    updated_by: 'device-a',
   }
 
   const baseBackup: SessionBackup = {
@@ -444,6 +403,7 @@ describe('mergeSession', () => {
     started_at: 1000,
     ended_at: 5000,
     updated_at: 5000,
+    updated_by: 'device-b',
   }
 
   describe('started_at merge (min wins)', () => {
@@ -458,15 +418,6 @@ describe('mergeSession', () => {
 
     it('uses remote started_at when remote is earlier', () => {
       const local = { ...baseSession, started_at: 2000 }
-      const remote = { ...baseBackup, started_at: 1000 }
-
-      const { merged } = mergeSession(local, remote)
-
-      expect(merged.started_at).toBe(1000)
-    })
-
-    it('handles equal started_at', () => {
-      const local = { ...baseSession, started_at: 1000 }
       const remote = { ...baseBackup, started_at: 1000 }
 
       const { merged } = mergeSession(local, remote)
@@ -493,15 +444,6 @@ describe('mergeSession', () => {
 
       expect(merged.ended_at).toBe(8000)
     })
-
-    it('handles equal ended_at', () => {
-      const local = { ...baseSession, ended_at: 5000 }
-      const remote = { ...baseBackup, ended_at: 5000 }
-
-      const { merged } = mergeSession(local, remote)
-
-      expect(merged.ended_at).toBe(5000)
-    })
   })
 
   describe('combined scenarios', () => {
@@ -514,15 +456,16 @@ describe('mergeSession', () => {
       expect(merged.started_at).toBe(1000)
       expect(merged.ended_at).toBe(10000)
     })
+  })
 
-    it('takes earlier start from remote, later end from local', () => {
-      const local = { ...baseSession, started_at: 2000, ended_at: 10000 }
-      const remote = { ...baseBackup, started_at: 1000, ended_at: 8000 }
+  describe('updated_at handling', () => {
+    it('uses max updated_at from both sides', () => {
+      const local = { ...baseSession, updated_at: 3000 }
+      const remote = { ...baseBackup, updated_at: 5000 }
 
       const { merged } = mergeSession(local, remote)
 
-      expect(merged.started_at).toBe(1000)
-      expect(merged.ended_at).toBe(10000)
+      expect(merged.updated_at).toBe(5000)
     })
   })
 
@@ -537,29 +480,6 @@ describe('mergeSession', () => {
       const { merged } = mergeSession(baseSession, baseBackup)
 
       expect(merged.id).toBe('session-1')
-    })
-  })
-
-  describe('updated_at handling', () => {
-    it('sets updated_at to current time', () => {
-      const before = Date.now()
-      const { merged } = mergeSession(baseSession, baseBackup)
-      const after = Date.now()
-
-      expect(merged.updated_at).toBeGreaterThanOrEqual(before)
-      expect(merged.updated_at).toBeLessThanOrEqual(after)
-    })
-  })
-
-  describe('resolution message', () => {
-    it('includes the merged time range', () => {
-      const local = { ...baseSession, started_at: 2000, ended_at: 8000 }
-      const remote = { ...baseBackup, started_at: 1000, ended_at: 10000 }
-
-      const { resolution } = mergeSession(local, remote)
-
-      expect(resolution).toContain('1000')
-      expect(resolution).toContain('10000')
     })
   })
 

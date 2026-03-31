@@ -14,6 +14,7 @@ export interface BookBackup {
   duration: number
   position: number
   updated_at: number
+  updated_by: string | null  // device ID (null for legacy backups)
   title: string | null
   artist: string | null
   artwork: string | null
@@ -32,6 +33,7 @@ export interface ClipBackup {
   transcription: string | null
   created_at: number
   updated_at: number
+  updated_by: string | null  // device ID (null for legacy backups)
 }
 
 export interface SessionBackup {
@@ -40,6 +42,7 @@ export interface SessionBackup {
   started_at: number
   ended_at: number
   updated_at: number
+  updated_by: string | null  // device ID (null for legacy backups)
 }
 
 // -----------------------------------------------------------------------------

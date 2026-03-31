@@ -3,7 +3,7 @@ import { AudioSlicerService, AudioPlayerService, AudioMetadataService, ChapterRe
 import { DatabaseService, FileStorageService, FileCopierService, FileDownloaderService, FilePickerService } from './storage'
 import { WhisperService, TranscriptionQueueService } from './transcription'
 import { SharingService } from './system'
-import { GoogleAuthService, GoogleDriveService, BackupSyncService, SyncQueueService } from './backup'
+import { GoogleAuthService, GoogleDriveService, BackupSyncService } from './backup'
 
 export type {
   BaseService,
@@ -23,7 +23,6 @@ export type {
   GoogleAuthService,
   GoogleDriveService,
   BackupSyncService,
-  SyncQueueService,
 }
 
 export type {
@@ -56,9 +55,16 @@ export type {
   SyncEntityType,
   SyncOperation,
   SyncManifestEntry,
-  SyncQueueItem,
+  SyncOutboxItem,
+  SyncCheckpoint,
   PickedFile
 } from './storage'
+
+// Minimal type for action deps that queue sync changes
+export interface SyncQueueService {
+  queueChange(entityType: 'book' | 'clip' | 'session', entityId: string, operation: 'upsert' | 'delete'): Promise<void>
+  getCount(maxAttempts?: number): Promise<number>
+}
 
 
 export type {
@@ -76,7 +82,6 @@ export type {
   SyncNotification,
   SyncStatus,
   BackupSyncEvents,
-  QueueStats,
 } from './backup'
 
 
@@ -93,7 +98,6 @@ export const sharing = new SharingService()
 export const audio = new AudioPlayerService()
 export const auth = new GoogleAuthService()
 export const drive = new GoogleDriveService(auth)
-export const syncQueue = new SyncQueueService(db)
-export const sync = new BackupSyncService(db, drive, auth, syncQueue)
+export const sync = new BackupSyncService(db, drive, auth)
 export const transcription = new TranscriptionQueueService({ database: db, whisper, slicer })
 

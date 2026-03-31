@@ -2,7 +2,6 @@ import { BackupSyncService } from '../sync'
 import type { DatabaseService, Book } from '../../storage'
 import type { GoogleDriveService } from '../drive'
 import type { GoogleAuthService } from '../auth'
-import type { SyncQueueService } from '../queue'
 
 /**
  * Tests for the BackupSyncService.
@@ -26,8 +25,10 @@ describe('BackupSyncService', () => {
     const db: jest.Mocked<DatabaseService> = {
       getAllBooks: jest.fn(async () => []),
       getAllClips: jest.fn(async () => []),
+      getAllClipIds: jest.fn(async () => []),
       getAllSessionsRaw: jest.fn(async () => []),
       getAllManifestEntries: jest.fn(async () => []),
+      getManifestEntry: jest.fn(async () => null),
       getLastSyncTime: jest.fn(() => null),
       setLastSyncTime: jest.fn(async () => {}),
       upsertManifestEntry: jest.fn(async () => {}),
@@ -39,13 +40,26 @@ describe('BackupSyncService', () => {
       restoreBookFromBackup: jest.fn(async () => {}),
       restoreClipFromBackup: jest.fn(async () => {}),
       restoreSessionFromBackup: jest.fn(async () => {}),
+      getCheckpoint: jest.fn(() => ({ last_page_token: null, last_full_reconcile_at: null })),
+      setCheckpointPageToken: jest.fn(async () => {}),
+      setCheckpointFullReconcile: jest.fn(async () => {}),
+      clearCheckpoint: jest.fn(async () => {}),
+      getOutboxItems: jest.fn(async () => []),
+      removeOutboxItem: jest.fn(async () => {}),
+      updateOutboxItemAttempt: jest.fn(async () => {}),
+      queueChange: jest.fn(async () => {}),
+      getQueueCount: jest.fn(async () => 0),
+      deviceId: 'test-device',
     } as any
 
     const drive: jest.Mocked<GoogleDriveService> = {
       listFiles: jest.fn(() => Promise.resolve([])),
       uploadFile: jest.fn(),
+      updateFile: jest.fn(),
       downloadFile: jest.fn(),
       deleteFile: jest.fn(),
+      getStartPageToken: jest.fn(async () => '12345'),
+      getChanges: jest.fn(async () => ({ changes: [], newStartPageToken: '12346' })),
     } as any
 
     const auth: jest.Mocked<GoogleAuthService> = {
@@ -55,65 +69,55 @@ describe('BackupSyncService', () => {
       signIn: jest.fn(() => Promise.resolve(true)),
     } as any
 
-    const syncQueue: jest.Mocked<SyncQueueService> = {
-      getCount: jest.fn(async () => 0),
-      processQueue: jest.fn(() => Promise.resolve({ processed: 0, errors: [] })),
-    } as any
-
-    return { db, drive, auth, syncQueue }
+    return { db, drive, auth }
   }
 
   describe('syncNow', () => {
     it('prevents concurrent sync operations', async () => {
-      const { db, drive, auth, syncQueue } = createMockDeps()
+      const { db, drive, auth } = createMockDeps()
 
       let performSyncStarted = 0
 
-      // Use db.setLastSyncTime as marker - it's called at the end of performSync
       db.setLastSyncTime.mockImplementation(async () => {
         performSyncStarted++
       })
 
-      // Make sync take some time
+      // Make sync take some time (full reconcile lists files)
       drive.listFiles.mockImplementation(async () => {
         await new Promise(resolve => setTimeout(resolve, 100))
         return []
       })
 
-      const service = new BackupSyncService(db, drive, auth, syncQueue)
+      const service = new BackupSyncService(db, drive, auth)
 
-      // Fire multiple sync calls with slight delays to ensure they interleave
       const p1 = service.syncNow()
       const p2 = service.syncNow()
       const p3 = service.syncNow()
 
       await Promise.all([p1, p2, p3])
 
-      // Only one sync should have completed
       expect(performSyncStarted).toBe(1)
     })
 
     it('allows subsequent sync after first completes', async () => {
-      const { db, drive, auth, syncQueue } = createMockDeps()
+      const { db, drive, auth } = createMockDeps()
 
       let syncCompletedCount = 0
       db.setLastSyncTime.mockImplementation(async () => {
         syncCompletedCount++
       })
 
-      const service = new BackupSyncService(db, drive, auth, syncQueue)
+      const service = new BackupSyncService(db, drive, auth)
 
-      // First sync
       await service.syncNow()
       expect(syncCompletedCount).toBe(1)
 
-      // Second sync (should work since first completed)
       await service.syncNow()
       expect(syncCompletedCount).toBe(2)
     })
 
     it('resets sync flag on error', async () => {
-      const { db, drive, auth, syncQueue } = createMockDeps()
+      const { db, drive, auth } = createMockDeps()
 
       let authInitCount = 0
       auth.initialize.mockImplementation(async () => {
@@ -123,13 +127,11 @@ describe('BackupSyncService', () => {
         }
       })
 
-      const service = new BackupSyncService(db, drive, auth, syncQueue)
+      const service = new BackupSyncService(db, drive, auth)
 
-      // First sync fails (auth.initialize throws)
       await service.syncNow()
       expect(authInitCount).toBe(1)
 
-      // Second sync should be allowed (flag was reset despite error)
       await service.syncNow()
       expect(authInitCount).toBe(2)
     })
@@ -137,34 +139,31 @@ describe('BackupSyncService', () => {
 
   describe('autoSync', () => {
     it('prevents concurrent auto-sync operations', async () => {
-      const { db, drive, auth, syncQueue } = createMockDeps()
+      const { db, drive, auth } = createMockDeps()
 
       let syncCompletedCount = 0
       db.setLastSyncTime.mockImplementation(async () => {
         syncCompletedCount++
       })
 
-      // Make sync take some time
       drive.listFiles.mockImplementation(async () => {
         await new Promise(resolve => setTimeout(resolve, 100))
         return []
       })
 
-      const service = new BackupSyncService(db, drive, auth, syncQueue)
+      const service = new BackupSyncService(db, drive, auth)
 
-      // Fire multiple auto-sync calls
       const p1 = service.autoSync()
       const p2 = service.autoSync()
       const p3 = service.autoSync()
 
       await Promise.all([p1, p2, p3])
 
-      // Only one sync should have completed
       expect(syncCompletedCount).toBe(1)
     })
 
     it('skips sync when not authenticated', async () => {
-      const { db, drive, auth, syncQueue } = createMockDeps()
+      const { db, drive, auth } = createMockDeps()
 
       auth.getAccessToken.mockResolvedValue(null)
 
@@ -173,11 +172,10 @@ describe('BackupSyncService', () => {
         syncCompletedCount++
       })
 
-      const service = new BackupSyncService(db, drive, auth, syncQueue)
+      const service = new BackupSyncService(db, drive, auth)
 
       await service.autoSync()
 
-      // Sync should not have started
       expect(syncCompletedCount).toBe(0)
     })
   })
@@ -195,16 +193,19 @@ describe('BackupSyncService', () => {
         duration: 60000,
         position: 5000,
         updated_at: 1000,
+        updated_by: 'device-a',
         title: 'My Book',
         artist: 'Author',
         artwork: null,
         file_size: FILE_SIZE,
         fingerprint: FINGERPRINT,
         hidden: false,
+        chapters: null,
+        speed: 100,
       }
     }
 
-    function setupSyncWithRemoteBook(deps: ReturnType<typeof createMockDeps>, remoteId: string) {
+    function setupFullReconcileWithRemoteBook(deps: ReturnType<typeof createMockDeps>, remoteId: string) {
       const { drive } = deps
       const remoteBookJson = JSON.stringify({
         id: remoteId,
@@ -212,6 +213,7 @@ describe('BackupSyncService', () => {
         duration: 60000,
         position: 3000,
         updated_at: 2000,
+        updated_by: 'device-b',
         title: 'My Book',
         artist: 'Author',
         artwork: null,
@@ -220,7 +222,7 @@ describe('BackupSyncService', () => {
         hidden: false,
       })
 
-      // Drive returns one remote book JSON file
+      // Drive returns one remote book JSON file (used during full reconcile)
       drive.listFiles.mockImplementation(async (folder: string) => {
         if (folder === 'books') {
           return [{ id: 'drive-file-1', name: `book_${remoteId}.json`, mimeType: 'application/json', modifiedTime: new Date(2000).toISOString() }]
@@ -237,18 +239,14 @@ describe('BackupSyncService', () => {
       const { db } = deps
       const localBook = createLocalBook('a0a0-a0a0')
 
-      // Local state: one book
       db.getAllBooks.mockResolvedValue([localBook])
-
-      // Fingerprint lookup returns the local book (same content, different ID)
       db.getBookByFingerprint.mockResolvedValue(localBook)
 
-      setupSyncWithRemoteBook(deps, 'b0b0-b0b0')
+      setupFullReconcileWithRemoteBook(deps, 'b0b0-b0b0')
 
-      const service = new BackupSyncService(db, deps.drive, deps.auth, deps.syncQueue)
+      const service = new BackupSyncService(db, deps.drive, deps.auth)
       await service.syncNow()
 
-      // restoreBookFromBackup should NOT have been called — the download was skipped
       expect(db.restoreBookFromBackup).not.toHaveBeenCalled()
     })
 
@@ -256,15 +254,13 @@ describe('BackupSyncService', () => {
       const deps = createMockDeps()
       const { db } = deps
 
-      // No local books, no fingerprint match
       db.getBookByFingerprint.mockResolvedValue(null)
 
-      setupSyncWithRemoteBook(deps, 'b0b0-b0b0')
+      setupFullReconcileWithRemoteBook(deps, 'b0b0-b0b0')
 
-      const service = new BackupSyncService(db, deps.drive, deps.auth, deps.syncQueue)
+      const service = new BackupSyncService(db, deps.drive, deps.auth)
       await service.syncNow()
 
-      // restoreBookFromBackup SHOULD have been called for the remote book
       expect(db.restoreBookFromBackup).toHaveBeenCalled()
       expect(db.restoreBookFromBackup.mock.calls[0][0]).toBe('b0b0-b0b0')
     })
@@ -275,15 +271,13 @@ describe('BackupSyncService', () => {
       const localBook = createLocalBook('aabb-ccdd')
 
       db.getAllBooks.mockResolvedValue([localBook])
-      // Fingerprint matches, but it's the same book ID — this is an update, not a duplicate
       db.getBookByFingerprint.mockResolvedValue(localBook)
 
-      setupSyncWithRemoteBook(deps, 'aabb-ccdd')
+      setupFullReconcileWithRemoteBook(deps, 'aabb-ccdd')
 
-      const service = new BackupSyncService(db, deps.drive, deps.auth, deps.syncQueue)
+      const service = new BackupSyncService(db, deps.drive, deps.auth)
       await service.syncNow()
 
-      // This is a legitimate update to the same book — should proceed
       expect(db.restoreBookFromBackup).toHaveBeenCalled()
     })
   })

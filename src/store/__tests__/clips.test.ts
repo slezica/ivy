@@ -21,6 +21,7 @@ describe('createUpdateClip', () => {
       transcription: null,
       created_at: 1000,
       updated_at: 1000,
+      updated_by: null,
       file_uri: 'file:///books/book-1.mp3',
       file_name: 'Book 1',
       file_title: 'Book Title',

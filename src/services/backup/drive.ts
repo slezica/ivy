@@ -188,6 +188,144 @@ export class GoogleDriveService {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Changes API (for incremental sync)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get a page token representing the current state.
+   * Future calls to getChanges() with this token will return only changes after this point.
+   */
+  async getStartPageToken(): Promise<string> {
+    const token = await this.getToken()
+
+    const response = await fetch(`${DRIVE_API}/changes/startPageToken`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(`Failed to get start page token: ${response.status} - ${text}`)
+    }
+
+    const data = await response.json()
+    return data.startPageToken
+  }
+
+  /**
+   * Get changes since a given page token.
+   * Returns changed files and a new page token to use next time.
+   */
+  async getChanges(pageToken: string): Promise<{
+    changes: Array<{
+      fileId: string
+      removed: boolean
+      file?: DriveFile
+    }>
+    newStartPageToken?: string
+    nextPageToken?: string
+  }> {
+    const token = await this.getToken()
+
+    const allChanges: Array<{ fileId: string; removed: boolean; file?: DriveFile }> = []
+    let currentToken = pageToken
+    let newStartPageToken: string | undefined
+
+    do {
+      const params = new URLSearchParams({
+        pageToken: currentToken,
+        fields: 'nextPageToken, newStartPageToken, changes(fileId, removed, file(id, name, mimeType, modifiedTime))',
+        spaces: 'drive',
+        pageSize: '100',
+      })
+
+      const response = await fetch(`${DRIVE_API}/changes?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(`Failed to get changes: ${response.status} - ${text}`)
+      }
+
+      const data = await response.json()
+
+      for (const change of data.changes ?? []) {
+        allChanges.push({
+          fileId: change.fileId,
+          removed: change.removed ?? false,
+          file: change.file ? {
+            id: change.file.id,
+            name: change.file.name,
+            mimeType: change.file.mimeType,
+            modifiedTime: change.file.modifiedTime,
+          } : undefined,
+        })
+      }
+
+      if (data.newStartPageToken) {
+        newStartPageToken = data.newStartPageToken
+      }
+
+      currentToken = data.nextPageToken
+    } while (currentToken)
+
+    return { changes: allChanges, newStartPageToken }
+  }
+
+  /**
+   * Update an existing file's content in place (preserves file ID).
+   */
+  async updateFile(
+    fileId: string,
+    content: string | Uint8Array
+  ): Promise<DriveFile> {
+    const token = await this.getToken()
+
+    const isJson = typeof content === 'string'
+    const mimeType = isJson ? 'application/json' : 'audio/mpeg'
+
+    const fields = 'id,name,mimeType,modifiedTime'
+    const initResponse = await fetch(`${UPLOAD_API}/files/${fileId}?uploadType=resumable&fields=${encodeURIComponent(fields)}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-Upload-Content-Type': mimeType,
+      },
+      body: JSON.stringify({}),
+    })
+
+    if (!initResponse.ok) {
+      const errorText = await initResponse.text()
+      throw new Error(`Failed to init update: ${initResponse.status} - ${errorText}`)
+    }
+
+    const uploadUri = initResponse.headers.get('Location')
+    if (!uploadUri) {
+      throw new Error('No upload URI returned')
+    }
+
+    const uploadResponse = await fetch(uploadUri, {
+      method: 'PUT',
+      headers: { 'Content-Type': mimeType },
+      body: isJson ? content : (content as Uint8Array).buffer as ArrayBuffer,
+    })
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text()
+      throw new Error(`Failed to upload update: ${uploadResponse.status} - ${errorText}`)
+    }
+
+    const data = await uploadResponse.json()
+    return {
+      id: data.id,
+      name: data.name,
+      mimeType: data.mimeType,
+      modifiedTime: data.modifiedTime,
+    }
+  }
+
   /**
    * Reset cached folder IDs (useful after sign-out).
    */

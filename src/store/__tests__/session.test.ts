@@ -24,6 +24,9 @@ describe('createTrackSession', () => {
       file_size: 1000000,
       fingerprint: new Uint8Array([1, 2, 3, 4]),
       hidden: false,
+      updated_by: null,
+      chapters: null,
+      speed: 100,
     }
   }
 
@@ -37,6 +40,7 @@ describe('createTrackSession', () => {
           started_at: Date.now(),
           ended_at: Date.now(),
           updated_at: Date.now(),
+          updated_by: null,
         })),
         updateSessionEndedAt: jest.fn(),
       } as any,
@@ -99,6 +103,7 @@ describe('createTrackSession', () => {
       started_at: 1000,
       ended_at: 1000,
       updated_at: 1000,
+      updated_by: null,
     }
 
     const storeState: any = {
@@ -145,6 +150,8 @@ describe('createTrackSession', () => {
         book_id: 'book-1',
         started_at: Date.now(),
         ended_at: Date.now(),
+        updated_at: Date.now(),
+        updated_by: null,
       }
     })
 
