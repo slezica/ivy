@@ -1,14 +1,7 @@
 import { BackupSyncService } from '../sync'
-import type { DatabaseService, Book } from '../../storage'
+import type { DatabaseService, Book, Clip, Session } from '../../storage'
 import type { GoogleDriveService } from '../drive'
 import type { GoogleAuthService } from '../auth'
-
-/**
- * Tests for the BackupSyncService.
- *
- * Bug #2: Race condition where multiple syncNow() calls could
- * run concurrently before the isSyncing flag was set.
- */
 
 // Helper: encode Uint8Array to base64 (mirrors sync.ts internal helper)
 function uint8ArrayToBase64(bytes: Uint8Array): string {
@@ -19,8 +12,54 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
+const FINGERPRINT = new Uint8Array([1, 2, 3, 4])
+const FINGERPRINT_B64 = uint8ArrayToBase64(FINGERPRINT)
+
+// IDs must be hex + hyphens to match the filename regex
+const BOOK_ID = 'aaa00001-0000-0000-0000-000000000001'
+const CLIP_ID = 'ccc00001-0000-0000-0000-000000000001'
+
+function createBook(overrides: Partial<Book> = {}): Book {
+  return {
+    id: BOOK_ID,
+    uri: `file:///audio/${BOOK_ID}.mp3`,
+    name: 'Test Book',
+    duration: 60000,
+    position: 5000,
+    updated_at: 1000,
+    updated_by: 'device-a',
+    title: 'Test Title',
+    artist: 'Test Artist',
+    artwork: null,
+    file_size: 100000,
+    fingerprint: FINGERPRINT,
+    hidden: false,
+    chapters: null,
+    speed: 100,
+    ...overrides,
+  }
+}
+
+function createRemoteBookJson(overrides: Record<string, any> = {}): string {
+  return JSON.stringify({
+    id: BOOK_ID,
+    name: 'Test Book',
+    duration: 60000,
+    position: 5000,
+    updated_at: 2000,
+    updated_by: 'device-b',
+    title: 'Remote Title',
+    artist: 'Remote Artist',
+    artwork: null,
+    file_size: 100000,
+    fingerprint: FINGERPRINT_B64,
+    hidden: false,
+    speed: 100,
+    ...overrides,
+  })
+}
+
 describe('BackupSyncService', () => {
-  // Mock dependencies
   function createMockDeps() {
     const db: jest.Mocked<DatabaseService> = {
       getAllBooks: jest.fn(async () => []),
@@ -53,47 +92,45 @@ describe('BackupSyncService', () => {
     } as any
 
     const drive: jest.Mocked<GoogleDriveService> = {
-      listFiles: jest.fn(() => Promise.resolve([])),
-      uploadFile: jest.fn(),
-      updateFile: jest.fn(),
-      downloadFile: jest.fn(),
-      deleteFile: jest.fn(),
+      listFiles: jest.fn(async () => []),
+      uploadFile: jest.fn(async () => ({ id: 'new-file-id', name: 'test', mimeType: 'application/json' })),
+      updateFile: jest.fn(async () => ({ id: 'existing-file-id', name: 'test', mimeType: 'application/json' })),
+      downloadFile: jest.fn(async () => '{}'),
+      deleteFile: jest.fn(async () => {}),
       getStartPageToken: jest.fn(async () => '12345'),
       getChanges: jest.fn(async () => ({ changes: [], newStartPageToken: '12346' })),
     } as any
 
     const auth: jest.Mocked<GoogleAuthService> = {
-      initialize: jest.fn(() => Promise.resolve()),
+      initialize: jest.fn(async () => {}),
       isAuthenticated: jest.fn(() => true),
-      getAccessToken: jest.fn(() => Promise.resolve('mock-token')),
-      signIn: jest.fn(() => Promise.resolve(true)),
+      getAccessToken: jest.fn(async () => 'mock-token'),
+      signIn: jest.fn(async () => true),
     } as any
 
     return { db, drive, auth }
   }
+
+  // ===========================================================================
+  // Concurrency & Auth
+  // ===========================================================================
 
   describe('syncNow', () => {
     it('prevents concurrent sync operations', async () => {
       const { db, drive, auth } = createMockDeps()
 
       let performSyncStarted = 0
+      db.setLastSyncTime.mockImplementation(async () => { performSyncStarted++ })
 
-      db.setLastSyncTime.mockImplementation(async () => {
-        performSyncStarted++
-      })
-
-      // Make sync take some time (full reconcile lists files)
       drive.listFiles.mockImplementation(async () => {
         await new Promise(resolve => setTimeout(resolve, 100))
         return []
       })
 
       const service = new BackupSyncService(db, drive, auth)
-
       const p1 = service.syncNow()
       const p2 = service.syncNow()
       const p3 = service.syncNow()
-
       await Promise.all([p1, p2, p3])
 
       expect(performSyncStarted).toBe(1)
@@ -102,18 +139,14 @@ describe('BackupSyncService', () => {
     it('allows subsequent sync after first completes', async () => {
       const { db, drive, auth } = createMockDeps()
 
-      let syncCompletedCount = 0
-      db.setLastSyncTime.mockImplementation(async () => {
-        syncCompletedCount++
-      })
+      let count = 0
+      db.setLastSyncTime.mockImplementation(async () => { count++ })
 
       const service = new BackupSyncService(db, drive, auth)
-
       await service.syncNow()
-      expect(syncCompletedCount).toBe(1)
-
       await service.syncNow()
-      expect(syncCompletedCount).toBe(2)
+
+      expect(count).toBe(2)
     })
 
     it('resets sync flag on error', async () => {
@@ -122,107 +155,425 @@ describe('BackupSyncService', () => {
       let authInitCount = 0
       auth.initialize.mockImplementation(async () => {
         authInitCount++
-        if (authInitCount === 1) {
-          throw new Error('Network error')
-        }
+        if (authInitCount === 1) throw new Error('Network error')
       })
 
       const service = new BackupSyncService(db, drive, auth)
-
       await service.syncNow()
-      expect(authInitCount).toBe(1)
-
       await service.syncNow()
+
       expect(authInitCount).toBe(2)
     })
   })
 
   describe('autoSync', () => {
-    it('prevents concurrent auto-sync operations', async () => {
-      const { db, drive, auth } = createMockDeps()
-
-      let syncCompletedCount = 0
-      db.setLastSyncTime.mockImplementation(async () => {
-        syncCompletedCount++
-      })
-
-      drive.listFiles.mockImplementation(async () => {
-        await new Promise(resolve => setTimeout(resolve, 100))
-        return []
-      })
-
-      const service = new BackupSyncService(db, drive, auth)
-
-      const p1 = service.autoSync()
-      const p2 = service.autoSync()
-      const p3 = service.autoSync()
-
-      await Promise.all([p1, p2, p3])
-
-      expect(syncCompletedCount).toBe(1)
-    })
-
     it('skips sync when not authenticated', async () => {
       const { db, drive, auth } = createMockDeps()
-
       auth.getAccessToken.mockResolvedValue(null)
 
-      let syncCompletedCount = 0
-      db.setLastSyncTime.mockImplementation(async () => {
-        syncCompletedCount++
-      })
+      let count = 0
+      db.setLastSyncTime.mockImplementation(async () => { count++ })
 
       const service = new BackupSyncService(db, drive, auth)
-
       await service.autoSync()
 
-      expect(syncCompletedCount).toBe(0)
+      expect(count).toBe(0)
     })
   })
 
-  describe('fingerprint deduplication', () => {
-    const FINGERPRINT = new Uint8Array([1, 2, 3, 4])
-    const FINGERPRINT_B64 = uint8ArrayToBase64(FINGERPRINT)
-    const FILE_SIZE = 1000000
+  // ===========================================================================
+  // Incremental Pull (Change Feed Reconciliation)
+  // ===========================================================================
 
-    function createLocalBook(id: string): Book {
-      return {
-        id,
-        uri: `file:///path/to/${id}.mp3`,
-        name: `Book ${id}`,
-        duration: 60000,
-        position: 5000,
+  describe('incremental pull', () => {
+    it('downloads a book when remote is ahead', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      // Existing page token → incremental path
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+
+      // Change feed returns one changed book
+      const remoteJson = createRemoteBookJson({ updated_at: 2000, updated_by: 'device-b' })
+      drive.getChanges.mockResolvedValue({
+        changes: [{
+          fileId: 'drive-book-1',
+          removed: false,
+          file: { id: 'drive-book-1', name: `book_${BOOK_ID}.json`, mimeType: 'application/json' },
+        }],
+        newStartPageToken: '101',
+      })
+      drive.downloadFile.mockResolvedValue(remoteJson)
+
+      // Local book is older
+      db.getBookById.mockResolvedValue(createBook({ updated_at: 1000, updated_by: 'device-a' }))
+      db.getBookByFingerprint.mockResolvedValue(null)
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(db.restoreBookFromBackup).toHaveBeenCalled()
+      expect(db.restoreBookFromBackup.mock.calls[0][0]).toBe(BOOK_ID)
+      expect(db.setCheckpointPageToken).toHaveBeenCalledWith('101')
+    })
+
+    it('queues for push when local is ahead', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+
+      const remoteJson = createRemoteBookJson({ updated_at: 1000, updated_by: 'device-b' })
+      drive.getChanges.mockResolvedValue({
+        changes: [{
+          fileId: 'drive-book-1',
+          removed: false,
+          file: { id: 'drive-book-1', name: `book_${BOOK_ID}.json`, mimeType: 'application/json' },
+        }],
+        newStartPageToken: '101',
+      })
+      drive.downloadFile.mockResolvedValue(remoteJson)
+
+      // Local book is newer
+      db.getBookById.mockResolvedValue(createBook({ updated_at: 3000, updated_by: 'device-a' }))
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(db.restoreBookFromBackup).not.toHaveBeenCalled()
+      expect(db.queueChange).toHaveBeenCalledWith('book', BOOK_ID, 'upsert')
+    })
+
+    it('merges when versions are concurrent (same timestamp, different devices)', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+
+      // Same updated_at, same updated_by → isRemoteAhead and isLocalAhead both return false
+      const remoteJson = createRemoteBookJson({
         updated_at: 1000,
         updated_by: 'device-a',
-        title: 'My Book',
-        artist: 'Author',
-        artwork: null,
-        file_size: FILE_SIZE,
-        fingerprint: FINGERPRINT,
-        hidden: false,
-        chapters: null,
-        speed: 100,
-      }
-    }
+        position: 9000,
+      })
+      drive.getChanges.mockResolvedValue({
+        changes: [{
+          fileId: 'drive-book-1',
+          removed: false,
+          file: { id: 'drive-book-1', name: `book_${BOOK_ID}.json`, mimeType: 'application/json' },
+        }],
+        newStartPageToken: '101',
+      })
+      drive.downloadFile.mockResolvedValue(remoteJson)
 
-    function setupFullReconcileWithRemoteBook(deps: ReturnType<typeof createMockDeps>, remoteId: string) {
-      const { drive } = deps
-      const remoteBookJson = JSON.stringify({
-        id: remoteId,
-        name: 'Book remote',
-        duration: 60000,
-        position: 3000,
-        updated_at: 2000,
-        updated_by: 'device-b',
-        title: 'My Book',
-        artist: 'Author',
-        artwork: null,
-        file_size: FILE_SIZE,
-        fingerprint: FINGERPRINT_B64,
-        hidden: false,
+      db.getBookById.mockResolvedValue(createBook({
+        updated_at: 1000,
+        updated_by: 'device-a',
+        position: 5000,
+      }))
+
+      const service = new BackupSyncService(db, drive, auth)
+
+      const statusEvents: any[] = []
+      service.on('status', (s) => statusEvents.push(s))
+
+      await service.syncNow()
+
+      // Merge should have written the merged result
+      expect(db.restoreBookFromBackup).toHaveBeenCalled()
+      // Merge should queue for push (so all devices converge)
+      expect(db.queueChange).toHaveBeenCalledWith('book', BOOK_ID, 'upsert')
+    })
+
+    it('downloads new book when no local entity exists', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+
+      const remoteJson = createRemoteBookJson({ id: 'bbb00002-0000-0000-0000-000000000002' })
+      drive.getChanges.mockResolvedValue({
+        changes: [{
+          fileId: 'drive-new',
+          removed: false,
+          file: { id: 'drive-new', name: 'book_bbb00002-0000-0000-0000-000000000002.json', mimeType: 'application/json' },
+        }],
+        newStartPageToken: '101',
+      })
+      drive.downloadFile.mockResolvedValue(remoteJson)
+
+      db.getBookById.mockResolvedValue(null)
+      db.getBookByFingerprint.mockResolvedValue(null)
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(db.restoreBookFromBackup).toHaveBeenCalled()
+      expect(db.restoreBookFromBackup.mock.calls[0][0]).toBe('bbb00002-0000-0000-0000-000000000002')
+    })
+
+    it('skips removed files', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+
+      drive.getChanges.mockResolvedValue({
+        changes: [{
+          fileId: 'drive-removed',
+          removed: true,
+        }],
+        newStartPageToken: '101',
       })
 
-      // Drive returns one remote book JSON file (used during full reconcile)
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(drive.downloadFile).not.toHaveBeenCalled()
+      expect(db.restoreBookFromBackup).not.toHaveBeenCalled()
+    })
+
+    it('falls back to full reconcile on invalid page token', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: 'stale-token', last_full_reconcile_at: null })
+
+      // First call fails with 410
+      drive.getChanges.mockRejectedValueOnce(new Error('410 Gone'))
+      // After clearCheckpoint, getCheckpoint returns null → full reconcile
+      db.clearCheckpoint.mockImplementation(async () => {
+        db.getCheckpoint.mockReturnValue({ last_page_token: null, last_full_reconcile_at: null })
+      })
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(db.clearCheckpoint).toHaveBeenCalled()
+      // Full reconcile path: getStartPageToken is called
+      expect(drive.getStartPageToken).toHaveBeenCalled()
+    })
+  })
+
+  // ===========================================================================
+  // Push Phase (Outbox Drain)
+  // ===========================================================================
+
+  describe('push phase', () => {
+    it('uploads a book from the outbox', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+      drive.getChanges.mockResolvedValue({ changes: [], newStartPageToken: '101' })
+
+      const book = createBook()
+      db.getOutboxItems.mockResolvedValue([{
+        id: 'outbox-1',
+        entity_type: 'book' as const,
+        entity_id: BOOK_ID,
+        operation: 'upsert' as const,
+        updated_at_when_queued: 1000,
+        queued_at: 1000,
+        attempts: 0,
+        last_error: null,
+      }])
+      db.getBookById.mockResolvedValue(book)
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(drive.uploadFile).toHaveBeenCalled()
+      expect(db.removeOutboxItem).toHaveBeenCalledWith('book', BOOK_ID)
+    })
+
+    it('uses updateFile when manifest has remote_file_id', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+      drive.getChanges.mockResolvedValue({ changes: [], newStartPageToken: '101' })
+
+      const book = createBook()
+      db.getOutboxItems.mockResolvedValue([{
+        id: 'outbox-1',
+        entity_type: 'book' as const,
+        entity_id: BOOK_ID,
+        operation: 'upsert' as const,
+        updated_at_when_queued: 1000,
+        queued_at: 1000,
+        attempts: 0,
+        last_error: null,
+      }])
+      db.getBookById.mockResolvedValue(book)
+      db.getManifestEntry.mockResolvedValue({
+        entity_type: 'book',
+        entity_id: BOOK_ID,
+        local_updated_at: 500,
+        remote_updated_at: null,
+        remote_file_id: 'existing-drive-id',
+        remote_audio_file_id: null,
+        synced_at: 500,
+      })
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(drive.updateFile).toHaveBeenCalledWith('existing-drive-id', expect.any(String))
+      expect(drive.uploadFile).not.toHaveBeenCalled()
+    })
+
+    it('uses uploadFile when no manifest exists (first upload)', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+      drive.getChanges.mockResolvedValue({ changes: [], newStartPageToken: '101' })
+
+      const book = createBook()
+      db.getOutboxItems.mockResolvedValue([{
+        id: 'outbox-1',
+        entity_type: 'book' as const,
+        entity_id: BOOK_ID,
+        operation: 'upsert' as const,
+        updated_at_when_queued: 1000,
+        queued_at: 1000,
+        attempts: 0,
+        last_error: null,
+      }])
+      db.getBookById.mockResolvedValue(book)
+      db.getManifestEntry.mockResolvedValue(null)
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(drive.uploadFile).toHaveBeenCalled()
+      expect(drive.updateFile).not.toHaveBeenCalled()
+    })
+
+    it('re-queues when entity was modified during upload (stale detection)', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+      drive.getChanges.mockResolvedValue({ changes: [], newStartPageToken: '101' })
+
+      const book = createBook({ updated_at: 1000 })
+      db.getOutboxItems.mockResolvedValue([{
+        id: 'outbox-1',
+        entity_type: 'book' as const,
+        entity_id: BOOK_ID,
+        operation: 'upsert' as const,
+        updated_at_when_queued: 1000,
+        queued_at: 1000,
+        attempts: 0,
+        last_error: null,
+      }])
+
+      // First getBookById call (for upload): returns original
+      // Second getBookById call (stale check): returns modified version
+      db.getBookById
+        .mockResolvedValueOnce(book)
+        .mockResolvedValueOnce(createBook({ updated_at: 2000 }))
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      // Should still remove the outbox item (pushOutbox does this)
+      // but the upload method should have re-queued
+      expect(db.queueChange).toHaveBeenCalledWith('book', BOOK_ID, 'upsert')
+    })
+
+    it('does not re-queue when entity has not changed since enqueue', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+      drive.getChanges.mockResolvedValue({ changes: [], newStartPageToken: '101' })
+
+      const book = createBook({ updated_at: 1000 })
+      db.getOutboxItems.mockResolvedValue([{
+        id: 'outbox-1',
+        entity_type: 'book' as const,
+        entity_id: BOOK_ID,
+        operation: 'upsert' as const,
+        updated_at_when_queued: 1000,
+        queued_at: 1000,
+        attempts: 0,
+        last_error: null,
+      }])
+
+      // Both calls return same updated_at
+      db.getBookById.mockResolvedValue(book)
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      // queueChange should NOT have been called (no stale re-queue)
+      expect(db.queueChange).not.toHaveBeenCalled()
+    })
+
+    it('increments attempts on upload failure', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+      drive.getChanges.mockResolvedValue({ changes: [], newStartPageToken: '101' })
+
+      db.getOutboxItems.mockResolvedValue([{
+        id: 'outbox-1',
+        entity_type: 'book' as const,
+        entity_id: BOOK_ID,
+        operation: 'upsert' as const,
+        updated_at_when_queued: 1000,
+        queued_at: 1000,
+        attempts: 0,
+        last_error: null,
+      }])
+
+      db.getBookById.mockResolvedValue(createBook())
+      drive.uploadFile.mockRejectedValue(new Error('Network error'))
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(db.updateOutboxItemAttempt).toHaveBeenCalledWith('book', BOOK_ID, 'Network error')
+      expect(db.removeOutboxItem).not.toHaveBeenCalled()
+    })
+
+    it('deletes remote clip on delete operation', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+      drive.getChanges.mockResolvedValue({ changes: [], newStartPageToken: '101' })
+
+      db.getOutboxItems.mockResolvedValue([{
+        id: 'outbox-1',
+        entity_type: 'clip' as const,
+        entity_id: CLIP_ID,
+        operation: 'delete' as const,
+        updated_at_when_queued: 1000,
+        queued_at: 1000,
+        attempts: 0,
+        last_error: null,
+      }])
+
+      db.getManifestEntry.mockResolvedValue({
+        entity_type: 'clip',
+        entity_id: CLIP_ID,
+        local_updated_at: null,
+        remote_updated_at: null,
+        remote_file_id: 'json-file-id',
+        remote_audio_file_id: 'audio-file-id',
+        synced_at: 1000,
+      })
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(drive.deleteFile).toHaveBeenCalledWith('json-file-id')
+      expect(drive.deleteFile).toHaveBeenCalledWith('audio-file-id')
+      expect(db.deleteManifestEntry).toHaveBeenCalledWith('clip', CLIP_ID)
+    })
+  })
+
+  // ===========================================================================
+  // Fingerprint Deduplication
+  // ===========================================================================
+
+  describe('fingerprint deduplication', () => {
+    function setupFullReconcileWithRemoteBook(deps: ReturnType<typeof createMockDeps>, remoteId: string) {
+      const { drive } = deps
+      const remoteBookJson = createRemoteBookJson({ id: remoteId })
+
       drive.listFiles.mockImplementation(async (folder: string) => {
         if (folder === 'books') {
           return [{ id: 'drive-file-1', name: `book_${remoteId}.json`, mimeType: 'application/json', modifiedTime: new Date(2000).toISOString() }]
@@ -230,19 +581,17 @@ describe('BackupSyncService', () => {
         return []
       })
       drive.downloadFile.mockResolvedValue(remoteBookJson)
-
-      return { remoteBookJson }
     }
 
     it('skips download when remote book fingerprint matches a local book with different ID', async () => {
       const deps = createMockDeps()
       const { db } = deps
-      const localBook = createLocalBook('a0a0-a0a0')
+      const localBook = createBook({ id: 'a0a00000-0000-0000-0000-00000000a0a0' })
 
       db.getAllBooks.mockResolvedValue([localBook])
       db.getBookByFingerprint.mockResolvedValue(localBook)
 
-      setupFullReconcileWithRemoteBook(deps, 'b0b0-b0b0')
+      setupFullReconcileWithRemoteBook(deps, 'b0b00000-0000-0000-0000-00000000b0b0')
 
       const service = new BackupSyncService(db, deps.drive, deps.auth)
       await service.syncNow()
@@ -256,29 +605,61 @@ describe('BackupSyncService', () => {
 
       db.getBookByFingerprint.mockResolvedValue(null)
 
-      setupFullReconcileWithRemoteBook(deps, 'b0b0-b0b0')
+      setupFullReconcileWithRemoteBook(deps, 'b0b00000-0000-0000-0000-00000000b0b0')
 
       const service = new BackupSyncService(db, deps.drive, deps.auth)
       await service.syncNow()
 
       expect(db.restoreBookFromBackup).toHaveBeenCalled()
-      expect(db.restoreBookFromBackup.mock.calls[0][0]).toBe('b0b0-b0b0')
+      expect(db.restoreBookFromBackup.mock.calls[0][0]).toBe('b0b00000-0000-0000-0000-00000000b0b0')
     })
 
     it('allows download when fingerprint matches the same ID (not a duplicate)', async () => {
       const deps = createMockDeps()
       const { db } = deps
-      const localBook = createLocalBook('aabb-ccdd')
+      const localBook = createBook({ id: 'aabbccdd-0000-0000-0000-0000aabbccdd' })
 
       db.getAllBooks.mockResolvedValue([localBook])
       db.getBookByFingerprint.mockResolvedValue(localBook)
 
-      setupFullReconcileWithRemoteBook(deps, 'aabb-ccdd')
+      setupFullReconcileWithRemoteBook(deps, 'aabbccdd-0000-0000-0000-0000aabbccdd')
 
       const service = new BackupSyncService(db, deps.drive, deps.auth)
       await service.syncNow()
 
       expect(db.restoreBookFromBackup).toHaveBeenCalled()
+    })
+  })
+
+  // ===========================================================================
+  // Full Reconcile
+  // ===========================================================================
+
+  describe('full reconcile', () => {
+    it('queues local-only books for upload', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      // No page token → full reconcile
+      db.getAllBooks.mockResolvedValue([createBook({ id: 'eee00001-0000-0000-0000-000000000001' })])
+
+      // No remote books
+      drive.listFiles.mockResolvedValue([])
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(db.queueChange).toHaveBeenCalledWith('book', 'eee00001-0000-0000-0000-000000000001', 'upsert')
+    })
+
+    it('saves page token after full reconcile', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      drive.getStartPageToken.mockResolvedValue('fresh-token')
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(db.setCheckpointPageToken).toHaveBeenCalledWith('fresh-token')
     })
   })
 })

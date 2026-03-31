@@ -199,6 +199,59 @@ describe('mergeBook', () => {
     })
   })
 
+  describe('updated_by propagation', () => {
+    it('carries local updated_by when local wins', () => {
+      const local = { ...baseBook, updated_at: 2000, updated_by: 'device-a' }
+      const remote = { ...baseBackup, updated_at: 1000, updated_by: 'device-b' }
+
+      const { merged } = mergeBook(local, remote)
+
+      expect(merged.updated_by).toBe('device-a')
+    })
+
+    it('carries remote updated_by when remote wins', () => {
+      const local = { ...baseBook, updated_at: 1000, updated_by: 'device-a' }
+      const remote = { ...baseBackup, updated_at: 2000, updated_by: 'device-b' }
+
+      const { merged } = mergeBook(local, remote)
+
+      expect(merged.updated_by).toBe('device-b')
+    })
+
+    it('handles null updated_by on local (legacy entity)', () => {
+      const local = { ...baseBook, updated_at: 1000, updated_by: null }
+      const remote = { ...baseBackup, updated_at: 1000, updated_by: 'device-b' }
+
+      const { merged } = mergeBook(local, remote)
+
+      // 'device-b' > '' (null coerced), so remote wins
+      expect(merged.updated_by).toBe('device-b')
+      expect(merged.title).toBe('Remote Title')
+    })
+
+    it('handles null updated_by on remote (legacy backup)', () => {
+      const local = { ...baseBook, updated_at: 1000, updated_by: 'device-a' }
+      const remote = { ...baseBackup, updated_at: 1000, updated_by: null }
+
+      const { merged } = mergeBook(local, remote)
+
+      // 'device-a' > '' (null coerced), so local wins
+      expect(merged.updated_by).toBe('device-a')
+      expect(merged.title).toBe('Local Title')
+    })
+
+    it('handles null updated_by on both sides', () => {
+      const local = { ...baseBook, updated_at: 1000, updated_by: null }
+      const remote = { ...baseBackup, updated_at: 1000, updated_by: null }
+
+      const { merged } = mergeBook(local, remote)
+
+      // '' >= '', local wins (>= favors local)
+      expect(merged.updated_by).toBeNull()
+      expect(merged.title).toBe('Local Title')
+    })
+  })
+
   describe('hidden merge (hidden-wins)', () => {
     it('stays visible when both are visible', () => {
       const local = { ...baseBook, hidden: false }
@@ -356,6 +409,25 @@ describe('mergeClip', () => {
       expect(merged.transcription).toBe('Remote transcription')
     })
 
+    it('keeps remote transcription even when local wins LWW', () => {
+      const local = { ...baseClip, transcription: null, updated_at: 2000 }
+      const remote = { ...baseBackup, transcription: 'Remote transcription', updated_at: 1000 }
+
+      const { merged } = mergeClip(local, remote)
+
+      // Local wins LWW, but transcription prefers non-null
+      expect(merged.transcription).toBe('Remote transcription')
+    })
+
+    it('keeps local transcription even when remote wins LWW', () => {
+      const local = { ...baseClip, transcription: 'Local transcription', updated_at: 1000 }
+      const remote = { ...baseBackup, transcription: null, updated_at: 2000 }
+
+      const { merged } = mergeClip(local, remote)
+
+      expect(merged.transcription).toBe('Local transcription')
+    })
+
     it('uses LWW when both have transcriptions', () => {
       const local = { ...baseClip, transcription: 'Local', updated_at: 1000 }
       const remote = { ...baseBackup, transcription: 'Remote', updated_at: 2000 }
@@ -372,6 +444,36 @@ describe('mergeClip', () => {
       const { merged } = mergeClip(local, remote)
 
       expect(merged.transcription).toBeNull()
+    })
+  })
+
+  describe('updated_by propagation', () => {
+    it('carries local updated_by when local wins', () => {
+      const local = { ...baseClip, updated_at: 2000, updated_by: 'device-a' }
+      const remote = { ...baseBackup, updated_at: 1000, updated_by: 'device-b' }
+
+      const { merged } = mergeClip(local, remote)
+
+      expect(merged.updated_by).toBe('device-a')
+    })
+
+    it('carries remote updated_by when remote wins', () => {
+      const local = { ...baseClip, updated_at: 1000, updated_by: 'device-a' }
+      const remote = { ...baseBackup, updated_at: 2000, updated_by: 'device-b' }
+
+      const { merged } = mergeClip(local, remote)
+
+      expect(merged.updated_by).toBe('device-b')
+    })
+
+    it('handles null updated_by tie-break (legacy vs modern)', () => {
+      const local = { ...baseClip, updated_at: 1000, updated_by: null }
+      const remote = { ...baseBackup, updated_at: 1000, updated_by: 'device-b' }
+
+      const { merged } = mergeClip(local, remote)
+
+      expect(merged.updated_by).toBe('device-b')
+      expect(merged.note).toBe('Remote note')
     })
   })
 
@@ -465,6 +567,36 @@ describe('mergeSession', () => {
 
       const { merged } = mergeSession(local, remote)
 
+      expect(merged.updated_at).toBe(5000)
+    })
+  })
+
+  describe('updated_by propagation', () => {
+    it('carries updated_by from the side with higher updated_at', () => {
+      const local = { ...baseSession, updated_at: 3000, updated_by: 'device-a' }
+      const remote = { ...baseBackup, updated_at: 5000, updated_by: 'device-b' }
+
+      const { merged } = mergeSession(local, remote)
+
+      expect(merged.updated_by).toBe('device-b')
+    })
+
+    it('carries local updated_by when local updated_at is higher', () => {
+      const local = { ...baseSession, updated_at: 5000, updated_by: 'device-a' }
+      const remote = { ...baseBackup, updated_at: 3000, updated_by: 'device-b' }
+
+      const { merged } = mergeSession(local, remote)
+
+      expect(merged.updated_by).toBe('device-a')
+    })
+
+    it('handles null updated_by on the winning side', () => {
+      const local = { ...baseSession, updated_at: 3000, updated_by: 'device-a' }
+      const remote = { ...baseBackup, updated_at: 5000, updated_by: null }
+
+      const { merged } = mergeSession(local, remote)
+
+      expect(merged.updated_by).toBeNull()
       expect(merged.updated_at).toBe(5000)
     })
   })
