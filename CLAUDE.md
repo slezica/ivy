@@ -87,7 +87,7 @@ Automatic listening activity tracking. See **[docs/SESSIONS.md](docs/SESSIONS.md
 
 Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC.md)** for the full guide.
 
-**Quick summary:** Store actions queue changes to a local outbox → sync pulls remote changes via Drive's change feed (incremental, not full crawl) → per-entity reconciliation with deterministic merge rules → outbox drained with update-in-place uploads and stale detection → store notified of remote changes via events.
+**Quick summary:** Store actions queue changes to a local outbox → sync pulls remote changes via Drive's change feed (incremental, not full crawl) → per-entity LWW reconciliation (last writer wins, no per-field merging) → outbox drained with update-in-place uploads and stale detection → store notified of remote changes via events.
 
 
 ## Project Overview
@@ -152,10 +152,9 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── backup/
   │   │   ├── auth.ts             # Google OAuth (@react-native-google-signin)
   │   │   ├── drive.ts            # Google Drive REST API (upload, download, changes, update-in-place)
-  │   │   ├── sync.ts             # Sync engine (pull via change feed, push via outbox, per-entity reconcile)
-  │   │   ├── merge.ts            # Pure conflict resolution (book/clip/session merge)
+  │   │   ├── sync.ts             # Sync engine (pull via change feed, push via outbox, LWW reconcile)
   │   │   ├── types.ts            # Shared backup types
-  │   │   └── __tests__/          # Unit tests for merge and sync
+  │   │   └── __tests__/          # Unit tests for sync engine
   │   └── system/
   │       └── sharing.ts          # Share clips via native share sheet
   ├── screens/

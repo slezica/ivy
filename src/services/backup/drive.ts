@@ -95,7 +95,7 @@ export class GoogleDriveService {
     const token = await this.getToken()
 
     const isJson = typeof content === 'string'
-    const mimeType = isJson ? 'application/json' : 'audio/mpeg'
+    const mimeType = isJson ? 'application/json' : 'audio/mp4'
 
     // Step 1: Create file with metadata, get upload URI
     const metadata = {
@@ -283,7 +283,7 @@ export class GoogleDriveService {
     const token = await this.getToken()
 
     const isJson = typeof content === 'string'
-    const mimeType = isJson ? 'application/json' : 'audio/mpeg'
+    const mimeType = isJson ? 'application/json' : 'audio/mp4'
 
     const fields = 'id,name,mimeType,modifiedTime'
     const initResponse = await fetch(`${UPLOAD_API}/files/${fileId}?uploadType=resumable&fields=${encodeURIComponent(fields)}`, {

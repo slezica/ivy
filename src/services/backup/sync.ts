@@ -4,14 +4,13 @@
  * Incremental sync engine using Drive's changes.list API.
  *
  * Architecture:
- * - Pull: Drive change feed since last page token → per-entity reconciliation
+ * - Pull: Drive change feed since last page token → per-entity LWW reconciliation
  * - Push: Drain local outbox → upload with stale detection
- * - Merge: Pure functions resolve conflicts (merge.ts)
  * - Transport: Update-in-place uploads preserve Drive file IDs
  */
 
 import RNFS from 'react-native-fs'
-import { DatabaseService, Book, Clip, Session, SyncManifestEntry, SyncOutboxItem } from '../storage'
+import { DatabaseService, Book, Clip, Session, SyncOutboxItem } from '../storage'
 import { GoogleDriveService, DriveFile } from './drive'
 import { GoogleAuthService } from './auth'
 import { BaseService } from '../base'
@@ -23,7 +22,6 @@ import {
   SyncNotification,
   SyncStatus,
 } from './types'
-import { mergeBook, mergeClip, mergeSession } from './merge'
 import { createLogger } from '../../utils'
 
 const log = createLogger('Sync')
@@ -127,9 +125,6 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     try {
       const result = await this.performSync()
 
-      if (result.conflicts.length > 0) {
-        log('Auto-sync conflicts resolved:', result.conflicts)
-      }
       if (result.errors.length > 0) {
         log('Auto-sync errors:', result.errors)
         await this.setStatus(false, `${result.errors.length} error(s) occurred`)
@@ -160,7 +155,6 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       uploaded: { books: 0, clips: 0, sessions: 0 },
       downloaded: { books: 0, clips: 0, sessions: 0 },
       deleted: { clips: 0, sessions: 0 },
-      conflicts: [],
       errors: [],
     }
 
@@ -236,11 +230,13 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         await this.db.setCheckpointPageToken(newToken)
       }
     } catch (error: any) {
-      // Invalid page token — trigger recovery
-      if (error.message?.includes('410') || error.message?.includes('invalid')) {
-        log('Page token invalid, triggering full reconcile')
+      // Invalid page token — trigger recovery (once only, not recursive)
+      if (error.message?.includes('410')) {
+        log('Page token expired (410), triggering full reconcile')
         await this.db.clearCheckpoint()
-        await this.pullRemoteChanges(result, notification)
+        const freshToken = await this.drive.getStartPageToken()
+        await this.fullReconcile(result, notification)
+        await this.db.setCheckpointPageToken(freshToken)
       } else {
         throw error
       }
@@ -259,11 +255,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     for (const change of changes) {
       const filename = change.file?.name
       if (!filename) {
-        // File was deleted or we can't identify it — try manifest lookup
-        if (change.removed) {
-          // We can't easily map removed files without filename, skip
-          continue
-        }
+        // Removed files don't include metadata — skip (can't map to entity without name)
         continue
       }
 
@@ -333,18 +325,18 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       return
     }
 
-    // Compare versions
-    if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-      // Remote is ahead — apply remote
+    // LWW reconciliation
+    if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+      // Already in sync — just ensure manifest has the file ID
+      await this.db.upsertManifestEntry({
+        entity_type: 'book', entity_id: id,
+        local_updated_at: local.updated_at, remote_updated_at: null,
+        remote_file_id: jsonChange.fileId, remote_audio_file_id: null,
+      })
+    } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
       await this.downloadBook(remote, jsonChange.fileId, result, notification)
-    } else if (this.isLocalAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-      // Local is ahead — ensure outbox has this entity
-      await this.db.queueChange('book', id, 'upsert')
     } else {
-      // Concurrent change — merge
-      const { merged, resolution } = mergeBook(local, remote)
-      await this.applyMergedBook(merged, jsonChange.fileId, result, notification)
-      result.conflicts.push({ entityType: 'book', entityId: id, resolution })
+      await this.db.queueChange('book', id, 'upsert', local.updated_at)
     }
   }
 
@@ -379,18 +371,16 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       return
     }
 
-    if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+    if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+      // Already in sync
+    } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
       const audioFileId = audioChange?.fileId ?? (await this.db.getManifestEntry('clip', id))?.remote_audio_file_id
       const audioFilename = audioChange?.file?.name
       if (audioFileId) {
         await this.downloadClip(remote, jsonChange.fileId, audioFileId, audioFilename, result, notification)
       }
-    } else if (this.isLocalAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-      await this.db.queueChange('clip', id, 'upsert')
     } else {
-      const { merged, resolution } = mergeClip(local, remote)
-      await this.applyMergedClip(merged, jsonChange.fileId, result, notification)
-      result.conflicts.push({ entityType: 'clip', entityId: id, resolution })
+      await this.db.queueChange('clip', id, 'upsert', local.updated_at)
     }
   }
 
@@ -413,20 +403,25 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       return
     }
 
-    if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+    if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+      // Already in sync
+    } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
       await this.downloadSession(remote, jsonChange.fileId, result, notification)
-    } else if (this.isLocalAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-      await this.db.queueChange('session', id, 'upsert')
     } else {
-      const { merged, resolution } = mergeSession(local, remote)
-      await this.applyMergedSession(merged, jsonChange.fileId, result, notification)
-      result.conflicts.push({ entityType: 'session', entityId: id, resolution })
+      await this.db.queueChange('session', id, 'upsert', local.updated_at)
     }
   }
 
   // ---------------------------------------------------------------------------
   // Version Comparison
   // ---------------------------------------------------------------------------
+
+  private isSameVersion(
+    localUpdatedAt: number, localUpdatedBy: string | null,
+    remoteUpdatedAt: number, remoteUpdatedBy: string | null,
+  ): boolean {
+    return localUpdatedAt === remoteUpdatedAt && (localUpdatedBy ?? '') === (remoteUpdatedBy ?? '')
+  }
 
   private isRemoteAhead(
     localUpdatedAt: number, localUpdatedBy: string | null,
@@ -435,14 +430,6 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     if (localUpdatedAt !== remoteUpdatedAt) return remoteUpdatedAt > localUpdatedAt
     // Same timestamp — check device ID tie-breaker
     return (remoteUpdatedBy ?? '') > (localUpdatedBy ?? '')
-  }
-
-  private isLocalAhead(
-    localUpdatedAt: number, localUpdatedBy: string | null,
-    remoteUpdatedAt: number, remoteUpdatedBy: string | null,
-  ): boolean {
-    if (localUpdatedAt !== remoteUpdatedAt) return localUpdatedAt > remoteUpdatedAt
-    return (localUpdatedBy ?? '') > (remoteUpdatedBy ?? '')
   }
 
   // ---------------------------------------------------------------------------
@@ -552,62 +539,6 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   }
 
   // ---------------------------------------------------------------------------
-  // Apply Merge Results
-  // ---------------------------------------------------------------------------
-
-  private async applyMergedBook(
-    merged: Book, remoteFileId: string,
-    result: SyncResult, notification: SyncNotification,
-  ): Promise<void> {
-    await this.db.restoreBookFromBackup(
-      merged.id, merged.name, merged.duration, merged.position,
-      merged.updated_at, merged.updated_by,
-      merged.title, merged.artist, merged.artwork,
-      merged.file_size, merged.fingerprint,
-      merged.hidden, merged.speed,
-    )
-
-    // Queue merged result for push so all devices converge
-    await this.db.queueChange('book', merged.id, 'upsert')
-
-    notification.booksChanged.push(merged.id)
-    log(`Merged book: ${merged.id}`)
-  }
-
-  private async applyMergedClip(
-    merged: Clip, remoteFileId: string,
-    result: SyncResult, notification: SyncNotification,
-  ): Promise<void> {
-    await this.db.restoreClipFromBackup(
-      merged.id, merged.source_id, merged.uri,
-      merged.start, merged.duration, merged.note,
-      merged.transcription, merged.created_at,
-      merged.updated_at, merged.updated_by,
-    )
-
-    await this.db.queueChange('clip', merged.id, 'upsert')
-
-    notification.clipsChanged.push(merged.id)
-    log(`Merged clip: ${merged.id}`)
-  }
-
-  private async applyMergedSession(
-    merged: Session, remoteFileId: string,
-    result: SyncResult, notification: SyncNotification,
-  ): Promise<void> {
-    await this.db.restoreSessionFromBackup(
-      merged.id, merged.book_id,
-      merged.started_at, merged.ended_at,
-      merged.updated_at, merged.updated_by,
-    )
-
-    await this.db.queueChange('session', merged.id, 'upsert')
-
-    notification.sessionsChanged.push(merged.id)
-    log(`Merged session: ${merged.id}`)
-  }
-
-  // ---------------------------------------------------------------------------
   // Push Phase: Drain Outbox
   // ---------------------------------------------------------------------------
 
@@ -629,6 +560,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   private async pushOutboxItem(item: SyncOutboxItem, result: SyncResult): Promise<void> {
     switch (item.entity_type) {
       case 'book':
+        // Books use soft-delete (hidden flag) — always upsert, never remote-delete
         if (item.operation === 'upsert') {
           const book = await this.db.getBookById(item.entity_id)
           if (book) await this.uploadBook(book, item, result)
@@ -693,7 +625,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     // Stale check: if entity was modified during upload, re-queue
     const fresh = await this.db.getBookById(book.id)
     if (fresh && fresh.updated_at > outboxItem.updated_at_when_queued) {
-      await this.db.queueChange('book', book.id, 'upsert')
+      await this.db.queueChange('book', book.id, 'upsert', fresh.updated_at)
       log(`Book ${book.id} was modified during upload, re-queued`)
     }
 
@@ -722,24 +654,34 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const manifest = await this.db.getManifestEntry('clip', clip.id)
 
     // Upload JSON (update or create)
-    const jsonFile = manifest?.remote_file_id
-      ? await this.drive.updateFile(manifest.remote_file_id, jsonContent)
+    const isJsonUpdate = !!manifest?.remote_file_id
+    const jsonFile = isJsonUpdate
+      ? await this.drive.updateFile(manifest!.remote_file_id!, jsonContent)
       : await this.drive.uploadFile('clips', jsonFilename, jsonContent)
 
     // Upload audio (update or create, with size check)
-    let audioFileId = manifest?.remote_audio_file_id
-    const clipPath = clip.uri.replace('file://', '')
-    const fileStat = await RNFS.stat(clipPath)
-    if (fileStat.size > MAX_CLIP_SIZE) {
-      throw new Error(`Clip file too large (${Math.round(fileStat.size / 1024 / 1024)}MB). Max: 50MB`)
+    let audioFile
+    try {
+      const audioFileId = manifest?.remote_audio_file_id
+      const clipPath = clip.uri.replace('file://', '')
+      const fileStat = await RNFS.stat(clipPath)
+      if (fileStat.size > MAX_CLIP_SIZE) {
+        throw new Error(`Clip file too large (${Math.round(fileStat.size / 1024 / 1024)}MB). Max: 50MB`)
+      }
+
+      const audioBase64 = await RNFS.readFile(clipPath, 'base64')
+      const audioBytes = base64ToUint8Array(audioBase64)
+
+      audioFile = audioFileId
+        ? await this.drive.updateFile(audioFileId, audioBytes)
+        : await this.drive.uploadFile('clips', audioFilename, audioBytes)
+    } catch (audioError) {
+      // Rollback: if we created a new JSON file (not update-in-place), delete it
+      if (!isJsonUpdate) {
+        await this.drive.deleteFile(jsonFile.id).catch(() => {})
+      }
+      throw audioError
     }
-
-    const audioBase64 = await RNFS.readFile(clipPath, 'base64')
-    const audioBytes = base64ToUint8Array(audioBase64)
-
-    const audioFile = audioFileId
-      ? await this.drive.updateFile(audioFileId, audioBytes)
-      : await this.drive.uploadFile('clips', audioFilename, audioBytes)
 
     await this.db.upsertManifestEntry({
       entity_type: 'clip', entity_id: clip.id,
@@ -752,7 +694,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     // Stale check
     const fresh = await this.db.getClip(clip.id)
     if (fresh && fresh.updated_at > outboxItem.updated_at_when_queued) {
-      await this.db.queueChange('clip', clip.id, 'upsert')
+      await this.db.queueChange('clip', clip.id, 'upsert', fresh.updated_at)
       log(`Clip ${clip.id} was modified during upload, re-queued`)
     }
 
@@ -789,7 +731,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     // Stale check
     const fresh = await this.db.getSessionById(session.id)
     if (fresh && fresh.updated_at > outboxItem.updated_at_when_queued) {
-      await this.db.queueChange('session', session.id, 'upsert')
+      await this.db.queueChange('session', session.id, 'upsert', fresh.updated_at)
       log(`Session ${session.id} was modified during upload, re-queued`)
     }
 
@@ -854,20 +796,23 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
         if (!local) {
           await this.downloadBook(remote, file.id, result, notification)
-        } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-          await this.downloadBook(remote, file.id, result, notification)
-        } else if (this.isLocalAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-          // Ensure manifest has the file ID for future update-in-place
+        } else if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+          // Already in sync — just record the file ID
           await this.db.upsertManifestEntry({
             entity_type: 'book', entity_id: parsed.id,
             local_updated_at: local.updated_at, remote_updated_at: null,
             remote_file_id: file.id, remote_audio_file_id: null,
           })
-          await this.db.queueChange('book', parsed.id, 'upsert')
+        } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+          await this.downloadBook(remote, file.id, result, notification)
         } else {
-          const { merged, resolution } = mergeBook(local, remote)
-          await this.applyMergedBook(merged, file.id, result, notification)
-          result.conflicts.push({ entityType: 'book', entityId: parsed.id, resolution })
+          // Local is ahead — record file ID and queue for push
+          await this.db.upsertManifestEntry({
+            entity_type: 'book', entity_id: parsed.id,
+            local_updated_at: local.updated_at, remote_updated_at: null,
+            remote_file_id: file.id, remote_audio_file_id: null,
+          })
+          await this.db.queueChange('book', parsed.id, 'upsert', local.updated_at)
         }
       } catch (error) {
         result.errors.push(`Full reconcile book ${parsed.id}: ${error}`)
@@ -895,19 +840,21 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
         if (!local) {
           await this.downloadClip(remote, json.id, audio.id, audio.name, result, notification)
-        } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-          await this.downloadClip(remote, json.id, audio.id, audio.name, result, notification)
-        } else if (this.isLocalAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+        } else if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
           await this.db.upsertManifestEntry({
             entity_type: 'clip', entity_id: clipId,
             local_updated_at: local.updated_at, remote_updated_at: null,
             remote_file_id: json.id, remote_audio_file_id: audio.id,
           })
-          await this.db.queueChange('clip', clipId, 'upsert')
+        } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+          await this.downloadClip(remote, json.id, audio.id, audio.name, result, notification)
         } else {
-          const { merged, resolution } = mergeClip(local, remote)
-          await this.applyMergedClip(merged, json.id, result, notification)
-          result.conflicts.push({ entityType: 'clip', entityId: clipId, resolution })
+          await this.db.upsertManifestEntry({
+            entity_type: 'clip', entity_id: clipId,
+            local_updated_at: local.updated_at, remote_updated_at: null,
+            remote_file_id: json.id, remote_audio_file_id: audio.id,
+          })
+          await this.db.queueChange('clip', clipId, 'upsert', local.updated_at)
         }
       } catch (error) {
         result.errors.push(`Full reconcile clip ${clipId}: ${error}`)
@@ -926,19 +873,21 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
         if (!local) {
           await this.downloadSession(remote, file.id, result, notification)
-        } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-          await this.downloadSession(remote, file.id, result, notification)
-        } else if (this.isLocalAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+        } else if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
           await this.db.upsertManifestEntry({
             entity_type: 'session', entity_id: parsed.id,
             local_updated_at: local.updated_at, remote_updated_at: null,
             remote_file_id: file.id, remote_audio_file_id: null,
           })
-          await this.db.queueChange('session', parsed.id, 'upsert')
+        } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+          await this.downloadSession(remote, file.id, result, notification)
         } else {
-          const { merged, resolution } = mergeSession(local, remote)
-          await this.applyMergedSession(merged, file.id, result, notification)
-          result.conflicts.push({ entityType: 'session', entityId: parsed.id, resolution })
+          await this.db.upsertManifestEntry({
+            entity_type: 'session', entity_id: parsed.id,
+            local_updated_at: local.updated_at, remote_updated_at: null,
+            remote_file_id: file.id, remote_audio_file_id: null,
+          })
+          await this.db.queueChange('session', parsed.id, 'upsert', local.updated_at)
         }
       } catch (error) {
         result.errors.push(`Full reconcile session ${parsed.id}: ${error}`)
@@ -980,10 +929,12 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const localBooks = await this.db.getAllBooks()
     for (const book of localBooks) {
       if (!remoteBookIds.has(book.id)) {
-        await this.db.queueChange('book', book.id, 'upsert')
+        await this.db.queueChange('book', book.id, 'upsert', book.updated_at)
       }
     }
 
+    // getAllClipIds doesn't return updated_at, so we fall back to Date.now().
+    // This is acceptable: local-only clips are new and their updated_at ≈ now.
     const localClipIds = await this.db.getAllClipIds()
     for (const clipId of localClipIds) {
       if (!remoteClipIds.has(clipId)) {
@@ -994,7 +945,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const localSessions = await this.db.getAllSessionsRaw()
     for (const session of localSessions) {
       if (!remoteSessionIds.has(session.id)) {
-        await this.db.queueChange('session', session.id, 'upsert')
+        await this.db.queueChange('session', session.id, 'upsert', session.updated_at)
       }
     }
   }

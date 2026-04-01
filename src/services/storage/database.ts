@@ -609,7 +609,7 @@ export class DatabaseService {
          title = excluded.title, artist = excluded.artist, artwork = excluded.artwork,
          file_size = excluded.file_size, fingerprint = excluded.fingerprint, hidden = excluded.hidden,
          speed = excluded.speed
-       WHERE excluded.updated_at > files.updated_at`,
+       WHERE excluded.updated_at >= files.updated_at`,
       [id, name, duration, position, updated_at, updated_by, title, artist, artwork, fileSize, fingerprint, hidden ? 1 : 0, speed]
     )
   }
@@ -637,7 +637,7 @@ export class DatabaseService {
          start = excluded.start, duration = excluded.duration,
          note = excluded.note, transcription = excluded.transcription,
          updated_at = excluded.updated_at, updated_by = excluded.updated_by
-       WHERE excluded.updated_at > clips.updated_at`,
+       WHERE excluded.updated_at >= clips.updated_at`,
       [id, sourceId, uri, start, duration, note, transcription, created_at, updated_at, updated_by]
     )
   }
@@ -722,7 +722,7 @@ export class DatabaseService {
          ended_at = excluded.ended_at,
          updated_at = excluded.updated_at,
          updated_by = excluded.updated_by
-       WHERE excluded.updated_at > sessions.updated_at`,
+       WHERE excluded.updated_at >= sessions.updated_at`,
       [id, bookId, startedAt, endedAt, updatedAt, updatedBy]
     )
   }
@@ -878,7 +878,7 @@ export class DatabaseService {
   // Sync Queue / Outbox
   // ---------------------------------------------------------------------------
 
-  async queueChange(entityType: SyncEntityType, entityId: string, operation: SyncOperation): Promise<void> {
+  async queueChange(entityType: SyncEntityType, entityId: string, operation: SyncOperation, entityUpdatedAt?: number): Promise<void> {
     const now = Date.now()
     const id = generateId()
     await this.db.runAsync(
@@ -890,7 +890,7 @@ export class DatabaseService {
          updated_at_when_queued = excluded.updated_at_when_queued,
          attempts = 0,
          last_error = NULL`,
-      [id, entityType, entityId, operation, now, now]
+      [id, entityType, entityId, operation, now, entityUpdatedAt ?? now]
     )
   }
 

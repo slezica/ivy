@@ -49,17 +49,10 @@ export interface SessionBackup {
 // Sync Results and Status
 // -----------------------------------------------------------------------------
 
-export interface ConflictInfo {
-  entityType: 'book' | 'clip' | 'session'
-  entityId: string
-  resolution: string // human-readable description of how it was resolved
-}
-
 export interface SyncResult {
   uploaded: { books: number; clips: number; sessions: number }
   downloaded: { books: number; clips: number; sessions: number }
   deleted: { clips: number; sessions: number }
-  conflicts: ConflictInfo[]
   errors: string[]
 }
 

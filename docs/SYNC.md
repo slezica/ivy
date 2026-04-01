@@ -142,35 +142,18 @@ Create-new is only used for the first upload of an entity (no known remote file 
 
 ---
 
-## Conflict Resolution
+## Conflict Resolution: Pure Last-Writer-Wins
 
-A conflict occurs when the same entity was modified on two devices between syncs. The sync engine detects this during reconciliation; the **merge module** resolves it.
+All conflicts are resolved by **whole-entity LWW**: the version with the higher `(updated_at, updated_by)` wins entirely. There are no per-field merge rules — the last write replaces the whole entity.
 
-### Book Merge Strategy
+This is intentional. Per-field merge rules (like "max position" or "hidden wins") encode assumptions about user intent that are often wrong. For example, if a user deliberately rewinds to re-listen, a "max position" merge would undo their choice. LWW is the only strategy users can reason about without understanding merge semantics: **what you did last is what you see**.
 
-| Field | Strategy | Rationale |
-|-------|----------|-----------|
-| `position` | **Max value wins** | The user progressed further on one device |
-| `hidden` | **Hidden wins** | If deleted on either device, stay deleted |
-| `title`, `artist`, `artwork`, `speed` | **Last-writer-wins** | Based on `(updated_at, updated_by)` |
-| `name`, `duration`, `file_size`, `fingerprint` | Identity-derived | Not user-merged |
+Consequences:
+- Position can go backward if an older device syncs after the user rewinds on another
+- A hide/unhide on one device can be overridden by a later metadata edit on another
+- Session time ranges don't widen — the latest version wins
 
-### Clip Merge Strategy
-
-| Field | Strategy | Rationale |
-|-------|----------|-----------|
-| `note` | **Last-writer-wins** | Simpler than concatenation, predictable |
-| `start`, `duration` | **Last-writer-wins** | Structural; newer definition wins |
-| `transcription` | **Prefer non-null**, then LWW | If either side has a transcription, keep it |
-
-### Session Merge Strategy
-
-| Field | Strategy | Rationale |
-|-------|----------|-----------|
-| `started_at` | **Min value wins** | Earlier boundary is more accurate |
-| `ended_at` | **Max value wins** | The user listened longer on one device |
-
-After merging, the result is written locally and queued for push so all devices converge.
+These tradeoffs favor predictability over cleverness.
 
 ---
 
@@ -271,12 +254,10 @@ src/services/backup/
   types.ts        → BookBackup, ClipBackup, SessionBackup, SyncResult, SyncStatus
   auth.ts         → GoogleAuthService (OAuth sign-in, token management)
   drive.ts        → GoogleDriveService (REST wrapper + changes API + update-in-place)
-  sync.ts         → BackupSyncService (pull, push, reconcile, full reconcile)
-  merge.ts        → mergeBook(), mergeClip(), mergeSession() — pure conflict resolution
+  sync.ts         → BackupSyncService (pull, push, LWW reconcile, full reconcile)
 
   __tests__/
-    merge.test.ts   → Tests for conflict resolution logic
-    sync.test.ts    → Tests for concurrency and auth behavior
+    sync.test.ts    → Tests for concurrency, reconciliation, push phase, fingerprinting
     drive.test.ts   → Tests for Drive folder creation
 
 src/actions/

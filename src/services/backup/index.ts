@@ -18,9 +18,4 @@ export type {
   SyncResult,
   SyncNotification,
   SyncStatus,
-  ConflictInfo,
 } from './types'
-
-// Pure functions (for testing)
-export { mergeBook, mergeClip, mergeSession } from './merge'
-export type { MergeResult } from './merge'

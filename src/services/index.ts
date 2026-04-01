@@ -62,7 +62,7 @@ export type {
 
 // Minimal type for action deps that queue sync changes
 export interface SyncQueueService {
-  queueChange(entityType: 'book' | 'clip' | 'session', entityId: string, operation: 'upsert' | 'delete'): Promise<void>
+  queueChange(entityType: 'book' | 'clip' | 'session', entityId: string, operation: 'upsert' | 'delete', entityUpdatedAt?: number): Promise<void>
   getCount(maxAttempts?: number): Promise<number>
 }
 

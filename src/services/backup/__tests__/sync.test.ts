@@ -239,18 +239,18 @@ describe('BackupSyncService', () => {
       await service.syncNow()
 
       expect(db.restoreBookFromBackup).not.toHaveBeenCalled()
-      expect(db.queueChange).toHaveBeenCalledWith('book', BOOK_ID, 'upsert')
+      expect(db.queueChange).toHaveBeenCalledWith('book', BOOK_ID, 'upsert', 3000)
     })
 
-    it('merges when versions are concurrent (same timestamp, different devices)', async () => {
+    it('uses tie-breaker when timestamps match but devices differ', async () => {
       const { db, drive, auth } = createMockDeps()
 
       db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
 
-      // Same updated_at, same updated_by → isRemoteAhead and isLocalAhead both return false
+      // Same updated_at, different updated_by → tie-breaker picks a winner (not a merge)
       const remoteJson = createRemoteBookJson({
         updated_at: 1000,
-        updated_by: 'device-a',
+        updated_by: 'device-b',
         position: 9000,
       })
       drive.getChanges.mockResolvedValue({
@@ -268,18 +268,47 @@ describe('BackupSyncService', () => {
         updated_by: 'device-a',
         position: 5000,
       }))
+      db.getBookByFingerprint.mockResolvedValue(null)
 
       const service = new BackupSyncService(db, drive, auth)
-
-      const statusEvents: any[] = []
-      service.on('status', (s) => statusEvents.push(s))
-
       await service.syncNow()
 
-      // Merge should have written the merged result
+      // 'device-b' > 'device-a' → remote is ahead → download, not merge
       expect(db.restoreBookFromBackup).toHaveBeenCalled()
-      // Merge should queue for push (so all devices converge)
-      expect(db.queueChange).toHaveBeenCalledWith('book', BOOK_ID, 'upsert')
+    })
+
+    it('skips when same version (same timestamp, same device)', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+
+      const remoteJson = createRemoteBookJson({
+        updated_at: 1000,
+        updated_by: 'device-a',
+      })
+      drive.getChanges.mockResolvedValue({
+        changes: [{
+          fileId: 'drive-book-1',
+          removed: false,
+          file: { id: 'drive-book-1', name: `book_${BOOK_ID}.json`, mimeType: 'application/json' },
+        }],
+        newStartPageToken: '101',
+      })
+      drive.downloadFile.mockResolvedValue(remoteJson)
+
+      db.getBookById.mockResolvedValue(createBook({
+        updated_at: 1000,
+        updated_by: 'device-a',
+      }))
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      // Should not download, merge, or queue
+      expect(db.restoreBookFromBackup).not.toHaveBeenCalled()
+      expect(db.queueChange).not.toHaveBeenCalled()
+      // Should still update manifest with file ID
+      expect(db.upsertManifestEntry).toHaveBeenCalled()
     })
 
     it('downloads new book when no local entity exists', async () => {
@@ -470,8 +499,8 @@ describe('BackupSyncService', () => {
       await service.syncNow()
 
       // Should still remove the outbox item (pushOutbox does this)
-      // but the upload method should have re-queued
-      expect(db.queueChange).toHaveBeenCalledWith('book', BOOK_ID, 'upsert')
+      // but the upload method should have re-queued with the fresh entity's updated_at
+      expect(db.queueChange).toHaveBeenCalledWith('book', BOOK_ID, 'upsert', 2000)
     })
 
     it('does not re-queue when entity has not changed since enqueue', async () => {
@@ -648,7 +677,7 @@ describe('BackupSyncService', () => {
       const service = new BackupSyncService(db, drive, auth)
       await service.syncNow()
 
-      expect(db.queueChange).toHaveBeenCalledWith('book', 'eee00001-0000-0000-0000-000000000001', 'upsert')
+      expect(db.queueChange).toHaveBeenCalledWith('book', 'eee00001-0000-0000-0000-000000000001', 'upsert', 1000)
     })
 
     it('saves page token after full reconcile', async () => {
