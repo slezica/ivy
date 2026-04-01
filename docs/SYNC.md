@@ -30,7 +30,7 @@ Instead of listing all remote files on every sync, Ivy uses Drive's `changes.lis
 
 ### 3. Per-Entity Reconciliation: "Decide on sight"
 
-There is no global planning phase. When the sync engine encounters a changed entity (local or remote), it immediately compares versions, applies merge rules if needed, and acts. This removes the need to assemble a complete world snapshot before making decisions.
+There is no global planning phase. When the sync engine encounters a changed entity (local or remote), it immediately compares versions via LWW and acts. This removes the need to assemble a complete world snapshot before making decisions.
 
 ---
 
@@ -52,29 +52,19 @@ There is no global planning phase. When the sync engine encounters a changed ent
 ┌──────────────────────────────────────────┐      │
 │          BackupSyncService               │      │
 │                                          │      │
-│  1. Pull: Drive changes → reconcile      │      │
+│  1. Pull: Drive changes → LWW reconcile  │      │
 │  2. Push: drain outbox → upload          │      │
 │  3. Notify (emit events)                 │──────┘
-└────┬─────────────────────────────────────┘
-     │
-     ▼
-┌──────────────┐
-│ Merge        │
-│ (pure)       │
-└──────────────┘
-     │  no I/O
-     ▼
-   MergeResult
+└──────────────────────────────────────────┘
 ```
 
-**Four source files, each with a clear role:**
+**Three source files, each with a clear role:**
 
 | File | Role | Has side effects? |
 |------|------|:-:|
 | `auth.ts` | Google OAuth (sign in, get tokens) | Yes |
 | `drive.ts` | Google Drive REST API (upload, download, list, changes, delete) | Yes |
-| `sync.ts` | Sync engine (pull, push, reconcile) | Yes |
-| `merge.ts` | Resolves conflicts between local and remote | **No** |
+| `sync.ts` | Sync engine (pull, push, LWW reconcile) | Yes |
 
 ---
 
@@ -91,12 +81,11 @@ These are stamped automatically by database write methods. The `deviceId` is gen
 
 | Case | Condition | Action |
 |------|-----------|--------|
-| Same version | Same `updated_at` and `updated_by`, equivalent fields | Do nothing |
+| Same version | Same `updated_at` and `updated_by` | Do nothing (update manifest) |
 | Remote ahead | Remote `updated_at` > local, or tie-broken by `updated_by` | Apply remote locally |
-| Local ahead | Local `updated_at` > remote, or tie-broken by `updated_by` | Keep local, ensure outbox entry |
-| Concurrent | Neither clearly dominates | Run entity-specific merge |
+| Local ahead | Everything else | Keep local, ensure outbox entry |
 
-**Tie-breaking:** When `updated_at` matches, the lexicographically larger `updated_by` wins. This is arbitrary but deterministic — all devices make the same choice.
+**Tie-breaking:** When `updated_at` matches, the lexicographically larger `updated_by` wins. This is arbitrary but deterministic — all devices make the same choice. There is always a winner; no merge step is needed.
 
 ---
 
@@ -108,7 +97,7 @@ These are stamped automatically by database write methods. The `deviceId` is gen
 2. If no token exists (first sync or recovery), get a `startPageToken`, perform a **full reconcile** (list all remote files), save the token, and return.
 3. Call `changes.list` with the saved token.
 4. Group changed files by Ivy entity (parse filenames).
-5. For each changed entity, **reconcile**: download remote JSON, compare with local, apply merge/download/skip.
+5. For each changed entity, **reconcile**: download remote JSON, compare with local via LWW, download or skip.
 6. Advance the page token only after all changes are applied.
 
 If Drive returns an invalid token (410), the engine clears the checkpoint and falls back to full reconcile.
@@ -187,7 +176,7 @@ All JSON payloads include `updated_at` and `updated_by` for version comparison. 
 
 ### Clip Upload Safety
 
-Clips involve two files (JSON + audio). Audio uploads are size-capped at 50MB. If a clip's audio file exceeds this, the upload fails with an error rather than risking OOM.
+Clips involve two files (JSON + audio). Audio uploads are size-capped at 50MB. If a clip's audio file exceeds this, the upload fails with an error rather than risking OOM. If the audio upload fails after a new JSON file was created, the JSON is deleted (rolled back) to prevent orphans. Update-in-place JSON uploads don't need rollback since the old content remains valid.
 
 ---
 
@@ -216,7 +205,7 @@ The sync service emits `status` events containing `{ isSyncing, pendingCount, er
 
 ### 3. Data Notifications (sync service → store)
 
-After downloading or merging entities, the sync service emits a `data` event with changed entity IDs. The store re-fetches affected data from the database.
+After downloading remote entities, the sync service emits a `data` event with changed entity IDs. The store re-fetches affected data from the database.
 
 ---
 
@@ -229,8 +218,8 @@ A local mutex (`isSyncing` flag) ensures only one sync runs at a time. The outbo
 ### Cross-Device
 
 No distributed locks. Convergence comes from:
-- Version metadata on entities
-- Deterministic merge rules
+- Version metadata on entities (`updated_at`, `updated_by`)
+- Deterministic LWW comparison with tie-breaking
 - Eventual replay of remote changes via the Drive change feed
 
 ---
