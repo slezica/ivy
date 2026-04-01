@@ -83,26 +83,28 @@ export default function SettingsScreen() {
           />
         </View>
 
-        <View style={styles.settingSecondary}>
-          <Text style={styles.secondaryText}>
-            {sync.pendingCount > 0 ? pendingLabel : 'Up to date'}
-          </Text>
-
-          {sync.error && (
-            <>
-              <Text style={styles.secondaryText}> · </Text>
-              <Text style={styles.errorText}>Failed</Text>
-            </>
-          )}
-
-          <Text style={styles.secondaryText}> · </Text>
-
-          <TouchableOpacity onPress={syncNow} disabled={sync.isSyncing}>
-            <Text style={styles.linkText}>
-              {sync.isSyncing ? 'Syncing...' : 'Sync now'}
+        {settings.sync_enabled && (
+          <View style={styles.settingSecondary}>
+            <Text style={styles.secondaryText}>
+              {sync.pendingCount > 0 ? pendingLabel : 'Up to date'}
             </Text>
-          </TouchableOpacity>
-        </View>
+
+            {sync.error && (
+              <>
+                <Text style={styles.secondaryText}> · </Text>
+                <Text style={styles.errorText}>Failed</Text>
+              </>
+            )}
+
+            <Text style={styles.secondaryText}> · </Text>
+
+            <TouchableOpacity onPress={syncNow} disabled={sync.isSyncing}>
+              <Text style={styles.linkText}>
+                {sync.isSyncing ? 'Syncing...' : 'Sync now'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={[styles.settingRow, { marginTop: 24 }]}>
           <Text style={styles.settingLabel}>YouTube downloader</Text>
