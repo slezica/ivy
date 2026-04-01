@@ -5,6 +5,7 @@ import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import EmptyState from '../components/shared/EmptyState'
 import SessionItem from '../components/SessionItem'
+import SessionHistogram from '../components/SessionHistogram'
 import { useStore } from '../store'
 import { Space } from '../theme'
 
@@ -32,6 +33,7 @@ export default function SessionsScreen() {
           data={sortedSessions}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          ListHeaderComponent={<SessionHistogram sessions={sortedSessions} />}
           renderItem={({ item }) => (
             <SessionItem session={item} />
           )}
