@@ -42,7 +42,7 @@ function getBucketStart(date: Date, span: Span): number {
   }
   if (span === 'week') {
     const day = d.getDay()
-    d.setDate(d.getDate() - day)
+    d.setDate(d.getDate() - ((day + 6) % 7))
     return d.getTime()
   }
   if (span === 'month') {
