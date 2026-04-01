@@ -25,6 +25,7 @@ const SCOPES = [
 
 class GoogleAuthService {
   private configured = false
+  private tokenPromise: Promise<string | null> | null = null
 
   /**
    * Configure the service. Must be called before other methods.
@@ -53,17 +54,27 @@ class GoogleAuthService {
    * The native library handles token refresh automatically.
    */
   async getAccessToken(): Promise<string | null> {
+    // Serialize concurrent calls to avoid racing signInSilently
+    if (this.tokenPromise) return this.tokenPromise
+
+    this.tokenPromise = this.fetchAccessToken()
+    try {
+      return await this.tokenPromise
+    } finally {
+      this.tokenPromise = null
+    }
+  }
+
+  private async fetchAccessToken(): Promise<string | null> {
     await this.initialize()
 
     try {
-      // Restore session if needed
       if (GoogleSignin.hasPreviousSignIn()) {
         await GoogleSignin.signInSilently()
       } else {
         return null
       }
 
-      // Get tokens (library handles refresh internally)
       const tokens = await GoogleSignin.getTokens()
       return tokens.accessToken
     } catch (error: any) {
