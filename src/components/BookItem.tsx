@@ -48,7 +48,7 @@ export default function BookItem({ book, onPress, onOpenMenu }: BookItemProps) {
       <Pressable
         style={styles.menuButton}
         onPress={() => onOpenMenu(book.id)}
-        hitSlop={8}
+        hitSlop={{ top: 12, right: 16, bottom: 12, left: 8 }}
       >
         <Ionicons name="ellipsis-vertical" size={20} color={Color.TEXT_2} />
       </Pressable>

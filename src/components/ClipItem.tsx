@@ -47,7 +47,7 @@ export default function ClipItem({ clip, isPending, onView, onOpenMenu }: ClipIt
       <Pressable
         style={styles.menuButton}
         onPress={() => onOpenMenu(clip.id)}
-        hitSlop={8}
+        hitSlop={{ top: 12, right: 16, bottom: 12, left: 8 }}
         testID="clip-menu-button"
       >
         <Ionicons name="ellipsis-vertical" size={20} color={Color.TEXT_2} />
