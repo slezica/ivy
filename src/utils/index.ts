@@ -85,3 +85,11 @@ export type Logger = (...args: any[]) => void
 export function createLogger(tag: string): Logger {
   return (...args: any[]) => console.log(`[${tag}]`, ...args)
 }
+
+export function sanitizeFilename(filename: string): string {
+  return filename.replace(/[/\\:*?"<>|[\]]/g, '_')
+}
+
+export function uriToPath(uri: string): string {
+  return uri.startsWith('file://') ? uri.replace('file://', '') : uri
+}

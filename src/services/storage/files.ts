@@ -7,7 +7,7 @@
 
 import { Paths, Directory } from 'expo-file-system'
 import RNFS from 'react-native-fs'
-import { createLogger } from '../../utils'
+import { createLogger, uriToPath } from '../../utils'
 
 const log = createLogger('FileStorage')
 
@@ -137,10 +137,6 @@ export class FileStorageService {
 // =============================================================================
 // Helpers
 // =============================================================================
-
-function uriToPath(uri: string): string {
-  return uri.replace('file://', '')
-}
 
 function getExtension(path: string): string {
   const dotIndex = path.lastIndexOf('.')

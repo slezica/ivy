@@ -3,7 +3,7 @@ import type { GetState, SetState, Action, ActionFactory, AppState } from '../sto
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
 import type { CleanupOrphanedFiles } from './cleanup_orphaned_files'
-import { generateId, createLogger } from '../utils'
+import { generateId, createLogger, sanitizeFilename } from '../utils'
 import RNFS from 'react-native-fs'
 
 export interface LoadFromUrlDeps {
@@ -214,10 +214,6 @@ async function moveToAppStorage(files: FileStorageService, sourcePath: string, b
 
 function getFilename(path: string): string {
   return path.substring(path.lastIndexOf('/') + 1)
-}
-
-function sanitizeFilename(filename: string): string {
-  return filename.replace(/[/\\:*?"<>|[\]]/g, '_')
 }
 
 function isCancellation(error: unknown): boolean {

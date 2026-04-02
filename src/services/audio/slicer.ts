@@ -7,7 +7,7 @@
 
 import { NativeModules } from 'react-native'
 import RNFS from 'react-native-fs'
-import { createLogger } from '../../utils'
+import { createLogger, uriToPath } from '../../utils'
 
 const log = createLogger('AudioSlicer')
 
@@ -131,6 +131,3 @@ const { AudioSlicer } = NativeModules as {
 // Helpers
 // =============================================================================
 
-function uriToPath(uri: string): string {
-  return uri.startsWith('file://') ? uri.replace('file://', '') : uri
-}

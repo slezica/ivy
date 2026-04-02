@@ -8,7 +8,7 @@
  */
 
 import { NativeModules } from 'react-native'
-import { createLogger } from '../../utils'
+import { createLogger, uriToPath } from '../../utils'
 
 const log = createLogger('AudioMetadata')
 
@@ -75,6 +75,3 @@ const { AudioMetadataModule } = NativeModules as {
 // Helpers
 // =============================================================================
 
-function uriToPath(uri: string): string {
-  return uri.replace('file://', '')
-}

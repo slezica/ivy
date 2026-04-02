@@ -3,7 +3,7 @@ import type { GetState, SetState, Action, ActionFactory, AppState } from '../sto
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
 import type { CleanupOrphanedFiles } from './cleanup_orphaned_files'
-import { generateId, createLogger } from '../utils'
+import { generateId, createLogger, sanitizeFilename } from '../utils'
 
 export interface LoadFileDeps {
   db: DatabaseService
@@ -202,10 +202,6 @@ async function copyFile(ctx: Context, bookId: string, originalName: string): Pro
 function getExtension(filename: string): string {
   const dotIndex = filename.lastIndexOf('.')
   return dotIndex >= 0 ? filename.substring(dotIndex) : ''
-}
-
-function sanitizeFilename(filename: string): string {
-  return filename.replace(/[/\\:*?"<>|[\]]/g, '_')
 }
 
 function isCancellation(error: unknown): boolean {

@@ -8,6 +8,7 @@ import {
 jest.mock('../../utils', () => ({
   generateId: () => 'generated-id-1',
   createLogger: () => () => {},
+  sanitizeFilename: (f: string) => f.replace(/[/\\:*?"<>|[\]]/g, '_'),
 }))
 
 // Mock react-native-fs
