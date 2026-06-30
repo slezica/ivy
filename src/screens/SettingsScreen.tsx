@@ -8,13 +8,12 @@ import { useStore } from '../store'
 
 export default function SettingsScreen() {
   const router = useRouter()
-  const { settings, updateSettings, sync, syncNow, fetchSyncState, downloader, fetchDownloaderState, updateDownloader, transcription, startTranscription, stopTranscription } = useStore()
+  const { settings, updateSettings, sync, syncNow, fetchSyncState, transcription, startTranscription, stopTranscription } = useStore()
 
   useFocusEffect(
     useCallback(() => {
       fetchSyncState()
-      fetchDownloaderState()
-    }, [fetchSyncState, fetchDownloaderState])
+    }, [fetchSyncState])
   )
 
   const pendingLabel = sync.pendingCount === 1 ? '1 item pending' : `${sync.pendingCount} items pending`
@@ -105,24 +104,6 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
         )}
-
-        <View style={[styles.settingRow, { marginTop: 24 }]}>
-          <Text style={styles.settingLabel}>YouTube downloader</Text>
-        </View>
-
-        <View style={styles.settingSecondary}>
-          <Text style={styles.secondaryText}>
-            {downloader.version ?? '...'}
-          </Text>
-
-          <Text style={styles.secondaryText}> · </Text>
-
-          <TouchableOpacity onPress={updateDownloader} disabled={downloader.status === 'updating'}>
-            <Text style={styles.linkText}>
-              {downloader.status === 'updating' ? 'Updating...' : 'Update'}
-            </Text>
-          </TouchableOpacity>
-        </View>
 
       </View>
     </ScreenArea>
