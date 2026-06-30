@@ -26,7 +26,6 @@ class MainApplication : Application(), ReactApplication {
               add(AudioSlicerPackage())
               add(AudioMetadataPackage())
               add(FileCopierPackage())
-              add(FileDownloaderPackage())
               add(ChapterReaderPackage())
             }
 
