@@ -27,10 +27,9 @@ function createDeps(libraryOverrides: Partial<AppState['library']> = {}) {
 
 // -- Tests --------------------------------------------------------------------
 //
-// Note: these assert the behavior that must be preserved when the URL-download
-// feature is removed — cancelling the in-progress *copy* and resetting library
-// state. We deliberately do not assert on the downloader branch, since that dep
-// is going away.
+// These assert the behavior preserved after the URL-download feature was removed:
+// cancelling the in-progress *copy* and resetting library state. cancel_load_file
+// now depends only on the copier — there is no downloader branch to assert.
 
 describe('createCancelLoadFile', () => {
 
