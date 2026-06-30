@@ -165,10 +165,13 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
-    // yt-dlp for URL downloads
-    def youtubedlAndroidVersion = "0.18.1"
-    implementation("io.github.junkfood02.youtubedl-android:library:$youtubedlAndroidVersion")
-    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$youtubedlAndroidVersion")
+    // Bundled FFmpeg (libffmpeg.so), used by AudioSlicer (clip slicing + transcription
+    // extraction) and ChapterReader. We deliberately keep ONLY the :ffmpeg artifact —
+    // the yt-dlp :library engine was removed. :ffmpeg pulls :common transitively, but its
+    // FFmpeg.init() throws com.yausername.youtubedl_android.YoutubeDLException (declared
+    // compileOnly upstream, so not in the published POM), so we ship a shim of that class —
+    // see com/yausername/youtubedl_android/YoutubeDLException.kt.
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";

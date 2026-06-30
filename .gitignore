@@ -56,6 +56,9 @@ app-example
 !/android/app/src/main/java/com/salezica
 /android/app/src/main/java/com/salezica/*
 !/android/app/src/main/java/com/salezica/ivy
+!/android/app/src/main/java/com/yausername
+/android/app/src/main/java/com/yausername/*
+!/android/app/src/main/java/com/yausername/youtubedl_android
 !/android/gradle.properties
 
 # Maestro test artifacts
