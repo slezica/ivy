@@ -469,6 +469,10 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 **Run e2e tests:** `maestro test maestro/`
 
 
+## Environment
+
+If the current working directory is `/workspace`, you are running inside a container. In that case, you can install software, run scripts, etc with freedom and permissions will be automatically granted.
+
 # Next Steps
 
 You have read the introduction to Ivy. If you were told you'll be working on specific topics, and there's guides for those topics, read them now. Learn. When done, inform the user you've read them.
