@@ -7,7 +7,7 @@
 
 Ivy is a local-first audiobook/podcast player written in React Native. It can:
 
-- Import audio files into its library (from local files or URLs via yt-dlp)
+- Import audio files into its library (from local files)
 - Play audio files in the library
 - Extract, play and share clips
 - Remember listening sessions
@@ -34,7 +34,7 @@ These are in-depth guides to aspects of the application. CRITICAL: before you st
 
 ### Books and Library
 
-File import (local and URL), metadata editing, archiving, deletion, and restoration. See **[docs/BOOKS.md](docs/BOOKS.md)** for the full guide.
+File import (local files), metadata editing, archiving, deletion, and restoration. See **[docs/BOOKS.md](docs/BOOKS.md)** for the full guide.
 
 **Quick summary:** Files are copied to app-owned storage on import. Each book is fingerprinted (file size + first 4KB) for duplicate detection. Adding a file that matches an archived/deleted book restores it with preserved position. Books use soft-delete (`hidden` flag), never hard-delete.
 
@@ -114,8 +114,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
 - whisper.rn for on-device transcription
 - react-native-safe-area-context (not deprecated SafeAreaView)
 - expo-splash-screen (manual splash control during async initialization)
-- Native Kotlin modules for audio slicing, metadata, file copy, URL download
-- youtubedl-android 0.18.1 (yt-dlp + FFmpeg for URL downloads)
+- Native Kotlin modules for audio slicing, metadata, file copy
+- youtubedl-android 0.18.1 — `:ffmpeg` artifact only (bundled `libffmpeg.so` for clip slicing + chapter extraction; the yt-dlp engine was removed, see docs/2026-06-30-remove-ytdlp.md)
 
 ## File Structure
 
@@ -126,7 +126,6 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── play.ts, pause.ts, ... # Playback actions
   │   ├── add_clip.ts, ...       # Clip actions
   │   ├── load_file.ts, ...      # Library actions (local files)
-  │   ├── load_from_url.ts       # Library actions (URL download via yt-dlp)
   │   ├── initialize_application.ts # App startup (hydrate store, auto-load, dismiss splash)
   │   └── ...                     # ~35 action files total
   ├── store/
@@ -144,7 +143,6 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   │   ├── database.ts         # SQLite operations
   │   │   ├── files.ts            # File copying to app storage
   │   │   ├── copier.ts           # Native file copier (progress, fingerprint, cancel)
-  │   │   ├── downloader.ts       # URL download via yt-dlp native module
   │   │   └── picker.ts           # Document picker
   │   ├── transcription/
   │   │   ├── queue.ts            # Background transcription queue
@@ -162,7 +160,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── PlayerScreen.tsx        # Main player
   │   ├── ClipsListScreen.tsx     # Clip management
   │   ├── SessionsScreen.tsx      # Listening history
-  │   └── SettingsScreen.tsx      # App settings (sync, transcription, yt-dlp version)
+  │   └── SettingsScreen.tsx      # App settings (sync, transcription)
   ├── components/
   │   ├── MetadataEditor.tsx      # Book metadata editing (title, artist; artwork read-only)
   │   ├── ClipViewer.tsx          # Clip playback (own position state, timeline, transcription)
@@ -208,8 +206,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── AudioMetadataPackage.kt     # Native module package registration
   ├── FileCopierModule.kt         # Native module for file copy with progress
   ├── FileCopierPackage.kt        # Native module package registration
-  ├── FileDownloaderModule.kt     # Native module wrapping yt-dlp for URL downloads
-  └── FileDownloaderPackage.kt    # Native module package registration
+  ├── ChapterReaderModule.kt      # Native module for chapter extraction (FFmpeg -f ffmetadata)
+  └── ChapterReaderPackage.kt     # Native module package registration
 
 /maestro                          # Maestro e2e test flows
   ├── smoke-test.yaml             # Empty state verification
@@ -325,7 +323,7 @@ See `store/types.ts` for authoritative type definitions (`AppState` interface).
 initialized: boolean               // false until initializeApplication completes
 library: {
   status: 'idle' | 'adding' | 'duplicate' | 'error'
-  addProgress: number | null     // 0-100 percent (copy or download)
+  addProgress: number | null     // 0-100 percent (copy)
   addOpId: string | null         // Active operation ID (for cancellation)
   message: string | null         // Status message shown during loading
 }
@@ -350,10 +348,6 @@ sync: {
 }
 settings: { sync_enabled: boolean, transcription_enabled: boolean }
 sessions: Record<string, SessionWithBook>  // Listening history (keyed by id)
-downloader: {
-  version: string | null             // Current yt-dlp version
-  status: 'idle' | 'downloading' | 'updating'
-}
 currentSessionBookId: string | null
 ```
 

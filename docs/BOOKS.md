@@ -51,19 +51,19 @@ Archive and delete actions update the Zustand store immediately (optimistic), th
 ┌──────────────────────────────────────────────────────────────┐
 │                       Store Actions                           │
 │  loadFile · loadFileWithPicker · loadFileWithUri              │
-│  loadFromUrl · cancelLoadFile                                 │
+│  cancelLoadFile                                               │
 │  fetchBooks · archiveBook · deleteBook                        │
-└───┬──────────┬──────────┬──────────┬──────────┬─────────────┘
-    │          │          │          │          │
-    ▼          ▼          ▼          ▼          ▼
-┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────┐
-│  File  │ │Metadata│ │Database│ │  Sync  │ │   File   │
-│Storage │ │Service │ │Service │ │ Queue  │ │Downloader│
-└────────┘ └────────┘ └────────┘ └────────┘ └──────────┘
-  copy,      title,     upsert,    queue      download
-  rename,    artist,    archive,   changes    via yt-dlp
-  delete,    artwork,   hide,                 (YouTube,
-  fingerprint duration   restore               etc.)
+└───┬──────────┬──────────┬──────────┬────────────────────────┘
+    │          │          │          │
+    ▼          ▼          ▼          ▼
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│  File  │ │Metadata│ │Database│ │  Sync  │
+│Storage │ │Service │ │Service │ │ Queue  │
+└────────┘ └────────┘ └────────┘ └────────┘
+  copy,      title,     upsert,    queue
+  rename,    artist,    archive,   changes
+  delete,    artwork,   hide,
+  fingerprint duration   restore
 ```
 
 No dedicated "library service" — the actions coordinate the storage, metadata, and database services directly.
@@ -97,21 +97,6 @@ A `finally` block ensures no orphaned files remain:
 - The temporary file (pre-rename) is always deleted
 - If a renamed file exists but has no corresponding database record (DB write failed), it's also deleted
 - Cleanup failures are swallowed — they never affect the operation's outcome
-
----
-
-## Adding a Book from URL
-
-The "Download URL" option in the library menu lets users add books from YouTube and other yt-dlp-supported sites. This is handled by `loadFromUrl()`, which follows a different pipeline than `loadFile()` but converges on the same fingerprint → three cases → DB logic.
-
-### How it works
-
-Downloads via `FileDownloaderService` → native `FileDownloaderModule` (wraps `youtubedl-android`). File is downloaded to `{CachesDirectory}/downloads/` as m4a with embedded metadata, then goes through the same fingerprint → three cases → DB logic as `loadFile()`, and finally moved to app storage.
-
-### Native module gotchas
-
-- **Lazy initialization** — yt-dlp and FFmpeg are initialized on first use via `ensureInitialized()`, using a `CountDownLatch` so concurrent calls block until init completes.
-- **Legacy packaging required** — `expo.useLegacyPackaging=true` in `gradle.properties` is required because yt-dlp's native `.so` files must be extracted to disk (not kept compressed in the APK).
 
 ---
 
@@ -251,10 +236,7 @@ src/actions/
   load_file.ts           → Core loading pipeline (copy, metadata, fingerprint, upsert)
   load_file_with_uri.ts  → Thin wrapper: uri + name → loadFile
   load_file_with_picker.ts → Launch picker → loadFile
-  load_from_url.ts       → URL download pipeline (yt-dlp → fingerprint → upsert)
-  cancel_load_file.ts    → Cancel active copy or download
-  fetch_downloader_state.ts → Fetch yt-dlp version into store
-  update_downloader.ts   → Update yt-dlp, refresh version
+  cancel_load_file.ts    → Cancel the active copy
   fetch_books.ts         → Load all non-hidden books into store
   archive_book.ts        → Set uri=null, delete file
   update_book.ts         → Update title/artist, queue sync
@@ -263,21 +245,19 @@ src/actions/
 
 src/components/
   MetadataEditor.tsx     → Dialog content for editing book title/artist (shows artwork read-only)
-  LibraryLoadingDialog.tsx → Progress dialog for adding books (copy or download)
+  LibraryLoadingDialog.tsx → Progress dialog for adding books (copy)
 
 src/services/storage/
   database.ts            → Book CRUD, fingerprint lookup, archive/hide/restore
   files.ts               → FileStorageService (copy, rename, delete, fingerprint read)
   copier.ts              → FileCopierService (native file copy with progress + cancel)
-  downloader.ts          → FileDownloaderService (URL download via yt-dlp native module)
   picker.ts              → FilePickerService (expo-document-picker wrapper)
 
 src/services/audio/
   metadata.ts            → AudioMetadataService (native ID3 tag extraction)
 
 src/screens/
-  LibraryScreen.tsx      → Book list with active/archived sections, search, menus, URL dialog
-  SettingsScreen.tsx     → yt-dlp version display + update
+  LibraryScreen.tsx      → Book list with active/archived sections, search, menus
 
 src/store/
   index.ts               → Wires book actions, position sync, auto-sync trigger
@@ -286,5 +266,5 @@ src/store/
 android/.../
   AudioMetadataModule.kt    → Native metadata extraction (MediaMetadataRetriever)
   FileCopierModule.kt       → Native file copy with progress, fingerprint, cancellation
-  FileDownloaderModule.kt   → Native yt-dlp wrapper (download, cancel, update, version)
+  ChapterReaderModule.kt    → Native chapter extraction via bundled FFmpeg (-f ffmetadata)
 ```

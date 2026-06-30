@@ -20,9 +20,11 @@ Clips live independently of their source book. Even if the user archives the boo
 
 ### 1. Every clip has its own audio file
 
-When a clip is created, the relevant segment is extracted from the source book and saved as a standalone audio file at `{DocumentDirectory}/clips/{clipId}.m4a`. All clips are output as `.m4a` regardless of source format — the native slicer remuxes all audio into an MPEG-4 container via MediaMuxer. This file is the clip's permanent audio — it doesn't depend on the source book existing.
+When a clip is created, the relevant segment is extracted from the source book and saved as a standalone audio file at `{DocumentDirectory}/clips/{clipId}.m4a`. All clips are output as `.m4a` regardless of source format — the native slicer (`AudioSlicerModule`) shells out to the bundled FFmpeg (`libffmpeg.so`) to transcode the segment to AAC in an MPEG-4 container (`-map 0:a:0 -c:a aac`). This file is the clip's permanent audio — it doesn't depend on the source book existing.
 
 The JS side passes a filename prefix (no extension) to the native slicer, which appends `.m4a` and returns the actual path. The JS code stores the native return value in the database, so the correct extension is always what gets persisted.
+
+**FFmpeg packaging.** The slicer (and `ChapterReaderModule`) use `libffmpeg.so`, which ships in the `:ffmpeg` artifact of `youtubedl-android` (the yt-dlp engine itself was removed — see [2026-06-30-remove-ytdlp.md](2026-06-30-remove-ytdlp.md)). `expo.useLegacyPackaging=true` in `gradle.properties` is required so the native `.so` is extracted to disk rather than kept compressed in the APK. `FFmpeg.getInstance().init()` (idempotent) unpacks the binary on first use.
 
 ### 2. Clips reference their source, but don't require it
 
