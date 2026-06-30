@@ -6,7 +6,6 @@ import type { FetchClips } from '../actions/fetch_clips'
 import type { LoadFile } from '../actions/load_file'
 import type { LoadFileWithUri } from '../actions/load_file_with_uri'
 import type { LoadFileWithPicker } from '../actions/load_file_with_picker'
-import type { LoadFromUrl } from '../actions/load_from_url'
 import type { CancelLoadFile } from '../actions/cancel_load_file'
 import type { ArchiveBook } from '../actions/archive_book'
 import type { DeleteBook } from '../actions/delete_book'
@@ -30,8 +29,6 @@ import type { UpdateSettings } from '../actions/update_settings'
 import type { FetchSessions } from '../actions/fetch_sessions'
 import type { TrackSession } from '../actions/track_session'
 import type { UpdateBook } from '../actions/update_book'
-import type { FetchDownloaderState } from '../actions/fetch_downloader_state'
-import type { UpdateDownloader } from '../actions/update_downloader'
 import type { SetSpeed } from '../actions/set_speed'
 import type { InitializeApplication } from '../actions/initialize_application'
 
@@ -71,11 +68,6 @@ export interface AppState {
     error: string | null
   }
 
-  downloader: {
-    version: string | null
-    status: 'idle' | 'downloading' | 'updating'
-  }
-
   currentSessionBookId: string | null // TODO move out of here
 
   // Actions
@@ -83,7 +75,6 @@ export interface AppState {
   loadFile: LoadFile
   loadFileWithUri: LoadFileWithUri
   loadFileWithPicker: LoadFileWithPicker
-  loadFromUrl: LoadFromUrl
   cancelLoadFile: CancelLoadFile
   archiveBook: ArchiveBook
   deleteBook: DeleteBook
@@ -106,8 +97,6 @@ export interface AppState {
   syncNow: SyncNow
   autoSync: AutoSync
   fetchSyncState: FetchSyncState
-  fetchDownloaderState: FetchDownloaderState
-  updateDownloader: UpdateDownloader
   updateSettings: UpdateSettings
   fetchSessions: FetchSessions
   trackSession: TrackSession

@@ -1,6 +1,6 @@
 import { BaseService } from './base'
 import { AudioSlicerService, AudioPlayerService, AudioMetadataService, ChapterReaderService, playbackService } from './audio'
-import { DatabaseService, FileStorageService, FileCopierService, FileDownloaderService, FilePickerService } from './storage'
+import { DatabaseService, FileStorageService, FileCopierService, FilePickerService } from './storage'
 import { WhisperService, TranscriptionQueueService } from './transcription'
 import { SharingService } from './system'
 import { GoogleAuthService, GoogleDriveService, BackupSyncService } from './backup'
@@ -15,7 +15,6 @@ export type {
   WhisperService,
   FileStorageService,
   FileCopierService,
-  FileDownloaderService,
   FilePickerService,
   TranscriptionQueueService,
   SharingService,
@@ -40,8 +39,6 @@ export type {
   CopyBeginResult,
   CopyCommitResult,
   ProgressCallback,
-  DownloadResult,
-  DownloadProgressCallback,
 } from './storage'
 
 export type {
@@ -88,7 +85,6 @@ export type {
 export const db = new DatabaseService()
 export const files = new FileStorageService()
 export const copier = new FileCopierService()
-export const downloader = new FileDownloaderService()
 export const picker = new FilePickerService()
 export const metadata = new AudioMetadataService()
 export const chapters = new ChapterReaderService()

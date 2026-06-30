@@ -46,9 +46,6 @@ import { createFinalizeSession } from '../actions/finalize_session'
 import { createUpdateBook } from '../actions/update_book'
 import { createSetSpeed } from '../actions/set_speed'
 import { createCleanupOrphanedFiles } from '../actions/cleanup_orphaned_files'
-import { createLoadFromUrl } from '../actions/load_from_url'
-import { createFetchDownloaderState } from '../actions/fetch_downloader_state'
-import { createUpdateDownloader } from '../actions/update_downloader'
 import { createInitializeApplication } from '../actions/initialize_application'
 
 
@@ -79,7 +76,6 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const loadFile = createLoadFile({ ...deps, fetchBooks, fetchClips, cleanupOrphanedFiles })
   const loadFileWithUri = createLoadFileWithUri({ ...deps, loadFile })
   const loadFileWithPicker = createLoadFileWithPicker({ ...deps, loadFile })
-  const loadFromUrl = createLoadFromUrl({ ...deps, fetchBooks, fetchClips, cleanupOrphanedFiles })
   const cancelLoadFile = createCancelLoadFile(deps)
   const loadBook = createLoadBook(deps)
   const play = createPlay({ ...deps, loadBook })
@@ -98,8 +94,6 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const syncNow = createSyncNow(deps)
   const autoSync = createAutoSync(deps)
   const fetchSyncState = createFetchSyncState(deps)
-  const fetchDownloaderState = createFetchDownloaderState(deps)
-  const updateDownloader = createUpdateDownloader(deps)
   const updateSettings = createUpdateSettings(deps)
   const fetchSessions = createFetchSessions(deps)
   const trackSession = createTrackSession(deps)
@@ -153,11 +147,6 @@ export const useStore = create<AppState>()(immer((set, get) => {
       error: null,
     },
 
-    downloader: {
-      version: null,
-      status: 'idle',
-    },
-
     currentSessionBookId: null, // TODO sucks
 
     // Actions:
@@ -165,7 +154,6 @@ export const useStore = create<AppState>()(immer((set, get) => {
     loadFile,
     loadFileWithUri,
     loadFileWithPicker,
-    loadFromUrl,
     cancelLoadFile,
     archiveBook,
     deleteBook,
@@ -188,8 +176,6 @@ export const useStore = create<AppState>()(immer((set, get) => {
     syncNow,
     autoSync,
     fetchSyncState,
-    fetchDownloaderState,
-    updateDownloader,
     updateSettings,
     fetchSessions,
     trackSession,
