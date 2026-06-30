@@ -1,10 +1,9 @@
-import type { FileCopierService, FileDownloaderService } from '../services'
+import type { FileCopierService } from '../services'
 import type { GetState, SetState, Action, ActionFactory } from '../store/types'
 import { createLogger } from '../utils'
 
 export interface CancelLoadFileDeps {
   copier: FileCopierService
-  downloader: FileDownloaderService
   get: GetState
   set: SetState
 }
@@ -13,7 +12,7 @@ export type CancelLoadFile = Action<[]>
 
 export const createCancelLoadFile: ActionFactory<CancelLoadFileDeps, CancelLoadFile> = (deps) => (
   async () => {
-    const { copier, downloader, get, set } = deps
+    const { copier, get, set } = deps
     const log = createLogger('CancelLoadFile')
 
     const opId = get().library.addOpId
@@ -22,7 +21,7 @@ export const createCancelLoadFile: ActionFactory<CancelLoadFileDeps, CancelLoadF
 
     log(`Cancelling operation ${opId}`)
 
-    // Dismiss immediately — loadFile/loadFromUrl catch will handle cleanup in background
+    // Dismiss immediately — loadFile catch will handle cleanup in background
     set(state => {
       state.library.status = 'idle'
       state.library.addProgress = null
@@ -30,10 +29,7 @@ export const createCancelLoadFile: ActionFactory<CancelLoadFileDeps, CancelLoadF
       state.library.message = null
     })
 
-    // Signal native side — cancel both copy and download (only one will be active)
-    await Promise.all([
-      copier.cancelCopy(opId).catch(() => {}),
-      downloader.cancelDownload().catch(() => {}),
-    ])
+    // Signal native side to cancel the in-progress copy
+    await copier.cancelCopy(opId).catch(() => {})
   }
 )

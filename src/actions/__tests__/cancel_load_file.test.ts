@@ -1,7 +1,7 @@
 import { createCancelLoadFile, CancelLoadFileDeps } from '../cancel_load_file'
 import {
   createMockState, createImmerSet, createMockGet,
-  createMockCopier, createMockDownloader,
+  createMockCopier,
 } from './helpers'
 
 jest.mock('../../utils', () => ({
@@ -16,7 +16,6 @@ function createDeps(libraryOverrides: Partial<ReturnType<typeof createMockState>
 
   const deps: CancelLoadFileDeps = {
     copier: createMockCopier(),
-    downloader: createMockDownloader(),
     get: createMockGet(state),
     set: createImmerSet(state),
   }
