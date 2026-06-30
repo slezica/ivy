@@ -43,6 +43,13 @@ function createMockDeps(overrides: Partial<LoadFileDeps> = {}): LoadFileDeps {
 
 const INPUT = { uri: 'content://external/test.mp3', name: 'Test Book.mp3' }
 
+// Non-empty chapters to prove the (ffmpeg-backed) reader output flows through to
+// the persisted book record, not just the empty default.
+const CHAPTERS = [
+  { title: 'Intro', start_ms: 0, end_ms: 30000 },
+  { title: 'Part One', start_ms: 30000, end_ms: 60000 },
+]
+
 
 // -- Tests --------------------------------------------------------------------
 
@@ -146,6 +153,40 @@ describe('createLoadFile', () => {
 
       expect(deps.syncQueue.queueChange).toHaveBeenCalledWith('book', 'generated-id-1', 'upsert')
     })
+
+    it('reads chapters from the copied file', async () => {
+      const deps = createMockDeps()
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.chapters.readChapters).toHaveBeenCalledWith(
+        expect.stringContaining('generated-id-1'),
+      )
+    })
+
+    it('persists chapters to the new book record', async () => {
+      const deps = createMockDeps({
+        chapters: createMockChapterReader({ readChapters: jest.fn(async () => CHAPTERS) }),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.upsertBook).toHaveBeenCalledWith(
+        'generated-id-1',
+        expect.stringContaining('generated-id-1'),
+        'Test Book.mp3',
+        60000,
+        0,
+        'Test Title',
+        'Test Artist',
+        'data:image/png;base64,abc',
+        1024,
+        new Uint8Array([1, 2, 3]),
+        CHAPTERS,
+      )
+    })
   })
 
   // -- Case A: Archived book (fingerprint match, uri is null) -----------------
@@ -239,6 +280,33 @@ describe('createLoadFile', () => {
 
       expect(deps.db.upsertBook).not.toHaveBeenCalled()
       expect(deps.db.touchBook).not.toHaveBeenCalled()
+    })
+
+    it('persists chapters to the restored book record', async () => {
+      const archivedBook = createMockBook({ id: 'archived-1', uri: null })
+      const deps = createMockDeps({
+        db: createMockDb({
+          getBookByFingerprint: jest.fn(() => archivedBook),
+          restoreBook: jest.fn(() => createMockBook({ id: 'archived-1' })),
+        }),
+        chapters: createMockChapterReader({ readChapters: jest.fn(async () => CHAPTERS) }),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.restoreBook).toHaveBeenCalledWith(
+        'archived-1',
+        expect.stringContaining('archived-1'),
+        'Test Book.mp3',
+        60000,
+        'Test Title',
+        'Test Artist',
+        'data:image/png;base64,abc',
+        1024,
+        new Uint8Array([1, 2, 3]),
+        CHAPTERS,
+      )
     })
   })
 
