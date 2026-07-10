@@ -72,7 +72,7 @@ The system has no dedicated service — it's built from two store actions (`trac
 
 ## Session Lifecycle
 
-When playback starts, `trackSession(bookId)` queries for a recent session on this book. If one exists within the 5-minute window (`SESSION_GAP_THRESHOLD_MS`), it extends that session by updating `ended_at`; otherwise it creates a new one. While playback continues, the throttle fires `trackSession` every 5 seconds to keep `ended_at` current.
+When playback starts, `trackSession(bookId)` queries for a recent session on this book. If one exists within the 5-minute window, it extends that session by updating `ended_at`; otherwise it creates a new one. While playback continues, the throttle fires `trackSession` every 5 seconds to keep `ended_at` current.
 
 When playback stops, `finalizeSession` runs immediately (not throttled). Sessions shorter than `MIN_SESSION_DURATION_MS` (1 second) are deleted; the rest get a final `ended_at` update.
 
@@ -80,7 +80,7 @@ When playback stops, `finalizeSession` runs immediately (not throttled). Session
 
 ## The 5-Minute Window
 
-The session-extension mechanism uses `SESSION_GAP_THRESHOLD_MS` (5 minutes). When `trackSession` runs, it looks for an existing session on the same book whose `ended_at` is within this window. If found, it extends that session rather than creating a new one. If the gap has passed, a fresh session starts.
+The 5-minute window is hardcoded in `getCurrentSession` (`services/storage/database.ts`) — there is no named constant. When `trackSession` runs, `getCurrentSession` looks for an existing session on the same book whose `ended_at` is within the last 5 minutes. If found, it extends that session rather than creating a new one. If the gap has passed, a fresh session starts.
 
 ---
 
