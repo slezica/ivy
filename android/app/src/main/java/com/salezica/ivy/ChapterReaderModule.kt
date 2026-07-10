@@ -98,13 +98,23 @@ class ChapterReaderModule(reactContext: ReactApplicationContext) : ReactContextB
 
         for (section in sections) {
             val fields = mutableMapOf<String, String>()
-            for (line in section.lines()) {
+            val lines = section.lines()
+            var i = 0
+            while (i < lines.size) {
+                val line = lines[i]
                 val eq = line.indexOf('=')
                 if (eq > 0) {
                     val key = line.substring(0, eq).trim()
-                    val value = line.substring(eq + 1).trim()
-                    fields[key] = value
+                    var value = line.substring(eq + 1)
+                    // A trailing unescaped backslash escapes the newline:
+                    // the value continues on the next line.
+                    while (endsInLoneBackslash(value) && i + 1 < lines.size) {
+                        i++
+                        value = value.dropLast(1) + "\n" + lines[i]
+                    }
+                    fields[key] = unescapeValue(value.trim())
                 }
+                i++
             }
 
             val timebase = parseTimebase(fields["TIMEBASE"])
@@ -124,6 +134,39 @@ class ChapterReaderModule(reactContext: ReactApplicationContext) : ReactContextB
         }
 
         return result
+    }
+
+    /** True if the string ends in an odd number of backslashes (i.e. a lone, unescaped one). */
+    private fun endsInLoneBackslash(value: String): Boolean {
+        var count = 0
+        var i = value.length - 1
+        while (i >= 0 && value[i] == '\\') {
+            count++
+            i--
+        }
+        return count % 2 == 1
+    }
+
+    /**
+     * Unescape ffmetadata backslash sequences (\\, \=, \;, \# — a backslash
+     * escapes whatever character follows it). A trailing lone backslash is dropped.
+     */
+    private fun unescapeValue(raw: String): String {
+        val sb = StringBuilder(raw.length)
+        var i = 0
+        while (i < raw.length) {
+            val c = raw[i]
+            if (c == '\\' && i + 1 < raw.length) {
+                sb.append(raw[i + 1])
+                i += 2
+            } else if (c == '\\') {
+                i++ // trailing lone backslash — drop it
+            } else {
+                sb.append(c)
+                i++
+            }
+        }
+        return sb.toString()
     }
 
     /** Parse TIMEBASE=num/den into a multiplier (seconds per unit). Defaults to 1/1000. */
