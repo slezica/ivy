@@ -42,11 +42,21 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
         state.playback.ownerId = context.ownerId
       })
 
-      const duration = await audio.load(context.fileUri, {
-        title: bookRecord.title,
-        artist: bookRecord.artist,
-        artwork: bookRecord.artwork,
-      })
+      let duration: number
+      try {
+        duration = await audio.load(context.fileUri, {
+          title: bookRecord.title,
+          artist: bookRecord.artist,
+          artwork: bookRecord.artwork,
+        })
+      } catch (error) {
+        // Nothing is loaded — reset so the loading guard doesn't block forever
+        set(state => {
+          state.playback.status = 'idle'
+          state.playback.uri = null
+        })
+        throw error
+      }
 
       set(state => {
         state.playback.uri = context.fileUri

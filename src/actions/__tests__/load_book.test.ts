@@ -125,6 +125,31 @@ describe('createLoadBook', () => {
 
       expect(state.playback.ownerId).toBe('new-owner')
     })
+
+    it('resets playback to idle and re-throws when audio.load fails', async () => {
+      const { state, deps } = createStatefulDeps({ uri: null }, {
+        audio: createMockAudio({ load: jest.fn(async () => { throw new Error('load failed') }) }),
+      })
+      const loadBook = createLoadBook(deps)
+
+      await expect(loadBook(CONTEXT)).rejects.toThrow('load failed')
+
+      expect(state.playback.status).toBe('idle')
+      expect(state.playback.uri).toBeNull()
+    })
+
+    it('does not stay stuck in loading after a failed load', async () => {
+      const { deps } = createStatefulDeps({ uri: null }, {
+        audio: createMockAudio({ load: jest.fn(async () => { throw new Error('load failed') }) }),
+      })
+      const loadBook = createLoadBook(deps)
+
+      await expect(loadBook(CONTEXT)).rejects.toThrow('load failed')
+
+      // A retry must not be blocked by the loading guard
+      await expect(loadBook(CONTEXT)).rejects.toThrow('load failed')
+      expect(deps.audio.load).toHaveBeenCalledTimes(2)
+    })
   })
 
   // -- Same file, different position ------------------------------------------
