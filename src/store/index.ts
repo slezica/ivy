@@ -53,8 +53,6 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const deps = { set, get, ...services, syncQueue }
   const { db, audio, files, transcription, sync } = services
 
-  const initialSettings = db.getSettings()
-
   // Throttled helpers
   const queuePositionSync = throttle((bookId: string) => {
     db.queueChange('book', bookId, 'upsert').catch(() => {})
