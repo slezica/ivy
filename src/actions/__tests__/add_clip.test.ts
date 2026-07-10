@@ -74,6 +74,16 @@ describe('createAddClip', () => {
 
       await expect(addClip('book-1', 0)).rejects.toThrow('Book has been archived')
     })
+
+    it('throws if position is at or past the end of the book', async () => {
+      const { deps } = createDeps({ bookDuration: 60000 })
+      const addClip = createAddClip(deps)
+
+      await expect(addClip('book-1', 60000)).rejects.toThrow('Cannot add clip at the end of the book')
+      await expect(addClip('book-1', 70000)).rejects.toThrow('Cannot add clip at the end of the book')
+      expect(deps.slicer.slice).not.toHaveBeenCalled()
+      expect(deps.db.createClip).not.toHaveBeenCalled()
+    })
   })
 
   describe('audio slicing', () => {

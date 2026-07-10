@@ -33,6 +33,9 @@ export const createAddClip: ActionFactory<AddClipDeps, AddClip> = (deps) => (
 
     // Cap clip duration to not exceed remaining audio length
     const remainingDuration = book.duration - position
+    if (remainingDuration <= 0) {
+      throw new Error('Cannot add clip at the end of the book')
+    }
     const clipDuration = Math.min(DEFAULT_CLIP_DURATION_MS, remainingDuration)
 
     // Generate clip ID upfront and use it for filename
