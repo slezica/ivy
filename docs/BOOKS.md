@@ -92,10 +92,11 @@ After the database is updated, `fetchBooks()` and `fetchClips()` reload all data
 
 ### Cleanup
 
-A `finally` block ensures no orphaned files remain:
+Files are copied directly to their final path (`audio/{bookId}{ext}`) — there is no temp file or rename step. Several layers ensure no orphaned files remain:
 
-- The temporary file (pre-rename) is always deleted
-- If a renamed file exists but has no corresponding database record (DB write failed), it's also deleted
+- The native copier deletes the destination file itself when the copy fails or is cancelled
+- If metadata extraction or the DB write fails after the copy, `loadFile`'s catch deletes the copied file — but only if no database record references it
+- Any leftovers that slip through are reclaimed by `cleanupOrphanedFiles`, which runs at the start of the next `loadFile` and deletes files with no matching database record
 - Cleanup failures are swallowed — they never affect the operation's outcome
 
 ---
