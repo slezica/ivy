@@ -51,31 +51,30 @@ describe('TranscriptionQueueService', () => {
       const clip1 = createMockClip('clip-1')
       const clip2 = createMockClip('clip-2')
 
-      // Track which clips are "pending" (not yet transcribed)
-      const pendingClips = new Set([clip1.id, clip2.id])
-
-      deps.database.getClipsNeedingTranscription = jest.fn(async () => {
-        return [clip1, clip2].filter(c => pendingClips.has(c.id))
-      })
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => [clip1, clip2])
 
       // First clip throws, second should still be processed
       deps.slicer.slice = jest.fn()
         .mockRejectedValueOnce(new Error('Slice failed'))
         .mockResolvedValue({ uri: 'file:///temp.mp3', path: '/temp.mp3' })
 
-      // Mark clip as transcribed when updateClip is called
-      deps.database.updateClip = jest.fn(async (id: string) => {
-        pendingClips.delete(id)
-      })
+      const completedClips: string[] = []
 
       const service = new TranscriptionQueueService(deps)
+      service.on('finish', ({ clipId, transcription }) => {
+        if (transcription !== undefined) completedClips.push(clipId)
+      })
+
       await service.start()
 
       // Wait for processing to complete
       await new Promise(resolve => setTimeout(resolve, 100))
 
       // clip-1 failed but clip-2 should have been processed
-      expect(deps.database.updateClip).toHaveBeenCalledWith('clip-2', { transcription: 'transcription result' })
+      expect(completedClips).toEqual(['clip-2'])
+
+      // Persistence is the store's job — the queue never writes the DB directly
+      expect(deps.database.updateClip).not.toHaveBeenCalled()
     })
 
     it('continues processing remaining queue items after error', async () => {
@@ -84,15 +83,7 @@ describe('TranscriptionQueueService', () => {
       const clip2 = createMockClip('clip-2')
       const clip3 = createMockClip('clip-3')
 
-      const pendingClips = new Set([clip1.id, clip2.id, clip3.id])
-
-      deps.database.getClipsNeedingTranscription = jest.fn(async () => {
-        return [clip1, clip2, clip3].filter(c => pendingClips.has(c.id))
-      })
-
-      deps.database.updateClip = jest.fn(async (id: string) => {
-        pendingClips.delete(id)
-      })
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => [clip1, clip2, clip3])
 
       // Second clip throws error
       let sliceCallCount = 0
@@ -127,15 +118,7 @@ describe('TranscriptionQueueService', () => {
       const clip1 = createMockClip('clip-1')
       const clip2 = createMockClip('clip-2')
 
-      const pendingClips = new Set([clip1.id, clip2.id])
-
-      deps.database.getClipsNeedingTranscription = jest.fn(async () => {
-        return [clip1, clip2].filter(c => pendingClips.has(c.id))
-      })
-
-      deps.database.updateClip = jest.fn(async (id: string) => {
-        pendingClips.delete(id)
-      })
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => [clip1, clip2])
 
       // First clip throws
       deps.slicer.slice = jest.fn()
@@ -156,6 +139,30 @@ describe('TranscriptionQueueService', () => {
 
       // The event should have been emitted for clip-2
       expect(completedClips).toContainEqual({ clipId: 'clip-2', transcription: 'transcription result' })
+    })
+  })
+
+  describe('transcription results', () => {
+    it('emits finish with an empty transcription without writing the DB', async () => {
+      const deps = createMockDeps()
+      const clip = createMockClip('clip-1')
+
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => [clip])
+      deps.whisper.transcribe = jest.fn(() => Promise.resolve(''))
+
+      const finished: { clipId: string; transcription?: string; error?: Error }[] = []
+
+      const service = new TranscriptionQueueService(deps)
+      service.on('finish', (event) => finished.push(event))
+
+      await service.start()
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      // '' is a valid result (silence/music) and must reach listeners;
+      // persistence happens in the store, never in the queue
+      expect(finished).toEqual([{ clipId: 'clip-1', transcription: '' }])
+      expect(deps.database.updateClip).not.toHaveBeenCalled()
     })
   })
 

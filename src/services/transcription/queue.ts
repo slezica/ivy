@@ -184,10 +184,10 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
       audioPath = await this.extractClipAudio(clip)
 
       const transcription = await this.whisper.transcribe(audioPath)
-
-      await this.database.updateClip(clipId, { transcription })
       log('Completed clip:', clipId, '| Result:', transcription)
 
+      // Persistence is the store's job: its 'finish' handler runs the
+      // updateClip action, which writes the DB and queues the change for sync
       this.emit('finish', { clipId, transcription })
 
     } catch (error) {

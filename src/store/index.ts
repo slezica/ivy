@@ -249,7 +249,8 @@ export const useStore = create<AppState>()(immer((set, get) => {
       delete state.transcription.pending[clipId]
     })
 
-    if (transcription) {
+    // Empty string is a valid result (silence/music) — only errors are skipped
+    if (transcription != null) {
       updateClip(clipId, { transcription })
     }
   }
