@@ -28,6 +28,16 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
 
     const isSameFile = (playback.uri === context.fileUri)
 
+    // Apply per-book speed for main player, 1× for clips
+    const applyRate = async (bookRecord?: { speed: number } | null) => {
+      let rate = 1
+      if (context.ownerId === MAIN_PLAYER_OWNER_ID) {
+        const record = bookRecord ?? await db.getBookByAnyUri(context.fileUri)
+        if (record) rate = record.speed / 100
+      }
+      await audio.setRate(rate)
+    }
+
     if (!isSameFile) {
       const bookRecord = await db.getBookByAnyUri(context.fileUri)
       if (!bookRecord) {
@@ -67,10 +77,7 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
       })
 
       await audio.seek(context.position)
-
-      // Apply per-book speed for main player, 1× for clips
-      const rate = context.ownerId === MAIN_PLAYER_OWNER_ID ? bookRecord.speed / 100 : 1
-      await audio.setRate(rate)
+      await applyRate(bookRecord)
 
       log(`Loaded (${duration}ms)`)
 
@@ -82,11 +89,13 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
         state.playback.ownerId = context.ownerId
       })
       await audio.seek(context.position)
+      await applyRate()
 
     } else {
       set(state => {
         state.playback.ownerId = context.ownerId
       })
+      await applyRate()
     }
   }
 )

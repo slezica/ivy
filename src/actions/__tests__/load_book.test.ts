@@ -198,4 +198,66 @@ describe('createLoadBook', () => {
       expect(state.playback.ownerId).toBe('new-owner')
     })
   })
+
+  // -- Playback rate ------------------------------------------------------------
+
+  describe('playback rate', () => {
+    it('applies book speed for main player on fresh load', async () => {
+      const book = createMockBook({ speed: 150 })
+      const { deps } = createStatefulDeps({ uri: null }, {
+        db: createMockDb({ getBookByAnyUri: jest.fn(() => book) }),
+      })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook(CONTEXT)
+
+      expect(deps.audio.setRate).toHaveBeenCalledWith(1.5)
+    })
+
+    it('applies 1x for clip owners on fresh load', async () => {
+      const book = createMockBook({ speed: 150 })
+      const { deps } = createStatefulDeps({ uri: null }, {
+        db: createMockDb({ getBookByAnyUri: jest.fn(() => book) }),
+      })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook({ ...CONTEXT, ownerId: 'clip-viewer-1' })
+
+      expect(deps.audio.setRate).toHaveBeenCalledWith(1)
+    })
+
+    it('applies book speed for main player on same file, different position', async () => {
+      const book = createMockBook({ speed: 150 })
+      const { deps } = createStatefulDeps({ uri: CONTEXT.fileUri, position: 0, duration: 60000 }, {
+        db: createMockDb({ getBookByAnyUri: jest.fn(() => book) }),
+      })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook(CONTEXT)
+
+      expect(deps.audio.setRate).toHaveBeenCalledWith(1.5)
+    })
+
+    it('applies book speed for main player on same file, same position', async () => {
+      const book = createMockBook({ speed: 150 })
+      const { deps } = createStatefulDeps({ uri: CONTEXT.fileUri, position: CONTEXT.position, duration: 60000 }, {
+        db: createMockDb({ getBookByAnyUri: jest.fn(() => book) }),
+      })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook(CONTEXT)
+
+      expect(deps.audio.setRate).toHaveBeenCalledWith(1.5)
+    })
+
+    it('applies 1x for clip owners on same file without fetching the book', async () => {
+      const { deps } = createStatefulDeps({ uri: CONTEXT.fileUri, position: 0, duration: 60000 })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook({ ...CONTEXT, ownerId: 'clip-viewer-1' })
+
+      expect(deps.audio.setRate).toHaveBeenCalledWith(1)
+      expect(deps.db.getBookByAnyUri).not.toHaveBeenCalled()
+    })
+  })
 })
