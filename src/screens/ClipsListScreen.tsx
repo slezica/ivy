@@ -209,7 +209,7 @@ export default function ClipsListScreen() {
       }
 
       {(viewingClip || editingClip) && (
-        <Dialog visible onClose={handleCloseViewClip}>
+        <Dialog visible onClose={editingClip ? handleCancelEditClip : handleCloseViewClip}>
           {editingClip ? (
             <ClipEditor
               clip={editingClip}
