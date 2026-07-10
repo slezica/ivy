@@ -548,7 +548,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     for (const item of items) {
       try {
         await this.pushOutboxItem(item, result)
-        await this.db.removeOutboxItem(item.entity_type, item.entity_id)
+        await this.db.removeOutboxItem(item.entity_type, item.entity_id, item.updated_at_when_queued)
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
         await this.db.updateOutboxItemAttempt(item.entity_type, item.entity_id, msg)

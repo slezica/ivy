@@ -406,7 +406,7 @@ describe('BackupSyncService', () => {
       await service.syncNow()
 
       expect(drive.uploadFile).toHaveBeenCalled()
-      expect(db.removeOutboxItem).toHaveBeenCalledWith('book', BOOK_ID)
+      expect(db.removeOutboxItem).toHaveBeenCalledWith('book', BOOK_ID, 1000)
     })
 
     it('uses updateFile when manifest has remote_file_id', async () => {
@@ -498,9 +498,55 @@ describe('BackupSyncService', () => {
       const service = new BackupSyncService(db, drive, auth)
       await service.syncNow()
 
-      // Should still remove the outbox item (pushOutbox does this)
-      // but the upload method should have re-queued with the fresh entity's updated_at
+      // The upload re-queues with the fresh entity's updated_at, and the
+      // outbox removal is conditional on the ORIGINAL updated_at_when_queued
+      // so the re-queued row survives
       expect(db.queueChange).toHaveBeenCalledWith('book', BOOK_ID, 'upsert', 2000)
+      expect(db.removeOutboxItem).toHaveBeenCalledWith('book', BOOK_ID, 1000)
+    })
+
+    it('keeps a re-queued outbox row when clearing the pushed item', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+      drive.getChanges.mockResolvedValue({ changes: [], newStartPageToken: '101' })
+
+      // Emulate the real sync_queue table: UNIQUE(entity_type, entity_id) with
+      // upsert semantics on queueChange, conditional delete on removeOutboxItem
+      const table = new Map<string, { operation: string; updated_at_when_queued: number }>()
+      table.set(`book:${BOOK_ID}`, { operation: 'upsert', updated_at_when_queued: 1000 })
+
+      db.queueChange.mockImplementation(async (type, id, operation, entityUpdatedAt) => {
+        table.set(`${type}:${id}`, { operation, updated_at_when_queued: entityUpdatedAt ?? Date.now() })
+      })
+      db.removeOutboxItem.mockImplementation(async (type, id, queuedUpdatedAt) => {
+        const row = table.get(`${type}:${id}`)
+        if (row && row.updated_at_when_queued === queuedUpdatedAt) {
+          table.delete(`${type}:${id}`)
+        }
+      })
+
+      db.getOutboxItems.mockResolvedValue([{
+        id: 'outbox-1',
+        entity_type: 'book' as const,
+        entity_id: BOOK_ID,
+        operation: 'upsert' as const,
+        updated_at_when_queued: 1000,
+        queued_at: 1000,
+        attempts: 0,
+        last_error: null,
+      }])
+
+      // Entity is modified during upload: the stale check re-queues it
+      db.getBookById
+        .mockResolvedValueOnce(createBook({ updated_at: 1000 }))
+        .mockResolvedValueOnce(createBook({ updated_at: 2000 }))
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      // The re-queued row (updated_at_when_queued = 2000) must survive removal
+      expect(table.get(`book:${BOOK_ID}`)).toEqual({ operation: 'upsert', updated_at_when_queued: 2000 })
     })
 
     it('does not re-queue when entity has not changed since enqueue', async () => {

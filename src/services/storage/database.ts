@@ -985,10 +985,12 @@ export class DatabaseService {
     )
   }
 
-  async removeOutboxItem(entityType: SyncEntityType, entityId: string): Promise<void> {
+  async removeOutboxItem(entityType: SyncEntityType, entityId: string, queuedUpdatedAt: number): Promise<void> {
+    // Conditional delete: a row re-queued during upload (stale detection) has a
+    // different updated_at_when_queued and must survive this removal
     await this.db.runAsync(
-      'DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ?',
-      [entityType, entityId]
+      'DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ? AND updated_at_when_queued = ?',
+      [entityType, entityId, queuedUpdatedAt]
     )
   }
 
