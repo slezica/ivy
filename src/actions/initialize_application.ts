@@ -24,27 +24,32 @@ export const createInitializeApplication: ActionFactory<InitializeApplicationDep
   async () => {
     const { db, set, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription } = deps
 
-    // Hydrate store with data
-    await Promise.all([fetchBooks(), fetchClips(), fetchSessions()])
+    try {
+      // Hydrate store with data
+      await Promise.all([fetchBooks(), fetchClips(), fetchSessions()])
 
-    // Auto-load last played book
-    const lastPlayed = db.getLastPlayedBook()
-    if (lastPlayed?.uri) {
-      await loadBook({
-        fileUri: lastPlayed.uri,
-        position: lastPlayed.position,
-        ownerId: MAIN_PLAYER_OWNER_ID,
-      }).catch(() => {}) // non-critical
+      // Auto-load last played book
+      const lastPlayed = db.getLastPlayedBook()
+      if (lastPlayed?.uri) {
+        await loadBook({
+          fileUri: lastPlayed.uri,
+          position: lastPlayed.position,
+          ownerId: MAIN_PLAYER_OWNER_ID,
+        }).catch(() => {}) // non-critical
+      }
+
+      // Auto-start transcription if enabled
+      const settings = db.getSettings()
+      if (settings.transcription_enabled) {
+        startTranscription().catch((error) => {
+          console.error('[Store] Transcription failed to start after retries:', error)
+        })
+      }
+    } catch (error) {
+      // Non-fatal: an empty library beats a permanent splash screen
+      console.error('[Store] Initialization failed:', error)
+    } finally {
+      set((state) => { state.initialized = true })
     }
-
-    // Auto-start transcription if enabled
-    const settings = db.getSettings()
-    if (settings.transcription_enabled) {
-      startTranscription().catch((error) => {
-        console.error('[Store] Transcription failed to start after retries:', error)
-      })
-    }
-
-    set((state) => { state.initialized = true })
   }
 )

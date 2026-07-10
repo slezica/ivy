@@ -12,7 +12,9 @@ export default function RootLayout() {
   const initializeApplication = useStore(s => s.initializeApplication)
 
   useEffect(() => {
-    initializeApplication()
+    initializeApplication().catch((error) => {
+      console.error('[App] Initialization failed:', error)
+    })
   }, [])
 
   useEffect(() => {
