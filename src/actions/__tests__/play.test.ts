@@ -59,6 +59,17 @@ describe('createPlay', () => {
     expect(callOrder).toEqual(['loadBook', 'audio.play'])
   })
 
+  it('no-ops while another load is in flight', async () => {
+    const { state, deps } = createStatefulDeps({ status: 'loading' })
+    const play = createPlay(deps)
+
+    await play(CONTEXT)
+
+    expect(deps.loadBook).not.toHaveBeenCalled()
+    expect(deps.audio.play).not.toHaveBeenCalled()
+    expect(state.playback.status).toBe('loading')
+  })
+
   // -- Error handling ---------------------------------------------------------
 
   describe('error handling', () => {
