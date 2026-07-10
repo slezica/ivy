@@ -23,8 +23,8 @@ class AudioMetadataModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun extractMetadata(filePath: String, promise: Promise) {
+        val retriever = MediaMetadataRetriever()
         try {
-            val retriever = MediaMetadataRetriever()
             retriever.setDataSource(filePath)
 
             val result: WritableMap = Arguments.createMap()
@@ -71,10 +71,11 @@ class AudioMetadataModule(reactContext: ReactApplicationContext) :
                 result.putString("artwork", null)
             }
 
-            retriever.release()
             promise.resolve(result)
         } catch (e: Exception) {
             promise.reject("METADATA_EXTRACTION_ERROR", "Failed to extract metadata: ${e.message}", e)
+        } finally {
+            retriever.release()
         }
     }
 
