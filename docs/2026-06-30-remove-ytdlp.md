@@ -1,6 +1,6 @@
 # Remove the yt-dlp (URL download) feature
 
-**Status:** planned
+**Status:** implemented
 **Branch:** `remove-ytdlp`
 **Date:** 2026-06-30
 
