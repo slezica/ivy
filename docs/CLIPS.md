@@ -10,7 +10,7 @@ Each clip captures:
 - **Where** in the source book it starts, and how long it is
 - **Its own audio file** — a slice of the source, stored permanently
 - **A note** — user-written, optional
-- **A transcription** — auto-generated from the first 10 seconds (see [docs/TRANSCRIPTION.md](TRANSCRIPTION.md))
+- **A transcription** — auto-generated from the first 60 seconds (see [docs/TRANSCRIPTION.md](TRANSCRIPTION.md))
 
 Clips live independently of their source book. Even if the user archives the book (freeing storage), clips remain playable from their own audio files.
 

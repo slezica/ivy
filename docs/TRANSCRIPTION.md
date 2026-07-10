@@ -9,7 +9,7 @@ When a user creates a clip (a bookmarked audio segment), Ivy automatically trans
 This is powered by [Whisper](https://github.com/openai/whisper), OpenAI's open-source speech recognition model, running natively via `whisper.rn`. The model (~150MB) downloads once on first use and is cached locally.
 
 **What gets transcribed:**
-- The first **10 seconds** of each clip's audio
+- The first **60 seconds** of each clip's audio
 
 **What triggers transcription:**
 - Creating a new clip
@@ -73,7 +73,7 @@ Everything happens on-device. The Whisper model runs locally via native bindings
 │ WhisperService│ │  AudioSlicerService  │
 │              │ │  (native Kotlin)     │
 │ initialize() │ │                      │
-│ transcribe() │ │  Extracts first 10s  │
+│ transcribe() │ │  Extracts first 60s  │
 │              │ │  of clip audio       │
 │              │ └──────────────────────┘
 └──────────────┘
@@ -153,9 +153,9 @@ processQueue():
 
 The `processing` flag is the key concurrency guard. It ensures only one clip is being transcribed at any time. The flag is reset in a `finally` block to prevent it from getting stuck if a clip fails.
 
-### The 10-second limit
+### The 60-second limit
 
-Only the first 10 seconds of each clip are transcribed. This is defined by `MAX_TRANSCRIPTION_DURATION_MS = 10000`. The audio slicer extracts `min(clip.duration, 10000)` milliseconds.
+Only the first 60 seconds of each clip are transcribed. This is defined by `MAX_TRANSCRIPTION_DURATION_MS = 60000`. The audio slicer extracts `min(clip.duration, 60000)` milliseconds.
 
 This is a practical tradeoff: transcription is CPU-intensive, and most clips are short bookmarks where the first few seconds capture the key content.
 
