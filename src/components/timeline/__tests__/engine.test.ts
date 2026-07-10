@@ -47,12 +47,12 @@ function tx(time: number): number {
 
 /** Create an engine with mock callbacks and optional config overrides */
 function createEngine(configOverrides?: Partial<EngineConfig>) {
-  const callbacks: EngineCallbacks = {
+  const callbacks = {
     onSeek: jest.fn(),
     onSelectionChange: jest.fn(),
     onFrame: jest.fn(),
     onDisplayPosition: jest.fn(),
-  }
+  } satisfies EngineCallbacks
 
   const config = { ...DEFAULT_CONFIG, ...configOverrides }
   const engine = new TimelinePhysicsEngine(config, callbacks)
