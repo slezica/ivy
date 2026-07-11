@@ -192,27 +192,36 @@ export const useStore = create<AppState>()(immer((set, get) => {
       state.playback.position = status.position
     })
 
+    const { playback, books, currentSessionBookId } = get()
+    const book = playback.uri ? Object.values(books).find(b => b.uri === playback.uri) : undefined
+
+    // Finalize the active session when playback stops, the book changes, or the
+    // main player loses ownership — checked before the guards below because book
+    // switches null playback.uri during the transition
+    if (currentSessionBookId) {
+      const interrupted =
+        status.status !== 'playing' ||
+        playback.ownerId !== MAIN_PLAYER_OWNER_ID ||
+        book?.id !== currentSessionBookId
+
+      if (interrupted) {
+        finalizeSession(currentSessionBookId)
+        set((state) => { state.currentSessionBookId = null })
+      }
+    }
+
     // Update book position in database
-    const { playback, books } = get()
     if (!playback.uri || status.position < 0 || status.duration <= 0) return
     if (playback.ownerId !== MAIN_PLAYER_OWNER_ID) return
-
-    const book = Object.values(books).find(b => b.uri === playback.uri)
     if (!book) return
 
     db.updateBookPosition(book.id, status.position)
     queuePositionSync(book.id)
 
     // Track listening sessions
-    const { currentSessionBookId } = get()
-
     if (status.status === 'playing') {
-      if (!book || status.position < 0 || status.duration <= 0) return
       set((state) => { state.currentSessionBookId = book.id })
       throttledTrackSession(book.id)
-    } else if (currentSessionBookId) {
-      finalizeSession(currentSessionBookId)
-      set((state) => { state.currentSessionBookId = null })
     }
   }
 
