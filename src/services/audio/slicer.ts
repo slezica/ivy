@@ -86,16 +86,39 @@ export class AudioSlicerService {
 
   /**
    * Move a file from one path to another, replacing the destination if it exists.
+   * The existing destination is kept as a backup until the move succeeds, so a
+   * failed move never loses the only copy of the file.
    */
   async move(fromPath: string, toPath: string): Promise<void> {
     const src = uriToPath(fromPath)
     const dst = uriToPath(toPath)
+    const backup = `${dst}.bak`
 
-    if (await RNFS.exists(dst)) {
-      await RNFS.unlink(dst)
+    const replacing = await RNFS.exists(dst)
+
+    if (replacing) {
+      if (await RNFS.exists(backup)) {
+        await RNFS.unlink(backup)
+      }
+      await RNFS.moveFile(dst, backup)
     }
 
-    await RNFS.moveFile(src, dst)
+    try {
+      await RNFS.moveFile(src, dst)
+    } catch (error) {
+      if (replacing) {
+        await RNFS.moveFile(backup, dst).catch(restoreError => {
+          log('Failed to restore backup after move failure:', restoreError)
+        })
+      }
+      throw error
+    }
+
+    if (replacing) {
+      await RNFS.unlink(backup).catch(cleanupError => {
+        log('Backup cleanup failed:', cleanupError)
+      })
+    }
   }
 
   /**

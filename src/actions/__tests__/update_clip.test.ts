@@ -129,6 +129,22 @@ describe('createUpdateClip', () => {
       )
     })
 
+    it('propagates a failed move without touching db or store', async () => {
+      const { state, deps } = createDeps({
+        slicer: createMockSlicer({ move: jest.fn(async () => { throw new Error('disk full') }) }),
+      })
+      const updateClip = createUpdateClip(deps)
+
+      await expect(updateClip('clip-1', { start: 20000 })).rejects.toThrow('disk full')
+
+      // Old clip stays intact: no db write, no store change, no re-queue
+      expect(deps.db.updateClip).not.toHaveBeenCalled()
+      expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
+      expect(deps.transcription.queueClip).not.toHaveBeenCalled()
+      expect(state.clips['clip-1'].start).toBe(10000)
+      expect(state.clips['clip-1'].uri).toBe('file:///clips/clip-1.mp3')
+    })
+
     it('throws if source file is missing', async () => {
       const { deps } = createDeps({ clip: { file_uri: null } })
       const updateClip = createUpdateClip(deps)
