@@ -21,6 +21,8 @@ export interface BookBackup {
   file_size: number
   fingerprint: string // base64-encoded
   speed?: number      // Playback speed as integer percentage (100 = 1.0x). Optional for backward compat.
+  deleted?: boolean   // Tombstone marker (full payload + deleted: true)
+  merged_into?: string // Identity retirement: this id merged into the given (smaller) book id
 }
 
 export interface ClipBackup {

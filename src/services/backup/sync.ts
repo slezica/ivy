@@ -560,6 +560,9 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   ): Promise<void> {
     log(`Merging book ${local.id} into ${remote.id} (fingerprint match)`)
 
+    // Read before the re-key deletes it — it names our superseded remote copy
+    const oldManifest = await this.db.getManifestEntry('book', local.id)
+
     const { clipIds, sessionIds } = await this.db.rekeyBook(local.id, remote.id)
 
     await this.db.restoreBookFromBackup(
@@ -583,10 +586,50 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       await this.db.queueChange('book', remote.id, 'upsert', merged.updated_at)
     }
 
+    // Retire our superseded remote copy so no live twin JSON survives on
+    // Drive. If we never uploaded it, there is nothing to retire.
+    if (oldManifest?.remote_file_id) {
+      await this.retireMergedRemoteBook(oldManifest.remote_file_id, local.id, remote.id)
+    }
+
     notification.booksChanged.push(remote.id)
     notification.clipsChanged.push(...clipIds)
     notification.sessionsChanged.push(...sessionIds)
     result.downloaded.books++
+  }
+
+  /**
+   * Rewrite the remote JSON of a merged-away book as a full-payload tombstone
+   * carrying `merged_into`, so devices holding the retired id re-key toward
+   * the survivor. Unlike clip/session tombstones there is no LWW guard:
+   * retirement is absolute — the identity is dead regardless of concurrent
+   * edits to the retired copy (their content lives on under the survivor).
+   */
+  private async retireMergedRemoteBook(
+    remoteFileId: string,
+    retiredId: string,
+    mergedInto: string,
+  ): Promise<void> {
+    let remote: BookBackup
+    try {
+      const content = await this.drive.downloadFile(remoteFileId, false) as string
+      remote = JSON.parse(content)
+    } catch (error: any) {
+      if (error.message?.includes('404')) return // remote purged — nothing to retire
+      throw error
+    }
+
+    if (remote.deleted) return // already retired (another holder merged first)
+
+    const tombstone: BookBackup = {
+      ...remote,
+      deleted: true,
+      merged_into: mergedInto,
+      updated_at: Date.now(),
+      updated_by: this.db.deviceId,
+    }
+    await this.drive.updateFile(remoteFileId, JSON.stringify(tombstone, null, 2))
+    log(`Retired merged remote book copy: ${retiredId} → ${mergedInto}`)
   }
 
   private async downloadClip(

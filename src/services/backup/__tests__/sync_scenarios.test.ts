@@ -677,6 +677,38 @@ describe('sync scenarios', () => {
       expect(await deviceB.db.getOutboxItems()).toEqual([])
     })
 
+    it('retires the superseded remote copy with a merged_into tombstone', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      // Twins on Drive: B uploaded its copy before ever seeing A's
+      await addBook(deviceB, LARGE_ID)
+      await deviceB.sync.syncNow()
+      await addBook(deviceA, SMALL_ID)
+      await deviceA.sync.syncNow()
+
+      await deviceB.sync.syncNow() // pulls the smaller twin → merges and retires its copy
+
+      // Full-payload tombstone in place of the losing JSON — no live twin
+      const tombstone = drive.readJson(`book_${LARGE_ID}.json`)
+      expect(tombstone.deleted).toBe(true)
+      expect(tombstone.merged_into).toBe(SMALL_ID)
+      expect(tombstone.name).toBe('Test Book')
+      expect(drive.readJson(`book_${SMALL_ID}.json`).deleted).toBeUndefined()
+      expect(await deviceB.db.getOutboxItems()).toEqual([])
+
+      // The tombstone echo is harmless on both devices
+      const errorsA = trackSyncErrors(deviceA)
+      const errorsB = trackSyncErrors(deviceB)
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow()
+      expect(errorsA).toEqual([null])
+      expect(errorsB).toEqual([null])
+      expect(await deviceA.db.getBookById(LARGE_ID)).toBeNull()
+      expect(await deviceB.db.getBookById(LARGE_ID)).toBeNull()
+    })
+
     it('keeps clips made on both devices before the merge, under the surviving id', async () => {
       const drive = new FakeDrive()
       const deviceA = createSyncHarness(drive)
