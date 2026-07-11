@@ -215,6 +215,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const entityChanges = this.groupChangesByEntity(changesResult.changes)
 
       // Reconcile each changed entity
+      const errorsBefore = result.errors.length
       for (const [key, files] of entityChanges) {
         const [type, id] = key.split(':') as ['book' | 'clip' | 'session', string]
         try {
@@ -224,9 +225,11 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         }
       }
 
-      // Only advance token after all changes are applied
+      // Only advance token if every change reconciled — on failure the token
+      // stays put so failed changes are re-delivered next sync (re-processing
+      // already-reconciled entities is safe: same versions short-circuit)
       const newToken = changesResult.newStartPageToken
-      if (newToken) {
+      if (newToken && result.errors.length === errorsBefore) {
         await this.db.setCheckpointPageToken(newToken)
       }
     } catch (error: any) {

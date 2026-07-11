@@ -98,7 +98,7 @@ These are stamped automatically by database write methods. The `deviceId` is gen
 3. Call `changes.list` with the saved token.
 4. Group changed files by Ivy entity (parse filenames).
 5. For each changed entity, **reconcile**: download remote JSON, compare with local via LWW, download or skip.
-6. Advance the page token only after all changes are applied.
+6. Advance the page token only if every change reconciled successfully. If any entity fails, the token stays put and the whole batch is re-delivered next sync — re-processing already-reconciled entities is safe because same versions short-circuit.
 
 If Drive returns an invalid token (410), the engine clears the checkpoint and falls back to full reconcile.
 

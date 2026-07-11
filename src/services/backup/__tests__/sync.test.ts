@@ -357,6 +357,29 @@ describe('BackupSyncService', () => {
       expect(db.restoreBookFromBackup).not.toHaveBeenCalled()
     })
 
+    it('does not advance the page token when a reconcile fails', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+
+      drive.getChanges.mockResolvedValue({
+        changes: [{
+          fileId: 'drive-book-1',
+          removed: false,
+          file: { id: 'drive-book-1', name: `book_${BOOK_ID}.json`, mimeType: 'application/json' },
+        }],
+        newStartPageToken: '101',
+      })
+      // Reconcile fails: remote JSON can't be downloaded
+      drive.downloadFile.mockRejectedValue(new Error('Network error'))
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      // Token must not advance — the failed change is re-delivered next sync
+      expect(db.setCheckpointPageToken).not.toHaveBeenCalled()
+    })
+
     it('falls back to full reconcile on invalid page token', async () => {
       const { db, drive, auth } = createMockDeps()
 
