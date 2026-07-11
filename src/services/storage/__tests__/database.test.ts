@@ -375,4 +375,24 @@ describe('DatabaseService (real SQLite)', () => {
       expect((await db.getManifestEntry('clip', 'clip-1'))!.remote_audio_version).toBeNull()
     })
   })
+
+  describe('fingerprint-only lookup', () => {
+    it('finds a book by fingerprint blob alone (source size unknown)', async () => {
+      const db = createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, null, null, null, 1024, FINGERPRINT)
+
+      const book = await db.getBookByFingerprintOnly(FINGERPRINT)
+
+      expect(book?.id).toBe('book-1')
+    })
+
+    it('does not match a different fingerprint', async () => {
+      const db = createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, null, null, null, 1024, FINGERPRINT)
+
+      const book = await db.getBookByFingerprintOnly(new Uint8Array([9, 9, 9, 9]))
+
+      expect(book).toBeNull()
+    })
+  })
 })

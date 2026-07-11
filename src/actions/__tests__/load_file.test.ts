@@ -642,4 +642,66 @@ describe('createLoadFile', () => {
       expect(state.library.status).toBe('idle') // not 'error'
     })
   })
+
+  // -- Unknown source size (provider reports -1) --------------------------------
+
+  describe('unknown source size', () => {
+    function depsWithUnknownSize(dbOverrides: Record<string, jest.Mock> = {}) {
+      return createMockDeps({
+        copier: createMockCopier({
+          beginCopy: jest.fn(async () => ({ fileSize: -1, fingerprint: new Uint8Array([1, 2, 3]) })),
+          commitCopy: jest.fn(async () => ({ hash: 'abc123', bytesWritten: 2048 })),
+        }),
+        db: createMockDb({
+          getBookByFingerprintOnly: jest.fn(async () => null),
+          ...dbOverrides,
+        }),
+      })
+    }
+
+    it('dedups by fingerprint alone when the size is unknown', async () => {
+      const deps = depsWithUnknownSize()
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.getBookByFingerprintOnly).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]))
+      expect(deps.db.getBookByFingerprint).not.toHaveBeenCalled()
+    })
+
+    it('detects an active duplicate through the fingerprint-only lookup', async () => {
+      const activeBook = createMockBook({ id: 'active-1', uri: 'file:///audio/active-1.mp3' })
+      const deps = depsWithUnknownSize({
+        getBookByFingerprintOnly: jest.fn(async () => activeBook),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.touchBook).toHaveBeenCalledWith('active-1')
+      expect(deps.copier.commitCopy).not.toHaveBeenCalled()
+      expect(deps.db.upsertBook).not.toHaveBeenCalled()
+    })
+
+    it('persists the copied size instead of -1', async () => {
+      const deps = depsWithUnknownSize()
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.upsertBook).toHaveBeenCalledWith(
+        'generated-id-1',
+        expect.stringContaining('generated-id-1'),
+        'Test Book.mp3',
+        60000,
+        0,
+        'Test Title',
+        'Test Artist',
+        'data:image/png;base64,abc',
+        2048, // bytes actually written by the copy, not the provider's -1
+        new Uint8Array([1, 2, 3]),
+        [],
+      )
+    })
+  })
 })

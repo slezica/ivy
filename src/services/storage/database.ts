@@ -352,6 +352,15 @@ export class DatabaseService {
     return row ? toBook(row) : null
   }
 
+  /** Fingerprint-only lookup, for sources whose provider doesn't report a size. */
+  async getBookByFingerprintOnly(fingerprint: Uint8Array): Promise<Book | null> {
+    const row = await this.db.getFirstAsync<BookRow>(
+      'SELECT * FROM files WHERE fingerprint = ?',
+      [fingerprint]
+    )
+    return row ? toBook(row) : null
+  }
+
   /**
    * Find a Book by URI - either the book's own URI or one of its clip URIs.
    * Useful for playback where the URI could be a book or a clip's audio file.

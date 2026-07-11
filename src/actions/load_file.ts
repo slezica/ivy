@@ -50,7 +50,11 @@ export const createLoadFile: ActionFactory<LoadFileDeps, LoadFile> = (deps) => (
 
     try {
       const { fileSize, fingerprint } = await copier.beginCopy(opId, file.uri)
-      const existingBook = await db.getBookByFingerprint(fileSize, fingerprint)
+
+      // Some providers don't report a size (-1) — fall back to fingerprint-only dedup
+      const existingBook = fileSize >= 0
+        ? await db.getBookByFingerprint(fileSize, fingerprint)
+        : await db.getBookByFingerprintOnly(fingerprint)
 
       if (existingBook?.uri) {
         await handleDuplicate(context, existingBook.id)
@@ -110,8 +114,11 @@ async function handleNewBook(
   const { db, files, metadata, chapters: chapterReader, syncQueue, updateLibrary } = ctx
 
   const bookId = existingBook?.id ?? generateId()
-  const destPath = await copyFile(ctx, bookId, file.name)
+  const { destPath, bytesWritten } = await copyFile(ctx, bookId, file.name)
   const fileUri = `file://${destPath}`
+
+  // Never persist an unknown size (-1) — the copy just measured the real one
+  const actualFileSize = fileSize >= 0 ? fileSize : bytesWritten
 
   // A cancel that lands after the copy finished resolves silently on the native
   // side — check the op is still ours before going any further
@@ -140,14 +147,14 @@ async function handleNewBook(
         existingBook.title ?? title,
         existingBook.artist ?? artist,
         existingBook.artwork ?? artwork,
-        fileSize, fingerprint,
+        actualFileSize, fingerprint,
         chapters,
       )
 
       await syncQueue.queueChange('book', existingBook.id, 'upsert')
 
     } else {
-      await db.upsertBook(bookId, fileUri, file.name, duration, 0, title, artist, artwork, fileSize, fingerprint, chapters)
+      await db.upsertBook(bookId, fileUri, file.name, duration, 0, title, artist, artwork, actualFileSize, fingerprint, chapters)
 
       await syncQueue.queueChange('book', bookId, 'upsert')
     }
@@ -206,7 +213,11 @@ function createSafeLibraryUpdater(set: SetState, opId: string): SafeLibraryUpdat
   }
 }
 
-async function copyFile(ctx: Context, bookId: string, originalName: string): Promise<string> {
+async function copyFile(
+  ctx: Context,
+  bookId: string,
+  originalName: string,
+): Promise<{ destPath: string; bytesWritten: number }> {
   const { copier, files, opId, updateLibrary } = ctx
   const extension = getExtension(originalName)
   const filename = sanitizeFilename(`${bookId}${extension}`)
@@ -214,13 +225,13 @@ async function copyFile(ctx: Context, bookId: string, originalName: string): Pro
   await files.ensureAudioDirectory()
   const destPath = `${files.audioDirectoryPath}/${filename}`
 
-  await copier.commitCopy(opId, destPath, (bytes, total) => {
+  const { bytesWritten } = await copier.commitCopy(opId, destPath, (bytes, total) => {
     updateLibrary(lib => {
       lib.addProgress = total > 0 ? Math.round((bytes / total) * 100) : null
     })
   })
 
-  return destPath
+  return { destPath, bytesWritten }
 }
 
 function getExtension(filename: string): string {
