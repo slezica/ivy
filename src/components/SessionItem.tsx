@@ -29,7 +29,7 @@ export default function SessionItem({ session }: SessionItemProps) {
 
       <View style={styles.sessionInfo}>
         <Text style={styles.bookName} numberOfLines={1}>
-          {session.book_title || session.book_name}
+          {session.book_title || session.book_name || 'Unknown book'}
         </Text>
 
         {session.book_artist && (

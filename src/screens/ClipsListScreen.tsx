@@ -51,7 +51,7 @@ export default function ClipsListScreen() {
         const query = searchQuery.toLowerCase()
         return (
           clip.file_title?.toLowerCase().includes(query) ||
-          clip.file_name.toLowerCase().includes(query) ||
+          clip.file_name?.toLowerCase().includes(query) ||
           clip.transcription?.toLowerCase().includes(query) ||
           clip.note?.toLowerCase().includes(query)
         )
@@ -167,11 +167,15 @@ export default function ClipsListScreen() {
   const getMenuItems = (): ActionMenuItem[] => {
     const clip = menuClipId ? clips[menuClipId] : null
     const hasSourceFile = clip?.file_uri != null
+    // Bounds editing also needs the source duration for its timeline
+    const canEdit = hasSourceFile && clip?.file_duration != null
 
     return [
-      // Edit and Go to source require source file
-      ...(hasSourceFile ? [
+      // Edit and Go to source require the source file
+      ...(canEdit ? [
         { key: 'edit', label: 'Edit', icon: 'pencil' } as ActionMenuItem,
+      ] : []),
+      ...(hasSourceFile ? [
         { key: 'goToSource', label: 'Go to source', icon: 'play-circle-outline' } as ActionMenuItem,
       ] : []),
       { key: 'share', label: 'Share', icon: 'share-outline' },

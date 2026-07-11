@@ -56,12 +56,15 @@ export interface Clip {
   updated_by: string | null // device ID that last modified this entity
 }
 
+// Joined book fields are null when the source book row is missing entirely
+// (clip synced before its book, or the book id retired) — clips have
+// independent lifespans and stay visible through their own audio file.
 export interface ClipWithFile extends Clip {
-  file_uri: string | null    // Source file URI (null if removed)
-  file_name: string
+  file_uri: string | null    // Source file URI (null if removed or book missing)
+  file_name: string | null
   file_title: string | null
   file_artist: string | null
-  file_duration: number
+  file_duration: number | null
 }
 
 export interface Session {
@@ -73,8 +76,9 @@ export interface Session {
   updated_by: string | null // device ID that last modified this entity
 }
 
+// Book fields are null when the book row is missing (see ClipWithFile)
 export interface SessionWithBook extends Session {
-  book_name: string
+  book_name: string | null
   book_title: string | null
   book_artist: string | null
   book_artwork: string | null
@@ -623,7 +627,7 @@ export class DatabaseService {
         files.artist as file_artist,
         files.duration as file_duration
       FROM clips
-      INNER JOIN files ON clips.source_id = files.id
+      LEFT JOIN files ON clips.source_id = files.id
       ORDER BY clips.created_at DESC`
     )
   }
@@ -870,7 +874,7 @@ export class DatabaseService {
         files.artist as book_artist,
         files.artwork as book_artwork
       FROM sessions
-      INNER JOIN files ON sessions.book_id = files.id
+      LEFT JOIN files ON sessions.book_id = files.id
       ORDER BY sessions.started_at DESC`
     )
   }

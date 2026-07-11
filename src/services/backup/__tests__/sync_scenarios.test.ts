@@ -805,7 +805,8 @@ describe('sync scenarios', () => {
       await addBook(deviceA, SMALL_ID)
       await deviceA.sync.syncNow() // pulls large → skip; pulls B's clip (dangles under large)
       expect((await deviceA.db.getClip(CLIP_B))!.source_id).toBe(LARGE_ID)
-      expect(await deviceA.db.getAllClips()).toHaveLength(0) // invisible orphan
+      // Orphaned but never invisible: the LEFT JOIN keeps it listed via its own audio
+      expect(await deviceA.db.getAllClips()).toHaveLength(1)
 
       await deviceB.sync.syncNow() // merge: re-key + retire + mass-bump the clip
       expect(drive.readJson(`clip_${CLIP_B}.json`).source_id).toBe(SMALL_ID)
@@ -813,7 +814,7 @@ describe('sync scenarios', () => {
       await deviceA.sync.syncNow() // pulls tombstone + the clip's re-upload
 
       expect((await deviceA.db.getClip(CLIP_B))!.source_id).toBe(SMALL_ID)
-      expect(await deviceA.db.getAllClips()).toHaveLength(1) // visible again
+      expect(await deviceA.db.getAllClips()).toHaveLength(1) // now attached to the survivor
       expect((await deviceB.db.getClip(CLIP_B))!.source_id).toBe(SMALL_ID)
       expect(await deviceB.db.getOutboxItems()).toEqual([])
     })

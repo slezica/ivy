@@ -25,11 +25,15 @@ interface ClipViewerProps {
 export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   const { playback, play, pause, seek } = useStore()
 
-  // Determine playback source: use source file if available, otherwise clip's own file
-  const hasSourceFile = clip.file_uri !== null
-  const playbackUri = hasSourceFile ? clip.file_uri! : clip.uri
-  const playbackDuration = hasSourceFile ? clip.file_duration : clip.duration
-  const initialPosition = hasSourceFile ? clip.start : 0
+  // Determine playback source: use the source book when it's fully known
+  // (uri and duration both present), otherwise the clip's own audio file
+  const source = clip.file_uri !== null && clip.file_duration !== null
+    ? { uri: clip.file_uri, duration: clip.file_duration }
+    : null
+  const hasSourceFile = source !== null
+  const playbackUri = source?.uri ?? clip.uri
+  const playbackDuration = source?.duration ?? clip.duration
+  const initialPosition = source ? clip.start : 0
 
   // Local state - the position this viewer remembers
   const [ownPosition, setOwnPosition] = useState(initialPosition)
@@ -105,7 +109,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{clip.file_title || clip.file_name}</Text>
+        <Text style={styles.title}>{clip.file_title || clip.file_name || 'Unknown book'}</Text>
         <Text style={styles.subtitle}>{`${formatTime(clip.duration)} (at ${formatTime(clip.start)})`}</Text>
       </View>
 

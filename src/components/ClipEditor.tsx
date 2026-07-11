@@ -24,8 +24,11 @@ interface ClipEditorProps {
 export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) {
   const { playback, play, pause, seek } = useStore()
 
-  // ClipEditor requires source file to exist (editing disabled otherwise)
-  const fileUri = clip.file_uri!
+  // The editor is only reachable when the source file and duration exist
+  // (menu and viewer gate on them); fall back to the clip's own audio
+  // defensively rather than crash if a stale clip slips through
+  const fileUri = clip.file_uri ?? clip.uri
+  const fileDuration = clip.file_duration ?? clip.duration
 
   const [note, setNote] = useState(clip.note)
   const [selectionStart, setSelectionStart] = useState(clip.start)
@@ -97,12 +100,12 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{clip.file_title || clip.file_name}</Text>
+        <Text style={styles.title}>{clip.file_title || clip.file_name || 'Unknown book'}</Text>
         <Text style={styles.subtitle}>{`${formatTime(selectionEnd - selectionStart)} (at ${formatTime(selectionStart)})`}</Text>
       </View>
 
       <Timeline
-        duration={clip.file_duration}
+        duration={fileDuration}
         position={ownPosition}
         onSeek={handleSeek}
         leftColor={Color.TEXT_DISABLED}

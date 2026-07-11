@@ -91,6 +91,37 @@ describe('DatabaseService (real SQLite)', () => {
     })
   })
 
+  describe('clip and session joins', () => {
+    it('lists clips whose book is missing, with null file fields', async () => {
+      const db = createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
+      await db.createClip('clip-1', 'book-1', 'file:///clips/clip-1.m4a', 0, 1000, 'attached')
+      await db.createClip('clip-2', 'no-such-book', 'file:///clips/clip-2.m4a', 0, 1000, 'orphan')
+
+      const clips = await db.getAllClips()
+      expect(clips).toHaveLength(2)
+
+      const attached = clips.find(c => c.id === 'clip-1')!
+      expect(attached.file_name).toBe('Book')
+      expect(attached.file_duration).toBe(60000)
+
+      const orphan = clips.find(c => c.id === 'clip-2')!
+      expect(orphan.file_uri).toBeNull()
+      expect(orphan.file_name).toBeNull()
+      expect(orphan.file_duration).toBeNull()
+    })
+
+    it('lists sessions whose book is missing, with null book fields', async () => {
+      const db = createDb()
+      await db.createSession('no-such-book')
+
+      const sessions = await db.getAllSessions()
+      expect(sessions).toHaveLength(1)
+      expect(sessions[0].book_name).toBeNull()
+      expect(sessions[0].book_artwork).toBeNull()
+    })
+  })
+
   describe('rekeyBook', () => {
     async function seedBookWithChildren(db: DatabaseService, bookId: string) {
       await db.upsertBook(bookId, `file:///audio/${bookId}.mp3`, 'Book', 60000, 5000, null, null, null, 1024, FINGERPRINT)

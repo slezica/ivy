@@ -21,7 +21,7 @@ export default function ClipItem({ clip, isPending, onView, onOpenMenu }: ClipIt
     >
       <View style={styles.clipContent}>
         <Text style={styles.clipFileLabel} numberOfLines={1}>
-          {clip.file_title || clip.file_name}
+          {clip.file_title || clip.file_name || 'Unknown book'}
         </Text>
 
         <View style={styles.clipHeader}>
