@@ -1,8 +1,8 @@
 /**
  * File Storage Service
  *
- * Manages copying external files to app-owned storage.
- * Solves content: URI invalidation issues on Android.
+ * Manages files in app-owned storage: existence, stats, deletion, fingerprints,
+ * listing. Import copies are performed by the native FileCopier module.
  */
 
 import { Paths, Directory } from 'expo-file-system'
@@ -30,29 +30,6 @@ export class FileStorageService {
   }
 
   /**
-   * Copy a file from external URI to app storage.
-   * If source is a local file (e.g., from cache), moves it instead of copying.
-   * Returns the local file:// URI.
-   */
-  async copyToAppStorage(externalUri: string, filename: string): Promise<string> {
-    await this.ensureAudioDirectory()
-
-    const uniqueFilename = createUniqueFilename(filename)
-    const localPath = `${this.audioDirectoryPath}/${uniqueFilename}`
-
-    // If source is already a local file, move instead of copy to save disk space
-    const isLocalFile = externalUri.startsWith('file://') || externalUri.startsWith('/')
-    if (isLocalFile) {
-      const sourcePath = uriToPath(externalUri)
-      await RNFS.moveFile(sourcePath, localPath)
-    } else {
-      await RNFS.copyFile(externalUri, localPath)
-    }
-
-    return `file://${localPath}`
-  }
-
-  /**
    * Check if a file exists at the given URI.
    */
   async fileExists(uri: string): Promise<boolean> {
@@ -62,20 +39,6 @@ export class FileStorageService {
     } catch {
       return false
     }
-  }
-
-  /**
-   * Rename a file, keeping it in app storage.
-   * Returns the new file:// URI.
-   */
-  async rename(currentUri: string, newBasename: string): Promise<string> {
-    const currentPath = uriToPath(currentUri)
-    const extension = getExtension(currentPath)
-    const newPath = `${this.audioDirectoryPath}/${newBasename}${extension}`
-
-    await RNFS.moveFile(currentPath, newPath)
-
-    return `file://${newPath}`
   }
 
   /**
@@ -149,22 +112,6 @@ export class FileStorageService {
 // =============================================================================
 // Helpers
 // =============================================================================
-
-function getExtension(path: string): string {
-  const dotIndex = path.lastIndexOf('.')
-  return dotIndex >= 0 ? path.substring(dotIndex) : ''
-}
-
-function createUniqueFilename(filename: string): string {
-  // Remove characters that cause issues with Android MediaMetadataRetriever
-  // Colons, brackets, and other special chars break setDataSource()
-  const sanitized = filename.replace(/[/\\:*?"<>|[\]]/g, '_')
-  const timestamp = Date.now()
-  const dotIndex = sanitized.lastIndexOf('.')
-  const nameWithoutExt = sanitized.substring(0, dotIndex)
-  const extension = sanitized.substring(dotIndex)
-  return `${nameWithoutExt}_${timestamp}${extension}`
-}
 
 /**
  * Convert base64 string to Uint8Array.
