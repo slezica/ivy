@@ -1230,6 +1230,11 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       this.drive.listFiles('sessions'),
     ])
 
+    // Book tombstones are applied after the clip and session loops: a
+    // bootstrap downloads clips under whatever id their JSON names, and a
+    // merged_into re-key can only reattach clips that have already landed
+    const bookTombstones: Array<{ remote: BookBackup; fileId: string }> = []
+
     // Reconcile books
     for (const file of bookFiles) {
       const parsed = parseFilename(file.name)
@@ -1241,7 +1246,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
         // Tombstone: branch before any fingerprint or restore logic
         if (remote.deleted) {
-          await this.applyBookTombstone(remote, file.id, notification)
+          bookTombstones.push({ remote, fileId: file.id })
           continue
         }
 
@@ -1359,6 +1364,15 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         }
       } catch (error) {
         result.errors.push(`Full reconcile session ${parsed.id}: ${error}`)
+      }
+    }
+
+    // Apply deferred book tombstones now that all children have landed
+    for (const { remote, fileId } of bookTombstones) {
+      try {
+        await this.applyBookTombstone(remote, fileId, notification)
+      } catch (error) {
+        result.errors.push(`Full reconcile book ${remote.id}: ${error}`)
       }
     }
 

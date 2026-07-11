@@ -864,6 +864,39 @@ describe('sync scenarios', () => {
       expect(drive.readJson(`clip_${CLIP_B}.json`).source_id).toBe(SMALL_ID)
     })
 
+    it('reattaches clips that bootstrap under a retired id', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      // B's clip is on Drive under the losing id
+      await addBook(deviceB, LARGE_ID)
+      await addClip(deviceB, CLIP_B, LARGE_ID)
+      await deviceB.sync.syncNow()
+      await deviceB.sync.syncNow()
+
+      // A's twin triggers the merge on C; B (the clip's owner) stays offline,
+      // so clip_{B}.json keeps naming the retired id
+      await addBook(deviceA, SMALL_ID)
+      await deviceA.sync.syncNow()
+      const deviceC = createSyncHarness(drive)
+      await deviceC.sync.syncNow() // merges + retires book_{large}
+      expect(drive.readJson(`book_${LARGE_ID}.json`).merged_into).toBe(SMALL_ID)
+      expect(drive.readJson(`clip_${CLIP_B}.json`).source_id).toBe(LARGE_ID)
+
+      // A fresh device bootstraps: the clip arrives naming the retired id and
+      // must still end up attached to the survivor
+      const deviceD = createSyncHarness(drive)
+      const errorsD = trackSyncErrors(deviceD)
+      await deviceD.sync.syncNow()
+
+      expect(errorsD).toEqual([null])
+      expect(await deviceD.db.getBookById(SMALL_ID)).not.toBeNull()
+      expect(await deviceD.db.getBookById(LARGE_ID)).toBeNull()
+      expect((await deviceD.db.getClip(CLIP_B))!.source_id).toBe(SMALL_ID)
+      expect(await deviceD.db.getAllClips()).toHaveLength(1) // visible, not orphaned
+    })
+
     it('keeps clips made on both devices before the merge, under the surviving id', async () => {
       const drive = new FakeDrive()
       const deviceA = createSyncHarness(drive)
