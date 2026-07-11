@@ -473,6 +473,22 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 
 If the current working directory is `/workspace`, you are running inside a container. In that case, you can install software, run scripts, etc with freedom and permissions will be automatically granted.
 
+**CRITICAL — `/workspace` is a bind mount of the developer's Mac checkout.** Android build artifacts embed absolute paths (`sdk.dir` in `local.properties`, module paths in `android/build/generated/autolinking/autolinking.json`, CMake caches under `node_modules/*/android/.cxx`), so a Gradle build run inside the container **breaks the next build on the Mac**, and vice versa (the symptom is "No matching variant … No variants exist" for every RN library at once, or a bad-`sdk.dir` warning).
+
+Rules for Android builds in the container:
+
+- Never commit `android/local.properties`.
+- After ANY Gradle invocation (`assembleDebug`, `compileDebugKotlin`, even a failed configure), clean up before finishing your session:
+
+  ```bash
+  rm -f android/local.properties
+  rm -rf android/build android/app/build android/.gradle
+  find node_modules -maxdepth 3 -type d \( -path '*/android/build' -o -name .cxx \) -exec rm -rf {} +
+  ```
+
+- If a container build fails with the "No variants exist" signature, the tree holds Mac-path artifacts: run the same cleanup first, then build.
+- The same script fixes the Mac side (`npm run clean:android` if present, else run it manually from the repo root).
+
 # Next Steps
 
 You have read the introduction to Ivy. If you were told you'll be working on specific topics, and there's guides for those topics, read them now. Learn. When done, inform the user you've read them.
