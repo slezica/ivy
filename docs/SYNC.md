@@ -40,7 +40,7 @@ There is no global planning phase. When the sync engine encounters a changed ent
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                         Zustand Store                            │
-│  (actions call db.queueChange on every mutation)                 │
+│  (actions queue sync-worthy mutations via db.queueChange)        │
 └──────────┬──────────────────────────────────────┬────────────────┘
            │ queues changes                       │ subscribes to events
            ▼                                      │
@@ -98,7 +98,7 @@ These are stamped automatically by database write methods. The `deviceId` is gen
 2. If no token exists (first sync or recovery), get a `startPageToken`, perform a **full reconcile** (list all remote files), save the token, and return.
 3. Call `changes.list` with the saved token.
 4. Group changed files by Ivy entity (parse filenames).
-5. For each changed entity, **reconcile**: download remote JSON, compare with local via LWW, download or skip.
+5. For each changed entity, **reconcile**: download remote JSON, compare with local via LWW, download or skip. Tombstones, identity merges, duplicate-twin resolution, and clip-audio versions are all handled inside this step — see their sections below.
 6. Advance the page token only if every change reconciled successfully. If any entity fails, the token stays put and the whole batch is re-delivered next sync — re-processing already-reconciled entities is safe because same versions short-circuit.
 
 If Drive returns an invalid token (410), the engine clears the checkpoint and falls back to full reconcile.
@@ -106,6 +106,8 @@ If Drive returns an invalid token (410), the engine clears the checkpoint and fa
 **Poison-pill quarantine.** Token-holding is deliberate for transient failures (e.g. a clip JSON arriving before its audio heals on re-delivery), but a *deterministically* failing entity (corrupt JSON, dead file id) would freeze the token forever. After 5 consecutive reconcile failures an entity is **quarantined**: its failures stop blocking token advance, it moves to an in-memory retry list attempted on every sync, and it counts into the Settings failing indicator. A successful reconcile clears it. The tracking is in-memory by design — an app restart resets the counters (a few extra token-holding retries before re-quarantining) and forgets the retry list, so a quarantined entity is only re-attempted after its next remote change or a full reconcile.
 
 ### Step 2: Push — Drain Local Outbox
+
+The push phase is **skipped entirely when first-sync initialization fails** (start token or full reconcile threw): before a successful bootstrap the manifest knows no remote file IDs, so every push would create-new — duplicating files that already exist remotely.
 
 1. Read all pending outbox items that are due (`next_attempt_at <= now`).
 2. For each item:
@@ -119,13 +121,13 @@ If Drive returns an invalid token (410), the engine clears the checkpoint and fa
 
 **Failure policy: retry forever with backoff.** A failed push stamps `next_attempt_at = now + min(2^attempts × 30s, 6h)` and increments `attempts` — items are never abandoned. The stamp is conditional on `updated_at_when_queued` (like outbox removal), so a failure reported for an old version never delays a row that was re-queued fresh mid-flight; re-queueing resets `attempts` and the backoff. Items with `attempts >= 3` are surfaced in Settings as failing (still retried).
 
-### Step 3: Notify
-
-If any entities were modified by incoming remote changes, the sync service emits a `data` event with changed IDs. The store re-fetches affected data.
-
-### Step 4: Record Sync Time
+### Step 3: Record Sync Time
 
 `lastSyncTime` is written to the database. Auto-sync uses this to enforce cooldowns.
+
+### Step 4: Notify
+
+If any entities were modified by incoming remote changes, the sync service emits a `data` event with changed IDs. The store re-fetches affected data.
 
 ---
 
@@ -133,7 +135,7 @@ If any entities were modified by incoming remote changes, the sync service emits
 
 When uploading, the sync engine uses Drive's update API (`PATCH /upload/drive/v3/files/{fileId}`) to modify existing files. This preserves file IDs across versions, requires one request instead of list+delete+create, and produces cleaner change feed events.
 
-Create-new is only used for the first upload of an entity (no known remote file ID).
+Create-new is only used for the first upload of an entity (no known remote file ID) — or as a **404 fallback**: if the update targets a dead file ID (user cleanup, trash purge), the engine creates the file anew and records the fresh ID in the manifest, healing the dead reference.
 
 ---
 
@@ -168,9 +170,56 @@ Concretely:
 
 ---
 
+## Identity Merge: Same Audio, Two IDs
+
+When the same audio file is imported independently on two devices, each device mints its own UUID — the cloud library ends up with two book identities for one book. The merge converges them on the **lexicographically smaller id** (deterministic and symmetric — no coordination needed).
+
+### Detection
+
+`downloadBook` checks every incoming remote book against the local library **by fingerprint** (`file_size` + first 4KB). A match with a *different* id means a duplicate identity:
+
+- **We hold the larger (losing) id** → this device performs the merge.
+- **We hold the smaller (winning) id** → skip the download and record nothing; convergence arrives through the other holder's merge (its re-keyed children and book upsert come in as ordinary changes).
+
+### The merge (losing-id holder)
+
+1. **Re-key locally**: `rekeyBook(oldId, newId)` renames the book row and re-points its clips and sessions, inside an exclusive transaction (so fire-and-forget writers can't interleave). The old manifest row is *deleted, never renamed* — its `remote_file_id` points at `book_{oldId}.json`, and a renamed row would upload the new id's content into that file. Any pending outbox row for the book moves to the new id.
+2. **Apply the remote fields** under normal LWW and point the manifest at the surviving remote file.
+3. **Queue an upsert** of the merged book, so our fields (position, speed, metadata edits) compete under LWW on the surviving id.
+4. **Retire our superseded remote copy**: the old `book_{oldId}.json` is rewritten as a full-payload tombstone carrying `merged_into: <newId>`, telling every other device holding the retired id to re-key toward the survivor. Unlike clip/session tombstones there is **no LWW guard** — retirement is absolute; concurrent edits to the retired copy live on under the survivor.
+5. **Touch and re-queue the re-keyed clips and sessions**: other devices only learn the new `source_id`/`book_id` through ordinary LWW updates. Accepted cost: the mass-bump can clobber a concurrent edit to one of those children from another device (rare, LWW-consistent).
+
+### Applying a `merged_into` tombstone (pull side)
+
+A book tombstone with `merged_into` retires that id everywhere — no LWW. The receiver re-points local clips/sessions at the survivor and resolves the retired row:
+
+| Local state | Action |
+|-------------|--------|
+| No local row for the retired id | Children reattached only (own echo, or the id was never bootstrapped) |
+| Retired row exists, survivor row absent | **Adopt**: re-key the whole row onto the surviving id, keeping local audio and fields; the survivor's JSON reconciles onto it whenever it arrives (order-independent) |
+| Both rows exist | Delete the retired row, transferring its audio `uri` to the survivor when the survivor has none. Audio files are never deleted here — a redundant file is merely orphaned and left for cleanup |
+
+### Plain book tombstones (twin cleanup)
+
+A book tombstone **without** `merged_into` comes from duplicate-twin cleanup (below), not from any user action — book deletion never propagates. Applying one deletes the local row **only if it has no audio** (`uri IS NULL`): a row with audio is a real per-device book and stays untouched. A twin-loser guard skips the tombstone entirely when the manifest tracks a different (live) file for the entity. If the row is kept, the manifest is pointed at the tombstone file so a future upload updates it in place rather than creating another twin.
+
+---
+
+## Duplicate Remote Twins
+
+Crash windows and 404 fallbacks can leave **two live remote JSON files for one entity id**. Reconciliation resolves them deterministically in `resolveJsonFile`:
+
+1. Prefer the file the local manifest already tracks.
+2. Otherwise, the **lexicographically smallest file id** — every device that sees both twins lands on the same file.
+3. Among twins, the winner is the first *live* (non-tombstone) one in preference order; if all are tombstones, the first overall.
+
+For **books**, losing live twins are retired in place with a plain full-payload tombstone (safe: plain book tombstones only delete audio-less rows). **Clip and session twins are only resolved, never tombstoned** — their plain tombstones would propagate as real deletions; winner selection alone converges them.
+
+---
+
 ## Clip and Session Deletion: Tombstones
 
-Deleting a clip or session propagates to every device. The mechanism is a **tombstone**: instead of deleting the entity's Drive file, the deleting device rewrites the JSON in place as the **full last-known payload plus `deleted: true`**, stamped with the deletion time and the deleting device:
+Deleting a clip or session propagates to every device. (Books have tombstones too, but those are sync-internal — identity retirement and twin cleanup, described above. User book deletion never propagates.) The mechanism is a **tombstone**: instead of deleting the entity's Drive file, the deleting device rewrites the JSON in place as the **full last-known payload plus `deleted: true`**, stamped with the deletion time and the deleting device:
 
 ```json
 { "id": "…", "source_id": "…", "start": 10000, "note": "…", "deleted": true, "updated_at": 1760000000000, "updated_by": "device-…" }
@@ -216,6 +265,20 @@ Reconciliation parses the JSON and branches on `deleted` **before** any audio do
 Tombstones are kept **forever**. They are a few KB each; if libraries ever accumulate enough of them to matter, compaction (dropping tombstones older than N months) can be added later.
 
 **Cross-version caveat (beta):** tombstones are a one-way data-format door. Old code applies them as live edits (harmless), but the audio hard-delete makes old-code clip downloads fail for those entities, and reverting a device to pre-tombstone code re-exposes it to that. Upgrade all devices before the first post-upgrade delete.
+
+---
+
+## Clip Audio Versioning
+
+Clip audio uploads are update-in-place, so the audio **file id never changes** — a JSON-only comparison would let stale audio become permanent: a device that already applied the JSON short-circuits on same-version and never looks at the audio again.
+
+The fix is a content version in the manifest: `remote_audio_version` stores the Drive file's `md5Checksum` (content hash, stable across no-op rewrites; `modifiedTime` as a fallback when a response omits it).
+
+- **Pull:** whenever a change group contains an audio file whose version differs from the manifest's, the audio is downloaded **regardless of the JSON LWW outcome** — on the same-version short-circuit, and even for audio-only change groups with no JSON at all (a bounds-edit re-slice, or a post-404 re-upload).
+- **Push:** `uploadClip` records the uploaded file's version in the manifest, so a device's own change-feed echo doesn't read its audio back.
+- One exception: when the **local** JSON is ahead, a remote audio change is ignored — the local edit wins and re-uploads its own audio, superseding the remote's.
+
+This also gives un-deletes and 404-fallback re-uploads a receiving side: the fresh audio file has a new version, so every other device fetches it.
 
 ---
 
@@ -274,7 +337,7 @@ Store actions that modify synced entities call `db.queueChange()`. A shim object
 
 ### 2. Status Updates (sync service → store)
 
-The sync service emits `status` events containing `{ isSyncing, pendingCount, error }`. The store subscribes and updates its `sync` state.
+The sync service emits `status` events containing `{ isSyncing, pendingCount, failingCount, error }`. The store subscribes and updates its `sync` state. `failingCount` counts repeatedly failing items — push outbox rows at 3+ attempts plus pull-quarantined entities — all still being retried; Settings surfaces it as a warning.
 
 ### 3. Data Notifications (sync service → store)
 
@@ -306,7 +369,7 @@ No distributed locks. Convergence comes from:
 - Periodically, when the last full reconcile is more than 7 days old — run *after* the incremental pull (token handling unchanged), backstopping quarantine lists lost to app restarts, whole-folder trash, and any missed feed event
 - Manual repair (clear checkpoint, re-sync)
 
-A full reconcile lists all remote folders, downloads and compares every entity, queues local-only entities for upload (dropping their stale manifest entries so the uploads create fresh files), and saves a fresh page token.
+A full reconcile lists all remote folders, downloads and compares every entity, queues local-only entities for upload (dropping their stale manifest entries so the uploads create fresh files), and refreshes `last_full_reconcile_at`. A fresh page token is saved only on the first-sync and expired-token paths — the periodic run leaves token handling to the incremental pull. Book tombstones are applied **after** the clip and session loops, so a `merged_into` re-key can reattach children that have already landed.
 
 ### Trashed Files
 
@@ -320,21 +383,22 @@ Files the user moves to Drive's trash arrive in the change feed with `trashed: t
 
 ```
 src/services/backup/
-  types.ts        → BookBackup, ClipBackup, SessionBackup, SyncResult, SyncStatus
+  types.ts        → BookBackup, ClipBackup, SessionBackup (incl. deleted/merged_into), SyncResult, SyncStatus
   auth.ts         → GoogleAuthService (OAuth sign-in, token management)
   drive.ts        → GoogleDriveService (REST wrapper + changes API + update-in-place)
-  sync.ts         → BackupSyncService (pull, push, LWW reconcile, full reconcile)
+  sync.ts         → BackupSyncService (pull, push, LWW reconcile, tombstones, merge, full reconcile)
 
   __tests__/
     sync.test.ts           → Tests for concurrency, reconciliation, push phase, fingerprinting
     drive.test.ts          → Tests for Drive folder creation
+    base64.test.ts         → Tests for the chunked base64 helpers
     harness.ts             → Scenario harness: FakeDrive + real DatabaseService on real SQLite
     sync_scenarios.test.ts → End-to-end sync scenarios (round trips, failures, per-device books)
 
 src/actions/
   sync_now.ts             → Manual sync action
   auto_sync.ts            → Background sync action (checks settings)
-  fetch_sync_state.ts     → Refresh pending count and last sync time
+  fetch_sync_state.ts     → Refresh pending/failing counts and last sync time
 
 src/store/index.ts        → Wires sync events to store state
 ```
