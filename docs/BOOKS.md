@@ -209,7 +209,7 @@ Deletion hides the book from the library entirely. Uses optimistic-update-with-r
 - The book disappears from the library UI
 - The database record remains (with `hidden = true`)
 - Clips still work (they're independent entities)
-- Sessions still reference the book metadata (via INNER JOIN)
+- Sessions still reference the book metadata (via LEFT JOIN — the soft-deleted row keeps it available)
 - Re-adding the same file triggers a restore
 
 ### Deletion is local-only
