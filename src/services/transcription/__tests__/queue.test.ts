@@ -166,6 +166,28 @@ describe('TranscriptionQueueService', () => {
     })
   })
 
+  describe('skipped clips', () => {
+    it('emits finish when a queued clip no longer needs transcription', async () => {
+      const deps = createMockDeps()
+      // Queue an id whose clip was already transcribed (or deleted)
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => [])
+
+      const finished: { clipId: string; transcription?: string; error?: Error }[] = []
+
+      const service = new TranscriptionQueueService(deps)
+      service.on('finish', (event) => finished.push(event))
+
+      await service.start()
+      service.queueClip('clip-1')
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      // Listeners still get a finish (to clear pending state), with no result
+      expect(finished).toEqual([{ clipId: 'clip-1' }])
+      expect(deps.whisper.transcribe).not.toHaveBeenCalled()
+    })
+  })
+
   describe('concurrent queue operations', () => {
     it('does not process concurrently when flag is set', async () => {
       const deps = createMockDeps()

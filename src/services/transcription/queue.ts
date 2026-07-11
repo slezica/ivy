@@ -183,6 +183,8 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
 
     if (!clip) {
       log('Clip not found or already transcribed:', clipId)
+      // Still emit finish so listeners can clear their pending state
+      this.emit('finish', { clipId })
       return
     }
 
