@@ -15,6 +15,6 @@ export const createSyncNow: ActionFactory<SyncNowDeps, SyncNow> = (deps) => (
     const log = createLogger('SyncNow')
 
     log('Triggering manual sync')
-    sync.syncNow()
+    await sync.syncNow()
   }
 )
