@@ -27,7 +27,9 @@ export interface TranscriptionQueueDeps {
 export type TranscriptionQueueEvents = {
   queued: { clipId: string }
   started: { clipId: string }
-  finish: { clipId: string; error?: Error, transcription?: string }
+  // Successful finishes carry the bounds the clip had when processing began,
+  // so listeners can discard results made stale by a concurrent bounds edit
+  finish: { clipId: string; error?: Error, transcription?: string, start?: number, duration?: number }
 }
 
 // =============================================================================
@@ -96,6 +98,15 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     this.processQueue().catch(error => {
       log('Queue processing failed:', error)
     })
+  }
+
+  /**
+   * Whether a job for this clip is still waiting in the queue.
+   * Does not count the job currently being processed, so a 'finish'
+   * listener can tell if a newer job for the same clip is pending.
+   */
+  hasQueuedJob(clipId: string): boolean {
+    return this.queue.includes(clipId)
   }
 
   // ---------------------------------------------------------------------------
@@ -190,6 +201,10 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
 
     this.emit('started', { clipId })
 
+    // Capture the bounds this job is transcribing — a concurrent bounds edit
+    // replaces the audio and re-queues, making this job's result stale
+    const { start, duration } = clip
+
     let audioPath: string | null = null
 
     try {
@@ -200,7 +215,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
 
       // Persistence is the store's job: its 'finish' handler runs the
       // updateClip action, which writes the DB and queues the change for sync
-      this.emit('finish', { clipId, transcription })
+      this.emit('finish', { clipId, transcription, start, duration })
 
     } catch (error) {
       log('Failed to process clip:', clipId, error)

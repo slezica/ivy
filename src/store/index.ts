@@ -4,7 +4,7 @@ import { immer } from 'zustand/middleware/immer'
 import type { PlaybackStatus, SyncStatus, SyncNotification } from '../services'
 import * as services from '../services'
 import type { TranscriptionQueueEvents } from '../services/transcription/queue'
-import { MAIN_PLAYER_OWNER_ID, throttleSameArgs } from '../utils'
+import { MAIN_PLAYER_OWNER_ID, createLogger, throttleSameArgs } from '../utils'
 import type { AppState } from './types'
 
 // Thin shim so action deps that expect syncQueue keep working
@@ -261,15 +261,29 @@ export const useStore = create<AppState>()(immer((set, get) => {
     })
   }
 
-  function onTranscriptionFinish({ clipId, error, transcription }: TranscriptionQueueEvents['finish']) {
+  function onTranscriptionFinish({ clipId, error, transcription, start, duration }: TranscriptionQueueEvents['finish']) {
     // error is logged by TranscriptionQueueService at the source
 
-    set(state => {
-      delete state.transcription.pending[clipId]
-    })
+    // A bounds edit while the job was in flight re-sliced the audio and
+    // re-queued the clip — this result belongs to the old audio, discard it
+    const clip = get().clips[clipId]
+    const stale = transcription != null && clip != null &&
+      (clip.start !== start || clip.duration !== duration)
+
+    if (stale) {
+      createLogger('Store')(`Discarding stale transcription for clip ${clipId}`)
+    }
+
+    // Keep the spinner while a newer job for this clip is still queued —
+    // that job will emit its own finish and clear it
+    if (!services.transcription.hasQueuedJob(clipId)) {
+      set(state => {
+        delete state.transcription.pending[clipId]
+      })
+    }
 
     // Empty string is a valid result (silence/music) — only errors are skipped
-    if (transcription != null) {
+    if (transcription != null && !stale) {
       updateClip(clipId, { transcription })
     }
   }

@@ -161,8 +161,56 @@ describe('TranscriptionQueueService', () => {
 
       // '' is a valid result (silence/music) and must reach listeners;
       // persistence happens in the store, never in the queue
-      expect(finished).toEqual([{ clipId: 'clip-1', transcription: '' }])
+      expect(finished).toEqual([{ clipId: 'clip-1', transcription: '', start: 0, duration: 5000 }])
       expect(deps.database.updateClip).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('stale bounds detection', () => {
+    it('carries the bounds captured at processing start, and processes a re-queued clip', async () => {
+      const deps = createMockDeps()
+
+      const oldClip = { ...createMockClip('clip-1'), start: 0, duration: 5000 }
+      const newClip = { ...createMockClip('clip-1'), start: 2000, duration: 4000 }
+
+      // The in-flight job reads the old bounds; the re-queued job reads the
+      // new ones (written by updateClip before it re-queued)
+      deps.database.getClipsNeedingTranscription = jest.fn()
+        .mockResolvedValueOnce([])        // start() seeding
+        .mockResolvedValueOnce([oldClip]) // in-flight job
+        .mockResolvedValue([newClip])     // re-queued job
+
+      // First job blocks on transcribe until released
+      let releaseFirst!: (text: string) => void
+      deps.whisper.transcribe = jest.fn()
+        .mockImplementationOnce(() => new Promise<string>(resolve => { releaseFirst = resolve }))
+        .mockResolvedValue('new text')
+
+      const service = new TranscriptionQueueService(deps)
+
+      // Record whether a newer job was still queued at each finish
+      const finished: Record<string, unknown>[] = []
+      service.on('finish', (event) => {
+        finished.push({ ...event, queuedBehind: service.hasQueuedJob(event.clipId) })
+      })
+
+      await service.start()
+      service.queueClip('clip-1')
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      // Bounds edit re-queues the clip while the first job is in flight
+      service.queueClip('clip-1')
+      expect(service.hasQueuedJob('clip-1')).toBe(true)
+
+      releaseFirst('old text')
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      // Both jobs finished with the bounds they actually transcribed, letting
+      // listeners discard the first (stale) result but keep its spinner alive
+      expect(finished).toEqual([
+        { clipId: 'clip-1', transcription: 'old text', start: 0, duration: 5000, queuedBehind: true },
+        { clipId: 'clip-1', transcription: 'new text', start: 2000, duration: 4000, queuedBehind: false },
+      ])
     })
   })
 
