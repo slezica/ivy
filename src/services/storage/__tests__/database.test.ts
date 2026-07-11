@@ -324,5 +324,24 @@ describe('DatabaseService (real SQLite)', () => {
       expect(all[0].remote_file_id).toBe('json-2')
       expect(all[0].remote_audio_file_id).toBe('audio-1')
     })
+
+    it('roundtrips remote_audio_version, defaulting to null when omitted', async () => {
+      const db = createDb()
+      const entry = {
+        entity_type: 'clip' as const, entity_id: 'clip-1',
+        local_updated_at: 1000, remote_updated_at: null,
+        remote_file_id: 'json-1', remote_audio_file_id: 'audio-1',
+      }
+
+      await db.upsertManifestEntry(entry)
+      expect((await db.getManifestEntry('clip', 'clip-1'))!.remote_audio_version).toBeNull()
+
+      await db.upsertManifestEntry({ ...entry, remote_audio_version: 'md5-abc' })
+      expect((await db.getManifestEntry('clip', 'clip-1'))!.remote_audio_version).toBe('md5-abc')
+
+      // Omitting the version on a later upsert resets it (full-row semantics)
+      await db.upsertManifestEntry(entry)
+      expect((await db.getManifestEntry('clip', 'clip-1'))!.remote_audio_version).toBeNull()
+    })
   })
 })

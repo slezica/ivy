@@ -460,6 +460,7 @@ describe('BackupSyncService', () => {
         remote_updated_at: null,
         remote_file_id: 'existing-drive-id',
         remote_audio_file_id: null,
+        remote_audio_version: null,
         synced_at: 500,
       })
 
@@ -661,6 +662,7 @@ describe('BackupSyncService', () => {
         remote_updated_at: null,
         remote_file_id: 'json-file-id',
         remote_audio_file_id: 'audio-file-id',
+        remote_audio_version: null,
         synced_at: 1000,
       })
 
@@ -716,6 +718,7 @@ describe('BackupSyncService', () => {
         remote_updated_at: null,
         remote_file_id: 'json-file-id',
         remote_audio_file_id: 'audio-file-id',
+        remote_audio_version: null,
         synced_at: 1000,
       })
 
@@ -760,6 +763,7 @@ describe('BackupSyncService', () => {
         remote_updated_at: null,
         remote_file_id: 'json-file-id',
         remote_audio_file_id: 'audio-file-id',
+        remote_audio_version: null,
         synced_at: 1000,
       })
 

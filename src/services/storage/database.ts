@@ -96,6 +96,7 @@ export interface SyncManifestEntry {
   remote_updated_at: number | null  // Legacy (unused by new sync engine)
   remote_file_id: string | null     // Drive file ID (JSON)
   remote_audio_file_id: string | null // Drive file ID (audio, clips only)
+  remote_audio_version: string | null // Audio content version on Drive (clips only)
   synced_at: number
 }
 
@@ -271,6 +272,11 @@ const migrations: Migration[] = [
   // Migration 5: Add next_attempt_at to sync_queue for retry backoff
   (db) => {
     db.execSync('ALTER TABLE sync_queue ADD COLUMN next_attempt_at INTEGER DEFAULT 0')
+  },
+
+  // Migration 6: Add remote_audio_version to sync_manifest (clip audio versioning)
+  (db) => {
+    db.execSync('ALTER TABLE sync_manifest ADD COLUMN remote_audio_version TEXT')
   },
 ]
 
@@ -980,18 +986,19 @@ export class DatabaseService {
     return this.db.getAllAsync<SyncManifestEntry>('SELECT * FROM sync_manifest')
   }
 
-  async upsertManifestEntry(entry: Omit<SyncManifestEntry, 'synced_at'>): Promise<void> {
+  async upsertManifestEntry(entry: Omit<SyncManifestEntry, 'synced_at' | 'remote_audio_version'> & { remote_audio_version?: string | null }): Promise<void> {
     const now = Date.now()
     await this.db.runAsync(
-      `INSERT INTO sync_manifest (entity_type, entity_id, local_updated_at, remote_updated_at, remote_file_id, remote_audio_file_id, synced_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO sync_manifest (entity_type, entity_id, local_updated_at, remote_updated_at, remote_file_id, remote_audio_file_id, remote_audio_version, synced_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(entity_type, entity_id) DO UPDATE SET
          local_updated_at = excluded.local_updated_at,
          remote_updated_at = excluded.remote_updated_at,
          remote_file_id = excluded.remote_file_id,
          remote_audio_file_id = excluded.remote_audio_file_id,
+         remote_audio_version = excluded.remote_audio_version,
          synced_at = excluded.synced_at`,
-      [entry.entity_type, entry.entity_id, entry.local_updated_at, entry.remote_updated_at, entry.remote_file_id, entry.remote_audio_file_id ?? null, now]
+      [entry.entity_type, entry.entity_id, entry.local_updated_at, entry.remote_updated_at, entry.remote_file_id, entry.remote_audio_file_id ?? null, entry.remote_audio_version ?? null, now]
     )
   }
 
