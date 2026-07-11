@@ -1,4 +1,5 @@
 import { BackupSyncService } from '../sync'
+import { DriveApiError } from '../drive'
 import type { DatabaseService, Book, Clip, Session } from '../../storage'
 import type { GoogleDriveService } from '../drive'
 import type { GoogleAuthService } from '../auth'
@@ -387,7 +388,7 @@ describe('BackupSyncService', () => {
       db.getCheckpoint.mockReturnValue({ last_page_token: 'stale-token', last_full_reconcile_at: null })
 
       // First call fails with 410
-      drive.getChanges.mockRejectedValueOnce(new Error('410 Gone'))
+      drive.getChanges.mockRejectedValueOnce(new DriveApiError('Failed to get changes: 410 - Gone', 410))
       // After clearCheckpoint, getCheckpoint returns null → full reconcile
       db.clearCheckpoint.mockImplementation(async () => {
         db.getCheckpoint.mockReturnValue({ last_page_token: null, last_full_reconcile_at: null })
@@ -768,7 +769,7 @@ describe('BackupSyncService', () => {
       })
 
       // User purged Drive — nothing to tombstone
-      drive.downloadFile.mockRejectedValue(new Error('Failed to download file: 404'))
+      drive.downloadFile.mockRejectedValue(new DriveApiError('Failed to download file: 404', 404))
 
       const service = new BackupSyncService(db, drive, auth)
       await service.syncNow()

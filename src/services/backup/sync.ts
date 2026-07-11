@@ -306,9 +306,9 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         log('Periodic full reconcile due')
         await this.fullReconcile(result, notification)
       }
-    } catch (error: any) {
+    } catch (error) {
       // Invalid page token — trigger recovery (once only, not recursive)
-      if (error.message?.includes('410')) {
+      if (error instanceof DriveApiError && error.status === 410) {
         log('Page token expired (410), triggering full reconcile')
         await this.db.clearCheckpoint()
         const freshToken = await this.drive.getStartPageToken()
@@ -766,8 +766,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     try {
       const content = await this.drive.downloadFile(remoteFileId, false) as string
       remote = JSON.parse(content)
-    } catch (error: any) {
-      if (error.message?.includes('404')) return // remote purged — nothing to retire
+    } catch (error) {
+      if (error instanceof DriveApiError && error.status === 404) return // remote purged — nothing to retire
       throw error
     }
 
@@ -1301,8 +1301,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     try {
       const content = await this.drive.downloadFile(remoteFileId, false) as string
       remote = JSON.parse(content)
-    } catch (error: any) {
-      if (error.message?.includes('404')) {
+    } catch (error) {
+      if (error instanceof DriveApiError && error.status === 404) {
         // Remote purged (user cleanup) — nothing to tombstone
         await this.db.deleteManifestEntry(item.entity_type, item.entity_id)
         return null

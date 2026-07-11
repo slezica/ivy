@@ -174,7 +174,7 @@ export class GoogleDriveService {
     })
 
     if (!response.ok) {
-      throw new Error(`Failed to download file: ${response.status}`)
+      throw new DriveApiError(`Failed to download file: ${response.status}`, response.status)
     }
 
     if (isBinary) {
@@ -198,7 +198,7 @@ export class GoogleDriveService {
     })
 
     if (!response.ok && response.status !== 404) {
-      throw new Error(`Failed to delete file: ${response.status}`)
+      throw new DriveApiError(`Failed to delete file: ${response.status}`, response.status)
     }
   }
 
@@ -259,7 +259,7 @@ export class GoogleDriveService {
 
       if (!response.ok) {
         const text = await response.text()
-        throw new Error(`Failed to get changes: ${response.status} - ${text}`)
+        throw new DriveApiError(`Failed to get changes: ${response.status} - ${text}`, response.status)
       }
 
       const data = await response.json()

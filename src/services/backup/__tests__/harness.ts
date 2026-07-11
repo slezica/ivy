@@ -125,7 +125,7 @@ export class FakeDrive {
   async downloadFile(fileId: string, isBinary: boolean = false): Promise<string | Uint8Array> {
     this.maybeFail('downloadFile')
     const file = this.files.get(fileId)
-    if (!file) throw new Error('Failed to download file: 404')
+    if (!file) throw new DriveApiError('Failed to download file: 404', 404)
     if (isBinary) {
       return typeof file.content === 'string'
         ? new TextEncoder().encode(file.content)
