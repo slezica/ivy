@@ -67,27 +67,28 @@ Bookmarks with their own audio files. See **[docs/CLIPS.md](docs/CLIPS.md)** for
 **Key rules for working with clips:**
 - Check `clip.file_uri !== null` before enabling edit or "go to source"
 - Use `clip.file_uri` (source) when available, fall back to `clip.uri` (clip's own file)
-- Every clip mutation must queue for sync (`db.queueChange`)
+- Clips LEFT JOIN their book: **all** `file_*` fields (`file_name`, `file_duration` included) are null when the book row is missing — don't assume any of them
+- Every clip mutation must queue for sync (`db.queueChange`); clip deletion is global (propagates via sync tombstones)
 - `note` and `transcription` are separate fields — don't conflate them
 
 ### Transcription
 
 On-device automatic clip transcription using Whisper. See **[docs/TRANSCRIPTION.md](docs/TRANSCRIPTION.md)** for the full guide.
 
-**Quick summary:** Clips are queued for transcription on creation → processed sequentially by a background queue → first 60s of audio extracted and fed to on-device Whisper → result saved to `clips.transcription` column. Controlled by `settings.transcription_enabled`.
+**Quick summary:** Clips are queued for transcription on creation → processed sequentially by a background queue → first 60s of audio extracted and fed to on-device Whisper → result persisted via the store's `updateClip` action (the queue never writes the DB; empty results are valid, only errors skip persistence). Controlled by `settings.transcription_enabled`.
 
 
 ### Sessions
 
 Automatic listening activity tracking. See **[docs/SESSIONS.md](docs/SESSIONS.md)** for the full guide.
 
-**Quick summary:** Main player playback creates sessions (time ranges per book) → `ended_at` updated every 5s while playing → finalized on pause (sessions < 1s are deleted). 5-minute resume window prevents fragmentation. Sessions are synced across devices.
+**Quick summary:** Main player playback creates sessions (time ranges per book) → `ended_at` updated every 5s while playing → finalized on pause (sessions < 1s are deleted). 5-minute resume window prevents fragmentation. Sessions are synced across devices (whole-entity LWW; deletions propagate via tombstones).
 
 ### Sync and Backup
 
 Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC.md)** for the full guide.
 
-**Quick summary:** Store actions queue changes to a local outbox → sync pulls remote changes via Drive's change feed (incremental, not full crawl) → per-entity LWW reconciliation (last writer wins, no per-field merging) → outbox drained with update-in-place uploads and stale detection → store notified of remote changes via events.
+**Quick summary:** Store actions queue changes to a local outbox → sync pulls remote changes via Drive's change feed (incremental, not full crawl) → per-entity LWW reconciliation (last writer wins, no per-field merging) → outbox drained with update-in-place uploads, stale detection, and retry-forever backoff → store notified of remote changes via events. Deletion semantics: book archive/delete are per-device (never queued, no `updated_at` bump); clip/session deletions propagate via full-payload tombstones. Duplicate book identities (same audio imported on two devices) merge by fingerprint onto the smaller id.
 
 
 ## Project Overview
@@ -143,7 +144,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   │   ├── database.ts         # SQLite operations
   │   │   ├── files.ts            # File copying to app storage
   │   │   ├── copier.ts           # Native file copier (progress, fingerprint, cancel)
-  │   │   └── picker.ts           # Document picker
+  │   │   ├── picker.ts           # Document picker
+  │   │   └── __tests__/          # database.test.ts + sqlite_adapter (real SQLite in Jest)
   │   ├── transcription/
   │   │   ├── queue.ts            # Background transcription queue
   │   │   └── whisper.ts          # On-device speech-to-text (whisper.rn)
@@ -152,7 +154,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   │   ├── drive.ts            # Google Drive REST API (upload, download, changes, update-in-place)
   │   │   ├── sync.ts             # Sync engine (pull via change feed, push via outbox, LWW reconcile)
   │   │   ├── types.ts            # Shared backup types
-  │   │   └── __tests__/          # Unit tests for sync engine
+  │   │   └── __tests__/          # Sync engine unit tests + FakeDrive scenario harness
   │   └── system/
   │       └── sharing.ts          # Share clips via native share sheet
   ├── screens/
@@ -270,6 +272,7 @@ local_updated_at INTEGER       -- Legacy field (not used by new sync engine)
 remote_updated_at INTEGER      -- Legacy field (not used by new sync engine)
 remote_file_id TEXT            -- Drive file ID (JSON)
 remote_audio_file_id TEXT      -- Drive file ID (audio, clips only)
+remote_audio_version TEXT      -- Audio content version on Drive (md5Checksum, clips only)
 synced_at INTEGER NOT NULL
 PRIMARY KEY (entity_type, entity_id)
 ```
@@ -282,8 +285,9 @@ entity_id TEXT NOT NULL
 operation TEXT NOT NULL        -- 'upsert' | 'delete'
 queued_at INTEGER NOT NULL
 updated_at_when_queued INTEGER  -- Entity's updated_at when queued (stale detection)
-attempts INTEGER DEFAULT 0     -- Retry count (max 3)
+attempts INTEGER DEFAULT 0     -- Retry count (retry forever; >= 3 surfaced as failing)
 last_error TEXT
+next_attempt_at INTEGER DEFAULT 0  -- Earliest next push attempt (exponential backoff)
 UNIQUE(entity_type, entity_id) -- One pending op per entity
 ```
 
@@ -343,6 +347,7 @@ transcription: {
 sync: {
   isSyncing: boolean            // Sync in progress
   pendingCount: number          // Items waiting to sync
+  failingCount: number          // Repeatedly failing items (push attempts >= 3 + pull quarantined)
   lastSyncTime: number | null   // Timestamp of last successful sync
   error: string | null          // Last sync error (null if successful)
 }
