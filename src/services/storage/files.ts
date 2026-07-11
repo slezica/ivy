@@ -79,6 +79,18 @@ export class FileStorageService {
   }
 
   /**
+   * Modification time of a file in milliseconds since epoch, or null if unavailable.
+   */
+  async getModificationTime(uri: string): Promise<number | null> {
+    try {
+      const stat = await RNFS.stat(uriToPath(uri))
+      return stat.mtime ? new Date(stat.mtime).getTime() : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
    * Delete a file from app storage.
    */
   async deleteFile(uri: string): Promise<void> {
