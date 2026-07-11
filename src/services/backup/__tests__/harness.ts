@@ -57,8 +57,7 @@ export class FakeDrive {
   }
 
   /** Seed a remote file directly, recording a change feed entry. */
-  putFile(folder: BackupFolder, name: string, content: string | Uint8Array): string {
-    const id = `drive-${this.nextFileId++}`
+  putFile(folder: BackupFolder, name: string, content: string | Uint8Array, id: string = `drive-${this.nextFileId++}`): string {
     const mimeType = typeof content === 'string' ? 'application/json' : 'audio/mp4'
     this.files.set(id, { id, folder, name, mimeType, content, trashed: false })
     this.recordChange(id, false)

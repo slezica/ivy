@@ -370,17 +370,16 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     result: SyncResult,
     notification: SyncNotification,
   ): Promise<void> {
-    // Find the JSON file change
-    const jsonChange = remoteChanges.find(c => c.file?.name?.endsWith('.json'))
-    if (!jsonChange?.file) return
+    // Resolve the JSON file (deterministically, if twins exist) and parse it
+    const resolved = await this.resolveJsonFile('book', id, jsonCandidates(remoteChanges))
+    if (!resolved) return
 
-    // Download and parse remote
-    const content = await this.drive.downloadFile(jsonChange.fileId, false) as string
-    const remote: BookBackup = JSON.parse(content)
+    const jsonFileId = resolved.file.id
+    const remote: BookBackup = JSON.parse(resolved.content)
 
     // Tombstone: branch before any fingerprint or restore logic
     if (remote.deleted) {
-      await this.applyBookTombstone(remote, jsonChange.fileId, notification)
+      await this.applyBookTombstone(remote, jsonFileId, notification)
       return
     }
 
@@ -389,7 +388,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
     if (!local) {
       // New remotely — download
-      await this.downloadBook(remote, jsonChange.fileId, result, notification)
+      await this.downloadBook(remote, jsonFileId, result, notification)
       return
     }
 
@@ -399,13 +398,75 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       await this.db.upsertManifestEntry({
         entity_type: 'book', entity_id: id,
         local_updated_at: local.updated_at, remote_updated_at: null,
-        remote_file_id: jsonChange.fileId, remote_audio_file_id: null,
+        remote_file_id: jsonFileId, remote_audio_file_id: null,
       })
     } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-      await this.downloadBook(remote, jsonChange.fileId, result, notification)
+      await this.downloadBook(remote, jsonFileId, result, notification)
     } else {
       await this.db.queueChange('book', id, 'upsert', local.updated_at)
     }
+  }
+
+  /**
+   * Pick the JSON file to reconcile from, resolving duplicate live twins
+   * deterministically (M9): prefer the file the manifest already tracks, else
+   * the lexicographically smallest file id — every device that sees both twins
+   * lands on the same file. For books, losing live twins are retired in place
+   * with a plain full-payload tombstone (no merged_into). Clip and session
+   * twins are only resolved, never tombstoned: their plain tombstones would
+   * propagate as real deletions, and the winner selection alone converges.
+   *
+   * Returns the winner and its content (already downloaded), or null when the
+   * group carries no JSON file.
+   */
+  private async resolveJsonFile(
+    type: 'book' | 'clip' | 'session',
+    id: string,
+    candidates: DriveFile[],
+  ): Promise<{ file: DriveFile; content: string } | null> {
+    // The same file can appear twice in one feed batch (create + update)
+    const byId = new Map<string, DriveFile>()
+    for (const file of candidates) byId.set(file.id, file)
+    const unique = [...byId.values()]
+
+    if (unique.length === 0) return null
+
+    if (unique.length === 1) {
+      const content = await this.drive.downloadFile(unique[0].id, false) as string
+      return { file: unique[0], content }
+    }
+
+    const manifest = await this.db.getManifestEntry(type, id)
+    const ordered = unique.sort((a, b) => (a.id < b.id ? -1 : 1))
+    const preferred = ordered.findIndex(f => f.id === manifest?.remote_file_id)
+    if (preferred > 0) ordered.unshift(ordered.splice(preferred, 1)[0])
+
+    // Twins: download them all — the winner is the first live one in
+    // preference order (or the first overall when every twin is a tombstone)
+    const parsed: Array<{ file: DriveFile; content: string; deleted: boolean }> = []
+    for (const file of ordered) {
+      const content = await this.drive.downloadFile(file.id, false) as string
+      const payload = JSON.parse(content) as { deleted?: boolean }
+      parsed.push({ file, content, deleted: payload.deleted === true })
+    }
+
+    const winner = parsed.find(p => !p.deleted) ?? parsed[0]
+
+    if (type === 'book') {
+      for (const twin of parsed) {
+        if (twin === winner || twin.deleted) continue
+        const tombstone = {
+          ...JSON.parse(twin.content),
+          deleted: true,
+          updated_at: Date.now(),
+          updated_by: this.db.deviceId,
+        }
+        await this.drive.updateFile(twin.file.id, JSON.stringify(tombstone, null, 2))
+        log(`Retired duplicate remote book file for ${id}: ${twin.file.id} (kept ${winner.file.id})`)
+      }
+    }
+
+    return { file: winner.file, content: winner.content }
   }
 
   private async reconcileClip(
@@ -414,7 +475,6 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     result: SyncResult,
     notification: SyncNotification,
   ): Promise<void> {
-    const jsonChange = remoteChanges.find(c => c.file?.name?.endsWith('.json'))
     const audioChange = remoteChanges.find(c => {
       const name = c.file?.name
       return name && (name.endsWith('.m4a') || name.endsWith('.mp3'))
@@ -427,7 +487,9 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const audioVersion = fileVersion(audioChange?.file)
     const audioChanged = audioChange != null && audioVersion !== manifest?.remote_audio_version
 
-    if (!jsonChange?.file) {
+    const resolved = await this.resolveJsonFile('clip', id, jsonCandidates(remoteChanges))
+
+    if (!resolved) {
       // Audio-only change (bounds edit re-slice, or a 404-fallback re-upload):
       // no JSON version to compare — the audio version mismatch is the signal
       if (audioChange && audioChanged && manifest) {
@@ -440,12 +502,12 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       return
     }
 
-    const content = await this.drive.downloadFile(jsonChange.fileId, false) as string
-    const remote: ClipBackup = JSON.parse(content)
+    const jsonFileId = resolved.file.id
+    const remote: ClipBackup = JSON.parse(resolved.content)
 
     // Tombstone: branch before any audio handling or restore call
     if (remote.deleted) {
-      await this.applyClipTombstone(remote, jsonChange.fileId, result, notification)
+      await this.applyClipTombstone(remote, jsonFileId, result, notification)
       return
     }
 
@@ -457,7 +519,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const audioFilename = audioChange?.file?.name
       if (audioFileId) {
         const version = audioChange ? audioVersion : manifest?.remote_audio_version ?? null
-        await this.downloadClip(remote, jsonChange.fileId, audioFileId, audioFilename, version, result, notification)
+        await this.downloadClip(remote, jsonFileId, audioFileId, audioFilename, version, result, notification)
       } else {
         result.errors.push(`Clip ${id}: no audio file found`)
       }
@@ -468,7 +530,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       // JSON already in sync — but the audio content may still have moved
       // (M5: the JSON short-circuit must never make stale audio permanent)
       if (audioChange && audioChanged) {
-        await this.downloadClipAudio(local, audioChange.fileId, audioVersion, manifest, notification, jsonChange.fileId)
+        await this.downloadClipAudio(local, audioChange.fileId, audioVersion, manifest, notification, jsonFileId)
         result.downloaded.clips++
       }
     } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
@@ -476,7 +538,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const audioFilename = audioChange?.file?.name
       if (audioFileId) {
         const version = audioChange ? audioVersion : manifest?.remote_audio_version ?? null
-        await this.downloadClip(remote, jsonChange.fileId, audioFileId, audioFilename, version, result, notification)
+        await this.downloadClip(remote, jsonFileId, audioFileId, audioFilename, version, result, notification)
       }
     } else {
       // Local edit is newer — it wins and re-uploads, audio included, so a
@@ -491,29 +553,29 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     result: SyncResult,
     notification: SyncNotification,
   ): Promise<void> {
-    const jsonChange = remoteChanges.find(c => c.file?.name?.endsWith('.json'))
-    if (!jsonChange?.file) return
+    const resolved = await this.resolveJsonFile('session', id, jsonCandidates(remoteChanges))
+    if (!resolved) return
 
-    const content = await this.drive.downloadFile(jsonChange.fileId, false) as string
-    const remote: SessionBackup = JSON.parse(content)
+    const jsonFileId = resolved.file.id
+    const remote: SessionBackup = JSON.parse(resolved.content)
 
     // Tombstone: branch before any restore call
     if (remote.deleted) {
-      await this.applySessionTombstone(remote, jsonChange.fileId, result, notification)
+      await this.applySessionTombstone(remote, jsonFileId, result, notification)
       return
     }
 
     const local = await this.db.getSessionById(id)
 
     if (!local) {
-      await this.downloadSession(remote, jsonChange.fileId, result, notification)
+      await this.downloadSession(remote, jsonFileId, result, notification)
       return
     }
 
     if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
       // Already in sync
     } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-      await this.downloadSession(remote, jsonChange.fileId, result, notification)
+      await this.downloadSession(remote, jsonFileId, result, notification)
     } else {
       await this.db.queueChange('session', id, 'upsert', local.updated_at)
     }
@@ -834,6 +896,14 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const local = await this.db.getBookById(retiredId)
 
     if (!survivorId) {
+      // Twin-loser guard: when the manifest tracks a different (live) file,
+      // this tombstone only retires a duplicate twin — the entity lives on in
+      // the manifest's file, so the local row must not be touched
+      const manifest = await this.db.getManifestEntry('book', retiredId)
+      if (manifest?.remote_file_id && manifest.remote_file_id !== jsonFileId) {
+        return
+      }
+
       if (local && local.uri === null) {
         await this.db.deleteBook(retiredId)
         await this.db.deleteManifestEntry('book', retiredId)
@@ -1313,65 +1383,66 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     // merged_into re-key can only reattach clips that have already landed
     const bookTombstones: Array<{ remote: BookBackup; fileId: string }> = []
 
-    // Reconcile books
-    for (const file of bookFiles) {
-      const parsed = parseFilename(file.name)
-      if (!parsed || parsed.type !== 'book' || parsed.extension !== 'json') continue
+    // Reconcile books (JSONs grouped by id so duplicate twins resolve)
+    const bookJsonsById = groupJsonFilesById(bookFiles, 'book')
 
+    for (const [bookId, jsons] of bookJsonsById) {
       try {
-        const content = await this.drive.downloadFile(file.id, false) as string
-        const remote: BookBackup = JSON.parse(content)
+        const resolved = await this.resolveJsonFile('book', bookId, jsons)
+        if (!resolved) continue
+        const fileId = resolved.file.id
+        const remote: BookBackup = JSON.parse(resolved.content)
 
         // Tombstone: branch before any fingerprint or restore logic
         if (remote.deleted) {
-          bookTombstones.push({ remote, fileId: file.id })
+          bookTombstones.push({ remote, fileId })
           continue
         }
 
-        const local = await this.db.getBookById(parsed.id)
+        const local = await this.db.getBookById(bookId)
 
         if (!local) {
-          await this.downloadBook(remote, file.id, result, notification)
+          await this.downloadBook(remote, fileId, result, notification)
         } else if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
           // Already in sync — just record the file ID
           await this.db.upsertManifestEntry({
-            entity_type: 'book', entity_id: parsed.id,
+            entity_type: 'book', entity_id: bookId,
             local_updated_at: local.updated_at, remote_updated_at: null,
-            remote_file_id: file.id, remote_audio_file_id: null,
+            remote_file_id: fileId, remote_audio_file_id: null,
           })
         } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-          await this.downloadBook(remote, file.id, result, notification)
+          await this.downloadBook(remote, fileId, result, notification)
         } else {
           // Local is ahead — record file ID and queue for push
           await this.db.upsertManifestEntry({
-            entity_type: 'book', entity_id: parsed.id,
+            entity_type: 'book', entity_id: bookId,
             local_updated_at: local.updated_at, remote_updated_at: null,
-            remote_file_id: file.id, remote_audio_file_id: null,
+            remote_file_id: fileId, remote_audio_file_id: null,
           })
-          await this.db.queueChange('book', parsed.id, 'upsert', local.updated_at)
+          await this.db.queueChange('book', bookId, 'upsert', local.updated_at)
         }
       } catch (error) {
-        result.errors.push(`Full reconcile book ${parsed.id}: ${error}`)
+        result.errors.push(`Full reconcile book ${bookId}: ${error}`)
       }
     }
 
     // Reconcile clips
-    const clipsByClipId = new Map<string, { json?: DriveFile; audio?: DriveFile }>()
+    const clipsByClipId = new Map<string, { jsons: DriveFile[]; audio?: DriveFile }>()
     for (const file of clipFiles) {
       const parsed = parseFilename(file.name)
       if (!parsed || parsed.type !== 'clip') continue
-      const existing = clipsByClipId.get(parsed.id) ?? {}
-      if (parsed.extension === 'json') existing.json = file
+      const existing = clipsByClipId.get(parsed.id) ?? { jsons: [] }
+      if (parsed.extension === 'json') existing.jsons.push(file)
       else existing.audio = file
       clipsByClipId.set(parsed.id, existing)
     }
 
-    for (const [clipId, { json, audio }] of clipsByClipId) {
-      if (!json) continue
-
+    for (const [clipId, { jsons, audio }] of clipsByClipId) {
       try {
-        const content = await this.drive.downloadFile(json.id, false) as string
-        const remote: ClipBackup = JSON.parse(content)
+        const resolved = await this.resolveJsonFile('clip', clipId, jsons)
+        if (!resolved) continue
+        const json = resolved.file
+        const remote: ClipBackup = JSON.parse(resolved.content)
 
         // Tombstones have no audio file — branch on deleted before requiring one
         if (remote.deleted) {
@@ -1415,42 +1486,43 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       }
     }
 
-    // Reconcile sessions
-    for (const file of sessionFiles) {
-      const parsed = parseFilename(file.name)
-      if (!parsed || parsed.type !== 'session' || parsed.extension !== 'json') continue
+    // Reconcile sessions (JSONs grouped by id so duplicate twins resolve)
+    const sessionJsonsById = groupJsonFilesById(sessionFiles, 'session')
 
+    for (const [sessionId, jsons] of sessionJsonsById) {
       try {
-        const content = await this.drive.downloadFile(file.id, false) as string
-        const remote: SessionBackup = JSON.parse(content)
+        const resolved = await this.resolveJsonFile('session', sessionId, jsons)
+        if (!resolved) continue
+        const fileId = resolved.file.id
+        const remote: SessionBackup = JSON.parse(resolved.content)
 
         if (remote.deleted) {
-          await this.applySessionTombstone(remote, file.id, result, notification)
+          await this.applySessionTombstone(remote, fileId, result, notification)
           continue
         }
 
-        const local = await this.db.getSessionById(parsed.id)
+        const local = await this.db.getSessionById(sessionId)
 
         if (!local) {
-          await this.downloadSession(remote, file.id, result, notification)
+          await this.downloadSession(remote, fileId, result, notification)
         } else if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
           await this.db.upsertManifestEntry({
-            entity_type: 'session', entity_id: parsed.id,
+            entity_type: 'session', entity_id: sessionId,
             local_updated_at: local.updated_at, remote_updated_at: null,
-            remote_file_id: file.id, remote_audio_file_id: null,
+            remote_file_id: fileId, remote_audio_file_id: null,
           })
         } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-          await this.downloadSession(remote, file.id, result, notification)
+          await this.downloadSession(remote, fileId, result, notification)
         } else {
           await this.db.upsertManifestEntry({
-            entity_type: 'session', entity_id: parsed.id,
+            entity_type: 'session', entity_id: sessionId,
             local_updated_at: local.updated_at, remote_updated_at: null,
-            remote_file_id: file.id, remote_audio_file_id: null,
+            remote_file_id: fileId, remote_audio_file_id: null,
           })
-          await this.db.queueChange('session', parsed.id, 'upsert', local.updated_at)
+          await this.db.queueChange('session', sessionId, 'upsert', local.updated_at)
         }
       } catch (error) {
-        result.errors.push(`Full reconcile session ${parsed.id}: ${error}`)
+        result.errors.push(`Full reconcile session ${sessionId}: ${error}`)
       }
     }
 
@@ -1541,6 +1613,28 @@ function parseFilename(name: string): ParsedFilename | null {
  */
 function fileVersion(file?: DriveFile): string | null {
   return file?.md5Checksum ?? file?.modifiedTime ?? null
+}
+
+/** The JSON files present in a group of feed changes (removals excluded). */
+function jsonCandidates(
+  remoteChanges: Array<{ fileId: string; removed: boolean; file?: DriveFile }>
+): DriveFile[] {
+  return remoteChanges
+    .filter(c => !c.removed && c.file?.name?.endsWith('.json'))
+    .map(c => c.file!)
+}
+
+/** Group a folder listing's JSON files by entity id (twins share an id). */
+function groupJsonFilesById(files: DriveFile[], type: 'book' | 'session'): Map<string, DriveFile[]> {
+  const byId = new Map<string, DriveFile[]>()
+  for (const file of files) {
+    const parsed = parseFilename(file.name)
+    if (!parsed || parsed.type !== type || parsed.extension !== 'json') continue
+    const list = byId.get(parsed.id) ?? []
+    list.push(file)
+    byId.set(parsed.id, list)
+  }
+  return byId
 }
 
 // -----------------------------------------------------------------------------

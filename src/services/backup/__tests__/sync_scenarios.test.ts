@@ -923,6 +923,69 @@ describe('sync scenarios', () => {
     })
   })
 
+  describe('duplicate remote files (twins)', () => {
+    it('resolves live book twins to the smallest file id and tombstones the loser', async () => {
+      const drive = new FakeDrive()
+      // Two live copies of the same book JSON (create-new race, e.g. two
+      // devices pushing before either saw the other's file)
+      const winnerId = drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ title: 'Copy One', updated_at: 5000 }))
+      const loserId = drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ title: 'Copy Two', updated_at: 6000 }))
+
+      const deviceA = createSyncHarness(drive)
+      const errorsA = trackSyncErrors(deviceA)
+      await deviceA.sync.syncNow() // bootstrap sees both twins
+
+      // No manifest → lexicographically smallest file id wins
+      expect(errorsA).toEqual([null])
+      expect((await deviceA.db.getBookById(BOOK_ID))!.title).toBe('Copy One')
+      expect((await deviceA.db.getManifestEntry('book', BOOK_ID))!.remote_file_id).toBe(winnerId)
+
+      // The loser was retired in place: full payload, plain tombstone
+      const loser = JSON.parse(drive.files.get(loserId)!.content as string)
+      expect(loser.deleted).toBe(true)
+      expect(loser.merged_into).toBeUndefined()
+      expect(loser.title).toBe('Copy Two')
+      expect(JSON.parse(drive.files.get(winnerId)!.content as string).deleted).toBeUndefined()
+
+      // Another device converges on the same winner (tombstoned twin skipped)
+      const deviceB = createSyncHarness(drive)
+      await deviceB.sync.syncNow()
+      expect((await deviceB.db.getBookById(BOOK_ID))!.title).toBe('Copy One')
+      expect((await deviceB.db.getManifestEntry('book', BOOK_ID))!.remote_file_id).toBe(winnerId)
+
+      // No flapping: A's own tombstone echo is a no-op, nothing re-queues
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow()
+      expect(await deviceA.db.getBookById(BOOK_ID)).not.toBeNull()
+      expect(await deviceA.db.getOutboxItems()).toEqual([])
+      expect(JSON.parse(drive.files.get(loserId)!.content as string).deleted).toBe(true)
+      expect(JSON.parse(drive.files.get(winnerId)!.content as string).deleted).toBeUndefined()
+    })
+
+    it('prefers the manifest-tracked file over a smaller-id twin', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await deviceA.sync.syncNow() // uploads — the manifest tracks this file
+      await deviceA.sync.syncNow() // consume the upload echo
+      const trackedId = drive.getFileByName(`book_${BOOK_ID}.json`)!.id
+
+      // A twin with a smaller file id appears alongside an update to ours
+      const twinId = drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ title: 'Twin Copy', updated_at: 4000 }), 'a-smaller-id')
+      expect(twinId < trackedId).toBe(true)
+      await drive.updateFile(trackedId, remoteBookJson({ title: 'Tracked Copy', updated_at: Date.now() }))
+
+      await deviceA.sync.syncNow() // both twins in one batch
+
+      // The manifest-tracked file wins even though it is not the smallest id
+      expect((await deviceA.db.getManifestEntry('book', BOOK_ID))!.remote_file_id).toBe(trackedId)
+      expect((await deviceA.db.getBookById(BOOK_ID))!.title).toBe('Tracked Copy')
+      expect(JSON.parse(drive.files.get(twinId)!.content as string).deleted).toBe(true)
+      expect(JSON.parse(drive.files.get(trackedId)!.content as string).deleted).toBeUndefined()
+    })
+  })
+
   describe('clip audio versioning (M5)', () => {
     it('re-downloads audio when only the audio content changed (same JSON version)', async () => {
       const drive = new FakeDrive()
