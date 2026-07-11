@@ -58,8 +58,17 @@ export const useStore = create<AppState>()(immer((set, get) => {
     db.queueChange('book', bookId, 'upsert').catch(() => {})
   }, 30_000)
 
+  // Session operations read-then-write the database; serialize them so a
+  // finalize cannot interleave with an in-flight track (and vice versa)
+  let sessionChain = Promise.resolve()
+  const enqueueSessionOp = (op: () => Promise<void>) => {
+    sessionChain = sessionChain.then(op).catch((error) => {
+      console.error('Session operation failed:', error)
+    })
+  }
+
   const throttledTrackSession = throttleSameArgs((bookId: string) => {
-    trackSession(bookId)
+    enqueueSessionOp(() => trackSession(bookId))
   }, 5_000)
 
   // Actions ---------------------------------------------------------------------------------------
@@ -205,7 +214,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
         book?.id !== currentSessionBookId
 
       if (interrupted) {
-        finalizeSession(currentSessionBookId)
+        enqueueSessionOp(() => finalizeSession(currentSessionBookId))
         set((state) => { state.currentSessionBookId = null })
       }
     }
