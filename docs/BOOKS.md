@@ -205,9 +205,11 @@ Deletion hides the book from the library entirely. Uses optimistic-update-with-r
 - Sessions still reference the book metadata (via INNER JOIN)
 - Re-adding the same file triggers a restore
 
-### Why upsert, not delete for sync?
+### Deletion is local-only
 
-Both archive and delete queue an `'upsert'` sync operation, not a `'delete'`. This is because books use soft-delete — the record still exists with `hidden: true`. Other devices need to learn about the hidden flag via sync. On the remote side, the `hidden-wins` merge strategy ensures deletion propagates correctly.
+Archive and delete are **per-device** operations — they never sync. `hidden` is a local-only field (excluded from the book backup payload), and neither operation bumps `updated_at`/`updated_by` or queues a sync change. Deleting a book on your phone doesn't touch your tablet; the book's JSON stays in the shared cloud library. See [SYNC.md](SYNC.md) for the rationale and consequences.
+
+This is why not bumping `updated_at` matters: the sync engine re-queues an upsert whenever local `updated_at` exceeds remote (local-ahead), so an archive-time bump would ship the book's pre-archive fields anyway and could revert a newer edit from another device.
 
 ---
 

@@ -42,7 +42,7 @@ File import (local files), metadata editing, archiving, deletion, and restoratio
 - `book.uri` can be null — always check before using for playback (null = archived or deleted)
 - Use `book.id` (UUID) as the stable identifier, not `uri` (which changes on restore)
 - Archive/delete are optimistic with rollback — update store first, then DB
-- Every book mutation must queue for sync (`db.queueChange`)
+- Every book mutation must queue for sync (`db.queueChange`) — except archive/delete, which are per-device and must NOT queue or bump `updated_at` (see docs/SYNC.md)
 - On restore, existing metadata (title/artist/artwork) wins over ID3 tags — protects user edits
 
 ### Playback

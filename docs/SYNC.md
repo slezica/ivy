@@ -7,12 +7,13 @@ A guide for Ivy's Google Drive sync.
 Ivy is an audiobook app that runs on multiple devices. The sync system keeps book metadata (positions, titles, archive state), clips (bookmarks with audio snippets), and sessions (listening history) consistent across devices, using Google Drive as the shared backend.
 
 **What gets synced:**
-- Book metadata — positions, titles, artists, artwork, archive/delete state, playback speed
+- Book metadata — positions, titles, artists, artwork, playback speed
 - Clips — metadata as JSON, audio as M4A (legacy clips may use MP3)
 - Sessions — listening history (time ranges per book)
 
 **What does NOT get synced:**
 - Full audiobook files (too large; users re-add from source)
+- Book archive/delete state (`hidden` and `uri` are per-device — see [Books Are Per-Device](#books-are-per-device))
 
 The system is **offline-first**: changes are queued locally and pushed to Drive whenever a sync happens next.
 
@@ -139,10 +140,26 @@ This is intentional. Per-field merge rules (like "max position" or "hidden wins"
 
 Consequences:
 - Position can go backward if an older device syncs after the user rewinds on another
-- A hide/unhide on one device can be overridden by a later metadata edit on another
 - Session time ranges don't widen — the latest version wins
 
 These tradeoffs favor predictability over cleverness.
+
+---
+
+## Books Are Per-Device
+
+Book *presence* is a per-device concern: audio never syncs, and neither does archive/delete state. The remote JSON collection is the shared cloud library; each device decides locally which of those books it holds audio for and which it has hidden.
+
+Concretely:
+
+- `hidden` is a **local-only field**. It is excluded from `BookBackup`, and applying a remote book never touches the local value (`restoreBookFromBackup` inserts new books as visible and omits `hidden` from its conflict-update list). Old remote JSONs may still contain a `hidden` field — readers ignore it.
+- **Archive and delete don't queue sync changes and don't bump `updated_at`/`updated_by`.** The no-bump part is load-bearing: the local-ahead branches in reconciliation re-queue an upsert whenever local `updated_at` exceeds remote, so a bump would ship the change anyway — and could revert another device's newer edit (an archive at 12:00 would beat a title edit at 11:55).
+- Deleting or archiving a book affects **only the device you do it on**. A locally deleted book is restored (hidden cleared, position preserved) by re-adding the same file.
+- Clip and session deletion, by contrast, is global and propagates to all devices.
+
+**Consequence (accepted):** a new device bootstraps *every* book ever added to the cloud library, including ones deleted locally elsewhere — they arrive as audio-less entries in the Archived section. If this becomes noise, a future explicit "remove from cloud" action can tombstone the book JSON.
+
+**Cross-version caveat (beta):** upgrade all devices before the first post-upgrade delete. New-code uploads omit `hidden`, but *old-code* `restoreBookFromBackup` still applies `remote.hidden ?? false` in its conflict update — so any upsert from an upgraded device un-deletes hidden books on a not-yet-upgraded device.
 
 ---
 
@@ -246,8 +263,10 @@ src/services/backup/
   sync.ts         → BackupSyncService (pull, push, LWW reconcile, full reconcile)
 
   __tests__/
-    sync.test.ts    → Tests for concurrency, reconciliation, push phase, fingerprinting
-    drive.test.ts   → Tests for Drive folder creation
+    sync.test.ts           → Tests for concurrency, reconciliation, push phase, fingerprinting
+    drive.test.ts          → Tests for Drive folder creation
+    harness.ts             → Scenario harness: FakeDrive + real DatabaseService on real SQLite
+    sync_scenarios.test.ts → End-to-end sync scenarios (round trips, failures, per-device books)
 
 src/actions/
   sync_now.ts             → Manual sync action
