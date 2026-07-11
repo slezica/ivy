@@ -402,3 +402,80 @@ src/actions/
 
 src/store/index.ts        → Wires sync events to store state
 ```
+
+---
+
+## Manual QA Playbook
+
+For a tester with no code knowledge. Requires: **two Android devices** (A and B) signed into the **same Google account**, 2–3 audio files (any mp3/m4a/m4b; at least one > 10 minutes), and access to [drive.google.com](https://drive.google.com) in a browser.
+
+Conventions: **[A]**/**[B]** = which device. **Sync** = open Settings → tap "Sync now" on *both* devices, wait for "Up to date" (or wait ~a minute for auto-sync after backgrounding/foregrounding the app). Steps chain — do sections in order, don't reset anything unless told. If any ✓ fails, note the section + step number and screenshot Settings on both devices.
+
+### 1. Setup
+
+1. [A][B] Install app, open Settings, enable Sync, sign in with the shared Google account
+2. [A] Add audio file #1 ("Book One"), let it import fully
+3. **Sync**
+4. ✓ [B] Book One appears in the library's archived section (no audio — expected: audio never syncs)
+5. ✓ [drive.google.com] An `Ivy` folder exists with `books/` inside
+
+### 2. Books
+
+1. [A] Edit Book One's title and artist (any values) → **Sync** → ✓ [B] shows the new title/artist
+2. [A] Play Book One for ~1 full minute, pause, note the position → **Sync**
+3. ✓ [B] book shows position within ~30s of A's (last ≤30s may lag — expected)
+4. [A] Change playback speed to 1.5× → **Sync** → ✓ [B] shows 1.5× for this book
+5. [B] Add the *same* audio file #1 → ✓ imports as the SAME book (no duplicate entry), keeps A's title/position, now playable on B
+6. **Sync** → ✓ [A] still exactly one Book One; [drive.google.com → books/] exactly one live book file for it
+7. [B] Edit title to "B Title"; [A] *immediately* edit title to "A Title" → **Sync** twice (both devices)
+8. ✓ Both devices converge on the SAME title (whichever edit was later — no mixing, no flapping)
+9. [A] Archive Book One → ✓ [A] moves to archived; **Sync** → ✓ [B] still ACTIVE and playable (archive is per-device)
+10. [A] Re-add file #1 → ✓ restores with title/position intact
+11. [A] Delete Book One (not archive) → **Sync** → ✓ [B] unaffected (delete is per-device); ✓ [A] library empty
+12. [A] Re-add file #1 once more → ✓ restores again (not "duplicate"), position preserved
+
+### 3. Clips
+
+1. [A] Add audio file #2 ("Book Two"), play it, create a clip mid-book
+2. ✓ [A] clip gets a transcription within ~a minute (needs transcription enabled in Settings)
+3. **Sync** → ✓ [B] clip appears WITH audio and transcription; ✓ plays on B even though B has no Book Two audio
+4. [B] Add a note to the clip → **Sync** → ✓ [A] shows the note
+5. [A] Edit the clip's bounds (drag start/end noticeably) → **Sync**
+6. ✓ [B] clip duration changed AND the audio matches the new bounds when played (not the old audio)
+7. ✓ [B] transcription updates to match the new bounds (may take ~a minute after sync)
+8. [A] Create a second clip → **Sync** → [B] delete that clip → **Sync**
+9. ✓ [A] the clip is gone (deletion propagates — unlike books)
+10. Conflict — delete vs edit: [A] airplane mode ON → delete the first clip; [B] edit the same clip's note
+11. [A] airplane mode OFF → **Sync** (both, twice)
+12. ✓ The clip SURVIVES on both devices with B's note (edit was later → wins), and still plays on both
+13. [B] Create a clip; put BOTH devices in airplane mode; delete it on B, nothing on A; both online → **Sync**
+14. ✓ Clip gone on both, stays gone (no flicker back) after another sync round
+
+### 4. Listening History
+
+1. [A] Play Book Two for ~2 minutes, pause → open History
+2. ✓ One session with correct duration; **Sync** → ✓ [B] shows the same session
+3. [A] Play Book Two, then after ~30s switch directly to Book One (no pause), play ~30s, pause
+4. ✓ History shows TWO sessions, one per book, correct durations
+5. [A] Tap play then pause immediately (<1s) → ✓ NO new junk session appears; **Sync** → ✓ none on B either
+
+### 5. Offline & Recovery
+
+1. [A] Airplane mode ON → edit Book Two's title, add a clip, edit a clip note
+2. ✓ [A] Settings shows pending changes count > 0 (not "Up to date")
+3. [A] Airplane mode OFF → Sync → ✓ pending drains to "Up to date"; **Sync** → ✓ all three changes on B
+4. [drive.google.com → Ivy/clips/] Trash one clip's `.json` file → [B] Sync
+5. ✓ [B] nothing breaks, clip stays; ✓ next syncs keep working ("Up to date")
+6. [A] Kill the app mid-sync (start Sync now, immediately swipe the app away), reopen
+7. ✓ App opens normally; Sync → completes; ✓ no duplicate books/clips appeared on either device afterward
+8. [A] Play a book while [B] taps Sync now repeatedly → ✓ no crash, playback uninterrupted
+
+### 6. Fresh Install (bootstrap) — do LAST
+
+1. [B] Note current state (books, clips count, history), then uninstall the app
+2. [B] Reinstall, enable Sync, sign in
+3. ✓ Full library appears: all books (audio-less, archived section), all clips (playable, with notes + transcriptions), full history
+4. ✓ Books deleted on A earlier ALSO appear (expected — deletion is per-device, the cloud keeps everything)
+5. ✓ Clips deleted in section 3 do NOT appear (deletions propagate for clips)
+6. [B] Re-add audio file #2 → ✓ Book Two merges with its cloud identity (clips still attached, position preserved)
+7. **Sync** both → ✓ both devices stable at "Up to date", no duplicates anywhere, [drive.google.com] no duplicate `Ivy` folders
