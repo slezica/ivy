@@ -735,6 +735,12 @@ describe('sync scenarios', () => {
       expect((await device.db.getClip(CLIP_B))!.source_id).toBe(SMALL_ID)
       expect((await device.db.getSessionById(session.id))!.book_id).toBe(SMALL_ID)
       expect(await device.db.getManifestEntry('book', LARGE_ID)).toBeNull()
+
+      // The re-keyed children re-uploaded — their remote copies were the only
+      // ones still naming the retired id
+      expect(drive.readJson(`clip_${CLIP_B}.json`).source_id).toBe(SMALL_ID)
+      expect(drive.readJson(`session_${session.id}.json`).book_id).toBe(SMALL_ID)
+      expect(await device.db.getOutboxItems()).toEqual([])
     })
 
     it('transfers audio to an audio-less survivor when both rows exist', async () => {
@@ -783,6 +789,79 @@ describe('sync scenarios', () => {
       expect(await deviceWithAudio.db.getBookById(SMALL_ID)).not.toBeNull()
       expect(await deviceWithoutAudio.db.getBookById(SMALL_ID)).toBeNull()
       expect(await deviceWithoutAudio.db.getManifestEntry('book', SMALL_ID)).toBeNull()
+    })
+
+    it('re-uploads children synced before the merge so all devices converge', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      // B's clip syncs under the losing id before the twin is ever seen
+      await addBook(deviceB, LARGE_ID)
+      await addClip(deviceB, CLIP_B, LARGE_ID)
+      await deviceB.sync.syncNow()
+      await deviceB.sync.syncNow() // consume upload echoes
+
+      await addBook(deviceA, SMALL_ID)
+      await deviceA.sync.syncNow() // pulls large → skip; pulls B's clip (dangles under large)
+      expect((await deviceA.db.getClip(CLIP_B))!.source_id).toBe(LARGE_ID)
+      expect(await deviceA.db.getAllClips()).toHaveLength(0) // invisible orphan
+
+      await deviceB.sync.syncNow() // merge: re-key + retire + mass-bump the clip
+      expect(drive.readJson(`clip_${CLIP_B}.json`).source_id).toBe(SMALL_ID)
+
+      await deviceA.sync.syncNow() // pulls tombstone + the clip's re-upload
+
+      expect((await deviceA.db.getClip(CLIP_B))!.source_id).toBe(SMALL_ID)
+      expect(await deviceA.db.getAllClips()).toHaveLength(1) // visible again
+      expect((await deviceB.db.getClip(CLIP_B))!.source_id).toBe(SMALL_ID)
+      expect(await deviceB.db.getOutboxItems()).toEqual([])
+    })
+
+    it('converges a third device that bootstraps mid-merge', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceB, LARGE_ID)
+      await addClip(deviceB, CLIP_B, LARGE_ID)
+      await deviceB.sync.syncNow()
+      await deviceB.sync.syncNow()
+
+      await addBook(deviceA, SMALL_ID)
+      await addClip(deviceA, CLIP_A, SMALL_ID)
+      await deviceA.sync.syncNow() // twins now live on Drive
+
+      // C bootstraps mid-merge: it sees both twins and merges on its own
+      const deviceC = createSyncHarness(drive)
+      const errorsC = trackSyncErrors(deviceC)
+      await deviceC.sync.syncNow()
+      expect(errorsC).toEqual([null])
+      expect(await deviceC.db.getBookById(LARGE_ID)).toBeNull()
+      expect(await deviceC.db.getBookById(SMALL_ID)).not.toBeNull()
+
+      // Everyone settles
+      await deviceB.sync.syncNow() // pulls the twin / tombstone → merges or adopts
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow()
+      await deviceC.sync.syncNow()
+      await deviceA.sync.syncNow()
+
+      // One book + all clips everywhere, all under the surviving id
+      for (const device of [deviceA, deviceB, deviceC]) {
+        expect(await device.db.getBookById(LARGE_ID)).toBeNull()
+        expect(await device.db.getBookById(SMALL_ID)).not.toBeNull()
+        expect((await device.db.getClip(CLIP_A))!.source_id).toBe(SMALL_ID)
+        expect((await device.db.getClip(CLIP_B))!.source_id).toBe(SMALL_ID)
+        expect(await device.db.getAllClips()).toHaveLength(2)
+        expect(await device.db.getOutboxItems()).toEqual([])
+      }
+
+      // Drive converged too: the loser is a tombstone, children name the survivor
+      expect(drive.readJson(`book_${LARGE_ID}.json`).deleted).toBe(true)
+      expect(drive.readJson(`book_${LARGE_ID}.json`).merged_into).toBe(SMALL_ID)
+      expect(drive.readJson(`book_${SMALL_ID}.json`).deleted).toBeUndefined()
+      expect(drive.readJson(`clip_${CLIP_B}.json`).source_id).toBe(SMALL_ID)
     })
 
     it('keeps clips made on both devices before the merge, under the surviving id', async () => {

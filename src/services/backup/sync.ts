@@ -598,10 +598,32 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       await this.retireMergedRemoteBook(oldManifest.remote_file_id, local.id, remote.id)
     }
 
+    await this.requeueMergedChildren(clipIds, sessionIds)
+
     notification.booksChanged.push(remote.id)
     notification.clipsChanged.push(...clipIds)
     notification.sessionsChanged.push(...sessionIds)
     result.downloaded.books++
+  }
+
+  /**
+   * Bump and queue upserts for the clips and sessions re-keyed by an identity
+   * merge. Other devices only learn the new source id through ordinary LWW
+   * updates — without this, their copies keep pointing at a book id that no
+   * longer exists anywhere. Accepted cost: the mass-bump can clobber a
+   * concurrent edit from another device (rare, LWW-consistent).
+   */
+  private async requeueMergedChildren(clipIds: string[], sessionIds: string[]): Promise<void> {
+    for (const clipId of clipIds) {
+      await this.db.touchClip(clipId)
+      const clip = await this.db.getClip(clipId)
+      if (clip) await this.db.queueChange('clip', clipId, 'upsert', clip.updated_at)
+    }
+    for (const sessionId of sessionIds) {
+      await this.db.touchSession(sessionId)
+      const session = await this.db.getSessionById(sessionId)
+      if (session) await this.db.queueChange('session', sessionId, 'upsert', session.updated_at)
+    }
   }
 
   /**
@@ -757,8 +779,11 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const survivor = await this.db.getBookById(survivorId)
 
     if (local && !survivor) {
-      // Adopt the surviving id wholesale
+      // Adopt the surviving id wholesale. Like the merge itself, adoption
+      // re-uploads the re-keyed children: this device may be the only one
+      // whose remote copies still name the retired id.
       const { clipIds, sessionIds } = await this.db.rekeyBook(retiredId, survivorId)
+      await this.requeueMergedChildren(clipIds, sessionIds)
       notification.booksChanged.push(survivorId)
       notification.clipsChanged.push(...clipIds)
       notification.sessionsChanged.push(...sessionIds)

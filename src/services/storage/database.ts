@@ -676,6 +676,15 @@ export class DatabaseService {
     )
   }
 
+  /** Touch a clip's updated_at/updated_by (e.g. to re-sync after an identity merge). */
+  async touchClip(id: string): Promise<void> {
+    const now = Date.now()
+    await this.db.runAsync(
+      'UPDATE clips SET updated_at = ?, updated_by = ? WHERE id = ?',
+      [now, this.deviceId, id]
+    )
+  }
+
   async getClipsNeedingTranscription(): Promise<Clip[]> {
     return this.db.getAllAsync<Clip>(
       'SELECT * FROM clips WHERE transcription IS NULL ORDER BY created_at ASC'
@@ -797,6 +806,15 @@ export class DatabaseService {
     ).catch((error) => {
       console.debug('Failed to update session ended_at (non-critical):', error)
     })
+  }
+
+  /** Touch a session's updated_at/updated_by (e.g. to re-sync after an identity merge). */
+  async touchSession(id: string): Promise<void> {
+    const now = Date.now()
+    await this.db.runAsync(
+      'UPDATE sessions SET updated_at = ?, updated_by = ? WHERE id = ?',
+      [now, this.deviceId, id]
+    )
   }
 
   async deleteSession(sessionId: string): Promise<void> {
