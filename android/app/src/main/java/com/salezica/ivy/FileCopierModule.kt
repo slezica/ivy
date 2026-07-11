@@ -64,6 +64,8 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                 return@Thread
             }
 
+            var inputStream: InputStream? = null
+
             try {
                 // Check if already cancelled before doing any work
                 if (op.cancelled) {
@@ -75,8 +77,12 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                 val uri = Uri.parse(sourceUri)
                 val context = reactApplicationContext
 
-                val inputStream = context.contentResolver.openInputStream(uri)
-                    ?: return@Thread promise.reject("OPEN_FAILED", "Could not open source URI: $sourceUri")
+                inputStream = context.contentResolver.openInputStream(uri)
+                if (inputStream == null) {
+                    operations.remove(opId)
+                    promise.reject("OPEN_FAILED", "Could not open source URI: $sourceUri")
+                    return@Thread
+                }
 
                 val fileSize = queryFileSize(uri) ?: -1L
 
@@ -117,6 +123,7 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                 promise.resolve(result)
 
             } catch (e: Exception) {
+                try { inputStream?.close() } catch (_: Exception) {}
                 operations.remove(opId)
                 if (op.cancelled) {
                     promise.reject("CANCELLED", "Copy was cancelled")
@@ -149,13 +156,15 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                 return@Thread
             }
 
+            var outputStream: FileOutputStream? = null
+
             try {
                 val digest = MessageDigest.getInstance("SHA-256")
 
                 // The fingerprint bytes were already read — feed them into the hash
                 digest.update(op.fingerprint)
 
-                val outputStream = FileOutputStream(destPath)
+                outputStream = FileOutputStream(destPath)
                 var bytesWritten = 0L
                 var lastProgressTime = System.currentTimeMillis()
 
@@ -208,6 +217,7 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
 
             } catch (e: Exception) {
                 android.util.Log.d("FileCopier", "commitCopy catch: cancelled=${op.cancelled}, error=${e.message}")
+                try { outputStream?.close() } catch (_: Exception) {}
                 try { inputStream.close() } catch (_: Exception) {}
                 java.io.File(destPath).delete()
                 operations.remove(opId)
