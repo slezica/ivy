@@ -15,7 +15,7 @@ Ivy automatically tracks how long the user listens to each book. Every time the 
 - Clip playback (ClipViewer, ClipEditor) — only the main player creates sessions
 - Position changes or seeks — sessions record wall-clock time, not audio position
 
-**Sessions are synced** to Google Drive, just like books and clips. Each device contributes its own sessions; conflicts are resolved by taking the widest time range (min start, max end). Sessions can be deleted, and deletions propagate across devices.
+**Sessions are synced** to Google Drive, just like books and clips. Each device contributes its own sessions; conflicts resolve by whole-entity last-writer-wins — the latest version replaces the record, time ranges don't widen. Session deletions (the sub-1-second cleanup) propagate across devices via sync tombstones (see [SYNC.md](SYNC.md)).
 
 ---
 
@@ -74,7 +74,7 @@ The system has no dedicated service — it's built from two store actions (`trac
 
 When playback starts, `trackSession(bookId)` queries for a recent session on this book. If one exists within the 5-minute window, it extends that session by updating `ended_at`; otherwise it creates a new one. While playback continues, the throttle fires `trackSession` every 5 seconds to keep `ended_at` current.
 
-When playback stops, `finalizeSession` runs immediately (not throttled). Sessions shorter than `MIN_SESSION_DURATION_MS` (1 second) are deleted; the rest get a final `ended_at` update.
+When playback stops, `finalizeSession` runs immediately (not throttled). Sessions shorter than `MIN_SESSION_DURATION_MS` (1 second) are deleted and a sync `delete` is queued so the cleanup propagates; the rest get a final `ended_at` update. Both `trackSession` and `finalizeSession` queue a sync `upsert` for the session they touch.
 
 ---
 
@@ -86,7 +86,7 @@ The 5-minute window is hardcoded in `getCurrentSession` (`services/storage/datab
 
 ## Integration with the Store
 
-**Throttling.** `trackSession` is wrapped in `throttle(fn, 5000)` and wired up in `store/index.ts` (not in the action files themselves). Audio status events fire many times per second, so without this, every event would hit the database. `finalizeSession` is not throttled — when playback stops, the session is immediately finalized with an accurate `ended_at`.
+**Throttling.** `trackSession` is wrapped in `throttleSameArgs(fn, 5000)` and wired up in `store/index.ts` (not in the action files themselves). Audio status events fire many times per second, so without this, every event would hit the database. Unlike a plain throttle, a call with a *different* book id goes through immediately — switching books doesn't wait out the 5-second window. `finalizeSession` is not throttled — when playback stops, the session is immediately finalized with an accurate `ended_at`.
 
 **Dual writes.** Both `trackSession` and `finalizeSession` update the database and the Zustand store in the same call, keeping in-memory state in sync without re-fetching.
 
@@ -100,7 +100,7 @@ If the app crashes, the session's `ended_at` reflects the last throttled update 
 
 ### Deleted books
 
-Sessions use `INNER JOIN files` to load book metadata. Since deleted books still have database records (soft-delete with `hidden: true`), their sessions still appear in the history with name, title, artist, and artwork preserved.
+Sessions use `LEFT JOIN files` to load book metadata. Since deleted books still have database records (soft-delete with `hidden: true`), their sessions still appear in the history with name, title, artist, and artwork preserved. The book row can be missing entirely, though — a session synced before its book, or a book id retired by a sync identity merge — so all `book_*` fields on `SessionWithBook` are nullable.
 
 ---
 
@@ -127,5 +127,5 @@ src/screens/
   PlayerScreen.tsx       → Clock icon navigating to sessions
 
 src/utils/
-  index.ts               → throttle(), formatTime()
+  index.ts               → throttle(), throttleSameArgs(), formatTime()
 ```
