@@ -303,8 +303,8 @@ export class DatabaseService {
     return this._deviceId
   }
 
-  constructor() {
-    this.db = SQLite.openDatabaseSync('audioplayer.db')
+  constructor(db: SQLite.SQLiteDatabase = SQLite.openDatabaseSync('audioplayer.db')) {
+    this.db = db
     this.runMigrations() // TODO this shouldn't be in the constructor
   }
 

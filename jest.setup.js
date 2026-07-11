@@ -80,3 +80,15 @@ jest.mock('@react-native-google-signin/google-signin', () => ({
 jest.mock('whisper.rn', () => ({
   initWhisper: jest.fn(),
 }), { virtual: true })
+
+// Mock expo-crypto (randomUUID returns undefined under jest-expo's native mocks)
+jest.mock('expo-crypto', () => ({
+  randomUUID: () => {
+    // RFC 4122 v4-shaped UUID, good enough for tests (hex + hyphens)
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0
+      const v = c === 'x' ? r : (r & 0x3) | 0x8
+      return v.toString(16)
+    })
+  },
+}))
