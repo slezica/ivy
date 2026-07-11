@@ -180,7 +180,13 @@ export class FakeDrive {
 }
 
 function toDriveFile(file: FakeDriveFile): DriveFile {
-  return { id: file.id, name: file.name, mimeType: file.mimeType, md5Checksum: contentHash(file.content) }
+  return {
+    id: file.id,
+    name: file.name,
+    mimeType: file.mimeType,
+    md5Checksum: contentHash(file.content),
+    trashed: file.trashed || undefined,
+  }
 }
 
 /** Deterministic content hash standing in for Drive's md5Checksum. */

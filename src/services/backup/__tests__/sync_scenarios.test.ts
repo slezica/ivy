@@ -1203,6 +1203,47 @@ describe('sync scenarios', () => {
     })
   })
 
+  describe('trashed remote files', () => {
+    it('treats trashed feed changes as no-ops and recovers via full reconcile', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+      const errors = trackSyncErrors(device)
+
+      await addBook(device)
+      await addClip(device)
+      await device.sync.syncNow()
+      await device.sync.syncNow() // consume the upload echoes
+      const oldJsonId = drive.getFileByName(`clip_${CLIP_ID}.json`)!.id
+      const oldAudioId = drive.getFileByName(`clip_${CLIP_ID}.m4a`)!.id
+
+      // The user trashes the clip's files in Drive — the feed delivers them
+      // as trashed changes, which must not delete or error anything locally
+      drive.trashFile(oldJsonId)
+      drive.trashFile(oldAudioId)
+      await device.sync.syncNow()
+
+      expect(errors[errors.length - 1]).toBeNull()
+      expect(await device.db.getClip(CLIP_ID)).not.toBeNull()
+
+      // Full reconcile (trash-filtered listing) sees the clip as local-only
+      // and re-uploads it as fresh files, dropping the stale manifest ids
+      await device.db.clearCheckpoint()
+      await device.sync.syncNow()
+
+      expect(errors[errors.length - 1]).toBeNull()
+      const liveJson = [...drive.files.values()].filter(f => f.name === `clip_${CLIP_ID}.json` && !f.trashed)
+      const liveAudio = [...drive.files.values()].filter(f => f.name === `clip_${CLIP_ID}.m4a` && !f.trashed)
+      expect(liveJson).toHaveLength(1)
+      expect(liveAudio).toHaveLength(1)
+      expect(liveJson[0].id).not.toBe(oldJsonId)
+      expect(liveAudio[0].id).not.toBe(oldAudioId)
+      const manifest = await device.db.getManifestEntry('clip', CLIP_ID)
+      expect(manifest!.remote_file_id).toBe(liveJson[0].id)
+      expect(manifest!.remote_audio_file_id).toBe(liveAudio[0].id)
+      expect(await device.db.getOutboxItems()).toEqual([])
+    })
+  })
+
   describe('bootstrap gating (M9)', () => {
     it('skips the push phase when the start token cannot be fetched', async () => {
       const drive = new FakeDrive()

@@ -28,6 +28,7 @@ export interface DriveFile {
   mimeType: string
   modifiedTime?: string  // ISO 8601 timestamp from Drive
   md5Checksum?: string   // Content hash (binary-content files; absent for Google Docs types)
+  trashed?: boolean      // In the user's trash (change feed only; listFiles filters trashed)
 }
 
 /** Drive REST error carrying the HTTP status, for callers that branch on it (e.g. 404). */
@@ -247,7 +248,7 @@ export class GoogleDriveService {
     do {
       const params = new URLSearchParams({
         pageToken: currentToken,
-        fields: 'nextPageToken, newStartPageToken, changes(fileId, removed, file(id, name, mimeType, modifiedTime, md5Checksum))',
+        fields: 'nextPageToken, newStartPageToken, changes(fileId, removed, file(id, name, mimeType, modifiedTime, md5Checksum, trashed))',
         spaces: 'drive',
         pageSize: '100',
       })
@@ -273,6 +274,7 @@ export class GoogleDriveService {
             mimeType: change.file.mimeType,
             modifiedTime: change.file.modifiedTime,
             md5Checksum: change.file.md5Checksum,
+            trashed: change.file.trashed,
           } : undefined,
         })
       }

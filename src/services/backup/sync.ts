@@ -320,6 +320,12 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         // Removed files don't include metadata — skip (can't map to entity without name)
         continue
       }
+      if (change.file?.trashed) {
+        // Trashed files are treated like removals: nothing to pull. Recovery
+        // (if the user trashed something Ivy still owns) is the full
+        // reconcile, whose listing excludes trash and re-uploads local-only.
+        continue
+      }
 
       const parsed = parseFilename(filename)
       if (!parsed) continue
@@ -1567,9 +1573,14 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       if (p?.type === 'session') remoteSessionIds.add(p.id)
     }
 
+    // For each local-only entity, any manifest entry is stale — its remote
+    // file no longer exists (purged) or sits in the trash. Dropping the entry
+    // makes the queued upload create a fresh file instead of writing into a
+    // dead id or a trashed file (the recovery path for a trashed Ivy folder).
     const localBooks = await this.db.getAllBooks()
     for (const book of localBooks) {
       if (!remoteBookIds.has(book.id)) {
+        await this.db.deleteManifestEntry('book', book.id)
         await this.db.queueChange('book', book.id, 'upsert', book.updated_at)
       }
     }
@@ -1579,6 +1590,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const localClipIds = await this.db.getAllClipIds()
     for (const clipId of localClipIds) {
       if (!remoteClipIds.has(clipId)) {
+        await this.db.deleteManifestEntry('clip', clipId)
         await this.db.queueChange('clip', clipId, 'upsert')
       }
     }
@@ -1586,6 +1598,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const localSessions = await this.db.getAllSessionsRaw()
     for (const session of localSessions) {
       if (!remoteSessionIds.has(session.id)) {
+        await this.db.deleteManifestEntry('session', session.id)
         await this.db.queueChange('session', session.id, 'upsert', session.updated_at)
       }
     }

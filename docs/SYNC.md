@@ -305,7 +305,13 @@ No distributed locks. Convergence comes from:
 - Drive returns an invalid/expired page token (410)
 - Manual repair (clear checkpoint, re-sync)
 
-A full reconcile lists all remote folders, downloads and compares every entity, queues local-only entities for upload, and saves a fresh page token.
+A full reconcile lists all remote folders, downloads and compares every entity, queues local-only entities for upload (dropping their stale manifest entries so the uploads create fresh files), and saves a fresh page token.
+
+### Trashed Files
+
+Files the user moves to Drive's trash arrive in the change feed with `trashed: true` and are treated like removals: nothing to pull, nothing deleted locally. Recovery is the full reconcile — its listing excludes trash, so entities whose remote files were trashed count as local-only and are re-uploaded as fresh files.
+
+**Known limit — trashing the whole `Ivy/` folder:** Drive emits no per-child feed entries for a folder trash, so children look "live" to the incremental feed until individually touched. The recovery for that gesture is also the full reconcile: it sees an empty remote and re-uploads everything as local-only. That *is* the intended recovery — do not expect the change feed to catch it.
 
 ---
 
