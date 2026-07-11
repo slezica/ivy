@@ -1654,15 +1654,22 @@ function groupJsonFilesById(files: DriveFile[], type: 'book' | 'session'): Map<s
 // Base64 Helpers
 // -----------------------------------------------------------------------------
 
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i])
+// Conversion chunk size: large enough to amortize per-call overhead, small
+// enough to stay clear of engine argument-count limits in fromCharCode.apply
+const BASE64_CHUNK = 8192
+
+export function uint8ArrayToBase64(bytes: Uint8Array): string {
+  // Chunked fromCharCode.apply: char-by-char string concatenation is
+  // quadratic and dominates multi-MB clip uploads
+  const parts: string[] = []
+  for (let i = 0; i < bytes.length; i += BASE64_CHUNK) {
+    const chunk = bytes.subarray(i, i + BASE64_CHUNK)
+    parts.push(String.fromCharCode.apply(null, chunk as unknown as number[]))
   }
-  return btoa(binary)
+  return btoa(parts.join(''))
 }
 
-function base64ToUint8Array(base64: string): Uint8Array {
+export function base64ToUint8Array(base64: string): Uint8Array {
   const binary = atob(base64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) {
