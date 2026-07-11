@@ -360,6 +360,12 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const content = await this.drive.downloadFile(jsonChange.fileId, false) as string
     const remote: ClipBackup = JSON.parse(content)
 
+    // Tombstone: branch before any audio handling or restore call
+    if (remote.deleted) {
+      await this.applyClipTombstone(remote, jsonChange.fileId, result, notification)
+      return
+    }
+
     const local = await this.db.getClip(id)
 
     if (!local) {
@@ -398,6 +404,12 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
     const content = await this.drive.downloadFile(jsonChange.fileId, false) as string
     const remote: SessionBackup = JSON.parse(content)
+
+    // Tombstone: branch before any restore call
+    if (remote.deleted) {
+      await this.applySessionTombstone(remote, jsonChange.fileId, result, notification)
+      return
+    }
 
     const local = await this.db.getSessionById(id)
 
@@ -539,6 +551,87 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     notification.sessionsChanged.push(remote.id)
     result.downloaded.sessions++
     log(`Downloaded session: ${remote.id}`)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Apply Remote Tombstones
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Apply a remote clip tombstone under LWW. Tombstone wins → delete the local
+   * row and audio file; a newer local edit wins → keep it and re-upload
+   * (un-delete). No local row (already deleted, or a device's own tombstone
+   * echoing back through the change feed) is a no-op.
+   *
+   * Either way the remote audio file is gone, so the manifest's audio id is
+   * nulled — the next upload creates a fresh audio file instead of updating a
+   * dead id.
+   */
+  private async applyClipTombstone(
+    remote: ClipBackup,
+    jsonFileId: string,
+    result: SyncResult,
+    notification: SyncNotification,
+  ): Promise<void> {
+    const local = await this.db.getClip(remote.id)
+    if (!local) return
+
+    if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) return
+
+    if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+      await RNFS.unlink(local.uri.replace('file://', '')).catch(() => {})
+      await this.db.deleteClip(remote.id)
+      await this.db.upsertManifestEntry({
+        entity_type: 'clip', entity_id: remote.id,
+        local_updated_at: remote.updated_at, remote_updated_at: null,
+        remote_file_id: jsonFileId, remote_audio_file_id: null,
+      })
+      notification.clipsChanged.push(remote.id)
+      result.deleted.clips++
+      log(`Applied clip tombstone: ${remote.id}`)
+    } else {
+      // Local edit is newer — it wins and re-uploads the live entity (un-delete)
+      await this.db.upsertManifestEntry({
+        entity_type: 'clip', entity_id: remote.id,
+        local_updated_at: local.updated_at, remote_updated_at: null,
+        remote_file_id: jsonFileId, remote_audio_file_id: null,
+      })
+      await this.db.queueChange('clip', remote.id, 'upsert', local.updated_at)
+    }
+  }
+
+  /**
+   * Apply a remote session tombstone under LWW (same as clips, minus audio).
+   */
+  private async applySessionTombstone(
+    remote: SessionBackup,
+    jsonFileId: string,
+    result: SyncResult,
+    notification: SyncNotification,
+  ): Promise<void> {
+    const local = await this.db.getSessionById(remote.id)
+    if (!local) return
+
+    if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) return
+
+    if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
+      await this.db.deleteSession(remote.id)
+      await this.db.upsertManifestEntry({
+        entity_type: 'session', entity_id: remote.id,
+        local_updated_at: remote.updated_at, remote_updated_at: null,
+        remote_file_id: jsonFileId, remote_audio_file_id: null,
+      })
+      notification.sessionsChanged.push(remote.id)
+      result.deleted.sessions++
+      log(`Applied session tombstone: ${remote.id}`)
+    } else {
+      await this.db.upsertManifestEntry({
+        entity_type: 'session', entity_id: remote.id,
+        local_updated_at: local.updated_at, remote_updated_at: null,
+        remote_file_id: jsonFileId, remote_audio_file_id: null,
+      })
+      await this.db.queueChange('session', remote.id, 'upsert', local.updated_at)
+    }
   }
 
   // ---------------------------------------------------------------------------

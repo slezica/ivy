@@ -5,6 +5,8 @@
  * DatabaseService (real SQLite) and the scripted FakeDrive.
  */
 
+import RNFS from 'react-native-fs'
+
 import { FakeDrive, createSyncHarness, SyncHarness } from './harness'
 
 // IDs must be hex + hyphens to match the sync filename regex
@@ -328,6 +330,151 @@ describe('sync scenarios', () => {
       expect(errors[errors.length - 1]).toBeNull()
       expect(await device.db.getOutboxItems()).toEqual([])
       expect(await device.db.getManifestEntry('clip', CLIP_ID)).toBeNull()
+    })
+
+    it('propagates a clip deletion to another device', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await addClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow() // consume the upload echo
+      await deviceB.sync.syncNow() // B bootstraps the clip
+      expect(await deviceB.db.getClip(CLIP_ID)).not.toBeNull()
+
+      await deleteClip(deviceA)
+      await deviceA.sync.syncNow() // pushes the tombstone
+      await deviceB.sync.syncNow() // B pulls it
+
+      expect(await deviceB.db.getClip(CLIP_ID)).toBeNull()
+      expect(RNFS.unlink).toHaveBeenCalledWith(`/mock/documents/clips/${CLIP_ID}.m4a`)
+      const manifest = await deviceB.db.getManifestEntry('clip', CLIP_ID)
+      expect(manifest!.remote_audio_file_id).toBeNull() // dead id nulled on the puller too
+    })
+
+    it('propagates a session deletion to another device', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      const session = await deviceA.db.createSession(BOOK_ID)
+      await deviceA.db.queueChange('session', session.id, 'upsert', session.updated_at)
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow() // consume the upload echo
+      await deviceB.sync.syncNow()
+      expect(await deviceB.db.getSessionById(session.id)).not.toBeNull()
+
+      await deviceA.db.deleteSession(session.id)
+      await deviceA.db.queueChange('session', session.id, 'delete')
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow()
+
+      expect(await deviceB.db.getSessionById(session.id)).toBeNull()
+      expect(drive.readJson(`session_${session.id}.json`).deleted).toBe(true)
+    })
+
+    it('applies a newer tombstone over an unsynced local edit', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await addClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow()
+
+      // B edits first, then A deletes — the deletion is newer and wins
+      await deviceB.db.updateClip(CLIP_ID, { note: 'Doomed edit' })
+      const edited = await deviceB.db.getClip(CLIP_ID)
+      await deviceB.db.queueChange('clip', CLIP_ID, 'upsert', edited!.updated_at)
+      await deleteClip(deviceA)
+      await deviceA.sync.syncNow()
+
+      await deviceB.sync.syncNow() // tombstone wins the pull; the stale upsert finds no row
+
+      expect(await deviceB.db.getClip(CLIP_ID)).toBeNull()
+      expect(await deviceB.db.getOutboxItems()).toEqual([])
+      expect(drive.readJson(`clip_${CLIP_ID}.json`).deleted).toBe(true)
+    })
+
+    it('resurrects a clip when a local edit is newer than the tombstone', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await addClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow()
+
+      // A deletes and syncs; B then edits — the edit is newer and un-deletes
+      await deleteClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceB.db.updateClip(CLIP_ID, { note: 'Edited after delete' })
+      const edited = await deviceB.db.getClip(CLIP_ID)
+      await deviceB.db.queueChange('clip', CLIP_ID, 'upsert', edited!.updated_at)
+
+      await deviceB.sync.syncNow() // local wins the pull; push re-uploads the live entity
+
+      expect((await deviceB.db.getClip(CLIP_ID))!.note).toBe('Edited after delete')
+      const remote = drive.readJson(`clip_${CLIP_ID}.json`)
+      expect(remote.deleted).toBeUndefined()
+      expect(remote.note).toBe('Edited after delete')
+      // The old audio id died with the tombstone — a fresh audio file was created
+      expect(drive.getFileByName(`clip_${CLIP_ID}.m4a`)).toBeDefined()
+
+      await deviceA.sync.syncNow() // A pulls the resurrection
+
+      expect((await deviceA.db.getClip(CLIP_ID))!.note).toBe('Edited after delete')
+    })
+
+    it('treats deleting an already-tombstoned clip as a no-op', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await addClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow()
+      const errors = trackSyncErrors(deviceB)
+
+      await deleteClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deleteClip(deviceB) // B deletes too, before pulling A's tombstone
+      const tombstoneBefore = drive.readJson(`clip_${CLIP_ID}.json`)
+
+      await deviceB.sync.syncNow()
+
+      expect(errors).toEqual([null])
+      expect(await deviceB.db.getClip(CLIP_ID)).toBeNull()
+      expect(await deviceB.db.getOutboxItems()).toEqual([])
+      // B dropped its own tombstone — A's stands untouched
+      expect(drive.readJson(`clip_${CLIP_ID}.json`)).toEqual(tombstoneBefore)
+    })
+
+    it('applies its own tombstone echo as a graceful no-op', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+      const errors = trackSyncErrors(device)
+
+      await addBook(device)
+      await addClip(device)
+      await device.sync.syncNow()
+      await device.sync.syncNow()
+      await deleteClip(device)
+      await device.sync.syncNow() // pushes the tombstone
+      await device.sync.syncNow() // pulls its own tombstone back
+
+      expect(errors).toEqual([null, null, null, null])
+      expect(await device.db.getClip(CLIP_ID)).toBeNull()
+      expect(await device.db.getOutboxItems()).toEqual([])
     })
   })
 
