@@ -33,6 +33,7 @@ export interface ClipBackup {
   created_at: number
   updated_at: number
   updated_by: string | null  // device ID (null for legacy backups)
+  deleted?: boolean          // Tombstone marker (full payload + deleted: true)
 }
 
 export interface SessionBackup {
@@ -42,6 +43,7 @@ export interface SessionBackup {
   ended_at: number
   updated_at: number
   updated_by: string | null  // device ID (null for legacy backups)
+  deleted?: boolean          // Tombstone marker (full payload + deleted: true)
 }
 
 // -----------------------------------------------------------------------------

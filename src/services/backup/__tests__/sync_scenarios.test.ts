@@ -21,6 +21,26 @@ async function addBook(device: SyncHarness, id: string = BOOK_ID): Promise<void>
   )
 }
 
+async function addClip(device: SyncHarness, id: string = CLIP_ID): Promise<void> {
+  const clip = await device.db.createClip(id, BOOK_ID, `file:///clips/${id}.m4a`, 10000, 5000, 'A note')
+  await device.db.queueChange('clip', id, 'upsert', clip.updated_at)
+}
+
+// Mirrors the delete_clip action: optimistic local delete + queued delete op
+async function deleteClip(device: SyncHarness, id: string = CLIP_ID): Promise<void> {
+  await device.db.deleteClip(id)
+  await device.db.queueChange('clip', id, 'delete')
+}
+
+/** Collect the terminal error of each sync run (null = clean). */
+function trackSyncErrors(device: SyncHarness): (string | null)[] {
+  const errors: (string | null)[] = []
+  device.sync.on('status', (status) => {
+    if (!status.isSyncing) errors.push(status.error)
+  })
+  return errors
+}
+
 function remoteBookJson(overrides: Record<string, any> = {}): string {
   return JSON.stringify({
     id: BOOK_ID,
@@ -215,6 +235,99 @@ describe('sync scenarios', () => {
       const book = await device.db.getBookById(BOOK_ID)
       expect(book).not.toBeNull()
       expect(book!.hidden).toBe(false)
+    })
+  })
+
+  describe('clips and sessions: tombstoned deletion', () => {
+    it('rewrites the remote clip as a full-payload tombstone on delete', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await addClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow() // consume the upload echo while the clip is live
+      const liveUpdatedAt = (await deviceA.db.getClip(CLIP_ID))!.updated_at
+
+      await deleteClip(deviceA)
+      await deviceA.sync.syncNow()
+
+      // JSON rewritten in place: full last-known payload plus deleted marker
+      const tombstone = drive.readJson(`clip_${CLIP_ID}.json`)
+      expect(tombstone.deleted).toBe(true)
+      expect(tombstone.note).toBe('A note')
+      expect(tombstone.source_id).toBe(BOOK_ID)
+      expect(tombstone.updated_at).toBeGreaterThan(liveUpdatedAt) // deletion time competes under LWW
+
+      // Audio is hard-deleted; the manifest row survives with the dead audio id nulled
+      expect(drive.getFileByName(`clip_${CLIP_ID}.m4a`)).toBeUndefined()
+      const manifest = await deviceA.db.getManifestEntry('clip', CLIP_ID)
+      expect(manifest!.remote_file_id).not.toBeNull()
+      expect(manifest!.remote_audio_file_id).toBeNull()
+      expect(await deviceA.db.getOutboxItems()).toEqual([])
+    })
+
+    it('drops a stale tombstone when a remote edit is newer than the deletion', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await addClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow() // B bootstraps the clip
+
+      // A deletes offline; B edits afterwards and syncs first
+      await deleteClip(deviceA)
+      await deviceB.db.updateClip(CLIP_ID, { note: 'Edited after delete' })
+      const edited = await deviceB.db.getClip(CLIP_ID)
+      await deviceB.db.queueChange('clip', CLIP_ID, 'upsert', edited!.updated_at)
+      await deviceB.sync.syncNow()
+
+      // A's pull restores the edited clip; A's push drops the stale tombstone
+      await deviceA.sync.syncNow()
+
+      expect(drive.readJson(`clip_${CLIP_ID}.json`).deleted).toBeUndefined()
+      expect(drive.getFileByName(`clip_${CLIP_ID}.m4a`)).toBeDefined()
+      expect(await deviceA.db.getOutboxItems()).toEqual([])
+      expect((await deviceA.db.getClip(CLIP_ID))!.note).toBe('Edited after delete')
+      expect((await deviceB.db.getClip(CLIP_ID))!.note).toBe('Edited after delete')
+    })
+
+    it('silently drops a delete for a clip that never synced', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+      const errors = trackSyncErrors(device)
+
+      await addBook(device)
+      await addClip(device)
+      await deleteClip(device)
+      await device.sync.syncNow()
+
+      expect(errors).toEqual([null])
+      expect(await device.db.getOutboxItems()).toEqual([])
+      expect(drive.getFileByName(`clip_${CLIP_ID}.json`)).toBeUndefined()
+    })
+
+    it('drops the queue item and manifest when the remote was purged', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+      const errors = trackSyncErrors(device)
+
+      await addBook(device)
+      await addClip(device)
+      await device.sync.syncNow()
+      await device.sync.syncNow() // consume the upload echo
+
+      // User purged Drive out-of-band, then the clip is deleted locally
+      drive.removeFile(drive.getFileByName(`clip_${CLIP_ID}.json`)!.id)
+      drive.removeFile(drive.getFileByName(`clip_${CLIP_ID}.m4a`)!.id)
+      await deleteClip(device)
+      await device.sync.syncNow()
+
+      expect(errors[errors.length - 1]).toBeNull()
+      expect(await device.db.getOutboxItems()).toEqual([])
+      expect(await device.db.getManifestEntry('clip', CLIP_ID)).toBeNull()
     })
   })
 

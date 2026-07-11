@@ -627,7 +627,7 @@ describe('BackupSyncService', () => {
       expect(db.removeOutboxItem).not.toHaveBeenCalled()
     })
 
-    it('deletes remote clip on delete operation', async () => {
+    it('tombstones remote clip on delete operation', async () => {
       const { db, drive, auth } = createMockDeps()
 
       db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
@@ -654,12 +654,112 @@ describe('BackupSyncService', () => {
         synced_at: 1000,
       })
 
+      // Stale-tombstone guard reads the current remote payload first
+      drive.downloadFile.mockResolvedValue(JSON.stringify({
+        id: CLIP_ID, source_id: BOOK_ID, start: 1000, duration: 5000,
+        note: 'A note', transcription: null, created_at: 500,
+        updated_at: 500, updated_by: 'device-a',
+      }))
+
       const service = new BackupSyncService(db, drive, auth)
       await service.syncNow()
 
-      expect(drive.deleteFile).toHaveBeenCalledWith('json-file-id')
+      // JSON is rewritten in place as a full-payload tombstone
+      expect(drive.updateFile).toHaveBeenCalledWith('json-file-id', expect.stringContaining('"deleted": true'))
+      const tombstone = JSON.parse(drive.updateFile.mock.calls[0][1] as string)
+      expect(tombstone.note).toBe('A note') // full payload preserved
+      expect(tombstone.updated_at).toBe(1000) // deletion time wins LWW
+
+      // Only the audio file is hard-deleted; the manifest row survives with a dead audio id nulled
       expect(drive.deleteFile).toHaveBeenCalledWith('audio-file-id')
+      expect(drive.deleteFile).not.toHaveBeenCalledWith('json-file-id')
+      expect(db.deleteManifestEntry).not.toHaveBeenCalled()
+      expect(db.upsertManifestEntry).toHaveBeenCalledWith(expect.objectContaining({
+        entity_type: 'clip', entity_id: CLIP_ID,
+        remote_file_id: 'json-file-id', remote_audio_file_id: null,
+      }))
+      expect(db.removeOutboxItem).toHaveBeenCalledWith('clip', CLIP_ID, 1000)
+    })
+
+    it('drops a queued delete when the remote was edited after the deletion', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+      drive.getChanges.mockResolvedValue({ changes: [], newStartPageToken: '101' })
+
+      db.getOutboxItems.mockResolvedValue([{
+        id: 'outbox-1',
+        entity_type: 'clip' as const,
+        entity_id: CLIP_ID,
+        operation: 'delete' as const,
+        updated_at_when_queued: 1000,
+        queued_at: 1000,
+        attempts: 0,
+        last_error: null,
+      }])
+
+      db.getManifestEntry.mockResolvedValue({
+        entity_type: 'clip',
+        entity_id: CLIP_ID,
+        local_updated_at: null,
+        remote_updated_at: null,
+        remote_file_id: 'json-file-id',
+        remote_audio_file_id: 'audio-file-id',
+        synced_at: 1000,
+      })
+
+      // Remote edit is newer than the queued deletion — the edit won
+      drive.downloadFile.mockResolvedValue(JSON.stringify({
+        id: CLIP_ID, source_id: BOOK_ID, start: 1000, duration: 5000,
+        note: 'Edited elsewhere', transcription: null, created_at: 500,
+        updated_at: 2000, updated_by: 'device-b',
+      }))
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(drive.updateFile).not.toHaveBeenCalled()
+      expect(drive.deleteFile).not.toHaveBeenCalled()
+      expect(db.deleteManifestEntry).not.toHaveBeenCalled()
+      expect(db.removeOutboxItem).toHaveBeenCalledWith('clip', CLIP_ID, 1000)
+    })
+
+    it('drops a queued delete and the manifest when the remote file is gone', async () => {
+      const { db, drive, auth } = createMockDeps()
+
+      db.getCheckpoint.mockReturnValue({ last_page_token: '100', last_full_reconcile_at: null })
+      drive.getChanges.mockResolvedValue({ changes: [], newStartPageToken: '101' })
+
+      db.getOutboxItems.mockResolvedValue([{
+        id: 'outbox-1',
+        entity_type: 'clip' as const,
+        entity_id: CLIP_ID,
+        operation: 'delete' as const,
+        updated_at_when_queued: 1000,
+        queued_at: 1000,
+        attempts: 0,
+        last_error: null,
+      }])
+
+      db.getManifestEntry.mockResolvedValue({
+        entity_type: 'clip',
+        entity_id: CLIP_ID,
+        local_updated_at: null,
+        remote_updated_at: null,
+        remote_file_id: 'json-file-id',
+        remote_audio_file_id: 'audio-file-id',
+        synced_at: 1000,
+      })
+
+      // User purged Drive — nothing to tombstone
+      drive.downloadFile.mockRejectedValue(new Error('Failed to download file: 404'))
+
+      const service = new BackupSyncService(db, drive, auth)
+      await service.syncNow()
+
+      expect(drive.updateFile).not.toHaveBeenCalled()
       expect(db.deleteManifestEntry).toHaveBeenCalledWith('clip', CLIP_ID)
+      expect(db.removeOutboxItem).toHaveBeenCalledWith('clip', CLIP_ID, 1000)
     })
   })
 

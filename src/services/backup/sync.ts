@@ -574,7 +574,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
           const clip = await this.db.getClip(item.entity_id)
           if (clip) await this.uploadClip(clip, item, result)
         } else if (item.operation === 'delete') {
-          await this.deleteRemoteClip(item.entity_id, result)
+          await this.tombstoneRemoteClip(item, result)
         }
         break
       case 'session':
@@ -582,7 +582,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
           const session = await this.db.getSessionById(item.entity_id)
           if (session) await this.uploadSession(session, item, result)
         } else if (item.operation === 'delete') {
-          await this.deleteRemoteSession(item.entity_id, result)
+          await this.tombstoneRemoteSession(item, result)
         }
         break
     }
@@ -742,30 +742,107 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   }
 
   // ---------------------------------------------------------------------------
-  // Remote Deletion
+  // Remote Deletion (Tombstones)
   // ---------------------------------------------------------------------------
 
-  private async deleteRemoteClip(clipId: string, result: SyncResult): Promise<void> {
-    const manifest = await this.db.getManifestEntry('clip', clipId)
-    if (manifest?.remote_file_id) {
-      await this.drive.deleteFile(manifest.remote_file_id).catch(() => {})
+  /**
+   * Read the current remote JSON before tombstoning it (stale-tombstone guard).
+   * The remote is also the tombstone's payload source: the local row is deleted
+   * at queue time, so the last-known remote is the full payload we rewrite with
+   * `deleted: true`.
+   *
+   * Returns null when there is nothing to tombstone and the queue item should
+   * be dropped: the remote is already a tombstone, a remote edit is newer than
+   * the deletion (the edit won), or the remote file is gone (404).
+   */
+  private async readRemoteForTombstone<T extends ClipBackup | SessionBackup>(
+    remoteFileId: string,
+    item: SyncOutboxItem,
+  ): Promise<T | null> {
+    let remote: T
+    try {
+      const content = await this.drive.downloadFile(remoteFileId, false) as string
+      remote = JSON.parse(content)
+    } catch (error: any) {
+      if (error.message?.includes('404')) {
+        // Remote purged (user cleanup) — nothing to tombstone
+        await this.db.deleteManifestEntry(item.entity_type, item.entity_id)
+        return null
+      }
+      throw error
     }
-    if (manifest?.remote_audio_file_id) {
-      await this.drive.deleteFile(manifest.remote_audio_file_id).catch(() => {})
+
+    if (remote.deleted) return null // already tombstoned elsewhere
+
+    // The deletion competes under LWW as (queue time, this device)
+    if (this.isRemoteAhead(item.updated_at_when_queued, this.db.deviceId, remote.updated_at, remote.updated_by)) {
+      log(`Skipping stale tombstone for ${item.entity_type} ${item.entity_id}: remote edit is newer`)
+      return null
     }
-    await this.db.deleteManifestEntry('clip', clipId)
-    result.deleted.clips++
-    log(`Deleted remote clip: ${clipId}`)
+
+    return remote
   }
 
-  private async deleteRemoteSession(sessionId: string, result: SyncResult): Promise<void> {
-    const manifest = await this.db.getManifestEntry('session', sessionId)
-    if (manifest?.remote_file_id) {
-      await this.drive.deleteFile(manifest.remote_file_id).catch(() => {})
+  private async tombstoneRemoteClip(item: SyncOutboxItem, result: SyncResult): Promise<void> {
+    const manifest = await this.db.getManifestEntry('clip', item.entity_id)
+    if (!manifest?.remote_file_id) {
+      // Never uploaded — nothing to tombstone
+      if (manifest) await this.db.deleteManifestEntry('clip', item.entity_id)
+      return
     }
-    await this.db.deleteManifestEntry('session', sessionId)
+
+    const remote = await this.readRemoteForTombstone<ClipBackup>(manifest.remote_file_id, item)
+    if (!remote) return
+
+    const tombstone: ClipBackup = {
+      ...remote,
+      deleted: true,
+      updated_at: item.updated_at_when_queued,
+      updated_by: this.db.deviceId,
+    }
+    await this.drive.updateFile(manifest.remote_file_id, JSON.stringify(tombstone, null, 2))
+
+    // The audio file is hard-deleted (reclaim space) — its id is dead
+    if (manifest.remote_audio_file_id) {
+      await this.drive.deleteFile(manifest.remote_audio_file_id).catch(() => {})
+    }
+    await this.db.upsertManifestEntry({
+      entity_type: 'clip', entity_id: item.entity_id,
+      local_updated_at: item.updated_at_when_queued, remote_updated_at: null,
+      remote_file_id: manifest.remote_file_id, remote_audio_file_id: null,
+    })
+
+    result.deleted.clips++
+    log(`Tombstoned remote clip: ${item.entity_id}`)
+  }
+
+  private async tombstoneRemoteSession(item: SyncOutboxItem, result: SyncResult): Promise<void> {
+    const manifest = await this.db.getManifestEntry('session', item.entity_id)
+    if (!manifest?.remote_file_id) {
+      // Never uploaded — nothing to tombstone
+      if (manifest) await this.db.deleteManifestEntry('session', item.entity_id)
+      return
+    }
+
+    const remote = await this.readRemoteForTombstone<SessionBackup>(manifest.remote_file_id, item)
+    if (!remote) return
+
+    const tombstone: SessionBackup = {
+      ...remote,
+      deleted: true,
+      updated_at: item.updated_at_when_queued,
+      updated_by: this.db.deviceId,
+    }
+    await this.drive.updateFile(manifest.remote_file_id, JSON.stringify(tombstone, null, 2))
+
+    await this.db.upsertManifestEntry({
+      entity_type: 'session', entity_id: item.entity_id,
+      local_updated_at: item.updated_at_when_queued, remote_updated_at: null,
+      remote_file_id: manifest.remote_file_id, remote_audio_file_id: null,
+    })
+
     result.deleted.sessions++
-    log(`Deleted remote session: ${sessionId}`)
+    log(`Tombstoned remote session: ${item.entity_id}`)
   }
 
   // ---------------------------------------------------------------------------
