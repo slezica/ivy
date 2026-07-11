@@ -1,7 +1,7 @@
 import { createArchiveBook, ArchiveBookDeps } from '../archive_book'
 import {
   createMockBook, createMockState, createImmerSet, createMockGet,
-  createMockDb, createMockFiles, createMockSyncQueue, createMockAudio,
+  createMockDb, createMockFiles, createMockAudio,
 } from './helpers'
 
 
@@ -17,7 +17,6 @@ function createDeps(bookId: string, bookUri: string | null = 'file:///audio/book
     audio,
     db: createMockDb(),
     files: createMockFiles(),
-    syncQueue: createMockSyncQueue(),
     set: createImmerSet(state),
     get: createMockGet(state),
   }
@@ -49,15 +48,6 @@ describe('createArchiveBook', () => {
       expect(deps.db.archiveBook).toHaveBeenCalledWith('book-1')
     })
 
-    it('queues sync upsert', async () => {
-      const { deps } = createDeps('book-1')
-      const archiveBook = createArchiveBook(deps)
-
-      await archiveBook('book-1')
-
-      expect(deps.syncQueue.queueChange).toHaveBeenCalledWith('book', 'book-1', 'upsert')
-    })
-
     it('fire-and-forgets file deletion', async () => {
       const { deps } = createDeps('book-1')
       const archiveBook = createArchiveBook(deps)
@@ -84,7 +74,6 @@ describe('createArchiveBook', () => {
         audio: createMockAudio(),
         db: createMockDb(),
         files: createMockFiles(),
-        syncQueue: createMockSyncQueue(),
         set: createImmerSet(state),
         get: createMockGet(state),
       }
@@ -99,7 +88,6 @@ describe('createArchiveBook', () => {
         audio: createMockAudio(),
         db: createMockDb(),
         files: createMockFiles(),
-        syncQueue: createMockSyncQueue(),
         set: createImmerSet(state),
         get: createMockGet(state),
       }
@@ -108,7 +96,6 @@ describe('createArchiveBook', () => {
       await expect(archiveBook('nonexistent')).rejects.toThrow()
 
       expect(deps.db.archiveBook).not.toHaveBeenCalled()
-      expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
     })
   })
 
@@ -119,16 +106,6 @@ describe('createArchiveBook', () => {
       const archiveBook = createArchiveBook(deps)
 
       await expect(archiveBook('book-1')).rejects.toThrow('db failed')
-
-      expect(state.books['book-1'].uri).toBe('file:///audio/book-1.mp3')
-    })
-
-    it('restores book uri on sync queue error', async () => {
-      const { state, deps } = createDeps('book-1', 'file:///audio/book-1.mp3')
-      deps.syncQueue.queueChange = jest.fn(async () => { throw new Error('queue failed') })
-      const archiveBook = createArchiveBook(deps)
-
-      await expect(archiveBook('book-1')).rejects.toThrow('queue failed')
 
       expect(state.books['book-1'].uri).toBe('file:///audio/book-1.mp3')
     })
@@ -203,7 +180,6 @@ describe('createArchiveBook', () => {
 
       expect(state.books['book-1'].uri).toBeNull()
       expect(deps.db.archiveBook).toHaveBeenCalledWith('book-1')
-      expect(deps.syncQueue.queueChange).toHaveBeenCalledWith('book', 'book-1', 'upsert')
     })
   })
 })

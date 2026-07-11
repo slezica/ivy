@@ -54,6 +54,24 @@ describe('DatabaseService (real SQLite)', () => {
       expect(row?.hidden).toBe(true)
       expect(row?.uri).toBeNull()
     })
+
+    it('does not bump updated_at on delete or archive (per-device changes)', async () => {
+      const db = createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
+      await db.upsertBook('book-2', 'file:///audio/book-2.mp3', 'Book', 60000, 0)
+      const before1 = (await db.getBookById('book-1'))!
+      const before2 = (await db.getBookById('book-2'))!
+
+      await db.hideBook('book-1')
+      await db.archiveBook('book-2')
+
+      const after1 = (await db.getBookById('book-1'))!
+      const after2 = (await db.getBookById('book-2'))!
+      expect(after1.updated_at).toBe(before1.updated_at)
+      expect(after1.updated_by).toBe(before1.updated_by)
+      expect(after2.updated_at).toBe(before2.updated_at)
+      expect(after2.updated_by).toBe(before2.updated_by)
+    })
   })
 
   describe('backup restore', () => {

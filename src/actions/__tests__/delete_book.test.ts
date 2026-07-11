@@ -1,7 +1,7 @@
 import { createDeleteBook, DeleteBookDeps } from '../delete_book'
 import {
   createMockBook, createMockState, createImmerSet, createMockGet,
-  createMockDb, createMockFiles, createMockSyncQueue, createMockAudio,
+  createMockDb, createMockFiles, createMockAudio,
 } from './helpers'
 
 
@@ -15,7 +15,6 @@ function createDeps(bookId: string, bookUri: string | null = 'file:///audio/book
     audio: createMockAudio(),
     db: createMockDb(),
     files: createMockFiles(),
-    syncQueue: createMockSyncQueue(),
     set: createImmerSet(state),
     get: createMockGet(state),
   }
@@ -47,15 +46,6 @@ describe('createDeleteBook', () => {
       expect(deps.db.hideBook).toHaveBeenCalledWith('book-1')
     })
 
-    it('queues sync upsert', async () => {
-      const { deps } = createDeps('book-1')
-      const deleteBook = createDeleteBook(deps)
-
-      await deleteBook('book-1')
-
-      expect(deps.syncQueue.queueChange).toHaveBeenCalledWith('book', 'book-1', 'upsert')
-    })
-
     it('fire-and-forgets file deletion', async () => {
       const { deps } = createDeps('book-1')
       const deleteBook = createDeleteBook(deps)
@@ -82,7 +72,6 @@ describe('createDeleteBook', () => {
         audio: createMockAudio(),
         db: createMockDb(),
         files: createMockFiles(),
-        syncQueue: createMockSyncQueue(),
         set: createImmerSet(state),
         get: createMockGet(state),
       }
@@ -97,7 +86,6 @@ describe('createDeleteBook', () => {
         audio: createMockAudio(),
         db: createMockDb(),
         files: createMockFiles(),
-        syncQueue: createMockSyncQueue(),
         set: createImmerSet(state),
         get: createMockGet(state),
       }
@@ -106,7 +94,6 @@ describe('createDeleteBook', () => {
       await expect(deleteBook('nonexistent')).rejects.toThrow()
 
       expect(deps.db.hideBook).not.toHaveBeenCalled()
-      expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
     })
   })
 
@@ -120,17 +107,6 @@ describe('createDeleteBook', () => {
 
       expect(state.books['book-1']).toBeDefined()
       expect(state.books['book-1'].uri).toBe(book.uri)
-    })
-
-    it('restores book in state on sync queue error', async () => {
-      const { state, deps, book } = createDeps('book-1')
-      deps.syncQueue.queueChange = jest.fn(async () => { throw new Error('queue failed') })
-      const deleteBook = createDeleteBook(deps)
-
-      await expect(deleteBook('book-1')).rejects.toThrow('queue failed')
-
-      expect(state.books['book-1']).toBeDefined()
-      expect(state.books['book-1'].id).toBe(book.id)
     })
 
     it('does not delete file on rollback', async () => {
@@ -162,7 +138,6 @@ describe('createDeleteBook', () => {
 
       expect(state.books['book-1']).toBeUndefined()
       expect(deps.db.hideBook).toHaveBeenCalledWith('book-1')
-      expect(deps.syncQueue.queueChange).toHaveBeenCalledWith('book', 'book-1', 'upsert')
     })
   })
 })

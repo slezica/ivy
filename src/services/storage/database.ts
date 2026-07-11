@@ -424,12 +424,13 @@ export class DatabaseService {
   /**
    * Soft-delete a book (remove from library).
    * Sets uri to null and hidden to true. File deletion is caller's responsibility.
+   * Deletion is per-device: updated_at/updated_by stay untouched so the change
+   * never competes under sync's LWW or triggers a local-ahead re-upload.
    */
   async hideBook(id: string): Promise<void> {
-    const now = Date.now()
     await this.db.runAsync(
-      'UPDATE files SET uri = NULL, hidden = 1, updated_at = ?, updated_by = ? WHERE id = ?',
-      [now, this.deviceId, id]
+      'UPDATE files SET uri = NULL, hidden = 1 WHERE id = ?',
+      [id]
     )
   }
 
@@ -471,11 +472,14 @@ export class DatabaseService {
     )
   }
 
+  /**
+   * Archive a book (drop its audio file, keep the record).
+   * Per-device like deletion: no updated_at/updated_by bump (see hideBook).
+   */
   async archiveBook(id: string): Promise<void> {
-    const now = Date.now()
     await this.db.runAsync(
-      'UPDATE files SET uri = NULL, updated_at = ?, updated_by = ? WHERE id = ?',
-      [now, this.deviceId, id]
+      'UPDATE files SET uri = NULL WHERE id = ?',
+      [id]
     )
   }
 

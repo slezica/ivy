@@ -1,4 +1,4 @@
-import type { AudioPlayerService, DatabaseService, FileStorageService, SyncQueueService } from '../services'
+import type { AudioPlayerService, DatabaseService, FileStorageService } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
 import { createLogger } from '../utils'
 
@@ -7,7 +7,6 @@ export interface DeleteBookDeps {
   audio: AudioPlayerService
   db: DatabaseService
   files: FileStorageService
-  syncQueue: SyncQueueService
   set: SetState
   get: GetState
 }
@@ -16,7 +15,7 @@ export type DeleteBook = Action<[string]>
 
 export const createDeleteBook: ActionFactory<DeleteBookDeps, DeleteBook> = (deps) => (
   async (bookId) => {
-    const { audio, db, files, syncQueue, set, get } = deps
+    const { audio, db, files, set, get } = deps
     const log = createLogger('DeleteBook')
 
     const book = get().books[bookId]
@@ -42,8 +41,8 @@ export const createDeleteBook: ActionFactory<DeleteBookDeps, DeleteBook> = (deps
         delete state.books[bookId]
       })
 
+      // Deletion is per-device — no sync queueing (see docs/SYNC.md)
       await db.hideBook(bookId)
-      await syncQueue.queueChange('book', bookId, 'upsert')
 
     } catch (error) {
       log('Failed, rolling back:', error)

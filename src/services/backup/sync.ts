@@ -563,7 +563,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   private async pushOutboxItem(item: SyncOutboxItem, result: SyncResult): Promise<void> {
     switch (item.entity_type) {
       case 'book':
-        // Books use soft-delete (hidden flag) — always upsert, never remote-delete
+        // Books are per-device: deletion never syncs, only upserts are queued
         if (item.operation === 'upsert') {
           const book = await this.db.getBookById(item.entity_id)
           if (book) await this.uploadBook(book, item, result)

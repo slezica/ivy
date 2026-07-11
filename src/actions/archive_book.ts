@@ -1,4 +1,4 @@
-import type { AudioPlayerService, DatabaseService, FileStorageService, SyncQueueService } from '../services'
+import type { AudioPlayerService, DatabaseService, FileStorageService } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
 import { createLogger } from '../utils'
 
@@ -7,7 +7,6 @@ export interface ArchiveBookDeps {
   audio: AudioPlayerService
   db: DatabaseService
   files: FileStorageService
-  syncQueue: SyncQueueService
   set: SetState
   get: GetState
 }
@@ -16,7 +15,7 @@ export type ArchiveBook = Action<[string]>
 
 export const createArchiveBook: ActionFactory<ArchiveBookDeps, ArchiveBook> = (deps) => (
   async (bookId) => {
-    const { audio, db, files, syncQueue, set, get } = deps
+    const { audio, db, files, set, get } = deps
     const log = createLogger('ArchiveBook')
 
     const book = get().books[bookId]
@@ -42,8 +41,8 @@ export const createArchiveBook: ActionFactory<ArchiveBookDeps, ArchiveBook> = (d
         state.books[bookId].uri = null
       })
 
+      // Archiving is per-device — no sync queueing (see docs/SYNC.md)
       await db.archiveBook(bookId)
-      await syncQueue.queueChange('book', bookId, 'upsert')
 
     } catch (error) {
       log('Failed, rolling back:', error)

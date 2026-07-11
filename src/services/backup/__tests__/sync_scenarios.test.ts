@@ -166,6 +166,44 @@ describe('sync scenarios', () => {
       expect(await device.db.getAllBooks()).toEqual([])
     })
 
+    it('does not sync a local deletion to other devices', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow()
+
+      await deviceA.db.hideBook(BOOK_ID)
+      const remoteBefore = drive.readJson(`book_${BOOK_ID}.json`)
+      await deviceA.sync.syncNow()
+
+      // Nothing queued, nothing pushed — the remote payload is untouched
+      expect(await deviceA.db.getOutboxItems()).toEqual([])
+      expect(drive.readJson(`book_${BOOK_ID}.json`)).toEqual(remoteBefore)
+
+      // The other device keeps its copy
+      await deviceB.sync.syncNow()
+      const bookOnB = await deviceB.db.getBookById(BOOK_ID)
+      expect(bookOnB!.hidden).toBe(false)
+    })
+
+    it('does not trigger a local-ahead re-queue when a book is archived', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await device.sync.syncNow() // uploads; the upload lands in the change feed
+      const before = (await device.db.getBookById(BOOK_ID))!.updated_at
+
+      await device.db.archiveBook(BOOK_ID)
+      await device.sync.syncNow() // pulls its own change — must reconcile as same-version
+
+      expect(await device.db.getOutboxItems()).toEqual([])
+      expect((await device.db.getBookById(BOOK_ID))!.updated_at).toBe(before)
+    })
+
     it('ignores hidden in legacy remote payloads on bootstrap', async () => {
       const drive = new FakeDrive()
       const device = createSyncHarness(drive)
