@@ -265,6 +265,14 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
         promise.resolve(null)
     }
 
+    // Required for NativeEventEmitter (RN >= 0.65). Events are sent via RCTDeviceEventEmitter,
+    // so these are intentionally no-ops.
+    @ReactMethod
+    fun addListener(eventName: String) {}
+
+    @ReactMethod
+    fun removeListeners(count: Int) {}
+
     private fun emitProgress(opId: String, bytesWritten: Long, totalBytes: Long) {
         val params = Arguments.createMap().apply {
             putString("opId", opId)
