@@ -27,7 +27,7 @@ Each book stores its `file_size` (bytes) and `fingerprint` (first 4KB of the fil
 
 ### 3. Soft-delete, not hard-delete
 
-Books are never removed from the database. Archiving sets `uri = null`. Deletion sets `uri = null` and `hidden = true`. The record persists so that:
+Books are never removed from the database by user actions. Archiving sets `uri = null`. Deletion sets `uri = null` and `hidden = true`. (The one exception is internal to sync: cross-device identity merges hard-delete a retired duplicate row — see [SYNC.md](SYNC.md).) The record persists so that:
 
 - Clips can still reference their source book's metadata
 - Sessions (listening history) still display correctly
@@ -72,9 +72,9 @@ No dedicated "library service" — the actions coordinate the storage, metadata,
 
 ## Adding a Book
 
-When the user picks a file (or one is provided by URI), `loadFile()` runs a pipeline: copy to app storage, extract metadata, read fingerprint, then check for duplicates.
+When the user picks a file (or one is provided by URI), `loadFile()` runs a pipeline: open the source and read its size + fingerprint (`copier.beginCopy` — nothing written to disk yet), check for duplicates, then commit the copy directly to its final path in app storage, extract metadata and chapters, and write the database record.
 
-**Filename gotcha:** The filename is sanitized to remove characters that break Android's `MediaMetadataRetriever` (colons, brackets, etc.). A timestamp suffix prevents collisions.
+**Filename gotcha:** Destination files are named `audio/{bookId}{ext}` — the book's UUID plus the original file's extension, run through `sanitizeFilename` to strip characters that break Android's `MediaMetadataRetriever` (colons, brackets, etc.). The UUID makes collisions impossible; the original filename survives only in the database (`name` column).
 
 ### Check for existing book
 
@@ -120,6 +120,13 @@ The database query uses `file_size` first (indexed, fast integer comparison), th
 
 Audio files of the same content but from different sources typically share identical headers and initial audio frames. 4KB is enough to capture the file format headers and the beginning of the audio data, providing extremely low collision probability while being fast to read.
 
+### Fingerprints also drive cross-device identity
+
+The fingerprint answers "same audio?" in two places:
+
+- **Re-add restore (local):** adding a file whose fingerprint matches an archived/deleted book restores that book (Case A above).
+- **Identity merge (sync):** when sync downloads a remote book whose fingerprint matches a local book with a *different* id (the same audio was imported independently on two devices), the two identities are merged — every device converges on the lexicographically smaller id, and clips/sessions are re-keyed to it. See [SYNC.md](SYNC.md) for the mechanism.
+
 ---
 
 ## The Three Loading Cases
@@ -132,7 +139,7 @@ After fingerprinting, `loadFile()` branches into one of three cases:
 
 The existing book record is restored:
 
-1. Rename the temp file to use the existing book's ID as filename
+1. Commit the copy directly to `audio/{existingBook.id}{ext}`
 2. Call `db.restoreBook()` — sets the new URI, updates metadata, sets `hidden = 0`, preserves the saved position
 3. Queue for sync
 
@@ -144,9 +151,9 @@ The user gets their book back exactly where they left off, with all clips intact
 
 The file already exists in the library. No new record is created:
 
-1. Call `db.touchBook()` — updates `updated_at` timestamp (moves it to top of list)
-2. Queue for sync
-3. The temp file is cleaned up in the `finally` block
+1. Cancel the in-flight copy (`copier.cancelCopy`) — nothing was committed to app storage
+2. Call `db.touchBook()` — updates `updated_at` timestamp (moves it to top of list)
+3. Queue for sync
 
 ### Case C: New book
 
@@ -155,7 +162,7 @@ The file already exists in the library. No new record is created:
 A new book is created:
 
 1. Generate a UUID
-2. Rename the temp file to use the UUID as filename
+2. Commit the copy to `audio/{uuid}{ext}`
 3. Call `db.upsertBook()` with all metadata, position 0, and the fingerprint
 4. Queue for sync
 
@@ -224,14 +231,6 @@ Key preservation rules in `db.restoreBook()`:
 
 ---
 
-## Notes
-
-### File move optimization
-
-When the source URI is already a local path (starts with `file://` or `/`), `FileStorageService` moves the file instead of copying it. This avoids doubling disk usage for large audiobook files.
-
----
-
 ## File Map
 
 ```
@@ -244,6 +243,7 @@ src/actions/
   archive_book.ts        → Set uri=null, delete file
   update_book.ts         → Update title/artist, queue sync
   delete_book.ts         → Set uri=null + hidden=true, delete file
+  cleanup_orphaned_files.ts → Delete app-storage files with no DB record
   constants.ts           → CLIPS_DIR, skip durations (no book-specific constants)
 
 src/components/
@@ -252,7 +252,7 @@ src/components/
 
 src/services/storage/
   database.ts            → Book CRUD, fingerprint lookup, archive/hide/restore
-  files.ts               → FileStorageService (copy, rename, delete, fingerprint read)
+  files.ts               → FileStorageService (delete, list, audio dir helpers)
   copier.ts              → FileCopierService (native file copy with progress + cancel)
   picker.ts              → FilePickerService (expo-document-picker wrapper)
 
