@@ -113,6 +113,7 @@ If Drive returns an invalid token (410), the engine clears the checkpoint and fa
    - After upload, re-check the entity's `updated_at` against the outbox's `updated_at_when_queued`.
    - If the entity was modified during upload (stale), re-queue instead of clearing.
    - Otherwise, clear the outbox entry and update the manifest.
+   - `delete` operations don't upload — they rewrite the remote JSON as a tombstone (see [Clip and Session Deletion: Tombstones](#clip-and-session-deletion-tombstones)).
 
 ### Step 3: Notify
 
@@ -155,11 +156,62 @@ Concretely:
 - `hidden` is a **local-only field**. It is excluded from `BookBackup`, and applying a remote book never touches the local value (`restoreBookFromBackup` inserts new books as visible and omits `hidden` from its conflict-update list). Old remote JSONs may still contain a `hidden` field — readers ignore it.
 - **Archive and delete don't queue sync changes and don't bump `updated_at`/`updated_by`.** The no-bump part is load-bearing: the local-ahead branches in reconciliation re-queue an upsert whenever local `updated_at` exceeds remote, so a bump would ship the change anyway — and could revert another device's newer edit (an archive at 12:00 would beat a title edit at 11:55).
 - Deleting or archiving a book affects **only the device you do it on**. A locally deleted book is restored (hidden cleared, position preserved) by re-adding the same file.
-- Clip and session deletion, by contrast, is global and propagates to all devices.
+- Clip and session deletion, by contrast, is global and propagates to all devices via tombstones (see [Clip and Session Deletion: Tombstones](#clip-and-session-deletion-tombstones)).
 
 **Consequence (accepted):** a new device bootstraps *every* book ever added to the cloud library, including ones deleted locally elsewhere — they arrive as audio-less entries in the Archived section. If this becomes noise, a future explicit "remove from cloud" action can tombstone the book JSON.
 
 **Cross-version caveat (beta):** upgrade all devices before the first post-upgrade delete. New-code uploads omit `hidden`, but *old-code* `restoreBookFromBackup` still applies `remote.hidden ?? false` in its conflict update — so any upsert from an upgraded device un-deletes hidden books on a not-yet-upgraded device.
+
+---
+
+## Clip and Session Deletion: Tombstones
+
+Deleting a clip or session propagates to every device. The mechanism is a **tombstone**: instead of deleting the entity's Drive file, the deleting device rewrites the JSON in place as the **full last-known payload plus `deleted: true`**, stamped with the deletion time and the deleting device:
+
+```json
+{ "id": "…", "source_id": "…", "start": 10000, "note": "…", "deleted": true, "updated_at": 1760000000000, "updated_by": "device-…" }
+```
+
+The tombstone competes under ordinary LWW like any other version. The file — and its change-feed identity — never disappears, so deletions flow through the same reconcile path as edits.
+
+### Why full payload, not a minimal stub?
+
+Full-payload tombstones cost a few KB and buy graceful degradation everywhere a stub would crash:
+
+- **Old-code devices** apply them as a harmless live edit — no parse crash on missing fields, no frozen page token. The clip merely lingers on stale devices until they upgrade.
+- **Bootstraps and full reconciles** parse every JSON uniformly and branch on `deleted` alone.
+- The filename stays valid, so `queueLocalOnlyEntities` still sees the entity id remotely and never re-uploads (resurrects) a deleted entity.
+
+### Deletion flow (push side)
+
+1. The delete action removes the local row immediately (optimistic) and queues `operation: 'delete'`. The outbox row's `updated_at_when_queued` records the deletion time — that timestamp becomes the tombstone's `updated_at`.
+2. At push time the local row is gone, so the pusher **reads the current remote JSON** — that read doubles as the tombstone's payload source *and* the stale-tombstone guard (below).
+3. The remote JSON is rewritten in place with `deleted: true`. For clips, the separate **audio file is hard-deleted** (reclaim space) and the manifest's `remote_audio_file_id` is nulled — the id is dead. The manifest row itself survives: the JSON file still exists and future writes must target it.
+4. If no manifest entry exists (the entity was never uploaded), there is nothing to tombstone — the queue item is dropped silently.
+
+### Stale-tombstone guard
+
+Before overwriting the remote, the pusher checks what it just read. Three cases drop the queue item without writing:
+
+| Remote state | Action |
+|--------------|--------|
+| `updated_at` newer than the deletion | The edit won LWW — drop the delete; the edit arrives via the normal pull path |
+| Already a tombstone | Deletion already happened elsewhere — done |
+| Read returns 404 (user purged Drive) | Nothing to tombstone — drop the queue item **and** the manifest entry |
+
+### Applying tombstones (pull side)
+
+Reconciliation parses the JSON and branches on `deleted` **before** any audio download or restore call — in the incremental feed and in full reconcile alike (a tombstoned clip is a JSON with no audio file, which a live clip would treat as incomplete).
+
+- **Tombstone wins LWW** → delete the local row, delete the local clip audio file, null the manifest's dead `remote_audio_file_id`, notify the store (the entity id lands in the `data` event).
+- **Local edit is newer** → the edit wins and re-uploads: this is an **un-delete**, acceptable LWW semantics. The receiver still nulls the manifest's audio id, so the re-upload creates a *fresh* audio file instead of updating the hard-deleted one, and other devices (including the deleter) pick the clip back up through the feed.
+- **No local row** — already deleted locally, never seen, or a device's own tombstone echoing back through the change feed — is a graceful no-op.
+
+### Retention
+
+Tombstones are kept **forever**. They are a few KB each; if libraries ever accumulate enough of them to matter, compaction (dropping tombstones older than N months) can be added later.
+
+**Cross-version caveat (beta):** tombstones are a one-way data-format door. Old code applies them as live edits (harmless), but the audio hard-delete makes old-code clip downloads fail for those entities, and reverting a device to pre-tombstone code re-exposes it to that. Upgrade all devices before the first post-upgrade delete.
 
 ---
 
