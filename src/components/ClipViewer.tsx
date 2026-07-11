@@ -47,10 +47,12 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   const isPlaying = isOwner && playback.status === 'playing'
   const isLoading = isOwner && playback.status === 'loading'
 
-  // Stop playback when dismissed
+  // Stop playback when dismissed (only if we still own it)
   useEffect(() => {
-    return () => { pause() }
-  }, [pause])
+    return () => {
+      if (useStore.getState().playback.ownerId === ownerId) pause()
+    }
+  }, [pause, ownerId])
 
   // Sync position from playback when we own playback
   useEffect(() => {
