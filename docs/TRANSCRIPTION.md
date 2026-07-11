@@ -182,6 +182,10 @@ Two store actions integrate with transcription as a side effect:
 - **`addClip()`** — after creating a clip, calls `transcription.queueClip(clip.id)`. If the service isn't started (feature disabled), this is a no-op.
 - **`updateClip()`** — if the clip's bounds changed (start or duration), clears the transcription, re-extracts audio from the source, and re-queues the clip.
 
+### Persistence: the store is the single writer
+
+The queue **never writes the database**. Its `finish` event carries the result; the store's handler clears the clip's `pending` flag and — for successful results — runs the `updateClip` action, which persists the text and queues the clip for sync. An **empty string is a valid result** (silence, music) and is persisted like any other text; only errored jobs skip persistence, leaving `transcription = null` so a later service start re-queues the clip.
+
 ---
 
 ## Edge Cases and Robustness
@@ -193,6 +197,10 @@ The `processing` flag is reset in a `finally` block inside `processQueue()`. Eve
 ### Queue while stopped
 
 Calling `queueClip()` when the service isn't started is a silent no-op. The clip won't be transcribed until the service starts and queries the database for pending clips.
+
+### Start failure drains the queue
+
+If all start attempts fail (Whisper never becomes ready), `doStart()` sets `started = false`, empties the queue, and emits a `finish` event **with an error** for every abandoned clip — so listeners (the store) clear their pending indicators instead of spinning forever. The clips still have `transcription = null` in the database, so a later successful `start()` picks them up again.
 
 ### Start/stop lifecycle
 
