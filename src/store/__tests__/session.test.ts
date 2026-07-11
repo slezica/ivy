@@ -354,4 +354,57 @@ describe('onAudioStatus session lifecycle (store)', () => {
     expect(mockDb.deleteSession).not.toHaveBeenCalled()
     expect(useStore.getState().currentSessionBookId).toBe(bookA.id)
   })
+
+  it('serializes a finalize behind an in-flight track', async () => {
+    const bookA = makeBook(uid())
+    const order: string[] = []
+
+    let releaseTrackRead!: (session: Session | null) => void
+    mockDb.getCurrentSession
+      .mockImplementationOnce(() => {
+        order.push('track:read')
+        return new Promise((resolve) => { releaseTrackRead = resolve })
+      })
+      .mockImplementation(async () => {
+        order.push('finalize:read')
+        return null
+      })
+    mockDb.createSession.mockImplementationOnce(async (bookId: string) => {
+      order.push('track:create')
+      return {
+        id: `session-${bookId}`, book_id: bookId,
+        started_at: Date.now(), ended_at: Date.now(), updated_at: Date.now(), updated_by: null,
+      }
+    })
+
+    stage({ books: [bookA], currentSessionBookId: null, uri: bookA.uri, ownerId: MAIN_PLAYER_OWNER_ID })
+    onAudioStatus({ status: 'playing', position: 1000, duration: 60000 }) // track starts, read blocked
+    onAudioStatus({ status: 'paused', position: 1500, duration: 60000 })  // finalize lands mid-track
+    await flush()
+
+    // Finalize must not start while track's read-then-write is in flight
+    expect(order).toEqual(['track:read'])
+
+    releaseTrackRead(null)
+    await flush()
+
+    expect(order).toEqual(['track:read', 'track:create', 'finalize:read'])
+  })
+
+  it('queues position sync immediately when the book changes', async () => {
+    const bookA = makeBook(uid())
+    const bookB = makeBook(uid())
+
+    stage({ books: [bookA, bookB], uri: bookA.uri, ownerId: MAIN_PLAYER_OWNER_ID })
+    onAudioStatus({ status: 'playing', position: 1000, duration: 60000 })
+
+    // Switch books well inside the 30s throttle window — the new book's
+    // first position sync must not be suppressed by the old book's
+    useStore.setState((state) => { state.playback.uri = bookB.uri })
+    onAudioStatus({ status: 'playing', position: 0, duration: 60000 })
+    await flush()
+
+    expect(mockDb.queueChange).toHaveBeenCalledWith('book', bookA.id, 'upsert')
+    expect(mockDb.queueChange).toHaveBeenCalledWith('book', bookB.id, 'upsert')
+  })
 })

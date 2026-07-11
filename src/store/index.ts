@@ -4,7 +4,7 @@ import { immer } from 'zustand/middleware/immer'
 import type { PlaybackStatus, SyncStatus, SyncNotification } from '../services'
 import * as services from '../services'
 import type { TranscriptionQueueEvents } from '../services/transcription/queue'
-import { MAIN_PLAYER_OWNER_ID, throttle, throttleSameArgs } from '../utils'
+import { MAIN_PLAYER_OWNER_ID, throttleSameArgs } from '../utils'
 import type { AppState } from './types'
 
 // Thin shim so action deps that expect syncQueue keep working
@@ -53,8 +53,8 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const deps = { set, get, ...services, syncQueue }
   const { db, audio, files, transcription, sync } = services
 
-  // Throttled helpers
-  const queuePositionSync = throttle((bookId: string) => {
+  // Throttled helpers — keyed by args so a book switch queues immediately
+  const queuePositionSync = throttleSameArgs((bookId: string) => {
     db.queueChange('book', bookId, 'upsert').catch(() => {})
   }, 30_000)
 
