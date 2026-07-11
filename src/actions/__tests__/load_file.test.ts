@@ -617,5 +617,29 @@ describe('createLoadFile', () => {
       expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
       expect(state.library.status).toBe('idle') // not 'duplicate'
     })
+
+    it('cancel between beginCopy and commitCopy: UNKNOWN_OP rejection is not an error', async () => {
+      // cancelCopy removed the op from the native map, so commitCopy rejects
+      // with UNKNOWN_OP instead of CANCELLED
+      const state = createMockState()
+      const deps = createMockDeps({
+        copier: createMockCopier({
+          commitCopy: jest.fn(async () => {
+            simulateCancel(state)
+            const error = new Error('No operation found with ID: op-1')
+            ;(error as any).code = 'UNKNOWN_OP'
+            throw error
+          }),
+        }),
+        set: createImmerSet(state),
+        get: createMockGet(state),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.upsertBook).not.toHaveBeenCalled()
+      expect(state.library.status).toBe('idle') // not 'error'
+    })
   })
 })

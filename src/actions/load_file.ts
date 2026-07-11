@@ -166,7 +166,10 @@ async function handleNewBook(
 async function handleError(ctx: Context, error: unknown) {
   const { updateLibrary, log } = ctx
 
-  if (isCancellation(error)) {
+  // A cancel between native calls makes the next one reject with UNKNOWN_OP
+  // rather than CANCELLED — if the op was cancelled out from under us, any
+  // error here is a consequence of the cancellation, not a real failure
+  if (isCancellation(error) || wasCancelled(ctx)) {
     log('Cancelled by user')
     return
   }
