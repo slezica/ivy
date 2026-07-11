@@ -414,23 +414,11 @@ export class GoogleDriveService {
   private async findOrCreateFolder(name: string, parentId: string): Promise<string> {
     const token = await this.getToken()
 
-    // Search for existing folder
-    const parentQuery = parentId === 'root' ? `'root' in parents` : `'${parentId}' in parents`
-    const query = `name = '${name}' and ${parentQuery} and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
-    const searchUrl = `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id)`
-
-    const searchResponse = await fetch(searchUrl, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-
-    if (!searchResponse.ok) {
-      throw new Error(`Failed to search for folder: ${searchResponse.status}`)
-    }
-
-    const searchData = await searchResponse.json()
-    if (searchData.files?.length > 0) {
+    // Search for existing folder(s)
+    const existing = await this.searchFolders(name, parentId, token)
+    if (existing.length > 0) {
       log(`Found existing folder: ${name}`)
-      return searchData.files[0].id
+      return pickOldestFolder(existing)
     }
 
     // Create folder
@@ -455,6 +443,50 @@ export class GoogleDriveService {
 
     const createData = await createResponse.json()
     log(`Created folder: ${name}`)
-    return createData.id
+
+    // Re-query: another device may have created the same folder concurrently.
+    // Every device adopts the oldest copy so the trees converge; no Drive-side
+    // cleanup is attempted (stray empty folders are harmless).
+    const folders = await this.searchFolders(name, parentId, token)
+    if (folders.length > 1) {
+      const adopted = pickOldestFolder(folders)
+      log(`Duplicate '${name}' folders detected — adopting oldest: ${adopted}`)
+      return adopted
+    }
+
+    return folders[0]?.id ?? createData.id
   }
+
+  private async searchFolders(name: string, parentId: string, token: string): Promise<FolderInfo[]> {
+    const parentQuery = parentId === 'root' ? `'root' in parents` : `'${parentId}' in parents`
+    const query = `name = '${name}' and ${parentQuery} and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+    const searchUrl = `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id, createdTime)`
+
+    const searchResponse = await fetch(searchUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    if (!searchResponse.ok) {
+      throw new Error(`Failed to search for folder: ${searchResponse.status}`)
+    }
+
+    const searchData = await searchResponse.json()
+    return searchData.files ?? []
+  }
+}
+
+interface FolderInfo {
+  id: string
+  createdTime?: string
+}
+
+/** Deterministic duplicate-folder resolution: oldest createdTime, id tie-break. */
+function pickOldestFolder(folders: FolderInfo[]): string {
+  const sorted = [...folders].sort((a, b) => {
+    const aTime = a.createdTime ?? ''
+    const bTime = b.createdTime ?? ''
+    if (aTime !== bTime) return aTime < bTime ? -1 : 1
+    return a.id < b.id ? -1 : 1
+  })
+  return sorted[0].id
 }
