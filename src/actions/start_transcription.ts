@@ -23,7 +23,14 @@ export const createStartTranscription: ActionFactory<StartTranscriptionDeps, Sta
       await transcription.start()
     } catch {
       log('Failed to start')
-      set(state => { state.transcription.status = 'error' })
+
+      // Only transition to 'error' if we weren't stopped while starting
+      set(state => {
+        if (state.transcription.status === 'starting') {
+          state.transcription.status = 'error'
+        }
+      })
+
       return
     }
 
