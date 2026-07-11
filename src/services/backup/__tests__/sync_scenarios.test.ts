@@ -43,6 +43,21 @@ function trackSyncErrors(device: SyncHarness): (string | null)[] {
   return errors
 }
 
+function remoteClipJson(overrides: Record<string, any> = {}): string {
+  return JSON.stringify({
+    id: CLIP_ID,
+    source_id: BOOK_ID,
+    start: 10000,
+    duration: 5000,
+    note: 'A note',
+    transcription: null,
+    created_at: 4000,
+    updated_at: 5000,
+    updated_by: 'device-remote',
+    ...overrides,
+  })
+}
+
 function remoteBookJson(overrides: Record<string, any> = {}): string {
   return JSON.stringify({
     id: BOOK_ID,
@@ -678,6 +693,64 @@ describe('sync scenarios', () => {
       const file = drive.getFileByName(`session_${session.id}.json`)!
       expect(file.id).not.toBe(deadId)
       expect((await device.db.getManifestEntry('session', session.id))!.remote_file_id).toBe(file.id)
+    })
+  })
+
+  describe('pull quarantine (poison pill)', () => {
+    it('quarantines a repeatedly failing entity so the token advances, then keeps retrying it', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await device.sync.syncNow() // bootstrap: uploads the book, establishes a token
+
+      // Poison change: corrupt JSON that deterministically fails to parse
+      drive.putFile('clips', `clip_${CLIP_ID}.json`, 'not json {')
+
+      // Below the threshold every failure holds the token for re-delivery
+      const tokenBefore = device.db.getCheckpoint().last_page_token
+      for (let i = 0; i < 4; i++) {
+        await device.sync.syncNow()
+        expect(device.db.getCheckpoint().last_page_token).toBe(tokenBefore)
+      }
+
+      // The 5th consecutive failure quarantines the entity — the token advances
+      await device.sync.syncNow()
+      const tokenAfter = device.db.getCheckpoint().last_page_token
+      expect(tokenAfter).not.toBe(tokenBefore)
+
+      // The entity stays on the retry list: with no feed changes at all, the
+      // next sync still attempts (and reports) the quarantined reconcile
+      const errors = trackSyncErrors(device)
+      await device.sync.syncNow()
+      expect(errors[errors.length - 1]).not.toBeNull()
+    })
+
+    it('clears quarantine when the entity finally reconciles', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await device.sync.syncNow()
+
+      const poisonId = drive.putFile('clips', `clip_${CLIP_ID}.json`, 'not json {')
+      for (let i = 0; i < 5; i++) {
+        await device.sync.syncNow() // 5 consecutive failures → quarantined
+      }
+
+      // The owning device repairs the clip: fixed JSON plus its audio file
+      drive.putFile('clips', `clip_${CLIP_ID}.m4a`, new Uint8Array([1, 2, 3]))
+      await drive.updateFile(poisonId, remoteClipJson())
+
+      const errors = trackSyncErrors(device)
+      await device.sync.syncNow() // the feed delivers the fix; reconcile succeeds
+
+      expect(errors).toEqual([null])
+      expect(await device.db.getClip(CLIP_ID)).not.toBeNull()
+
+      // Nothing left on the retry list — subsequent syncs stay clean
+      await device.sync.syncNow()
+      expect(errors).toEqual([null, null])
     })
   })
 

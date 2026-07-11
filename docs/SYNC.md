@@ -103,6 +103,8 @@ These are stamped automatically by database write methods. The `deviceId` is gen
 
 If Drive returns an invalid token (410), the engine clears the checkpoint and falls back to full reconcile.
 
+**Poison-pill quarantine.** Token-holding is deliberate for transient failures (e.g. a clip JSON arriving before its audio heals on re-delivery), but a *deterministically* failing entity (corrupt JSON, dead file id) would freeze the token forever. After 5 consecutive reconcile failures an entity is **quarantined**: its failures stop blocking token advance, it moves to an in-memory retry list attempted on every sync, and it counts into the Settings failing indicator. A successful reconcile clears it. The tracking is in-memory by design — an app restart resets the counters (a few extra token-holding retries before re-quarantining) and forgets the retry list, so a quarantined entity is only re-attempted after its next remote change or a full reconcile.
+
 ### Step 2: Push — Drain Local Outbox
 
 1. Read all pending outbox items that are due (`next_attempt_at <= now`).

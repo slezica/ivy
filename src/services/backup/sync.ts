@@ -38,6 +38,9 @@ interface ParsedFilename {
   extension: 'json' | 'mp3' | 'm4a'
 }
 
+// A single entry from Drive's change feed
+type RemoteChange = { fileId: string; removed: boolean; file?: DriveFile }
+
 export type BackupSyncEvents = {
   status: SyncStatus
   data: SyncNotification
@@ -50,6 +53,10 @@ const MAX_CLIP_SIZE = 50 * 1024 * 1024
 const BACKOFF_BASE_MS = 30_000
 const BACKOFF_MAX_MS = 6 * 60 * 60 * 1000
 
+// Pull-side poison pill: consecutive reconcile failures after which an
+// entity's errors stop blocking token advance (it keeps retrying each sync)
+const QUARANTINE_THRESHOLD = 5
+
 // -----------------------------------------------------------------------------
 // Service
 // -----------------------------------------------------------------------------
@@ -59,6 +66,14 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   private drive: GoogleDriveService
   private auth: GoogleAuthService
   private isSyncing = false
+
+  // Pull-side poison-pill tracking. In-memory by design: an app restart resets
+  // it, which only costs a few extra token-holding retries before an entity
+  // re-quarantines — but a restarted app also forgets the retry list, so a
+  // quarantined entity is not re-attempted until its next remote change or a
+  // full reconcile.
+  private pullFailures = new Map<string, number>()        // "type:id" → consecutive reconcile failures
+  private quarantined = new Map<string, RemoteChange[]>() // "type:id" → last-seen changes, retried each sync
 
   constructor(
     db: DatabaseService,
@@ -215,22 +230,47 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       // Group changes by Ivy entity
       const entityChanges = this.groupChangesByEntity(changesResult.changes)
 
+      // Retry quarantined entities alongside fresh changes — their failures no
+      // longer hold the token, so the feed won't re-deliver them on its own
+      for (const [key, files] of this.quarantined) {
+        if (!entityChanges.has(key)) entityChanges.set(key, files)
+      }
+
       // Reconcile each changed entity
-      const errorsBefore = result.errors.length
+      let blockingFailures = 0
       for (const [key, files] of entityChanges) {
         const [type, id] = key.split(':') as ['book' | 'clip' | 'session', string]
+        const errorsBefore = result.errors.length
         try {
           await this.reconcileEntity(type, id, files, result, notification)
         } catch (error) {
           result.errors.push(`Failed to reconcile ${type} ${id}: ${error}`)
         }
+
+        // Failures are thrown or recorded directly in result.errors
+        if (result.errors.length > errorsBefore) {
+          const failures = (this.pullFailures.get(key) ?? 0) + 1
+          this.pullFailures.set(key, failures)
+          if (failures >= QUARANTINE_THRESHOLD) {
+            log(`Quarantining ${key} after ${failures} consecutive reconcile failures`)
+            this.quarantined.set(key, files)
+          } else {
+            blockingFailures++
+          }
+        } else {
+          this.pullFailures.delete(key)
+          this.quarantined.delete(key)
+        }
       }
 
-      // Only advance token if every change reconciled — on failure the token
-      // stays put so failed changes are re-delivered next sync (re-processing
-      // already-reconciled entities is safe: same versions short-circuit)
+      // Only advance the token when every change reconciled — on failure the
+      // token stays put so failed changes are re-delivered next sync
+      // (re-processing already-reconciled entities is safe: same versions
+      // short-circuit). Quarantined entities are the exception: a poison pill
+      // must not freeze the token forever, so their failures don't block and
+      // they retry from the in-memory list instead of the feed.
       const newToken = changesResult.newStartPageToken
-      if (newToken && result.errors.length === errorsBefore) {
+      if (newToken && blockingFailures === 0) {
         await this.db.setCheckpointPageToken(newToken)
       }
     } catch (error: any) {
