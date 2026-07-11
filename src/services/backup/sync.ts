@@ -506,10 +506,20 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   ): Promise<void> {
     const fingerprint = base64ToUint8Array(remote.fingerprint)
 
-    // Duplicate detection via fingerprint
+    // Identity merge: the same audio imported independently on two devices got
+    // two UUIDs — converge on the lexicographically smaller one (deterministic,
+    // symmetric, no coordination needed)
     const existing = await this.db.getBookByFingerprint(remote.file_size, fingerprint)
     if (existing && existing.id !== remote.id) {
-      log(`Skipping download of book ${remote.id}: fingerprint matches ${existing.id}`)
+      if (remote.id < existing.id) {
+        // We hold the larger, losing id — this device performs the merge
+        await this.mergeBook(existing, remote, remoteFileId, result, notification)
+      } else {
+        // We hold the smaller, winning id — skip and record nothing;
+        // convergence comes from the other holder's merge (its re-keyed
+        // children and book upsert arrive as normal changes)
+        log(`Skipping download of book ${remote.id}: fingerprint matches winning local ${existing.id}`)
+      }
       return
     }
 
@@ -532,6 +542,51 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     notification.booksChanged.push(remote.id)
     result.downloaded.books++
     log(`Downloaded book: ${remote.id}`)
+  }
+
+  /**
+   * Merge a fingerprint-matched local book (larger, losing id) into the
+   * remote identity (smaller, winning id): re-key the local rows, apply the
+   * remote fields under normal LWW, point the manifest at the surviving
+   * remote file, and queue an upsert so our fields (position, speed, metadata
+   * edits) compete under LWW on the surviving id.
+   */
+  private async mergeBook(
+    local: Book,
+    remote: BookBackup,
+    remoteFileId: string,
+    result: SyncResult,
+    notification: SyncNotification,
+  ): Promise<void> {
+    log(`Merging book ${local.id} into ${remote.id} (fingerprint match)`)
+
+    const { clipIds, sessionIds } = await this.db.rekeyBook(local.id, remote.id)
+
+    await this.db.restoreBookFromBackup(
+      remote.id, remote.name, remote.duration, remote.position,
+      remote.updated_at, remote.updated_by ?? null,
+      remote.title, remote.artist, remote.artwork,
+      remote.file_size, base64ToUint8Array(remote.fingerprint),
+      remote.speed ?? 100,
+    )
+
+    await this.db.upsertManifestEntry({
+      entity_type: 'book', entity_id: remote.id,
+      local_updated_at: remote.updated_at,
+      remote_updated_at: null,
+      remote_file_id: remoteFileId,
+      remote_audio_file_id: null,
+    })
+
+    const merged = await this.db.getBookById(remote.id)
+    if (merged) {
+      await this.db.queueChange('book', remote.id, 'upsert', merged.updated_at)
+    }
+
+    notification.booksChanged.push(remote.id)
+    notification.clipsChanged.push(...clipIds)
+    notification.sessionsChanged.push(...sessionIds)
+    result.downloaded.books++
   }
 
   private async downloadClip(

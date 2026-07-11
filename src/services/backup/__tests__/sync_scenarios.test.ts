@@ -23,8 +23,8 @@ async function addBook(device: SyncHarness, id: string = BOOK_ID): Promise<void>
   )
 }
 
-async function addClip(device: SyncHarness, id: string = CLIP_ID): Promise<void> {
-  const clip = await device.db.createClip(id, BOOK_ID, `file:///clips/${id}.m4a`, 10000, 5000, 'A note')
+async function addClip(device: SyncHarness, id: string = CLIP_ID, sourceId: string = BOOK_ID): Promise<void> {
+  const clip = await device.db.createClip(id, sourceId, `file:///clips/${id}.m4a`, 10000, 5000, 'A note')
   await device.db.queueChange('clip', id, 'upsert', clip.updated_at)
 }
 
@@ -590,6 +590,116 @@ describe('sync scenarios', () => {
       expect(errors).toEqual([null, null, null, null])
       expect(await device.db.getClip(CLIP_ID)).toBeNull()
       expect(await device.db.getOutboxItems()).toEqual([])
+    })
+  })
+
+  describe('book identity merge', () => {
+    // Same audio imported independently on two devices: the fingerprint
+    // matches, the ids differ — the lexicographically smaller id wins
+    const SMALL_ID = BOOK_ID // 'aaa…'
+    const LARGE_ID = 'bbb00001-0000-0000-0000-000000000001'
+    const CLIP_A = CLIP_ID
+    const CLIP_B = 'ccc00002-0000-0000-0000-000000000002'
+
+    it('merges a double-imported book toward the smaller id on both devices', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA, SMALL_ID)
+      await deviceA.sync.syncNow() // uploads book_{small}
+
+      await addBook(deviceB, LARGE_ID) // same audio, independent import
+      await deviceB.sync.syncNow() // bootstrap pulls the twin → B merges, pushes merged book
+      await deviceA.sync.syncNow() // A pulls B's merged upsert
+
+      // One surviving id everywhere, each device keeping its own audio
+      expect(await deviceB.db.getBookById(LARGE_ID)).toBeNull()
+      const onB = await deviceB.db.getBookById(SMALL_ID)
+      expect(onB).not.toBeNull()
+      expect(onB!.uri).toContain(LARGE_ID) // B's audio file survives the re-key
+      const onA = await deviceA.db.getBookById(SMALL_ID)
+      expect(onA!.uri).toContain(SMALL_ID)
+
+      // The losing id never reached Drive; the manifest points at the survivor
+      expect(drive.getFileByName(`book_${LARGE_ID}.json`)).toBeUndefined()
+      const manifest = await deviceB.db.getManifestEntry('book', SMALL_ID)
+      expect(manifest!.remote_file_id).toBe(drive.getFileByName(`book_${SMALL_ID}.json`)!.id)
+      expect(await deviceB.db.getManifestEntry('book', LARGE_ID)).toBeNull()
+      expect(await deviceB.db.getOutboxItems()).toEqual([])
+    })
+
+    it('skips the remote twin and records nothing when holding the smaller id', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceB, LARGE_ID)
+      await deviceB.sync.syncNow() // uploads book_{large}
+
+      await addBook(deviceA, SMALL_ID)
+      await deviceA.sync.syncNow() // pulls the larger twin → skip; pushes its own book
+
+      expect(await deviceA.db.getBookById(LARGE_ID)).toBeNull()
+      expect(await deviceA.db.getManifestEntry('book', LARGE_ID)).toBeNull()
+      expect(await deviceA.db.getOutboxItems()).toEqual([])
+      expect(drive.getFileByName(`book_${SMALL_ID}.json`)).toBeDefined()
+    })
+
+    it('converges without flapping when both devices pull each other\'s twin', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      // Both twins land on Drive before either device sees the other's
+      await addBook(deviceB, LARGE_ID)
+      await deviceB.sync.syncNow()
+      await addBook(deviceA, SMALL_ID)
+      await deviceA.sync.syncNow() // pulls large → skip (smaller local id wins)
+      await deviceB.sync.syncNow() // pulls small → merge
+
+      // Settle: everyone pulls the merge outcome
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow()
+
+      const onA = (await deviceA.db.getBookById(SMALL_ID))!
+      const onB = (await deviceB.db.getBookById(SMALL_ID))!
+      expect(await deviceA.db.getBookById(LARGE_ID)).toBeNull()
+      expect(await deviceB.db.getBookById(LARGE_ID)).toBeNull()
+      expect(onA.updated_at).toBe(onB.updated_at) // same winning version
+
+      // No flapping: further rounds change nothing and queue nothing
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow()
+      expect((await deviceA.db.getBookById(SMALL_ID))!.updated_at).toBe(onA.updated_at)
+      expect((await deviceB.db.getBookById(SMALL_ID))!.updated_at).toBe(onB.updated_at)
+      expect(await deviceA.db.getOutboxItems()).toEqual([])
+      expect(await deviceB.db.getOutboxItems()).toEqual([])
+    })
+
+    it('keeps clips made on both devices before the merge, under the surviving id', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA, SMALL_ID)
+      await addClip(deviceA, CLIP_A, SMALL_ID)
+      await deviceA.sync.syncNow()
+
+      await addBook(deviceB, LARGE_ID)
+      await addClip(deviceB, CLIP_B, LARGE_ID) // clip made before B ever sees the twin
+      await deviceB.sync.syncNow() // merge re-keys B's clip; push uploads it under the new id
+      await deviceA.sync.syncNow() // A pulls B's clip
+
+      expect(drive.readJson(`clip_${CLIP_B}.json`).source_id).toBe(SMALL_ID)
+      expect((await deviceB.db.getClip(CLIP_A))!.source_id).toBe(SMALL_ID)
+      expect((await deviceB.db.getClip(CLIP_B))!.source_id).toBe(SMALL_ID)
+      expect((await deviceA.db.getClip(CLIP_A))!.source_id).toBe(SMALL_ID)
+      expect((await deviceA.db.getClip(CLIP_B))!.source_id).toBe(SMALL_ID)
+
+      // Both clips visible in the library join on both devices
+      expect(await deviceA.db.getAllClips()).toHaveLength(2)
+      expect(await deviceB.db.getAllClips()).toHaveLength(2)
     })
   })
 
