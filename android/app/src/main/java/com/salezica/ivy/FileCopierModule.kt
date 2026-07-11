@@ -286,6 +286,13 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
     }
 
     private fun queryFileSize(uri: Uri): Long? {
+        // ContentResolver.query() no-ops for file:// URIs — stat the file directly
+        if (uri.scheme == "file") {
+            val path = uri.path ?: return null
+            val length = java.io.File(path).length()
+            return if (length > 0) length else null
+        }
+
         return try {
             reactApplicationContext.contentResolver.query(
                 uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null
