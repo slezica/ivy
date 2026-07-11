@@ -366,6 +366,12 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const content = await this.drive.downloadFile(jsonChange.fileId, false) as string
     const remote: BookBackup = JSON.parse(content)
 
+    // Tombstone: branch before any fingerprint or restore logic
+    if (remote.deleted) {
+      await this.applyBookTombstone(remote, jsonChange.fileId, notification)
+      return
+    }
+
     // Read local
     const local = await this.db.getBookById(id)
 
@@ -701,6 +707,79 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   // ---------------------------------------------------------------------------
   // Apply Remote Tombstones
   // ---------------------------------------------------------------------------
+
+  /**
+   * Apply a remote book tombstone.
+   *
+   * With `merged_into` (identity retirement) the retired id is dead
+   * everywhere — no LWW: the book's content lives on under the survivor.
+   * Local children re-key to the survivor, then the retired row resolves:
+   * - no local row → children reattached only (own echo / never bootstrapped)
+   * - survivor row absent → adopt: re-key the whole row onto the surviving
+   *   id, keeping local audio and fields; the survivor's JSON reconciles
+   *   onto it whenever it arrives (order-independent)
+   * - survivor row present → delete the retired row, transferring its audio
+   *   uri when the survivor has none. Audio files are never deleted here:
+   *   when both rows have audio the retired file is merely orphaned (the
+   *   survivor's copy makes it redundant) and left for cleanup.
+   *
+   * Without `merged_into` (twin cleanup) the tombstone deletes the local row
+   * only if it has no audio — a row with audio is a real per-device book and
+   * stays untouched (books' deletion never propagates).
+   */
+  private async applyBookTombstone(
+    remote: BookBackup,
+    jsonFileId: string,
+    notification: SyncNotification,
+  ): Promise<void> {
+    const retiredId = remote.id
+    const survivorId = remote.merged_into
+    const local = await this.db.getBookById(retiredId)
+
+    if (!survivorId) {
+      if (local && local.uri === null) {
+        await this.db.deleteBook(retiredId)
+        await this.db.deleteManifestEntry('book', retiredId)
+        notification.booksChanged.push(retiredId)
+        log(`Applied book tombstone: ${retiredId}`)
+      } else if (local) {
+        // Keeping the row: point the manifest at the tombstone file so any
+        // future upload updates it in place instead of creating a twin
+        await this.db.upsertManifestEntry({
+          entity_type: 'book', entity_id: retiredId,
+          local_updated_at: local.updated_at, remote_updated_at: null,
+          remote_file_id: jsonFileId, remote_audio_file_id: null,
+        })
+      }
+      return
+    }
+
+    const survivor = await this.db.getBookById(survivorId)
+
+    if (local && !survivor) {
+      // Adopt the surviving id wholesale
+      const { clipIds, sessionIds } = await this.db.rekeyBook(retiredId, survivorId)
+      notification.booksChanged.push(survivorId)
+      notification.clipsChanged.push(...clipIds)
+      notification.sessionsChanged.push(...sessionIds)
+      log(`Applied merged_into tombstone: ${retiredId} adopted id ${survivorId}`)
+      return
+    }
+
+    const { clipIds, sessionIds } = await this.db.reattachBookChildren(retiredId, survivorId)
+    notification.clipsChanged.push(...clipIds)
+    notification.sessionsChanged.push(...sessionIds)
+
+    if (local) {
+      if (local.uri && survivor && !survivor.uri) {
+        await this.db.setBookUri(survivorId, local.uri)
+      }
+      await this.db.deleteBook(retiredId)
+      notification.booksChanged.push(retiredId)
+      log(`Applied merged_into tombstone: ${retiredId} → ${survivorId}`)
+    }
+    await this.db.deleteManifestEntry('book', retiredId)
+  }
 
   /**
    * Apply a remote clip tombstone under LWW. Tombstone wins → delete the local
@@ -1134,6 +1213,13 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       try {
         const content = await this.drive.downloadFile(file.id, false) as string
         const remote: BookBackup = JSON.parse(content)
+
+        // Tombstone: branch before any fingerprint or restore logic
+        if (remote.deleted) {
+          await this.applyBookTombstone(remote, file.id, notification)
+          continue
+        }
+
         const local = await this.db.getBookById(parsed.id)
 
         if (!local) {

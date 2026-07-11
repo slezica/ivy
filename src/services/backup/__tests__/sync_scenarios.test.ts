@@ -709,6 +709,82 @@ describe('sync scenarios', () => {
       expect(await deviceB.db.getBookById(LARGE_ID)).toBeNull()
     })
 
+    it('adopts the surviving id when the tombstone arrives before the merged book', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+      const errors = trackSyncErrors(device)
+
+      await addBook(device, LARGE_ID) // this device holds the audio
+      await addClip(device, CLIP_B, LARGE_ID)
+      const session = await device.db.createSession(LARGE_ID)
+      await device.sync.syncNow() // uploads book + clip
+      await device.sync.syncNow() // consume the upload echoes
+
+      // Another device merged large → small; only the tombstone reaches us yet
+      const largeFile = drive.getFileByName(`book_${LARGE_ID}.json`)!
+      await drive.updateFile(largeFile.id, remoteBookJson({
+        id: LARGE_ID, deleted: true, merged_into: SMALL_ID, updated_at: Date.now(),
+      }))
+      await device.sync.syncNow()
+
+      expect(errors[errors.length - 1]).toBeNull()
+      expect(await device.db.getBookById(LARGE_ID)).toBeNull()
+      const survivor = await device.db.getBookById(SMALL_ID)
+      expect(survivor).not.toBeNull()
+      expect(survivor!.uri).toContain(LARGE_ID) // audio survives the adoption
+      expect((await device.db.getClip(CLIP_B))!.source_id).toBe(SMALL_ID)
+      expect((await device.db.getSessionById(session.id))!.book_id).toBe(SMALL_ID)
+      expect(await device.db.getManifestEntry('book', LARGE_ID)).toBeNull()
+    })
+
+    it('transfers audio to an audio-less survivor when both rows exist', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      // Bootstrapped survivor (no audio) — distinct fingerprint so the
+      // bootstrap itself doesn't trigger the merge path
+      const OTHER_FP = btoa(String.fromCharCode(9, 9, 9, 9))
+      drive.putFile('books', `book_${SMALL_ID}.json`, remoteBookJson({ id: SMALL_ID, fingerprint: OTHER_FP }))
+      await addBook(device, LARGE_ID) // locally imported copy with audio
+      await addClip(device, CLIP_B, LARGE_ID)
+      await device.sync.syncNow() // bootstraps small (uri null), uploads large
+      await device.sync.syncNow() // consume the upload echoes
+      expect((await device.db.getBookById(SMALL_ID))!.uri).toBeNull()
+
+      // Another device retires large in favor of small
+      const largeFile = drive.getFileByName(`book_${LARGE_ID}.json`)!
+      await drive.updateFile(largeFile.id, remoteBookJson({
+        id: LARGE_ID, deleted: true, merged_into: SMALL_ID, updated_at: Date.now(),
+      }))
+      await device.sync.syncNow()
+
+      expect(await device.db.getBookById(LARGE_ID)).toBeNull()
+      const survivor = await device.db.getBookById(SMALL_ID)
+      expect(survivor!.uri).toContain(LARGE_ID) // audio moved, never destroyed
+      expect((await device.db.getClip(CLIP_B))!.source_id).toBe(SMALL_ID)
+    })
+
+    it('applies a plain book tombstone only to audio-less rows', async () => {
+      const drive = new FakeDrive()
+      const deviceWithAudio = createSyncHarness(drive)
+      const deviceWithoutAudio = createSyncHarness(drive)
+
+      await addBook(deviceWithAudio, SMALL_ID)
+      await deviceWithAudio.sync.syncNow()
+      await deviceWithoutAudio.sync.syncNow() // bootstraps the book (uri null)
+
+      // Twin cleanup elsewhere tombstones the book without merged_into
+      const file = drive.getFileByName(`book_${SMALL_ID}.json`)!
+      await drive.updateFile(file.id, remoteBookJson({ id: SMALL_ID, deleted: true, updated_at: Date.now() }))
+      await deviceWithAudio.sync.syncNow()
+      await deviceWithoutAudio.sync.syncNow()
+
+      // Audio holder keeps its per-device book; audio-less row is cleaned up
+      expect(await deviceWithAudio.db.getBookById(SMALL_ID)).not.toBeNull()
+      expect(await deviceWithoutAudio.db.getBookById(SMALL_ID)).toBeNull()
+      expect(await deviceWithoutAudio.db.getManifestEntry('book', SMALL_ID)).toBeNull()
+    })
+
     it('keeps clips made on both devices before the merge, under the surviving id', async () => {
       const drive = new FakeDrive()
       const deviceA = createSyncHarness(drive)

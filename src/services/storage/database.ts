@@ -555,6 +555,39 @@ export class DatabaseService {
     return { clipIds, sessionIds }
   }
 
+  /** Hard-delete a book row (sync-only: identity retirement / twin cleanup). */
+  async deleteBook(id: string): Promise<void> {
+    await this.db.runAsync('DELETE FROM files WHERE id = ?', [id])
+  }
+
+  /**
+   * Attach an audio file to a book and make it visible (merge pull side:
+   * audio transferred from a retired twin row). Like deletion/archival, audio
+   * presence is per-device: no updated_at/updated_by bump.
+   */
+  async setBookUri(id: string, uri: string): Promise<void> {
+    await this.db.runAsync('UPDATE files SET uri = ?, hidden = 0 WHERE id = ?', [uri, id])
+  }
+
+  /**
+   * Point one book's clips and sessions at another id (merge pull side).
+   * Direct updates with no timestamp bump — order-independent with respect
+   * to the surviving book row's arrival. Returns the affected ids.
+   */
+  async reattachBookChildren(oldId: string, newId: string): Promise<{ clipIds: string[]; sessionIds: string[] }> {
+    const clipIds = (await this.db.getAllAsync<{ id: string }>(
+      'SELECT id FROM clips WHERE source_id = ?', [oldId]
+    )).map(r => r.id)
+    const sessionIds = (await this.db.getAllAsync<{ id: string }>(
+      'SELECT id FROM sessions WHERE book_id = ?', [oldId]
+    )).map(r => r.id)
+
+    await this.db.runAsync('UPDATE clips SET source_id = ? WHERE source_id = ?', [newId, oldId])
+    await this.db.runAsync('UPDATE sessions SET book_id = ? WHERE book_id = ?', [newId, oldId])
+
+    return { clipIds, sessionIds }
+  }
+
   // ---------------------------------------------------------------------------
   // Clips
   // ---------------------------------------------------------------------------
