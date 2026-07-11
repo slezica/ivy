@@ -1,6 +1,6 @@
 # Ivy
 
-A local podcast and audiobook player for Android with library management, clips with automatic transcription and innovative player UI.
+A local-first podcast and audiobook player for Android with library management, clips with on-device automatic transcription, listening history, multi-device sync via Google Drive and innovative player UI.
 
 ### AI Notice
 
