@@ -348,6 +348,9 @@ export class TimelinePhysicsEngine {
 
     // --- Regular scroll mode ---
 
+    // No drag in progress — panStart was blocked during pinch cooldown
+    if (!this._isDragging) return
+
     const newOffset = clamp(
       this._dragStartOffset - translationX,
       0,
@@ -377,15 +380,19 @@ export class TimelinePhysicsEngine {
    * using the EMA-smoothed velocity.
    */
   panEnd(_velocityX: number, now: number): void {
-    if (this._isPinchCooldown(now)) return
-
     // Handle drag ends — just clear state
     if (this._draggingHandle) {
       this._draggingHandle = null
       return
     }
 
+    // No drag in progress — panStart was blocked during pinch cooldown
+    if (!this._isDragging) return
+
     this._isDragging = false
+
+    // A pinch interrupted this drag — drop it without momentum or seek
+    if (this._isPinchCooldown(now)) return
 
     // Use EMA-smoothed velocity for momentum (ignoring raw gesture velocityX)
     this._velocity = this._emaVelocity

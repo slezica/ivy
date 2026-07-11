@@ -480,6 +480,58 @@ describe('TimelinePhysicsEngine', () => {
       // Should have moved
       expect(engine.scrollOffset).not.toBe(offsetBefore)
     })
+
+    it('clears drag state when pan ends during pinch cooldown', () => {
+      const { engine } = createEngine({ position: 10_000 })
+
+      // One-finger drag activates a pan
+      engine.panStart(200, 45, 0)
+      engine.panUpdate(-50, 16)
+
+      // Second finger down — pinch begins mid-pan, then both fingers lift.
+      // panEnd lands inside the 200ms cooldown after pinchEnd.
+      engine.pinchStart(32)
+      engine.pinchEnd(48)
+      engine.panEnd(0, 64)
+
+      // Drag state must not leak — the engine returns to idle
+      expect(engine.isActive).toBe(false)
+
+      // External position updates work again
+      engine.setExternalPosition(30_000, 300)
+      expect(engine.scrollOffset).toBeCloseTo(tx(30_000), 1)
+
+      // Tap-to-seek survives its first tick (not cancelled by a stale drag)
+      engine.touchDown(300, 45, 300)
+      engine.tap(300, 300)
+      expect(engine.tick(316)).toBe(true)
+    })
+
+    it('ignores pan updates when panStart was blocked during cooldown', () => {
+      const { engine, callbacks } = createEngine({ position: 10_000 })
+
+      // A previous pan leaves a stale drag start offset behind
+      engine.panStart(200, 45, 0)
+      engine.panUpdate(-50, 16)
+      engine.panEnd(0, 16)
+      callbacks.onSeek.mockClear()
+
+      // Pinch, then a pan begins inside the cooldown — panStart is blocked
+      engine.pinchStart(100)
+      engine.pinchEnd(150)
+      engine.panStart(200, 45, 200)
+
+      // The finger keeps moving past the end of the cooldown — updates must
+      // not resume against the stale drag start offset (no offset jump)
+      const offsetBefore = engine.scrollOffset
+      engine.panUpdate(-80, 400)
+      expect(engine.scrollOffset).toBe(offsetBefore)
+
+      // Releasing must not trigger momentum or a spurious seek
+      engine.panEnd(0, 420)
+      expect(engine.isActive).toBe(false)
+      expect(callbacks.onSeek).not.toHaveBeenCalled()
+    })
   })
 
   // --------------------------------------------------------------------------
