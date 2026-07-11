@@ -103,19 +103,19 @@ But it **cannot**:
 
 ### The `ClipWithFile` type
 
-The database returns clips enriched with source file metadata via a JOIN:
+The database returns clips enriched with source file metadata via a **LEFT JOIN**:
 
 ```typescript
 interface ClipWithFile extends Clip {
-  file_uri: string | null    // Source book's URI (null if archived)
-  file_name: string          // Book filename (preserved even when archived)
-  file_title: string | null  // Book title metadata
-  file_artist: string | null // Book artist metadata
-  file_duration: number      // Source book's full duration
+  file_uri: string | null    // Source book's URI (null if archived/deleted or book row missing)
+  file_name: string | null
+  file_title: string | null
+  file_artist: string | null
+  file_duration: number | null
 }
 ```
 
-This metadata is preserved in the `files` table even after archiving (soft-delete), so the clip always knows what book it came from, even if the audio is gone.
+Book metadata is preserved in the `files` table even after archiving or deletion (soft-delete), so the clip usually knows what book it came from even if the audio is gone. But the LEFT JOIN means the book **row** can also be missing entirely — a clip synced before its book arrived, or a book id retired by an identity merge — in which case *all* `file_*` fields are null, not just `file_uri`. Never assume `file_name` or `file_duration` are present.
 
 ---
 
@@ -125,11 +125,21 @@ Editing requires the source book's audio file — if the source is archived, edi
 
 ---
 
+## Deleting a Clip
+
+`deleteClip` removes the clip's audio file, deletes the database row, and queues a sync `delete`. Unlike book deletion (which is per-device), clip deletion is **global**: it propagates to every device via a sync tombstone. See [SYNC.md](SYNC.md).
+
+---
+
 ## Edge Cases
 
 ### Database reload after creation
 
 `addClip` calls `fetchClips()` after database insertion rather than manually constructing a `ClipWithFile`. This ensures the clip has correct source file metadata from the JOIN, avoiding stale or missing data.
+
+### Transcription results are persisted by the store
+
+The transcription queue never writes the database. Its `finish` event carries the text; the store's handler runs `updateClip(clipId, { transcription })`, which persists it and queues the clip for sync. An empty string is a valid result (silence/music) — only errored jobs skip persistence.
 
 ---
 
