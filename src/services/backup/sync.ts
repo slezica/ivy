@@ -188,10 +188,16 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
     try {
       // 1. Pull: process remote changes
-      await this.pullRemoteChanges(result, notification)
+      const pullInitialized = await this.pullRemoteChanges(result, notification)
 
-      // 2. Push: drain local outbox
-      await this.pushOutbox(result)
+      // 2. Push: drain local outbox. Gated on pull initialization (M9): before
+      // a successful bootstrap the manifest knows no remote file ids, so every
+      // push would create-new — duplicating files that already exist remotely.
+      if (pullInitialized) {
+        await this.pushOutbox(result)
+      } else {
+        log('Skipping push phase: pull bootstrap failed')
+      }
 
       // 3. Record sync time
       await this.db.setLastSyncTime(Date.now())
@@ -212,7 +218,11 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   // Pull Phase: Drive Changes
   // ---------------------------------------------------------------------------
 
-  private async pullRemoteChanges(result: SyncResult, notification: SyncNotification): Promise<void> {
+  /**
+   * Returns false when first-sync initialization (start token + full
+   * reconcile) failed — the caller must skip the push phase for this run.
+   */
+  private async pullRemoteChanges(result: SyncResult, notification: SyncNotification): Promise<boolean> {
     const checkpoint = this.db.getCheckpoint()
     let pageToken = checkpoint.last_page_token
 
@@ -222,10 +232,10 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         pageToken = await this.drive.getStartPageToken()
         await this.fullReconcile(result, notification)
         await this.db.setCheckpointPageToken(pageToken)
-        return
+        return true
       } catch (error) {
         result.errors.push(`Failed to initialize sync: ${error}`)
-        return
+        return false
       }
     }
 
@@ -291,6 +301,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         throw error
       }
     }
+
+    return true
   }
 
   /**

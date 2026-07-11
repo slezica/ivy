@@ -1140,6 +1140,54 @@ describe('sync scenarios', () => {
     })
   })
 
+  describe('bootstrap gating (M9)', () => {
+    it('skips the push phase when the start token cannot be fetched', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      // The book already lives on Drive (uploaded by A)
+      await addBook(deviceA)
+      await deviceA.sync.syncNow()
+
+      // B holds the same book and has it queued; its first sync fails to
+      // initialize the pull — pushing blind would create a twin of A's file
+      await addBook(deviceB)
+      await deviceB.db.queueChange('book', BOOK_ID, 'upsert')
+      drive.failNext('getStartPageToken', new Error('Network error'))
+      await deviceB.sync.syncNow()
+
+      expect([...drive.files.values()].filter(f => f.name === `book_${BOOK_ID}.json`)).toHaveLength(1)
+      expect(await deviceB.db.getOutboxItems()).toHaveLength(1) // still queued
+
+      // Next sync bootstraps and pushes normally — updating A's file in place
+      await deviceB.sync.syncNow()
+      expect([...drive.files.values()].filter(f => f.name === `book_${BOOK_ID}.json`)).toHaveLength(1)
+      expect(await deviceB.db.getOutboxItems()).toEqual([])
+    })
+
+    it('skips the push phase when the initial full reconcile fails', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await deviceA.sync.syncNow()
+
+      await addBook(deviceB)
+      await deviceB.db.queueChange('book', BOOK_ID, 'upsert')
+      drive.failNext('listFiles', new Error('Network error'))
+      await deviceB.sync.syncNow()
+
+      expect([...drive.files.values()].filter(f => f.name === `book_${BOOK_ID}.json`)).toHaveLength(1)
+      expect(await deviceB.db.getOutboxItems()).toHaveLength(1)
+
+      await deviceB.sync.syncNow()
+      expect([...drive.files.values()].filter(f => f.name === `book_${BOOK_ID}.json`)).toHaveLength(1)
+      expect(await deviceB.db.getOutboxItems()).toEqual([])
+    })
+  })
+
   describe('pull quarantine (poison pill)', () => {
     it('quarantines a repeatedly failing entity so the token advances, then keeps retrying it', async () => {
       const drive = new FakeDrive()
