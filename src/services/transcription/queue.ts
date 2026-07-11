@@ -125,6 +125,16 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
 
     if (!this.whisper.isReady()) {
       this.started = false
+
+      // Clips queued while starting will never be processed — fail them so
+      // listeners can clear their pending state. A later start() retries.
+      const abandoned = this.queue
+      this.queue = []
+
+      for (const clipId of abandoned) {
+        this.emit('finish', { clipId, error: lastError as Error })
+      }
+
       throw lastError
     }
 

@@ -270,6 +270,37 @@ describe('TranscriptionQueueService', () => {
       expect(deps.slicer.slice).toHaveBeenCalled()
     })
 
+    it('fails queued clips when initialization exhausts retries', async () => {
+      jest.useFakeTimers()
+
+      const deps = createMockDeps()
+      deps.whisper.initialize = jest.fn(() => Promise.reject(new Error('init failed')))
+      deps.whisper.isReady = jest.fn(() => false)
+
+      const service = new TranscriptionQueueService(deps)
+
+      const finished: { clipId: string; transcription?: string; error?: Error }[] = []
+      service.on('finish', (event) => finished.push(event))
+
+      const startPromise = service.start()
+
+      // Clip queued while the model is still initializing
+      service.queueClip('clip-1')
+
+      // Fast-forward through all retry delays
+      for (let i = 0; i < 3; i++) {
+        await Promise.resolve() // let the rejection propagate
+        jest.runAllTimers()
+      }
+
+      await expect(startPromise).rejects.toThrow('init failed')
+
+      // The queued clip was failed so listeners can clear pending state
+      expect(finished).toEqual([{ clipId: 'clip-1', error: expect.any(Error) }])
+
+      jest.useRealTimers()
+    })
+
     it('retries initialization on a fresh start() after failure', async () => {
       jest.useFakeTimers()
 
