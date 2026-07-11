@@ -85,6 +85,12 @@ async function handleDuplicate(ctx: Context, bookId: string) {
 
   await copier.cancelCopy(opId)
 
+  // The user may have cancelled while we were aborting — don't touch the book
+  if (wasCancelled(ctx)) {
+    ctx.log('Cancelled before duplicate touch')
+    return
+  }
+
   await db.touchBook(bookId)
   await syncQueue.queueChange('book', bookId, 'upsert')
 
@@ -107,11 +113,26 @@ async function handleNewBook(
   const destPath = await copyFile(ctx, bookId, file.name)
   const fileUri = `file://${destPath}`
 
+  // A cancel that lands after the copy finished resolves silently on the native
+  // side — check the op is still ours before going any further
+  if (wasCancelled(ctx)) {
+    await files.deleteFile(fileUri).catch(() => {})
+    ctx.log('Cancelled after copy completed')
+    return
+  }
+
   try {
     const [{ title, artist, artwork, duration }, chapters] = await Promise.all([
       metadata.readMetadata(fileUri),
       chapterReader.readChapters(fileUri),
     ])
+
+    // Check again right before the DB write — metadata extraction takes time
+    if (wasCancelled(ctx)) {
+      await files.deleteFile(fileUri).catch(() => {})
+      ctx.log('Cancelled before DB write')
+      return
+    }
 
     if (existingBook) {
       await db.restoreBook(
@@ -206,4 +227,9 @@ function getExtension(filename: string): string {
 
 function isCancellation(error: unknown): boolean {
   return error instanceof Error && (error as any).code === 'CANCELLED'
+}
+
+/** True when cancelLoadFile has released or replaced this operation's claim on the library. */
+function wasCancelled(ctx: Context): boolean {
+  return ctx.get().library.addOpId !== ctx.opId
 }

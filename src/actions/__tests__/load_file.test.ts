@@ -533,4 +533,89 @@ describe('createLoadFile', () => {
       expect(deps.files.deleteFile).not.toHaveBeenCalled()
     })
   })
+
+  // -- Late cancellation (cancel lands after the native op already completed) --
+
+  describe('late cancellation', () => {
+    // What cancelLoadFile does synchronously: reset library and release the op ID
+    function simulateCancel(state: ReturnType<typeof createMockState>) {
+      state.library.status = 'idle'
+      state.library.addProgress = null
+      state.library.addOpId = null
+      state.library.message = null
+    }
+
+    it('cancel landing after commitCopy: no book row, file deleted, library stays reset', async () => {
+      const state = createMockState()
+      const deps = createMockDeps({
+        copier: createMockCopier({
+          commitCopy: jest.fn(async () => {
+            simulateCancel(state)
+            return { hash: 'abc123', bytesWritten: 1024 }
+          }),
+        }),
+        set: createImmerSet(state),
+        get: createMockGet(state),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.upsertBook).not.toHaveBeenCalled()
+      expect(deps.db.restoreBook).not.toHaveBeenCalled()
+      expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
+      expect(deps.files.deleteFile).toHaveBeenCalledWith(
+        expect.stringContaining('generated-id-1'),
+      )
+      expect(state.library).toMatchObject({
+        status: 'idle', addProgress: null, addOpId: null, message: null,
+      })
+    })
+
+    it('cancel landing during metadata extraction: no book row, file deleted', async () => {
+      const state = createMockState()
+      const deps = createMockDeps({
+        metadata: createMockMetadata({
+          readMetadata: jest.fn(async () => {
+            simulateCancel(state)
+            return { title: 'T', artist: 'A', artwork: null, duration: 60000 }
+          }),
+        }),
+        set: createImmerSet(state),
+        get: createMockGet(state),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.upsertBook).not.toHaveBeenCalled()
+      expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
+      expect(deps.files.deleteFile).toHaveBeenCalledWith(
+        expect.stringContaining('generated-id-1'),
+      )
+      expect(state.library.status).toBe('idle')
+    })
+
+    it('cancel landing during duplicate handling: existing book is not touched', async () => {
+      const state = createMockState()
+      const activeBook = createMockBook({ id: 'active-1', uri: 'file:///audio/active-1.mp3' })
+      const deps = createMockDeps({
+        db: createMockDb({
+          getBookByFingerprint: jest.fn(() => activeBook),
+        }),
+        copier: createMockCopier({
+          cancelCopy: jest.fn(async () => { simulateCancel(state) }),
+        }),
+        set: createImmerSet(state),
+        get: createMockGet(state),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.touchBook).not.toHaveBeenCalled()
+      expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
+      expect(state.library.status).toBe('idle') // not 'duplicate'
+    })
+  })
 })
