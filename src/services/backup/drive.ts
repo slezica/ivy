@@ -29,6 +29,17 @@ export interface DriveFile {
   modifiedTime?: string  // ISO 8601 timestamp from Drive
 }
 
+/** Drive REST error carrying the HTTP status, for callers that branch on it (e.g. 404). */
+export class DriveApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'DriveApiError'
+    this.status = status
+  }
+}
+
 export class GoogleDriveService {
   private auth: GoogleAuthService
   private rootFolderId: string | null = null
@@ -298,7 +309,7 @@ export class GoogleDriveService {
 
     if (!initResponse.ok) {
       const errorText = await initResponse.text()
-      throw new Error(`Failed to init update: ${initResponse.status} - ${errorText}`)
+      throw new DriveApiError(`Failed to init update: ${initResponse.status} - ${errorText}`, initResponse.status)
     }
 
     const uploadUri = initResponse.headers.get('Location')
@@ -314,7 +325,7 @@ export class GoogleDriveService {
 
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse.text()
-      throw new Error(`Failed to upload update: ${uploadResponse.status} - ${errorText}`)
+      throw new DriveApiError(`Failed to upload update: ${uploadResponse.status} - ${errorText}`, uploadResponse.status)
     }
 
     const data = await uploadResponse.json()

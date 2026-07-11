@@ -578,6 +578,109 @@ describe('sync scenarios', () => {
     })
   })
 
+  describe('404 fallback: create on dead remote id', () => {
+    it('recreates the book JSON and heals the manifest when the remote was purged', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+      const errors = trackSyncErrors(device)
+
+      await addBook(device)
+      await device.sync.syncNow()
+      await device.sync.syncNow() // consume the upload echo
+      const deadId = drive.getFileByName(`book_${BOOK_ID}.json`)!.id
+      drive.removeFile(deadId) // user purged Drive out-of-band
+
+      await device.db.updateBookMetadata(BOOK_ID, 'New Title', null)
+      const edited = await device.db.getBookById(BOOK_ID)
+      await device.db.queueChange('book', BOOK_ID, 'upsert', edited!.updated_at)
+      await device.sync.syncNow()
+
+      expect(errors[errors.length - 1]).toBeNull()
+      const file = drive.getFileByName(`book_${BOOK_ID}.json`)!
+      expect(file.id).not.toBe(deadId)
+      expect(drive.readJson(`book_${BOOK_ID}.json`).title).toBe('New Title')
+      expect((await device.db.getManifestEntry('book', BOOK_ID))!.remote_file_id).toBe(file.id)
+      expect(await device.db.getOutboxItems(Number.MAX_SAFE_INTEGER)).toEqual([])
+    })
+
+    it('recreates the clip JSON while updating the audio in place', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+      const errors = trackSyncErrors(device)
+
+      await addBook(device)
+      await addClip(device)
+      await device.sync.syncNow()
+      await device.sync.syncNow()
+      const deadJsonId = drive.getFileByName(`clip_${CLIP_ID}.json`)!.id
+      const audioId = drive.getFileByName(`clip_${CLIP_ID}.m4a`)!.id
+      drive.removeFile(deadJsonId)
+
+      await device.db.updateClip(CLIP_ID, { note: 'Edited' })
+      const edited = await device.db.getClip(CLIP_ID)
+      await device.db.queueChange('clip', CLIP_ID, 'upsert', edited!.updated_at)
+      await device.sync.syncNow()
+
+      expect(errors[errors.length - 1]).toBeNull()
+      const jsonFile = drive.getFileByName(`clip_${CLIP_ID}.json`)!
+      expect(jsonFile.id).not.toBe(deadJsonId)
+      expect(drive.readJson(`clip_${CLIP_ID}.json`).note).toBe('Edited')
+      expect(drive.getFileByName(`clip_${CLIP_ID}.m4a`)!.id).toBe(audioId) // untouched id
+      const manifest = await device.db.getManifestEntry('clip', CLIP_ID)
+      expect(manifest!.remote_file_id).toBe(jsonFile.id)
+      expect(manifest!.remote_audio_file_id).toBe(audioId)
+    })
+
+    it('recreates the clip audio while updating the JSON in place', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+      const errors = trackSyncErrors(device)
+
+      await addBook(device)
+      await addClip(device)
+      await device.sync.syncNow()
+      await device.sync.syncNow()
+      const jsonId = drive.getFileByName(`clip_${CLIP_ID}.json`)!.id
+      const deadAudioId = drive.getFileByName(`clip_${CLIP_ID}.m4a`)!.id
+      drive.removeFile(deadAudioId)
+
+      await device.db.updateClip(CLIP_ID, { note: 'Edited' })
+      const edited = await device.db.getClip(CLIP_ID)
+      await device.db.queueChange('clip', CLIP_ID, 'upsert', edited!.updated_at)
+      await device.sync.syncNow()
+
+      expect(errors[errors.length - 1]).toBeNull()
+      const audioFile = drive.getFileByName(`clip_${CLIP_ID}.m4a`)!
+      expect(audioFile.id).not.toBe(deadAudioId)
+      expect(drive.getFileByName(`clip_${CLIP_ID}.json`)!.id).toBe(jsonId) // untouched id
+      const manifest = await device.db.getManifestEntry('clip', CLIP_ID)
+      expect(manifest!.remote_file_id).toBe(jsonId)
+      expect(manifest!.remote_audio_file_id).toBe(audioFile.id)
+    })
+
+    it('recreates the session JSON when the remote was purged', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+      const errors = trackSyncErrors(device)
+
+      await addBook(device)
+      const session = await device.db.createSession(BOOK_ID)
+      await device.db.queueChange('session', session.id, 'upsert', session.updated_at)
+      await device.sync.syncNow()
+      await device.sync.syncNow()
+      const deadId = drive.getFileByName(`session_${session.id}.json`)!.id
+      drive.removeFile(deadId)
+
+      await device.db.queueChange('session', session.id, 'upsert', session.updated_at)
+      await device.sync.syncNow()
+
+      expect(errors[errors.length - 1]).toBeNull()
+      const file = drive.getFileByName(`session_${session.id}.json`)!
+      expect(file.id).not.toBe(deadId)
+      expect((await device.db.getManifestEntry('session', session.id))!.remote_file_id).toBe(file.id)
+    })
+  })
+
   it('re-delivers a failed remote change by holding the page token', async () => {
     const drive = new FakeDrive()
     const deviceA = createSyncHarness(drive)

@@ -10,6 +10,7 @@ import { DatabaseService } from '../../storage'
 import { createTestDatabase } from '../../storage/__tests__/sqlite_adapter'
 import { BackupSyncService } from '../sync'
 import type { GoogleDriveService, DriveFile, BackupFolder } from '../drive'
+import { DriveApiError } from '../drive'
 import type { GoogleAuthService } from '../auth'
 
 // -----------------------------------------------------------------------------
@@ -110,7 +111,7 @@ export class FakeDrive {
   async updateFile(fileId: string, content: string | Uint8Array): Promise<DriveFile> {
     this.maybeFail('updateFile')
     const file = this.files.get(fileId)
-    if (!file) throw new Error('Failed to init update: 404 - File not found')
+    if (!file) throw new DriveApiError('Failed to init update: 404 - File not found', 404)
     file.content = content
     this.recordChange(fileId, false)
     return toDriveFile(file)

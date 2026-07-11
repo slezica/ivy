@@ -11,7 +11,7 @@
 
 import RNFS from 'react-native-fs'
 import { DatabaseService, Book, Clip, Session, SyncOutboxItem } from '../storage'
-import { GoogleDriveService, DriveFile } from './drive'
+import { GoogleDriveService, DriveFile, DriveApiError, BackupFolder } from './drive'
 import { GoogleAuthService } from './auth'
 import { BaseService } from '../base'
 import {
@@ -690,6 +690,26 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   // Upload (Push Local → Remote)
   // ---------------------------------------------------------------------------
 
+  /**
+   * Update a remote file in place, falling back to create-new when the remote
+   * id is dead (404 — user cleanup, trash purge). The caller records the
+   * returned id in its manifest entry, healing the dead reference.
+   */
+  private async updateOrRecreateFile(
+    fileId: string,
+    folder: BackupFolder,
+    filename: string,
+    content: string | Uint8Array,
+  ): Promise<DriveFile> {
+    try {
+      return await this.drive.updateFile(fileId, content)
+    } catch (error) {
+      if (!(error instanceof DriveApiError) || error.status !== 404) throw error
+      log(`Remote file ${fileId} for ${filename} is gone (404) — creating anew`)
+      return this.drive.uploadFile(folder, filename, content)
+    }
+  }
+
   private async uploadBook(book: Book, outboxItem: SyncOutboxItem, result: SyncResult): Promise<void> {
     const backup: BookBackup = {
       id: book.id,
@@ -711,7 +731,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
     const manifest = await this.db.getManifestEntry('book', book.id)
     const uploaded = manifest?.remote_file_id
-      ? await this.drive.updateFile(manifest.remote_file_id, content)
+      ? await this.updateOrRecreateFile(manifest.remote_file_id, 'books', filename, content)
       : await this.drive.uploadFile('books', filename, content)
 
     await this.db.upsertManifestEntry({
@@ -754,9 +774,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     const manifest = await this.db.getManifestEntry('clip', clip.id)
 
     // Upload JSON (update or create)
-    const isJsonUpdate = !!manifest?.remote_file_id
-    const jsonFile = isJsonUpdate
-      ? await this.drive.updateFile(manifest!.remote_file_id!, jsonContent)
+    const jsonFile = manifest?.remote_file_id
+      ? await this.updateOrRecreateFile(manifest.remote_file_id, 'clips', jsonFilename, jsonContent)
       : await this.drive.uploadFile('clips', jsonFilename, jsonContent)
 
     // Upload audio (update or create, with size check)
@@ -773,11 +792,13 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const audioBytes = base64ToUint8Array(audioBase64)
 
       audioFile = audioFileId
-        ? await this.drive.updateFile(audioFileId, audioBytes)
+        ? await this.updateOrRecreateFile(audioFileId, 'clips', audioFilename, audioBytes)
         : await this.drive.uploadFile('clips', audioFilename, audioBytes)
     } catch (audioError) {
-      // Rollback: if we created a new JSON file (not update-in-place), delete it
-      if (!isJsonUpdate) {
+      // Rollback: if the JSON file was created (first upload or 404 fallback,
+      // where its id differs from the manifest's), delete it — update-in-place
+      // needs no rollback
+      if (jsonFile.id !== manifest?.remote_file_id) {
         await this.drive.deleteFile(jsonFile.id).catch(() => {})
       }
       throw audioError
@@ -817,7 +838,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
     const manifest = await this.db.getManifestEntry('session', session.id)
     const uploaded = manifest?.remote_file_id
-      ? await this.drive.updateFile(manifest.remote_file_id, content)
+      ? await this.updateOrRecreateFile(manifest.remote_file_id, 'sessions', filename, content)
       : await this.drive.uploadFile('sessions', filename, content)
 
     await this.db.upsertManifestEntry({
