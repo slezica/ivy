@@ -134,21 +134,47 @@ describe('DatabaseService (real SQLite)', () => {
       expect(items[0].updated_at_when_queued).toBe(2000)
     })
 
-    it('resets attempts and last_error on re-queue', async () => {
+    it('resets attempts, last_error and backoff on re-queue', async () => {
       const db = createDb()
       await db.queueChange('book', 'book-1', 'upsert', 1000)
-      await db.updateOutboxItemAttempt('book', 'book-1', 'network error')
-      await db.updateOutboxItemAttempt('book', 'book-1', 'network error')
+      await db.updateOutboxItemAttempt('book', 'book-1', 'network error', 5000, 1000)
+      await db.updateOutboxItemAttempt('book', 'book-1', 'network error', 9000, 1000)
 
-      let items = await db.getOutboxItems()
+      let items = await db.getOutboxItems(9000)
       expect(items[0].attempts).toBe(2)
       expect(items[0].last_error).toBe('network error')
+      expect(items[0].next_attempt_at).toBe(9000)
 
       await db.queueChange('book', 'book-1', 'upsert', 2000)
 
-      items = await db.getOutboxItems()
+      items = await db.getOutboxItems(0)
       expect(items[0].attempts).toBe(0)
       expect(items[0].last_error).toBeNull()
+      expect(items[0].next_attempt_at).toBe(0)
+    })
+
+    it('holds items back until next_attempt_at', async () => {
+      const db = createDb()
+      await db.queueChange('book', 'book-1', 'upsert', 1000)
+      await db.updateOutboxItemAttempt('book', 'book-1', 'boom', 5000, 1000)
+
+      expect(await db.getOutboxItems(4999)).toEqual([])
+      expect(await db.getOutboxItems(5000)).toHaveLength(1)
+    })
+
+    it('ignores a failure report for an old version (conditional attempt update)', async () => {
+      const db = createDb()
+      await db.queueChange('book', 'book-1', 'upsert', 1000)
+      // Entity re-queued fresh mid-flight (stale detection)
+      await db.queueChange('book', 'book-1', 'upsert', 2000)
+
+      // The in-flight push fails for the OLD version — must not stamp backoff
+      await db.updateOutboxItemAttempt('book', 'book-1', 'boom', 99999, 1000)
+
+      const items = await db.getOutboxItems(0)
+      expect(items).toHaveLength(1)
+      expect(items[0].attempts).toBe(0)
+      expect(items[0].next_attempt_at).toBe(0)
     })
 
     it('keeps a re-queued row when removing with a stale timestamp (H1)', async () => {
@@ -178,7 +204,7 @@ describe('DatabaseService (real SQLite)', () => {
       await db.queueChange('book', 'book-1', 'upsert', 1000)
       await db.queueChange('clip', 'clip-1', 'upsert', 1000)
       for (let i = 0; i < 5; i++) {
-        await db.updateOutboxItemAttempt('clip', 'clip-1', 'boom')
+        await db.updateOutboxItemAttempt('clip', 'clip-1', 'boom', 0, 1000)
       }
 
       expect(await db.getOutboxItems()).toHaveLength(2)
@@ -190,7 +216,7 @@ describe('DatabaseService (real SQLite)', () => {
       await db.queueChange('book', 'book-1', 'upsert', 1000)
       await db.queueChange('clip', 'clip-1', 'upsert', 1000)
       for (let i = 0; i < 3; i++) {
-        await db.updateOutboxItemAttempt('clip', 'clip-1', 'boom')
+        await db.updateOutboxItemAttempt('clip', 'clip-1', 'boom', 0, 1000)
       }
 
       expect(await db.getFailingCount()).toBe(1)

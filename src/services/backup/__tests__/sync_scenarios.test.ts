@@ -146,15 +146,65 @@ describe('sync scenarios', () => {
     drive.failNext('uploadFile', new Error('Network error'))
     await device.sync.syncNow()
 
-    const items = await device.db.getOutboxItems()
+    const items = await device.db.getOutboxItems(Number.MAX_SAFE_INTEGER)
     expect(items).toHaveLength(1)
     expect(items[0].attempts).toBe(1)
     expect(items[0].last_error).toBe('Network error')
 
+    now += 30_000 // first backoff window (2^0 × 30s)
     await device.sync.syncNow()
 
-    expect(await device.db.getOutboxItems()).toEqual([])
+    expect(await device.db.getOutboxItems(Number.MAX_SAFE_INTEGER)).toEqual([])
     expect(drive.getFileByName(`book_${BOOK_ID}.json`)).toBeDefined()
+  })
+
+  it('respects the backoff schedule before retrying a failed push', async () => {
+    const drive = new FakeDrive()
+    const device = createSyncHarness(drive)
+
+    await addBook(device)
+    drive.failNext('uploadFile', new Error('Network error'), 2)
+    await device.sync.syncNow() // attempt 1 fails → 30s backoff
+
+    // Before the window elapses the item is held back — no upload attempted
+    await device.sync.syncNow()
+    expect(drive.getFileByName(`book_${BOOK_ID}.json`)).toBeUndefined()
+    let [item] = await device.db.getOutboxItems(Number.MAX_SAFE_INTEGER)
+    expect(item.attempts).toBe(1)
+
+    now += 30_000
+    await device.sync.syncNow() // attempt 2 fails → backoff doubles to 60s
+
+    ;[item] = await device.db.getOutboxItems(Number.MAX_SAFE_INTEGER)
+    expect(item.attempts).toBe(2)
+
+    now += 30_000 // only half the doubled window — still held back
+    await device.sync.syncNow()
+    expect(drive.getFileByName(`book_${BOOK_ID}.json`)).toBeUndefined()
+
+    now += 30_000 // full 60s elapsed — retried and succeeds
+    await device.sync.syncNow()
+    expect(drive.getFileByName(`book_${BOOK_ID}.json`)).toBeDefined()
+    expect(await device.db.getOutboxItems(Number.MAX_SAFE_INTEGER)).toEqual([])
+  })
+
+  it('resets backoff when the entity is re-queued by a fresh edit', async () => {
+    const drive = new FakeDrive()
+    const device = createSyncHarness(drive)
+
+    await addBook(device)
+    drive.failNext('uploadFile', new Error('Network error'))
+    await device.sync.syncNow() // push fails → 30s backoff stamped
+
+    // A fresh local edit re-queues the entity — the backoff must reset
+    await device.db.updateBookMetadata(BOOK_ID, 'New Title', null)
+    const edited = await device.db.getBookById(BOOK_ID)
+    await device.db.queueChange('book', BOOK_ID, 'upsert', edited!.updated_at)
+
+    await device.sync.syncNow() // no waiting — pushed immediately
+
+    expect(drive.readJson(`book_${BOOK_ID}.json`).title).toBe('New Title')
+    expect(await device.db.getOutboxItems(Number.MAX_SAFE_INTEGER)).toEqual([])
   })
 
   describe('books: local-only hidden', () => {

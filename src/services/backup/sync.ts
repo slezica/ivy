@@ -46,6 +46,10 @@ export type BackupSyncEvents = {
 // Max upload size for clip audio (50MB)
 const MAX_CLIP_SIZE = 50 * 1024 * 1024
 
+// Push retry backoff: 30s doubling per attempt, capped at 6 hours
+const BACKOFF_BASE_MS = 30_000
+const BACKOFF_MAX_MS = 6 * 60 * 60 * 1000
+
 // -----------------------------------------------------------------------------
 // Service
 // -----------------------------------------------------------------------------
@@ -644,7 +648,11 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         await this.db.removeOutboxItem(item.entity_type, item.entity_id, item.updated_at_when_queued)
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
-        await this.db.updateOutboxItemAttempt(item.entity_type, item.entity_id, msg)
+        const backoff = Math.min(2 ** item.attempts * BACKOFF_BASE_MS, BACKOFF_MAX_MS)
+        await this.db.updateOutboxItemAttempt(
+          item.entity_type, item.entity_id, msg,
+          Date.now() + backoff, item.updated_at_when_queued,
+        )
         result.errors.push(`Push ${item.entity_type}:${item.entity_id}: ${msg}`)
       }
     }

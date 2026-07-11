@@ -105,7 +105,7 @@ If Drive returns an invalid token (410), the engine clears the checkpoint and fa
 
 ### Step 2: Push — Drain Local Outbox
 
-1. Read all pending outbox items (under max attempts).
+1. Read all pending outbox items that are due (`next_attempt_at <= now`).
 2. For each item:
    - Read the local entity.
    - Look up the manifest for an existing remote file ID.
@@ -114,6 +114,8 @@ If Drive returns an invalid token (410), the engine clears the checkpoint and fa
    - If the entity was modified during upload (stale), re-queue instead of clearing.
    - Otherwise, clear the outbox entry and update the manifest.
    - `delete` operations don't upload — they rewrite the remote JSON as a tombstone (see [Clip and Session Deletion: Tombstones](#clip-and-session-deletion-tombstones)).
+
+**Failure policy: retry forever with backoff.** A failed push stamps `next_attempt_at = now + min(2^attempts × 30s, 6h)` and increments `attempts` — items are never abandoned. The stamp is conditional on `updated_at_when_queued` (like outbox removal), so a failure reported for an old version never delays a row that was re-queued fresh mid-flight; re-queueing resets `attempts` and the backoff. Items with `attempts >= 3` are surfaced in Settings as failing (still retried).
 
 ### Step 3: Notify
 

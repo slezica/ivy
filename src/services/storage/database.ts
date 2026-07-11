@@ -1015,10 +1015,12 @@ export class DatabaseService {
     )
   }
 
-  async updateOutboxItemAttempt(entityType: SyncEntityType, entityId: string, error: string | null): Promise<void> {
+  async updateOutboxItemAttempt(entityType: SyncEntityType, entityId: string, error: string | null, nextAttemptAt: number, queuedUpdatedAt: number): Promise<void> {
+    // Conditional update, symmetric with removeOutboxItem: a failure for an old
+    // version must not stamp backoff onto a row re-queued fresh mid-flight
     await this.db.runAsync(
-      'UPDATE sync_queue SET attempts = attempts + 1, last_error = ? WHERE entity_type = ? AND entity_id = ?',
-      [error, entityType, entityId]
+      'UPDATE sync_queue SET attempts = attempts + 1, last_error = ?, next_attempt_at = ? WHERE entity_type = ? AND entity_id = ? AND updated_at_when_queued = ?',
+      [error, nextAttemptAt, entityType, entityId, queuedUpdatedAt]
     )
   }
 }

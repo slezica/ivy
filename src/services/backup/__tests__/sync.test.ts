@@ -630,7 +630,8 @@ describe('BackupSyncService', () => {
       const service = new BackupSyncService(db, drive, auth)
       await service.syncNow()
 
-      expect(db.updateOutboxItemAttempt).toHaveBeenCalledWith('book', BOOK_ID, 'Network error')
+      // Backoff stamped conditionally on the queued version
+      expect(db.updateOutboxItemAttempt).toHaveBeenCalledWith('book', BOOK_ID, 'Network error', expect.any(Number), 1000)
       expect(db.removeOutboxItem).not.toHaveBeenCalled()
     })
 
