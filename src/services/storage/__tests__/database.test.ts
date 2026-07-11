@@ -91,6 +91,52 @@ describe('DatabaseService (real SQLite)', () => {
     })
   })
 
+  describe('getLastPlayedBook', () => {
+    it('prefers a played book over a more recently edited one', async () => {
+      const db = createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book 1', 60000, 0)
+      await db.upsertBook('book-2', 'file:///audio/book-2.mp3', 'Book 2', 60000, 0)
+
+      db.updateBookPosition('book-1', 1000)  // real playback stamps last_played_at
+      await Promise.resolve()                // fire-and-forget write settles
+      await db.updateBookMetadata('book-2', 'Edited Title', null) // bumps updated_at only
+
+      expect(db.getLastPlayedBook()!.id).toBe('book-1')
+    })
+
+    it('falls back to updated_at for rows that were never played', async () => {
+      const db = createDb()
+      const base = Date.now()
+      const spy = jest.spyOn(Date, 'now')
+
+      spy.mockReturnValue(base)
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book 1', 60000, 0)
+      spy.mockReturnValue(base + 1000)
+      await db.upsertBook('book-2', 'file:///audio/book-2.mp3', 'Book 2', 60000, 0)
+      spy.mockRestore()
+
+      // No last_played_at anywhere (legacy rows) — most recently updated wins
+      expect(db.getLastPlayedBook()!.id).toBe('book-2')
+    })
+
+    it('is not stolen by a remote sync upsert (last_played_at is local-only)', async () => {
+      const db = createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book 1', 60000, 0)
+      await db.upsertBook('book-2', 'file:///audio/book-2.mp3', 'Book 2', 60000, 0)
+      db.updateBookPosition('book-1', 1000)
+      await Promise.resolve()
+
+      // Remote change applied by sync carries a much newer updated_at
+      await db.restoreBookFromBackup(
+        'book-2', 'Book 2', 60000, 9000,
+        Date.now() + 10_000, 'other-device',
+        null, null, null, 1024, FINGERPRINT,
+      )
+
+      expect(db.getLastPlayedBook()!.id).toBe('book-1')
+    })
+  })
+
   describe('clip and session joins', () => {
     it('lists clips whose book is missing, with null file fields', async () => {
       const db = createDb()

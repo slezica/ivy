@@ -282,6 +282,11 @@ const migrations: Migration[] = [
   (db) => {
     db.execSync('ALTER TABLE sync_manifest ADD COLUMN remote_audio_version TEXT')
   },
+
+  // Migration 7: Add last_played_at to files (local-only, drives startup auto-load)
+  (db) => {
+    db.execSync('ALTER TABLE files ADD COLUMN last_played_at INTEGER')
+  },
 ]
 
 // =============================================================================
@@ -380,9 +385,14 @@ export class DatabaseService {
     return row ? toBook(row) : null
   }
 
+  // last_played_at is local-only (never synced) and written exclusively by real
+  // playback (updateBookPosition), so edits and remote upserts can't steal
+  // auto-load. It is NULL for legacy and never-played rows: COALESCE ranks any
+  // played book first, and updated_at breaks the tie among the rest
+  // (pre-migration behavior).
   getLastPlayedBook(): Book | null {
     const row = this.db.getFirstSync<BookRow>(
-      'SELECT * FROM files WHERE hidden = 0 AND uri IS NOT NULL ORDER BY updated_at DESC LIMIT 1'
+      'SELECT * FROM files WHERE hidden = 0 AND uri IS NOT NULL ORDER BY COALESCE(last_played_at, 0) DESC, updated_at DESC LIMIT 1'
     )
     return row ? toBook(row) : null
   }
@@ -481,8 +491,8 @@ export class DatabaseService {
   updateBookPosition(id: string, position: number): void {
     const now = Date.now()
     this.db.runAsync(
-      'UPDATE files SET position = ?, updated_at = ?, updated_by = ? WHERE id = ?',
-      [position, now, this.deviceId, id]
+      'UPDATE files SET position = ?, updated_at = ?, updated_by = ?, last_played_at = ? WHERE id = ?',
+      [position, now, this.deviceId, now, id]
     ).catch((error) => {
       // Silently ignore during app transitions/resets
       console.debug('Failed to update book position (non-critical):', error)
