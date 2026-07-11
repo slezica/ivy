@@ -10,6 +10,7 @@ jest.mock('react-native-fs', () => ({
   writeFile: jest.fn().mockResolvedValue(undefined),
   unlink: jest.fn().mockResolvedValue(undefined),
   copyFile: jest.fn().mockResolvedValue(undefined),
+  stat: jest.fn().mockResolvedValue({ size: 1024 }),
 }))
 
 // Mock expo-sqlite
