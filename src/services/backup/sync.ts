@@ -1003,11 +1003,20 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     }
 
     for (const [clipId, { json, audio }] of clipsByClipId) {
-      if (!json || !audio) continue
+      if (!json) continue
 
       try {
         const content = await this.drive.downloadFile(json.id, false) as string
         const remote: ClipBackup = JSON.parse(content)
+
+        // Tombstones have no audio file — branch on deleted before requiring one
+        if (remote.deleted) {
+          await this.applyClipTombstone(remote, json.id, result, notification)
+          continue
+        }
+
+        if (!audio) continue // live clips need their audio file
+
         const local = await this.db.getClip(clipId)
 
         if (!local) {
@@ -1041,6 +1050,12 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       try {
         const content = await this.drive.downloadFile(file.id, false) as string
         const remote: SessionBackup = JSON.parse(content)
+
+        if (remote.deleted) {
+          await this.applySessionTombstone(remote, file.id, result, notification)
+          continue
+        }
+
         const local = await this.db.getSessionById(parsed.id)
 
         if (!local) {

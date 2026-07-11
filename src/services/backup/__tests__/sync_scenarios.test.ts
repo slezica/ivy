@@ -459,6 +459,56 @@ describe('sync scenarios', () => {
       expect(drive.readJson(`clip_${CLIP_ID}.json`)).toEqual(tombstoneBefore)
     })
 
+    it('applies tombstones during a full reconcile', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await addClip(deviceA)
+      const session = await deviceA.db.createSession(BOOK_ID)
+      await deviceA.db.queueChange('session', session.id, 'upsert', session.updated_at)
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow() // B bootstraps clip and session
+      const errors = trackSyncErrors(deviceB)
+
+      await deleteClip(deviceA)
+      await deviceA.db.deleteSession(session.id)
+      await deviceA.db.queueChange('session', session.id, 'delete')
+      await deviceA.sync.syncNow()
+
+      // B lost its page token — recovery goes through the full reconcile path
+      await deviceB.db.clearCheckpoint()
+      await deviceB.sync.syncNow()
+
+      expect(errors).toEqual([null])
+      expect(await deviceB.db.getClip(CLIP_ID)).toBeNull()
+      expect(await deviceB.db.getSessionById(session.id)).toBeNull()
+      expect(await deviceB.db.getOutboxItems()).toEqual([])
+    })
+
+    it('ignores tombstones for never-seen entities on bootstrap', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await addClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow()
+      await deleteClip(deviceA)
+      await deviceA.sync.syncNow()
+
+      // A fresh device bootstraps after the tombstone exists
+      const deviceC = createSyncHarness(drive)
+      const errors = trackSyncErrors(deviceC)
+      await deviceC.sync.syncNow()
+
+      expect(errors).toEqual([null])
+      expect(await deviceC.db.getBookById(BOOK_ID)).not.toBeNull()
+      expect(await deviceC.db.getClip(CLIP_ID)).toBeNull()
+    })
+
     it('applies its own tombstone echo as a graceful no-op', async () => {
       const drive = new FakeDrive()
       const device = createSyncHarness(drive)
