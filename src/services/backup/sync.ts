@@ -46,9 +46,6 @@ export type BackupSyncEvents = {
 // Max upload size for clip audio (50MB)
 const MAX_CLIP_SIZE = 50 * 1024 * 1024
 
-// Max outbox retry attempts
-const MAX_ATTEMPTS = 3
-
 // -----------------------------------------------------------------------------
 // Service
 // -----------------------------------------------------------------------------
@@ -639,7 +636,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   // ---------------------------------------------------------------------------
 
   private async pushOutbox(result: SyncResult): Promise<void> {
-    const items = await this.db.getOutboxItems(MAX_ATTEMPTS)
+    const items = await this.db.getOutboxItems(Date.now())
 
     for (const item of items) {
       try {

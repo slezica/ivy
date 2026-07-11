@@ -422,6 +422,7 @@ describe('BackupSyncService', () => {
         queued_at: 1000,
         attempts: 0,
         last_error: null,
+        next_attempt_at: 0,
       }])
       db.getBookById.mockResolvedValue(book)
 
@@ -448,6 +449,7 @@ describe('BackupSyncService', () => {
         queued_at: 1000,
         attempts: 0,
         last_error: null,
+        next_attempt_at: 0,
       }])
       db.getBookById.mockResolvedValue(book)
       db.getManifestEntry.mockResolvedValue({
@@ -483,6 +485,7 @@ describe('BackupSyncService', () => {
         queued_at: 1000,
         attempts: 0,
         last_error: null,
+        next_attempt_at: 0,
       }])
       db.getBookById.mockResolvedValue(book)
       db.getManifestEntry.mockResolvedValue(null)
@@ -510,6 +513,7 @@ describe('BackupSyncService', () => {
         queued_at: 1000,
         attempts: 0,
         last_error: null,
+        next_attempt_at: 0,
       }])
 
       // First getBookById call (for upload): returns original
@@ -558,6 +562,7 @@ describe('BackupSyncService', () => {
         queued_at: 1000,
         attempts: 0,
         last_error: null,
+        next_attempt_at: 0,
       }])
 
       // Entity is modified during upload: the stale check re-queues it
@@ -588,6 +593,7 @@ describe('BackupSyncService', () => {
         queued_at: 1000,
         attempts: 0,
         last_error: null,
+        next_attempt_at: 0,
       }])
 
       // Both calls return same updated_at
@@ -615,6 +621,7 @@ describe('BackupSyncService', () => {
         queued_at: 1000,
         attempts: 0,
         last_error: null,
+        next_attempt_at: 0,
       }])
 
       db.getBookById.mockResolvedValue(createBook())
@@ -642,6 +649,7 @@ describe('BackupSyncService', () => {
         queued_at: 1000,
         attempts: 0,
         last_error: null,
+        next_attempt_at: 0,
       }])
 
       db.getManifestEntry.mockResolvedValue({
@@ -696,6 +704,7 @@ describe('BackupSyncService', () => {
         queued_at: 1000,
         attempts: 0,
         last_error: null,
+        next_attempt_at: 0,
       }])
 
       db.getManifestEntry.mockResolvedValue({
@@ -739,6 +748,7 @@ describe('BackupSyncService', () => {
         queued_at: 1000,
         attempts: 0,
         last_error: null,
+        next_attempt_at: 0,
       }])
 
       db.getManifestEntry.mockResolvedValue({

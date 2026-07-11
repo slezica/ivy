@@ -108,6 +108,7 @@ export interface SyncOutboxItem {
   queued_at: number
   attempts: number
   last_error: string | null
+  next_attempt_at: number            // Earliest timestamp the next push may be attempted (backoff)
 }
 
 export interface SyncCheckpoint {
@@ -265,6 +266,11 @@ const migrations: Migration[] = [
     db.execSync('ALTER TABLE sync_queue ADD COLUMN updated_at_when_queued INTEGER')
     // Backfill: use current timestamp for existing queue items
     db.execSync('UPDATE sync_queue SET updated_at_when_queued = queued_at WHERE updated_at_when_queued IS NULL')
+  },
+
+  // Migration 5: Add next_attempt_at to sync_queue for retry backoff
+  (db) => {
+    db.execSync('ALTER TABLE sync_queue ADD COLUMN next_attempt_at INTEGER DEFAULT 0')
   },
 ]
 
@@ -887,22 +893,31 @@ export class DatabaseService {
     const now = Date.now()
     const id = generateId()
     await this.db.runAsync(
-      `INSERT INTO sync_queue (id, entity_type, entity_id, operation, queued_at, updated_at_when_queued, attempts, last_error)
-       VALUES (?, ?, ?, ?, ?, ?, 0, NULL)
+      `INSERT INTO sync_queue (id, entity_type, entity_id, operation, queued_at, updated_at_when_queued, attempts, last_error, next_attempt_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0, NULL, 0)
        ON CONFLICT(entity_type, entity_id) DO UPDATE SET
          operation = excluded.operation,
          queued_at = excluded.queued_at,
          updated_at_when_queued = excluded.updated_at_when_queued,
          attempts = 0,
-         last_error = NULL`,
+         last_error = NULL,
+         next_attempt_at = 0`,
       [id, entityType, entityId, operation, now, entityUpdatedAt ?? now]
     )
   }
 
-  async getQueueCount(maxAttempts: number = 3): Promise<number> {
+  async getQueueCount(): Promise<number> {
     const result = await this.db.getFirstAsync<{ count: number }>(
-      'SELECT COUNT(*) as count FROM sync_queue WHERE attempts < ?',
-      [maxAttempts]
+      'SELECT COUNT(*) as count FROM sync_queue'
+    )
+    return result?.count ?? 0
+  }
+
+  /** Count of queue items that have failed repeatedly (still retried, surfaced in Settings). */
+  async getFailingCount(minAttempts: number = 3): Promise<number> {
+    const result = await this.db.getFirstAsync<{ count: number }>(
+      'SELECT COUNT(*) as count FROM sync_queue WHERE attempts >= ?',
+      [minAttempts]
     )
     return result?.count ?? 0
   }
@@ -983,10 +998,11 @@ export class DatabaseService {
   // Sync Outbox (adapted from sync_queue)
   // ---------------------------------------------------------------------------
 
-  async getOutboxItems(maxAttempts: number = 3): Promise<SyncOutboxItem[]> {
+  async getOutboxItems(now: number = Date.now()): Promise<SyncOutboxItem[]> {
+    // Items retry forever — backoff (next_attempt_at) decides when, not attempts
     return this.db.getAllAsync<SyncOutboxItem>(
-      'SELECT * FROM sync_queue WHERE attempts < ? ORDER BY queued_at ASC',
-      [maxAttempts]
+      'SELECT * FROM sync_queue WHERE next_attempt_at <= ? ORDER BY queued_at ASC',
+      [now]
     )
   }
 

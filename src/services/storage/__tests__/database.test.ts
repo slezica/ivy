@@ -173,7 +173,19 @@ describe('DatabaseService (real SQLite)', () => {
       expect(await db.getOutboxItems()).toEqual([])
     })
 
-    it('filters items and counts by max attempts', async () => {
+    it('keeps counting and returning items regardless of attempts (retry forever)', async () => {
+      const db = createDb()
+      await db.queueChange('book', 'book-1', 'upsert', 1000)
+      await db.queueChange('clip', 'clip-1', 'upsert', 1000)
+      for (let i = 0; i < 5; i++) {
+        await db.updateOutboxItemAttempt('clip', 'clip-1', 'boom')
+      }
+
+      expect(await db.getOutboxItems()).toHaveLength(2)
+      expect(await db.getQueueCount()).toBe(2)
+    })
+
+    it('counts repeatedly failing items separately', async () => {
       const db = createDb()
       await db.queueChange('book', 'book-1', 'upsert', 1000)
       await db.queueChange('clip', 'clip-1', 'upsert', 1000)
@@ -181,10 +193,8 @@ describe('DatabaseService (real SQLite)', () => {
         await db.updateOutboxItemAttempt('clip', 'clip-1', 'boom')
       }
 
-      const items = await db.getOutboxItems(3)
-      expect(items).toHaveLength(1)
-      expect(items[0].entity_id).toBe('book-1')
-      expect(await db.getQueueCount(3)).toBe(1)
+      expect(await db.getFailingCount()).toBe(1)
+      expect(await db.getQueueCount()).toBe(2)
     })
   })
 
