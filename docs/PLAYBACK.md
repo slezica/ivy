@@ -55,8 +55,8 @@ This prevents the timeline from jumping when another component takes over playba
            ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                     Store Actions                            │
-│  play · pause · seek · skipForward · skipBackward            │
-│  fetchPlaybackState                                          │
+│  loadBook · play · pause · seek · skipForward · skipBackward │
+│  setSpeed · fetchPlaybackState                               │
 └──────────┬───────────────────────────────────────────────────┘
            │
            ▼
@@ -140,23 +140,39 @@ if (playback.ownerId !== MAIN_PLAYER_OWNER_ID) return
 
 This means clip playback (ClipViewer, ClipEditor) never overwrites the book's saved position.
 
+### Pause on unmount
+
+ClipViewer and ClipEditor pause playback when they unmount — but only if they still own it (`playback.ownerId === myOwnerId` at unmount time). If another component has since taken over, unmounting a clip modal leaves that playback untouched.
+
 ---
 
-## The `play(context)` Action
+## The `play(context)` and `loadBook(context)` Actions
 
-The most important action. Takes a `PlayContext`: `{ fileUri, position, ownerId }`.
+The most important actions. Both take `{ fileUri, position, ownerId }` (`PlayContext` is an alias of `LoadBookContext`).
+
+`play()` is a thin wrapper: it **no-ops if a load is already in flight** (`status === 'loading'` — it must not play whatever that load ends up loading), delegates loading and seeking to `loadBook()`, then sets status to `'playing'` and calls `audio.play()`.
+
+`loadBook()` also no-ops while loading, then branches:
 
 1. If a different file is loaded:
-   - Look up metadata via `db.getBookByAnyUri(fileUri)` — checks books first, then clips (so clip playback still shows the source book's metadata on the system notification)
-   - Set status to `'loading'` and ownerId
+   - Look up the book via `db.getBookByAnyUri(fileUri)` — checks books first, then clips (so clip playback still shows the source book's metadata on the system notification)
+   - Set status to `'loading'`, clear `uri`, set ownerId
    - Call `audio.load(fileUri, metadata)` — returns duration
-   - Update store with uri, duration, position
-   - Seek to requested position
+   - **On load failure, reset to `'idle'` with `uri = null`** (nothing is loaded, and the loading guard must not block forever), then rethrow
+   - Update store with uri, duration, position, status `'paused'`
+   - Seek to requested position, apply the playback rate
 2. If the same file but different position:
-   - Update store position, seek
-3. Set status to `'playing'`, update ownerId, call `audio.play()`
+   - Update store position, seek, apply the playback rate
+3. Same file, same position:
+   - Just claim ownership and apply the playback rate
 
-On load failure, status reverts to `'paused'` (if a file was previously loaded) or `'idle'` (if nothing was loaded).
+`loadBook()` is also used by `initializeApplication` to auto-load the last played book without starting playback.
+
+If `loadBook()` throws inside `play()`, the catch sets status to `'paused'` when a file is still loaded or `'idle'` otherwise — a fresh-load failure always lands on `'idle'` because `loadBook` already nulled `uri`.
+
+### Playback speed
+
+Each book has a per-book `speed` (integer percentage, 100 = 1.0x). `loadBook`'s `applyRate` applies it on **every** path — including same-file loads — but only when the owner is the main player; clip owners (ClipViewer, ClipEditor) always play at 1.0x. The `setSpeed` action persists a new speed to the book (queued for sync) and applies it immediately if that book is playing in the main player.
 
 ---
 
@@ -190,7 +206,7 @@ Tapping the notification opens a deep link (`trackplayer://notification.click`).
 
 ### Load timeout
 
-If TrackPlayer can't return a valid duration within 10 seconds (corrupt file, unsupported format), `load()` throws. The `play()` action catches this and reverts the status to `'paused'` or `'idle'`.
+If TrackPlayer can't return a valid duration within 10 seconds (corrupt file, unsupported format), `load()` throws. `loadBook()` catches this, resets playback to `'idle'` with `uri = null` (nothing is loaded), and rethrows.
 
 ### Skip asymmetry
 
@@ -208,8 +224,10 @@ src/services/audio/
 index.js              → Registers playback service before app loads
 
 src/actions/
-  play.ts             → Load file / resume / claim ownership
+  load_book.ts        → Load file / seek / claim ownership / apply rate
+  play.ts             → Thin wrapper: loadBook + play (no-op while loading)
   pause.ts            → Pause playback
+  set_speed.ts        → Persist per-book speed, apply if playing in main player
   seek.ts             → Seek to position (guarded by fileUri match)
   skip_forward.ts     → Skip +25 seconds
   skip_backward.ts    → Skip -30 seconds
