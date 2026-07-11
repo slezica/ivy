@@ -88,6 +88,7 @@ describe('BackupSyncService', () => {
       updateOutboxItemAttempt: jest.fn(async () => {}),
       queueChange: jest.fn(async () => {}),
       getQueueCount: jest.fn(async () => 0),
+      getFailingCount: jest.fn(async () => 0),
       deviceId: 'test-device',
     } as any
 

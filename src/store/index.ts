@@ -141,6 +141,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     sync: {
       isSyncing: false,
       pendingCount: 0,
+      failingCount: 0,
       lastSyncTime: db.getLastSyncTime(),
       error: null,
     },

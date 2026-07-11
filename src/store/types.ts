@@ -64,6 +64,7 @@ export interface AppState {
   sync: {
     isSyncing: boolean
     pendingCount: number
+    failingCount: number
     lastSyncTime: number | null
     error: string | null
   }

@@ -90,6 +90,11 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     return this.db.getQueueCount()
   }
 
+  /** Repeatedly failing items: push outbox rows at >= 3 attempts + pull-quarantined entities. */
+  async getFailingCount(): Promise<number> {
+    return (await this.db.getFailingCount()) + this.quarantined.size
+  }
+
   /**
    * Manual sync with user authentication prompts if needed.
    */
@@ -158,6 +163,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     this.emit('status', {
       isSyncing,
       pendingCount: await this.getPendingCount(),
+      failingCount: await this.getFailingCount(),
       error,
     })
   }

@@ -66,5 +66,6 @@ export interface SyncNotification {
 export interface SyncStatus {
   isSyncing: boolean
   pendingCount: number
+  failingCount: number  // Repeatedly failing items (push attempts >= 3 + pull quarantined) — still retried
   error: string | null
 }

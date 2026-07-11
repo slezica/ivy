@@ -17,6 +17,7 @@ export default function SettingsScreen() {
   )
 
   const pendingLabel = sync.pendingCount === 1 ? '1 item pending' : `${sync.pendingCount} items pending`
+  const failingLabel = `${sync.failingCount === 1 ? '1 change' : `${sync.failingCount} changes`} failing — will keep retrying`
 
   function handleSyncToggle(enabled: boolean) {
     updateSettings({ ...settings, sync_enabled: enabled })
@@ -102,6 +103,12 @@ export default function SettingsScreen() {
                 {sync.isSyncing ? 'Syncing...' : 'Sync now'}
               </Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {settings.sync_enabled && sync.failingCount > 0 && (
+          <View style={styles.settingSecondary}>
+            <Text style={styles.errorText}>{failingLabel}</Text>
           </View>
         )}
 

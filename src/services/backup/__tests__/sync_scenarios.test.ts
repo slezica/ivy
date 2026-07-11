@@ -726,6 +726,37 @@ describe('sync scenarios', () => {
       expect(errors[errors.length - 1]).not.toBeNull()
     })
 
+    it('surfaces failing counts from both the push outbox and pull quarantine', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await device.sync.syncNow() // uploads the book, establishes a token
+
+      // Pull side: poison JSON quarantines after 5 consecutive failures
+      drive.putFile('clips', `clip_${CLIP_ID}.json`, 'not json {')
+      for (let i = 0; i < 5; i++) {
+        await device.sync.syncNow()
+      }
+
+      // Push side: a session upload failing 3 times counts as failing
+      const session = await device.db.createSession(BOOK_ID)
+      await device.db.queueChange('session', session.id, 'upsert', session.updated_at)
+      for (let i = 0; i < 3; i++) {
+        now += 6 * 60 * 60 * 1000 // jump past any backoff so the push is attempted
+        drive.failNext('uploadFile', new Error('Network error'))
+        await device.sync.syncNow()
+      }
+
+      expect(await device.sync.getFailingCount()).toBe(2)
+
+      // The count rides on the emitted sync status
+      const statuses: Array<{ isSyncing: boolean; failingCount: number }> = []
+      device.sync.on('status', (status) => statuses.push(status))
+      await device.sync.syncNow()
+      expect(statuses[statuses.length - 1].failingCount).toBe(2)
+    })
+
     it('clears quarantine when the entity finally reconciles', async () => {
       const drive = new FakeDrive()
       const device = createSyncHarness(drive)
