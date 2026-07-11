@@ -63,7 +63,7 @@ Everything happens on-device. The Whisper model runs locally via native bindings
 │  Events:                            │          │
 │    queued → { clipId }              │──────────┘
 │    started → { clipId }             │
-│    finish → { clipId, transcription?, error? }
+│    finish → { clipId, transcription?, error?, start, duration }
 └───────┬──────────────┬──────────────┘
         │              │
         │ calls        │ calls slice()
@@ -184,7 +184,7 @@ Two store actions integrate with transcription as a side effect:
 
 ### Persistence: the store is the single writer
 
-The queue **never writes the database**. Its `finish` event carries the result; the store's handler clears the clip's `pending` flag and — for successful results — runs the `updateClip` action, which persists the text and queues the clip for sync. An **empty string is a valid result** (silence, music) and is persisted like any other text; only errored jobs skip persistence, leaving `transcription = null` so a later service start re-queues the clip.
+The queue **never writes the database**. Its `finish` event carries the result *plus the clip bounds the job was started with*; the store's handler compares those bounds against the current clip and **discards stale results** (the clip's bounds were edited mid-transcription — the re-queued job for the new audio supersedes it, and `pending` is kept alive for it). For current results it clears `pending` and runs the `updateClip` action, which persists the text and queues the clip for sync. An **empty string is a valid result** (silence, music) and is persisted like any other text; only errored jobs skip persistence, leaving `transcription = null` so a later service start re-queues the clip.
 
 ---
 

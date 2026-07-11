@@ -121,7 +121,7 @@ Book metadata is preserved in the `files` table even after archiving or deletion
 
 ## Editing Clips
 
-Editing requires the source book's audio file — if the source is archived, editing is disabled. The key non-obvious behavior: when bounds change, the source is re-sliced, the old audio file is replaced, and transcription is cleared and re-queued. Note-only edits skip re-slicing and transcription entirely. See `update_clip.ts` for the full flow.
+Editing requires the source book's audio file — if the source is archived, editing is disabled. The key non-obvious behavior: when bounds change, the source is re-sliced and the old audio file is replaced via backup-swap (the old file is kept as `.bak` until the move succeeds, so a failed re-slice never loses the clip's only audio), and transcription is cleared and re-queued. Note-only edits skip re-slicing and transcription entirely. See `update_clip.ts` for the full flow.
 
 ---
 

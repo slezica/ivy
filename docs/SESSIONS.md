@@ -74,7 +74,7 @@ The system has no dedicated service — it's built from two store actions (`trac
 
 When playback starts, `trackSession(bookId)` queries for a recent session on this book. If one exists within the 5-minute window, it extends that session by updating `ended_at`; otherwise it creates a new one. While playback continues, the throttle fires `trackSession` every 5 seconds to keep `ended_at` current.
 
-When playback stops, `finalizeSession` runs immediately (not throttled). Sessions shorter than `MIN_SESSION_DURATION_MS` (1 second) are deleted and a sync `delete` is queued so the cleanup propagates; the rest get a final `ended_at` update. Both `trackSession` and `finalizeSession` queue a sync `upsert` for the session they touch.
+When the session's conditions stop holding — playback pauses, the book changes, or a clip component takes playback ownership — `finalizeSession` runs immediately (not throttled). Sessions shorter than `MIN_SESSION_DURATION_MS` (1 second) are deleted and a sync `delete` is queued so the cleanup propagates; the rest get a final `ended_at` update. Both `trackSession` and `finalizeSession` queue a sync `upsert` for the session they touch.
 
 ---
 
@@ -89,6 +89,8 @@ The 5-minute window is hardcoded in `getCurrentSession` (`services/storage/datab
 **Throttling.** `trackSession` is wrapped in `throttleSameArgs(fn, 5000)` and wired up in `store/index.ts` (not in the action files themselves). Audio status events fire many times per second, so without this, every event would hit the database. Unlike a plain throttle, a call with a *different* book id goes through immediately — switching books doesn't wait out the 5-second window. `finalizeSession` is not throttled — when playback stops, the session is immediately finalized with an accurate `ended_at`.
 
 **Dual writes.** Both `trackSession` and `finalizeSession` update the database and the Zustand store in the same call, keeping in-memory state in sync without re-fetching.
+
+**Serialization.** All session operations run through a single promise chain in `store/index.ts` (`enqueueSessionOp`), so a finalize can never interleave with an in-flight track's read-then-write — the ordering hazards (a pause landing mid-track, an upsert queued after a delete) are structurally excluded.
 
 ---
 

@@ -23,7 +23,7 @@ External URIs (from file pickers, Google Drive, etc.) become invalid after app r
 
 ### 2. File fingerprinting
 
-Each book stores its `file_size` (bytes) and `fingerprint` (first 4KB of the file as a BLOB). This pair uniquely identifies the audio content. When a file is added, the system checks for an existing book with the same fingerprint before creating a new one.
+Each book stores its `file_size` (bytes) and `fingerprint` (first 4KB of the file as a BLOB). This pair uniquely identifies the audio content. When a file is added, the system checks for an existing book with the same fingerprint before creating a new one. If the source provider doesn't report a size (returns `-1`), the lookup falls back to fingerprint-only matching, and the real size is backfilled from the bytes actually copied — `-1` is never persisted.
 
 ### 3. Soft-delete, not hard-delete
 
@@ -96,7 +96,7 @@ Files are copied directly to their final path (`audio/{bookId}{ext}`) — there 
 
 - The native copier deletes the destination file itself when the copy fails or is cancelled
 - If metadata extraction or the DB write fails after the copy, `loadFile`'s catch deletes the copied file — but only if no database record references it
-- Any leftovers that slip through are reclaimed by `cleanupOrphanedFiles`, which runs at the start of the next `loadFile` and deletes files with no matching database record
+- Any leftovers that slip through are reclaimed by `cleanupOrphanedFiles`, which runs at the start of the next `loadFile` and deletes files with no matching database record — but only files last modified more than 60 minutes ago, so in-flight writes (background sync downloads, clip slices) are never swept mid-operation
 - Cleanup failures are swallowed — they never affect the operation's outcome
 
 ---

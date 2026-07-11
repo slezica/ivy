@@ -238,6 +238,7 @@ fingerprint BLOB               -- First 4KB of file (for exact matching)
 hidden INTEGER NOT NULL DEFAULT 0  -- Soft-deleted (1 = removed from library)
 chapters TEXT                  -- JSON array of chapter metadata
 speed INTEGER NOT NULL DEFAULT 100  -- Playback speed (100 = 1.0x)
+last_played_at INTEGER         -- Local-only (never synced); drives startup auto-load
 ```
 
 **clips table:**
