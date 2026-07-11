@@ -91,6 +91,90 @@ describe('DatabaseService (real SQLite)', () => {
     })
   })
 
+  describe('rekeyBook', () => {
+    async function seedBookWithChildren(db: DatabaseService, bookId: string) {
+      await db.upsertBook(bookId, `file:///audio/${bookId}.mp3`, 'Book', 60000, 5000, null, null, null, 1024, FINGERPRINT)
+      await db.createClip('clip-1', bookId, 'file:///clips/clip-1.m4a', 1000, 2000, 'note')
+      await db.createSession(bookId)
+    }
+
+    it('re-keys the book row and all its children, preserving fields', async () => {
+      const db = createDb()
+      await seedBookWithChildren(db, 'old-id')
+      const before = (await db.getBookById('old-id'))!
+
+      const { clipIds, sessionIds } = await db.rekeyBook('old-id', 'new-id')
+
+      expect(await db.getBookById('old-id')).toBeNull()
+      const after = (await db.getBookById('new-id'))!
+      expect(after.position).toBe(before.position)
+      expect(after.updated_at).toBe(before.updated_at) // re-key is not an edit
+      expect(after.uri).toBe(before.uri)               // audio untouched
+
+      expect(clipIds).toEqual(['clip-1'])
+      expect(sessionIds).toHaveLength(1)
+      expect((await db.getClip('clip-1'))!.source_id).toBe('new-id')
+      expect((await db.getClipsForBook('old-id'))).toEqual([])
+      expect((await db.getSessionById(sessionIds[0]))!.book_id).toBe('new-id')
+    })
+
+    it('deletes the old manifest row instead of renaming it', async () => {
+      const db = createDb()
+      await seedBookWithChildren(db, 'old-id')
+      await db.upsertManifestEntry({
+        entity_type: 'book', entity_id: 'old-id',
+        local_updated_at: 1000, remote_updated_at: null,
+        remote_file_id: 'drive-old', remote_audio_file_id: null,
+      })
+
+      await db.rekeyBook('old-id', 'new-id')
+
+      expect(await db.getManifestEntry('book', 'old-id')).toBeNull()
+      expect(await db.getManifestEntry('book', 'new-id')).toBeNull() // caller's job
+    })
+
+    it('re-keys a pending queue row onto the new id', async () => {
+      const db = createDb()
+      await seedBookWithChildren(db, 'old-id')
+      await db.queueChange('book', 'old-id', 'upsert', 1000)
+
+      await db.rekeyBook('old-id', 'new-id')
+
+      const items = await db.getOutboxItems()
+      const bookItems = items.filter(i => i.entity_type === 'book')
+      expect(bookItems).toHaveLength(1)
+      expect(bookItems[0].entity_id).toBe('new-id')
+      expect(bookItems[0].updated_at_when_queued).toBe(1000)
+    })
+
+    it('merges queue rows on conflict, keeping the newest updated_at_when_queued', async () => {
+      const db = createDb()
+      await seedBookWithChildren(db, 'old-id')
+      await db.queueChange('book', 'old-id', 'upsert', 2000)
+      await db.queueChange('book', 'new-id', 'upsert', 1000)
+
+      await db.rekeyBook('old-id', 'new-id')
+
+      const bookItems = (await db.getOutboxItems()).filter(i => i.entity_type === 'book')
+      expect(bookItems).toHaveLength(1)
+      expect(bookItems[0].entity_id).toBe('new-id')
+      expect(bookItems[0].updated_at_when_queued).toBe(2000)
+      expect(bookItems[0].attempts).toBe(0)
+    })
+
+    it('leaves clip and session queue rows keyed by their own ids', async () => {
+      const db = createDb()
+      await seedBookWithChildren(db, 'old-id')
+      await db.queueChange('clip', 'clip-1', 'upsert', 1000)
+
+      await db.rekeyBook('old-id', 'new-id')
+
+      const clipItems = (await db.getOutboxItems()).filter(i => i.entity_type === 'clip')
+      expect(clipItems).toHaveLength(1)
+      expect(clipItems[0].entity_id).toBe('clip-1')
+    })
+  })
+
   describe('backup restore', () => {
     it('preserves local hidden when applying a remote book update', async () => {
       const db = createDb()

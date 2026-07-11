@@ -489,6 +489,72 @@ export class DatabaseService {
     )
   }
 
+  /**
+   * Re-key a book and everything referencing it from oldId to newId (identity
+   * merge). Runs in an exclusive transaction so the fire-and-forget writers
+   * (updateBookPosition, updateSessionEndedAt) cannot interleave mid-re-key.
+   *
+   * The ('book', oldId) manifest row is deleted, never renamed: its
+   * remote_file_id points at book_{oldId}.json, and devices group remote files
+   * by filename — a renamed row would upload newId content into that file.
+   * The caller inserts the ('book', newId) row with the correct file id.
+   *
+   * Returns the ids of re-keyed clips and sessions so the sync layer can
+   * re-upload them under the new source id.
+   */
+  async rekeyBook(oldId: string, newId: string): Promise<{ clipIds: string[]; sessionIds: string[] }> {
+    let clipIds: string[] = []
+    let sessionIds: string[] = []
+
+    await this.db.withExclusiveTransactionAsync(async (txn) => {
+      // Foreign keys are declared but not enforced by expo-sqlite; defer them
+      // anyway so the parent re-key stays valid if enforcement ever arrives
+      await txn.execAsync('PRAGMA defer_foreign_keys = ON')
+
+      clipIds = (await txn.getAllAsync<{ id: string }>(
+        'SELECT id FROM clips WHERE source_id = ?', [oldId]
+      )).map(r => r.id)
+      sessionIds = (await txn.getAllAsync<{ id: string }>(
+        'SELECT id FROM sessions WHERE book_id = ?', [oldId]
+      )).map(r => r.id)
+
+      await txn.runAsync('UPDATE files SET id = ? WHERE id = ?', [newId, oldId])
+      await txn.runAsync('UPDATE clips SET source_id = ? WHERE source_id = ?', [newId, oldId])
+      await txn.runAsync('UPDATE sessions SET book_id = ? WHERE book_id = ?', [newId, oldId])
+
+      // Manifest: delete, never rename (see docstring)
+      await txn.runAsync(
+        `DELETE FROM sync_manifest WHERE entity_type = 'book' AND entity_id = ?`, [oldId]
+      )
+
+      // Queue: move the book's pending row onto the new id. A row for the new
+      // id may already exist (UNIQUE constraint) — merge, keeping the newest
+      // updated_at_when_queued. Book queue rows are always upserts, and clip /
+      // session rows are keyed by their own ids, so nothing else moves.
+      const queued = await txn.getFirstAsync<{ operation: string; queued_at: number; updated_at_when_queued: number }>(
+        `SELECT operation, queued_at, updated_at_when_queued FROM sync_queue
+         WHERE entity_type = 'book' AND entity_id = ?`, [oldId]
+      )
+      await txn.runAsync(
+        `DELETE FROM sync_queue WHERE entity_type = 'book' AND entity_id = ?`, [oldId]
+      )
+      if (queued) {
+        await txn.runAsync(
+          `INSERT INTO sync_queue (id, entity_type, entity_id, operation, queued_at, updated_at_when_queued, attempts, last_error, next_attempt_at)
+           VALUES (?, 'book', ?, ?, ?, ?, 0, NULL, 0)
+           ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+             operation = excluded.operation,
+             queued_at = MAX(sync_queue.queued_at, excluded.queued_at),
+             updated_at_when_queued = MAX(sync_queue.updated_at_when_queued, excluded.updated_at_when_queued),
+             attempts = 0, last_error = NULL, next_attempt_at = 0`,
+          [generateId(), newId, queued.operation, queued.queued_at, queued.updated_at_when_queued]
+        )
+      }
+    })
+
+    return { clipIds, sessionIds }
+  }
+
   // ---------------------------------------------------------------------------
   // Clips
   // ---------------------------------------------------------------------------

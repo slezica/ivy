@@ -22,7 +22,11 @@ interface SQLiteRunResult {
  * to run the real service (migrations included) in tests.
  */
 export function createTestDatabase(): SQLite.SQLiteDatabase {
-  const db = new DatabaseSync(':memory:')
+  // Foreign keys are declared in the DDL but expo-sqlite never enables
+  // PRAGMA foreign_keys, so the on-device database does not enforce them
+  // (clips can arrive before their book, re-keys are order-independent).
+  // node:sqlite enforces them by default — disable to mirror the device.
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false })
 
   const run = (source: string, params: SQLiteParams = []): SQLiteRunResult => {
     const result = db.prepare(source).run(...params)
@@ -44,8 +48,21 @@ export function createTestDatabase(): SQLite.SQLiteDatabase {
     getFirstAsync: async <T>(source: string, params?: SQLiteParams): Promise<T | null> => getFirst<T>(source, params),
     getAllSync: getAll,
     getAllAsync: async <T>(source: string, params?: SQLiteParams): Promise<T[]> => getAll<T>(source, params),
+    // Real expo-sqlite runs the transaction on a dedicated connection; here
+    // node:sqlite is synchronous and single-connection, so passing the adapter
+    // itself as `txn` gives equivalent isolation.
+    withExclusiveTransactionAsync: async (task: (txn: SQLite.SQLiteDatabase) => Promise<void>): Promise<void> => {
+      db.exec('BEGIN EXCLUSIVE')
+      try {
+        await task(adapter as unknown as SQLite.SQLiteDatabase)
+        db.exec('COMMIT')
+      } catch (error) {
+        db.exec('ROLLBACK')
+        throw error
+      }
+    },
     closeSync: (): void => { db.close() },
-  }
+  } as unknown as SQLite.SQLiteDatabase
 
-  return adapter as unknown as SQLite.SQLiteDatabase
+  return adapter
 }
