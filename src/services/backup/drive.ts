@@ -27,6 +27,7 @@ export interface DriveFile {
   name: string
   mimeType: string
   modifiedTime?: string  // ISO 8601 timestamp from Drive
+  md5Checksum?: string   // Content hash (binary-content files; absent for Google Docs types)
 }
 
 /** Drive REST error carrying the HTTP status, for callers that branch on it (e.g. 404). */
@@ -64,7 +65,7 @@ export class GoogleDriveService {
     const token = await this.getToken()
 
     const query = `'${folderId}' in parents and trashed = false`
-    const fields = 'nextPageToken, files(id, name, mimeType, modifiedTime)'
+    const fields = 'nextPageToken, files(id, name, mimeType, modifiedTime, md5Checksum)'
     const allFiles: DriveFile[] = []
     let pageToken: string | undefined
 
@@ -114,7 +115,7 @@ export class GoogleDriveService {
       parents: [folderId],
     }
 
-    const fields = 'id,name,mimeType,modifiedTime'
+    const fields = 'id,name,mimeType,modifiedTime,md5Checksum'
     const initResponse = await fetch(`${UPLOAD_API}/files?uploadType=resumable&fields=${encodeURIComponent(fields)}`, {
       method: 'POST',
       headers: {
@@ -155,6 +156,7 @@ export class GoogleDriveService {
       name: data.name,
       mimeType: data.mimeType,
       modifiedTime: data.modifiedTime,
+      md5Checksum: data.md5Checksum,
     }
   }
 
@@ -245,7 +247,7 @@ export class GoogleDriveService {
     do {
       const params = new URLSearchParams({
         pageToken: currentToken,
-        fields: 'nextPageToken, newStartPageToken, changes(fileId, removed, file(id, name, mimeType, modifiedTime))',
+        fields: 'nextPageToken, newStartPageToken, changes(fileId, removed, file(id, name, mimeType, modifiedTime, md5Checksum))',
         spaces: 'drive',
         pageSize: '100',
       })
@@ -270,6 +272,7 @@ export class GoogleDriveService {
             name: change.file.name,
             mimeType: change.file.mimeType,
             modifiedTime: change.file.modifiedTime,
+            md5Checksum: change.file.md5Checksum,
           } : undefined,
         })
       }
@@ -296,7 +299,7 @@ export class GoogleDriveService {
     const isJson = typeof content === 'string'
     const mimeType = isJson ? 'application/json' : 'audio/mp4'
 
-    const fields = 'id,name,mimeType,modifiedTime'
+    const fields = 'id,name,mimeType,modifiedTime,md5Checksum'
     const initResponse = await fetch(`${UPLOAD_API}/files/${fileId}?uploadType=resumable&fields=${encodeURIComponent(fields)}`, {
       method: 'PATCH',
       headers: {
@@ -334,6 +337,7 @@ export class GoogleDriveService {
       name: data.name,
       mimeType: data.mimeType,
       modifiedTime: data.modifiedTime,
+      md5Checksum: data.md5Checksum,
     }
   }
 

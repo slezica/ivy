@@ -923,6 +923,120 @@ describe('sync scenarios', () => {
     })
   })
 
+  describe('clip audio versioning (M5)', () => {
+    it('re-downloads audio when only the audio content changed (same JSON version)', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await addClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow() // consume the upload echo
+      await deviceB.sync.syncNow() // B bootstraps the clip
+
+      const jsonId = drive.getFileByName(`clip_${CLIP_ID}.json`)!.id
+      const audioId = drive.getFileByName(`clip_${CLIP_ID}.m4a`)!.id
+
+      // A bounds edit updates in place: JSON first, the re-sliced audio after.
+      // B syncs in between, so it applies the JSON but still holds old audio.
+      await drive.updateFile(jsonId, remoteClipJson({ start: 20000, updated_at: Date.now() }))
+      await deviceB.sync.syncNow()
+      expect((await deviceB.db.getClip(CLIP_ID))!.start).toBe(20000)
+      const versionBefore = (await deviceB.db.getManifestEntry('clip', CLIP_ID))!.remote_audio_version
+
+      // The audio change arrives alone: same file id, same JSON version —
+      // only the manifest's audio version reveals the stale content
+      await drive.updateFile(audioId, new Uint8Array([9, 9, 9]))
+      await deviceB.sync.syncNow()
+
+      const manifest = await deviceB.db.getManifestEntry('clip', CLIP_ID)
+      expect(manifest!.remote_audio_version).toBe(drive.md5(`clip_${CLIP_ID}.m4a`))
+      expect(manifest!.remote_audio_version).not.toBe(versionBefore)
+      // New bytes written over the clip's local audio file
+      expect(RNFS.writeFile).toHaveBeenLastCalledWith(
+        `/mock/documents/clips/${CLIP_ID}.m4a`,
+        btoa(String.fromCharCode(9, 9, 9)),
+        'base64',
+      )
+    })
+
+    it('re-downloads audio grouped with a same-version JSON echo', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await addClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow()
+
+      const jsonFile = drive.getFileByName(`clip_${CLIP_ID}.json`)!
+      const audioId = drive.getFileByName(`clip_${CLIP_ID}.m4a`)!.id
+
+      // One feed batch: an identical JSON rewrite plus new audio content —
+      // the JSON short-circuits as same-version, the audio must still land
+      await drive.updateFile(jsonFile.id, jsonFile.content as string)
+      await drive.updateFile(audioId, new Uint8Array([7, 7, 7]))
+      await deviceB.sync.syncNow()
+
+      const manifest = await deviceB.db.getManifestEntry('clip', CLIP_ID)
+      expect(manifest!.remote_audio_version).toBe(drive.md5(`clip_${CLIP_ID}.m4a`))
+      expect(RNFS.writeFile).toHaveBeenLastCalledWith(
+        `/mock/documents/clips/${CLIP_ID}.m4a`,
+        btoa(String.fromCharCode(7, 7, 7)),
+        'base64',
+      )
+    })
+
+    it('skips the audio download when the version matches (own upload echo)', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await addClip(device)
+      await device.sync.syncNow() // uploads JSON + audio, records the version
+
+      const audioId = drive.getFileByName(`clip_${CLIP_ID}.m4a`)!.id
+      const downloads = jest.spyOn(drive, 'downloadFile')
+      await device.sync.syncNow() // pulls its own echo
+
+      expect(downloads).not.toHaveBeenCalledWith(audioId, true)
+      expect(await device.db.getOutboxItems()).toEqual([])
+    })
+
+    it('receives resurrection healing: fresh audio id and version after a re-create', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await addClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceA.sync.syncNow()
+      await deviceB.sync.syncNow()
+
+      // A deletes (tombstone + audio hard-delete); B's newer edit un-deletes,
+      // re-uploading the audio as a brand-new file (404 fallback path)
+      await deleteClip(deviceA)
+      await deviceA.sync.syncNow()
+      await deviceB.db.updateClip(CLIP_ID, { note: 'Edited after delete' })
+      const edited = await deviceB.db.getClip(CLIP_ID)
+      await deviceB.db.queueChange('clip', CLIP_ID, 'upsert', edited!.updated_at)
+      await deviceB.sync.syncNow()
+
+      const newAudioId = drive.getFileByName(`clip_${CLIP_ID}.m4a`)!.id
+
+      await deviceA.sync.syncNow() // A pulls the resurrection: new id + version
+
+      expect((await deviceA.db.getClip(CLIP_ID))!.note).toBe('Edited after delete')
+      const manifest = await deviceA.db.getManifestEntry('clip', CLIP_ID)
+      expect(manifest!.remote_audio_file_id).toBe(newAudioId)
+      expect(manifest!.remote_audio_version).toBe(drive.md5(`clip_${CLIP_ID}.m4a`))
+    })
+  })
+
   describe('404 fallback: create on dead remote id', () => {
     it('recreates the book JSON and heals the manifest when the remote was purged', async () => {
       const drive = new FakeDrive()

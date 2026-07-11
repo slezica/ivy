@@ -408,7 +408,25 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       return name && (name.endsWith('.m4a') || name.endsWith('.mp3'))
     })
 
-    if (!jsonChange?.file) return
+    const manifest = await this.db.getManifestEntry('clip', id)
+
+    // Audio uploads are update-in-place: the file id never changes, so the
+    // content version (md5) against the manifest is the only re-download signal
+    const audioVersion = fileVersion(audioChange?.file)
+    const audioChanged = audioChange != null && audioVersion !== manifest?.remote_audio_version
+
+    if (!jsonChange?.file) {
+      // Audio-only change (bounds edit re-slice, or a 404-fallback re-upload):
+      // no JSON version to compare — the audio version mismatch is the signal
+      if (audioChange && audioChanged && manifest) {
+        const local = await this.db.getClip(id)
+        if (local) {
+          await this.downloadClipAudio(local, audioChange.fileId, audioVersion, manifest, notification)
+          result.downloaded.clips++
+        }
+      }
+      return
+    }
 
     const content = await this.drive.downloadFile(jsonChange.fileId, false) as string
     const remote: ClipBackup = JSON.parse(content)
@@ -423,10 +441,11 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
     if (!local) {
       // New remotely — need audio file ID (from change or manifest)
-      const audioFileId = audioChange?.fileId ?? (await this.db.getManifestEntry('clip', id))?.remote_audio_file_id
+      const audioFileId = audioChange?.fileId ?? manifest?.remote_audio_file_id
       const audioFilename = audioChange?.file?.name
       if (audioFileId) {
-        await this.downloadClip(remote, jsonChange.fileId, audioFileId, audioFilename, result, notification)
+        const version = audioChange ? audioVersion : manifest?.remote_audio_version ?? null
+        await this.downloadClip(remote, jsonChange.fileId, audioFileId, audioFilename, version, result, notification)
       } else {
         result.errors.push(`Clip ${id}: no audio file found`)
       }
@@ -434,14 +453,22 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     }
 
     if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-      // Already in sync
+      // JSON already in sync — but the audio content may still have moved
+      // (M5: the JSON short-circuit must never make stale audio permanent)
+      if (audioChange && audioChanged) {
+        await this.downloadClipAudio(local, audioChange.fileId, audioVersion, manifest, notification, jsonChange.fileId)
+        result.downloaded.clips++
+      }
     } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-      const audioFileId = audioChange?.fileId ?? (await this.db.getManifestEntry('clip', id))?.remote_audio_file_id
+      const audioFileId = audioChange?.fileId ?? manifest?.remote_audio_file_id
       const audioFilename = audioChange?.file?.name
       if (audioFileId) {
-        await this.downloadClip(remote, jsonChange.fileId, audioFileId, audioFilename, result, notification)
+        const version = audioChange ? audioVersion : manifest?.remote_audio_version ?? null
+        await this.downloadClip(remote, jsonChange.fileId, audioFileId, audioFilename, version, result, notification)
       }
     } else {
+      // Local edit is newer — it wins and re-uploads, audio included, so a
+      // remote audio change is superseded rather than downloaded
       await this.db.queueChange('clip', id, 'upsert', local.updated_at)
     }
   }
@@ -665,19 +692,13 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     jsonFileId: string,
     audioFileId: string,
     audioFilename: string | undefined,
+    audioVersion: string | null,
     result: SyncResult,
     notification: SyncNotification,
   ): Promise<void> {
-    const audioBytes = await this.drive.downloadFile(audioFileId, true) as Uint8Array
-
-    const clipsDir = `${RNFS.DocumentDirectoryPath}/clips`
-    if (!(await RNFS.exists(clipsDir))) {
-      await RNFS.mkdir(clipsDir)
-    }
-
     const ext = audioFilename?.split('.').pop() ?? 'm4a'
-    const localPath = `${clipsDir}/${remote.id}.${ext}`
-    await RNFS.writeFile(localPath, uint8ArrayToBase64(audioBytes), 'base64')
+    const localPath = `${RNFS.DocumentDirectoryPath}/clips/${remote.id}.${ext}`
+    await this.fetchAudioToFile(audioFileId, localPath)
 
     const localUri = `file://${localPath}`
 
@@ -694,11 +715,53 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       remote_updated_at: null,
       remote_file_id: jsonFileId,
       remote_audio_file_id: audioFileId,
+      remote_audio_version: audioVersion,
     })
 
     notification.clipsChanged.push(remote.id)
     result.downloaded.clips++
     log(`Downloaded clip: ${remote.id}`)
+  }
+
+  /**
+   * Fetch a clip's audio file into the clip's existing local file, leaving the
+   * clip row untouched, and record the new audio version in the manifest.
+   * Used when the audio content changed without a JSON version change (M5):
+   * update-in-place bounds edits and post-404 audio re-uploads never change
+   * the JSON outcome under LWW, so the version mismatch is the only signal.
+   */
+  private async downloadClipAudio(
+    local: Clip,
+    audioFileId: string,
+    audioVersion: string | null,
+    manifest: { local_updated_at: number | null; remote_file_id: string | null } | null,
+    notification: SyncNotification,
+    jsonFileId: string | null = null,
+  ): Promise<void> {
+    await this.fetchAudioToFile(audioFileId, local.uri.replace('file://', ''))
+
+    await this.db.upsertManifestEntry({
+      entity_type: 'clip', entity_id: local.id,
+      local_updated_at: manifest?.local_updated_at ?? local.updated_at,
+      remote_updated_at: null,
+      remote_file_id: manifest?.remote_file_id ?? jsonFileId,
+      remote_audio_file_id: audioFileId,
+      remote_audio_version: audioVersion,
+    })
+
+    notification.clipsChanged.push(local.id)
+    log(`Downloaded clip audio: ${local.id}`)
+  }
+
+  private async fetchAudioToFile(audioFileId: string, localPath: string): Promise<void> {
+    const audioBytes = await this.drive.downloadFile(audioFileId, true) as Uint8Array
+
+    const clipsDir = `${RNFS.DocumentDirectoryPath}/clips`
+    if (!(await RNFS.exists(clipsDir))) {
+      await RNFS.mkdir(clipsDir)
+    }
+
+    await RNFS.writeFile(localPath, uint8ArrayToBase64(audioBytes), 'base64')
   }
 
   private async downloadSession(
@@ -1058,6 +1121,9 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       remote_updated_at: null,
       remote_file_id: jsonFile.id,
       remote_audio_file_id: audioFile.id,
+      // Recording the uploaded version keeps this device's own echo from
+      // reading its audio back on the next sync
+      remote_audio_version: fileVersion(audioFile),
     })
 
     // Stale check
@@ -1306,20 +1372,29 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         const local = await this.db.getClip(clipId)
 
         if (!local) {
-          await this.downloadClip(remote, json.id, audio.id, audio.name, result, notification)
+          await this.downloadClip(remote, json.id, audio.id, audio.name, fileVersion(audio), result, notification)
         } else if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-          await this.db.upsertManifestEntry({
-            entity_type: 'clip', entity_id: clipId,
-            local_updated_at: local.updated_at, remote_updated_at: null,
-            remote_file_id: json.id, remote_audio_file_id: audio.id,
-          })
+          const manifest = await this.db.getManifestEntry('clip', clipId)
+          if (fileVersion(audio) !== manifest?.remote_audio_version) {
+            // Same JSON, different audio content — fetch it (M5)
+            await this.downloadClipAudio(local, audio.id, fileVersion(audio), manifest, notification, json.id)
+            result.downloaded.clips++
+          } else {
+            await this.db.upsertManifestEntry({
+              entity_type: 'clip', entity_id: clipId,
+              local_updated_at: local.updated_at, remote_updated_at: null,
+              remote_file_id: json.id, remote_audio_file_id: audio.id,
+              remote_audio_version: fileVersion(audio),
+            })
+          }
         } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-          await this.downloadClip(remote, json.id, audio.id, audio.name, result, notification)
+          await this.downloadClip(remote, json.id, audio.id, audio.name, fileVersion(audio), result, notification)
         } else {
           await this.db.upsertManifestEntry({
             entity_type: 'clip', entity_id: clipId,
             local_updated_at: local.updated_at, remote_updated_at: null,
             remote_file_id: json.id, remote_audio_file_id: audio.id,
+            remote_audio_version: fileVersion(audio),
           })
           await this.db.queueChange('clip', clipId, 'upsert', local.updated_at)
         }
@@ -1446,6 +1521,14 @@ function parseFilename(name: string): ParsedFilename | null {
     id: match[2],
     extension: match[3] as 'json' | 'mp3' | 'm4a',
   }
+}
+
+/**
+ * Content version of a Drive file: md5Checksum (content hash, stable across
+ * no-op rewrites), falling back to modifiedTime for responses that omit it.
+ */
+function fileVersion(file?: DriveFile): string | null {
+  return file?.md5Checksum ?? file?.modifiedTime ?? null
 }
 
 // -----------------------------------------------------------------------------

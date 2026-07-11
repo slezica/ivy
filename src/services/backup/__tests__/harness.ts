@@ -83,6 +83,12 @@ export class FakeDrive {
     return [...this.files.values()].find(f => f.name === name)
   }
 
+  /** Content version (fake md5Checksum) of a file, as surfaced to the sync engine. */
+  md5(name: string): string | undefined {
+    const file = this.getFileByName(name)
+    return file ? contentHash(file.content) : undefined
+  }
+
   readJson(name: string): any {
     const file = this.getFileByName(name)
     if (!file || typeof file.content !== 'string') return null
@@ -175,7 +181,17 @@ export class FakeDrive {
 }
 
 function toDriveFile(file: FakeDriveFile): DriveFile {
-  return { id: file.id, name: file.name, mimeType: file.mimeType }
+  return { id: file.id, name: file.name, mimeType: file.mimeType, md5Checksum: contentHash(file.content) }
+}
+
+/** Deterministic content hash standing in for Drive's md5Checksum. */
+function contentHash(content: string | Uint8Array): string {
+  const bytes = typeof content === 'string' ? new TextEncoder().encode(content) : content
+  let hash = 5381
+  for (let i = 0; i < bytes.length; i++) {
+    hash = (Math.imul(hash, 33) ^ bytes[i]) >>> 0
+  }
+  return `md5-${hash.toString(16)}`
 }
 
 // -----------------------------------------------------------------------------
