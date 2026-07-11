@@ -282,6 +282,19 @@ describe('createLoadFile', () => {
       expect(deps.db.touchBook).not.toHaveBeenCalled()
     })
 
+    it('restores a locally deleted book (hidden) through the same path', async () => {
+      // Deleted books have uri NULL just like archived ones, so re-adding the
+      // file must reach restoreBook (which clears the hidden flag)
+      const deps = depsWithArchivedBook({ hidden: true })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.restoreBook).toHaveBeenCalled()
+      expect(deps.db.upsertBook).not.toHaveBeenCalled()
+      expect(deps.db.touchBook).not.toHaveBeenCalled()
+    })
+
     it('persists chapters to the restored book record', async () => {
       const archivedBook = createMockBook({ id: 'archived-1', uri: null })
       const deps = createMockDeps({

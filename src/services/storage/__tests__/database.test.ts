@@ -55,6 +55,23 @@ describe('DatabaseService (real SQLite)', () => {
       expect(row?.uri).toBeNull()
     })
 
+    it('clears hidden and preserves position when restoring a deleted book', async () => {
+      const db = createDb()
+      await db.upsertBook('book-1', 'file:///audio/old.mp3', 'Book', 60000, 42000)
+      await db.hideBook('book-1')
+
+      // Re-adding the same file takes load_file's restore branch (uri is NULL)
+      await db.restoreBook(
+        'book-1', 'file:///audio/new.mp3', 'Book', 60000,
+        'Title', 'Artist', null, 1024, FINGERPRINT,
+      )
+
+      const book = await db.getBookById('book-1')
+      expect(book!.hidden).toBe(false)
+      expect(book!.uri).toBe('file:///audio/new.mp3')
+      expect(book!.position).toBe(42000) // resume position survives delete + re-add
+    })
+
     it('does not bump updated_at on delete or archive (per-device changes)', async () => {
       const db = createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
