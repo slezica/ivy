@@ -12,12 +12,31 @@ const BOOK_ID = 'aaa00001-0000-0000-0000-000000000001'
 const CLIP_ID = 'ccc00001-0000-0000-0000-000000000001'
 
 const FINGERPRINT = new Uint8Array([1, 2, 3, 4])
+const FINGERPRINT_B64 = btoa(String.fromCharCode(...FINGERPRINT))
 
 async function addBook(device: SyncHarness, id: string = BOOK_ID): Promise<void> {
   await device.db.upsertBook(
     id, `file:///audio/${id}.mp3`, 'Test Book', 60000, 5000,
     'Test Title', 'Test Artist', null, 1024, FINGERPRINT,
   )
+}
+
+function remoteBookJson(overrides: Record<string, any> = {}): string {
+  return JSON.stringify({
+    id: BOOK_ID,
+    name: 'Test Book',
+    duration: 60000,
+    position: 5000,
+    updated_at: 5000,
+    updated_by: 'device-remote',
+    title: 'Remote Title',
+    artist: 'Remote Artist',
+    artwork: null,
+    file_size: 1024,
+    fingerprint: FINGERPRINT_B64,
+    speed: 100,
+    ...overrides,
+  })
 }
 
 describe('sync scenarios', () => {
@@ -114,6 +133,34 @@ describe('sync scenarios', () => {
 
     expect(await device.db.getOutboxItems()).toEqual([])
     expect(drive.getFileByName(`book_${BOOK_ID}.json`)).toBeDefined()
+  })
+
+  describe('books: local-only hidden', () => {
+    it('omits hidden from the uploaded payload', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await device.db.hideBook(BOOK_ID)
+      await device.db.queueChange('book', BOOK_ID, 'upsert')
+      await device.sync.syncNow()
+
+      const remote = drive.readJson(`book_${BOOK_ID}.json`)
+      expect(remote).not.toHaveProperty('hidden')
+    })
+
+    it('ignores hidden in legacy remote payloads on bootstrap', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      // Old-code devices wrote hidden into the payload — readers must ignore it
+      drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ hidden: true }))
+      await device.sync.syncNow()
+
+      const book = await device.db.getBookById(BOOK_ID)
+      expect(book).not.toBeNull()
+      expect(book!.hidden).toBe(false)
+    })
   })
 
   it('re-delivers a failed remote change by holding the page token', async () => {
