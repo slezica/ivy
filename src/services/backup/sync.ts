@@ -57,6 +57,11 @@ const BACKOFF_MAX_MS = 6 * 60 * 60 * 1000
 // entity's errors stop blocking token advance (it keeps retrying each sync)
 const QUARANTINE_THRESHOLD = 5
 
+// Periodic full reconcile interval: backstops everything the change feed
+// can't deliver (quarantine lists lost to restarts, whole-folder trash,
+// missed events)
+const FULL_RECONCILE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
+
 // -----------------------------------------------------------------------------
 // Service
 // -----------------------------------------------------------------------------
@@ -288,6 +293,18 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       const newToken = changesResult.newStartPageToken
       if (newToken && blockingFailures === 0) {
         await this.db.setCheckpointPageToken(newToken)
+      }
+
+      // Periodic full reconcile, in addition to the incremental pull (token
+      // handling above is unchanged). The in-memory quarantine retry list is
+      // forgotten on app restart, so without this a quarantined entity would
+      // never retry until its next remote change; it also recovers from
+      // whole-folder trash and any missed feed event. fullReconcile refreshes
+      // last_full_reconcile_at itself.
+      const lastFullReconcile = checkpoint.last_full_reconcile_at
+      if (lastFullReconcile === null || Date.now() - lastFullReconcile >= FULL_RECONCILE_INTERVAL_MS) {
+        log('Periodic full reconcile due')
+        await this.fullReconcile(result, notification)
       }
     } catch (error: any) {
       // Invalid page token — trigger recovery (once only, not recursive)

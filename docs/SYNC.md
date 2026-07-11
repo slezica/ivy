@@ -303,6 +303,7 @@ No distributed locks. Convergence comes from:
 
 - First sync (no saved page token)
 - Drive returns an invalid/expired page token (410)
+- Periodically, when the last full reconcile is more than 7 days old — run *after* the incremental pull (token handling unchanged), backstopping quarantine lists lost to app restarts, whole-folder trash, and any missed feed event
 - Manual repair (clear checkpoint, re-sync)
 
 A full reconcile lists all remote folders, downloads and compares every entity, queues local-only entities for upload (dropping their stale manifest entries so the uploads create fresh files), and saves a fresh page token.

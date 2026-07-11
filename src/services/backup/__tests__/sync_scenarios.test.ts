@@ -1382,6 +1382,35 @@ describe('sync scenarios', () => {
     })
   })
 
+  describe('periodic full reconcile', () => {
+    it('picks up remote changes the feed never delivered once a week has passed', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await device.sync.syncNow() // bootstrap full reconcile stamps the timestamp
+      await device.sync.syncNow() // consume the upload echo
+
+      // A remote edit the feed never delivers (simulated missed event:
+      // content mutated directly, no change log entry)
+      const file = drive.getFileByName(`book_${BOOK_ID}.json`)!
+      file.content = remoteBookJson({ title: 'Silently Updated', updated_at: Date.now() + 1_000_000 })
+
+      await device.sync.syncNow() // incremental only — nothing applied
+      expect((await device.db.getBookById(BOOK_ID))!.title).toBe('Test Title')
+
+      now += 7 * 24 * 60 * 60 * 1000 // a week passes
+      await device.sync.syncNow() // periodic full reconcile picks it up
+
+      expect((await device.db.getBookById(BOOK_ID))!.title).toBe('Silently Updated')
+
+      // The timestamp was refreshed — the next sync is incremental only
+      const listings = jest.spyOn(drive, 'listFiles')
+      await device.sync.syncNow()
+      expect(listings).not.toHaveBeenCalled()
+    })
+  })
+
   it('re-delivers a failed remote change by holding the page token', async () => {
     const drive = new FakeDrive()
     const deviceA = createSyncHarness(drive)
