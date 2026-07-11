@@ -149,6 +149,23 @@ describe('sync scenarios', () => {
       expect(remote).not.toHaveProperty('hidden')
     })
 
+    it('keeps a locally deleted book hidden when a remote update arrives', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await device.db.hideBook(BOOK_ID)
+
+      // A newer remote version of the book arrives (edited on another device)
+      drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ updated_at: Date.now() + 10_000_000 }))
+      await device.sync.syncNow()
+
+      const book = await device.db.getBookById(BOOK_ID)
+      expect(book!.title).toBe('Remote Title') // remote edit applied
+      expect(book!.hidden).toBe(true)          // local deletion untouched
+      expect(await device.db.getAllBooks()).toEqual([])
+    })
+
     it('ignores hidden in legacy remote payloads on bootstrap', async () => {
       const drive = new FakeDrive()
       const device = createSyncHarness(drive)

@@ -459,7 +459,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       remote.updated_at, remote.updated_by ?? null,
       remote.title, remote.artist, remote.artwork,
       remote.file_size, fingerprint,
-      false, remote.speed ?? 100,
+      remote.speed ?? 100,
     )
 
     await this.db.upsertManifestEntry({

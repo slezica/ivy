@@ -584,6 +584,8 @@ export class DatabaseService {
   /**
    * Restore a book from backup. Inserts if new, updates if exists and newer.
    * Does not set uri (file path) - caller must handle file restoration separately.
+   * `hidden` is local-only (books are per-device): fresh inserts default to
+   * visible, updates never touch the local value.
    */
   async restoreBookFromBackup(
     id: string,
@@ -597,20 +599,19 @@ export class DatabaseService {
     artwork: string | null,
     fileSize: number,
     fingerprint: Uint8Array,
-    hidden: boolean = false,
     speed: number = 100
   ): Promise<void> {
     await this.db.runAsync(
       `INSERT INTO files (id, uri, name, duration, position, updated_at, updated_by, title, artist, artwork, file_size, fingerprint, hidden, speed)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name, duration = excluded.duration,
          position = excluded.position, updated_at = excluded.updated_at, updated_by = excluded.updated_by,
          title = excluded.title, artist = excluded.artist, artwork = excluded.artwork,
-         file_size = excluded.file_size, fingerprint = excluded.fingerprint, hidden = excluded.hidden,
+         file_size = excluded.file_size, fingerprint = excluded.fingerprint,
          speed = excluded.speed
        WHERE excluded.updated_at >= files.updated_at`,
-      [id, name, duration, position, updated_at, updated_by, title, artist, artwork, fileSize, fingerprint, hidden ? 1 : 0, speed]
+      [id, name, duration, position, updated_at, updated_by, title, artist, artwork, fileSize, fingerprint, speed]
     )
   }
 

@@ -56,6 +56,38 @@ describe('DatabaseService (real SQLite)', () => {
     })
   })
 
+  describe('backup restore', () => {
+    it('preserves local hidden when applying a remote book update', async () => {
+      const db = createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
+      await db.hideBook('book-1')
+
+      await db.restoreBookFromBackup(
+        'book-1', 'Book', 60000, 9000,
+        Date.now() + 10000, 'other-device',
+        'Remote Title', null, null, 1024, FINGERPRINT,
+      )
+
+      const book = await db.getBookById('book-1')
+      expect(book!.title).toBe('Remote Title')
+      expect(book!.position).toBe(9000)
+      expect(book!.hidden).toBe(true) // local-only field survives
+    })
+
+    it('inserts remote books as visible by default', async () => {
+      const db = createDb()
+      await db.restoreBookFromBackup(
+        'book-1', 'Book', 60000, 0,
+        Date.now(), 'other-device',
+        null, null, null, 1024, FINGERPRINT,
+      )
+
+      const book = await db.getBookById('book-1')
+      expect(book!.hidden).toBe(false)
+      expect(book!.uri).toBeNull()
+    })
+  })
+
   describe('sync queue (outbox)', () => {
     it('deduplicates by entity via the UNIQUE constraint', async () => {
       const db = createDb()
