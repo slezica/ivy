@@ -16,7 +16,10 @@ def appVersionCode = semver[0] * 10000 + semver[1] * 100 + semver[2]
 react {
     entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
     reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
-    hermesCommand = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/sdks/hermesc/%OS-BIN%/hermesc"
+    // On arm64 Linux (build container) the RN plugin can't resolve %OS-BIN%; the
+    // x86_64 linux binary runs fine under emulation. No effect on macOS builds.
+    def hermesOsBin = (System.getProperty('os.name').toLowerCase().contains('linux') && System.getProperty('os.arch') == 'aarch64') ? 'linux64-bin' : '%OS-BIN%'
+    hermesCommand = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/sdks/hermesc/${hermesOsBin}/hermesc"
     codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
     enableBundleCompression = (findProperty('android.enableBundleCompression') ?: false).toBoolean()
@@ -119,6 +122,18 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+        }
+        // Standalone testing build: embedded JS bundle (no Metro), no dev-launcher,
+        // debug-signed so it installs over the dev build (and vice versa) without
+        // losing app data. Logs still reach logcat (ReactNativeJS).
+        // 'release' must come FIRST in the fallbacks: expo-dev-launcher/dev-menu
+        // select their no-op stub via the release variant — falling back to their
+        // debug variant compiles the full launcher UI in.
+        preview {
+            initWith debug
+            signingConfig signingConfigs.debug
+            debuggable false
+            matchingFallbacks = ['release', 'debug']
         }
         release {
             signingConfig signingConfigs.release
