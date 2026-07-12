@@ -487,7 +487,7 @@ Rules for Android builds in the container:
   ```
 
 - If a container build fails with the "No variants exist" signature, the tree holds Mac-path artifacts: run the same cleanup first, then build.
-- The same script fixes the Mac side (`npm run clean:android` if present, else run it manually from the repo root).
+- The same script fixes the Mac side (`npm run clean`).
 
 # Next Steps
 
