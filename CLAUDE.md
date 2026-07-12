@@ -477,17 +477,15 @@ If the current working directory is `/workspace`, you are running inside a conta
 
 Rules for Android builds in the container:
 
-- Never commit `android/local.properties`.
-- After ANY Gradle invocation (`assembleDebug`, `compileDebugKotlin`, even a failed configure), clean up before finishing your session:
+- **NEVER run Gradle in `/workspace` directly.** Use the isolation script, which mirrors the repo to a container-local clone (`/home/claude/ivy-build`) and builds there — incremental across sessions, zero pollution of the mount:
 
   ```bash
-  rm -f android/local.properties
-  rm -rf android/build android/app/build android/.gradle
-  find node_modules -maxdepth 3 -type d \( -path '*/android/build' -o -name .cxx \) -exec rm -rf {} +
+  scripts/container-build.sh :app:assembleDebug -PreactNativeArchitectures=arm64-v8a
   ```
 
-- If a container build fails with the "No variants exist" signature, the tree holds Mac-path artifacts: run the same cleanup first, then build.
-- The same script fixes the Mac side (`npm run clean`).
+  It syncs HEAD plus uncommitted *tracked* changes; untracked files must be committed (or `git add -N`'d) to be seen. Pass any Gradle tasks/flags as arguments.
+- Never commit `android/local.properties`.
+- **Recovery only** — if `/workspace` was polluted anyway (a Gradle run in the mount, from either side; symptom above), fix it with `npm run clean` (deletes `local.properties`, `android/{build,app/build,.gradle}`, and `node_modules/*/android/{build,.cxx}`). The next build on the affected machine is a slow full rebuild — that's why the isolation script is the rule, not cleaning.
 
 # Next Steps
 
