@@ -49,6 +49,14 @@
         }
       ],
       "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "useLegacyPackaging": true
+          }
+        }
+      ],
       "./plugins/withIvySigning.js",
       "./plugins/withIvyPreviewBuildType.js",
       "./plugins/withIvyHermesFix.js",
