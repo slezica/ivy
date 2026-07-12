@@ -32,6 +32,7 @@ rsync -a --delete \
   --exclude '/android/.gradle' \
   --exclude '/android/app/build' \
   --exclude '/android/local.properties' \
+  --exclude '/modules/ivy/android/build' \
   --exclude '.cxx' \
   --exclude '/.expo' \
   "$SRC/" "$DIR/"
