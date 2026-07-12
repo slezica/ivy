@@ -48,7 +48,11 @@
           "backgroundColor": "#222831"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "./plugins/withIvySigning.js",
+      "./plugins/withIvyPreviewBuildType.js",
+      "./plugins/withIvyHermesFix.js",
+      "./plugins/withIvyVersionName.js"
     ],
     "experiments": {
       "typedRoutes": true
