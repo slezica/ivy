@@ -24,7 +24,7 @@ When a clip is created, the relevant segment is extracted from the source book a
 
 The JS side passes a filename prefix (no extension) to the native slicer, which appends `.m4a` and returns the actual path. The JS code stores the native return value in the database, so the correct extension is always what gets persisted.
 
-**FFmpeg packaging.** The slicer (and `ChapterReaderModule`) use `libffmpeg.so`, which ships in the `:ffmpeg` artifact of `youtubedl-android` (the yt-dlp engine itself was removed — see [2026-06-30-remove-ytdlp.md](2026-06-30-remove-ytdlp.md)). `expo.useLegacyPackaging=true` in `gradle.properties` is required so the native `.so` is extracted to disk rather than kept compressed in the APK. `FFmpeg.getInstance().init()` (idempotent) unpacks the binary on first use.
+**FFmpeg packaging.** The slicer (and `ChapterReaderModule`) use `libffmpeg.so`, which ships in the `:ffmpeg` artifact of `youtubedl-android` (the yt-dlp engine itself was removed — see [2026-06-30-remove-ytdlp.md](2026-06-30-remove-ytdlp.md)). `expo.useLegacyPackaging=true` is required so the native `.so` is extracted to disk rather than kept compressed in the APK (managed via `expo-build-properties` in `app.json`; the `:ffmpeg` dependency itself lives in `modules/ivy/android/build.gradle`). `FFmpeg.getInstance().init()` (idempotent) unpacks the binary on first use.
 
 ### 2. Clips reference their source, but don't require it
 
