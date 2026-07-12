@@ -38,28 +38,15 @@ yarn-error.*
 
 app-example
 
-# generated native folders
+# generated native folders (expo prebuild)
 /ios
-/android/*
-# Exception: Keep custom native modules and gradle config
-!/android/app
-/android/app/*
-!/android/app/build.gradle
-!/android/app/src
-/android/app/src/*
-!/android/app/src/main
-/android/app/src/main/*
-!/android/app/src/main/java
-/android/app/src/main/java/*
-!/android/app/src/main/java/com
-/android/app/src/main/java/com/*
-!/android/app/src/main/java/com/salezica
-/android/app/src/main/java/com/salezica/*
-!/android/app/src/main/java/com/salezica/ivy
-!/android/app/src/main/java/com/yausername
-/android/app/src/main/java/com/yausername/*
-!/android/app/src/main/java/com/yausername/youtubedl_android
-!/android/gradle.properties
+/android
+
+# local native module build outputs
+/modules/ivy/android/build
+
+# keystores (never commit release.keystore)
+/credentials/
 
 # Maestro test artifacts
 maestro/screenshots/

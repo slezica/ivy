@@ -4,6 +4,8 @@
   "version": "1.0.2",
   "scripts": {
     "start": "expo run:android",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "lint": "expo lint",
     "test": "jest --silent",
     "test:verbose": "jest",
