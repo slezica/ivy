@@ -1,0 +1,49 @@
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+def safeExtGet(prop, fallback) {
+    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
+android {
+    // The Kotlin sources stay in `com.salezica.ivy` (see react-native.config.js);
+    // the namespace only has to be unique within the build (the app owns
+    // `com.salezica.ivy`).
+    namespace 'com.salezica.ivy.modules'
+    compileSdk safeExtGet('compileSdkVersion', 36)
+
+    defaultConfig {
+        minSdkVersion safeExtGet('minSdkVersion', 24)
+        targetSdkVersion safeExtGet('targetSdkVersion', 36)
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    // Version supplied by the React Native root project plugin (dependency substitution).
+    implementation 'com.facebook.react:react-android'
+
+    // Bundled FFmpeg (libffmpeg.so), used by AudioSlicer (clip slicing + transcription
+    // extraction) and ChapterReader. We deliberately keep ONLY the :ffmpeg artifact —
+    // the yt-dlp :library engine was removed. :ffmpeg pulls :common transitively, but its
+    // FFmpeg.init() throws com.yausername.youtubedl_android.YoutubeDLException (declared
+    // compileOnly upstream, so not in the published POM), so we ship a shim of that class —
+    // see com/yausername/youtubedl_android/YoutubeDLException.kt.
+    //
+    // libffmpeg.so only works when extracted to disk: the app must build with
+    // expo.useLegacyPackaging=true (managed via expo-build-properties in app.json).
+    implementation 'io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1'
+}

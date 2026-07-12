@@ -1,0 +1,6 @@
+{
+  "name": "ivy-native",
+  "version": "1.0.0",
+  "description": "Ivy's local native modules (audio slicing, metadata, file copy, chapters)",
+  "private": true
+}
