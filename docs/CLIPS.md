@@ -117,7 +117,9 @@ interface ClipWithFile extends Clip {
 }
 ```
 
-Book metadata is preserved in the `files` table even after archiving or deletion (soft-delete), so the clip usually knows what book it came from even if the audio is gone. But the LEFT JOIN means the book **row** can also be missing entirely — a clip synced before its book arrived, or a book id retired by an identity merge — in which case *all* `file_*` fields are null, not just `file_uri`. Never assume `file_name` or `file_duration` are present.
+Book metadata is preserved in the `files` table even after archiving or deletion (soft-delete), so the clip usually knows what book it came from even if the audio is gone. But the LEFT JOIN means the book **row** can also be missing entirely — a clip synced before its book arrived, a book id retired by an identity merge, or an archived (audio-less) row removed by a book tombstone — in which case *all* `file_*` fields are null, not just `file_uri`. Never assume `file_name` or `file_duration` are present.
+
+For display, clips also carry their own **snapshot** of the book's identity: `source_title` (book title, falling back to file name) and `source_artist`, captured at creation, synced in the clip payload, and backfilled once by migration. UI falls back `file_title || file_name || source_title` — the live join wins (reflects later metadata edits), the snapshot only covers orphans. Legacy backups lack the fields, so pulls never null out a local snapshot (`COALESCE` in `restoreClipFromBackup`).
 
 ---
 

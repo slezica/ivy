@@ -274,6 +274,8 @@ start INTEGER                  -- milliseconds (position in source file)
 duration INTEGER               -- milliseconds
 note TEXT
 transcription TEXT             -- Auto-generated from audio (Whisper)
+source_title TEXT              -- Book title/name snapshot at creation (survives book row loss)
+source_artist TEXT             -- Book artist snapshot at creation
 created_at INTEGER
 updated_at INTEGER
 updated_by TEXT                -- device ID that last modified this entity
