@@ -207,9 +207,11 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── react-native.config.js      # Registers IvyPackage with RN core autolinking
   └── android/
       ├── build.gradle            # Library module; carries the youtubedl-android :ffmpeg dependency
+      ├── src/main/jniLibs/       # Vendored ffmpeg runtime deps (libexpat, libcrypto, libandroid-*) per ABI — see docs/CLIPS.md
       └── src/main/java/com/
           ├── salezica/ivy/
           │   ├── IvyPackage.kt           # Single autolinked ReactPackage (aggregates the four below)
+          │   ├── FFmpegEnvironment.kt    # LD_LIBRARY_PATH + soname symlinks for exec'ing libffmpeg.so
           │   ├── AudioSlicerModule.kt    # Native module for audio slicing
           │   ├── AudioSlicerPackage.kt
           │   ├── AudioMetadataModule.kt  # Native module for metadata extraction
