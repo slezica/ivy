@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ToastAndroid } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import Slider from '@react-native-community/slider'
 
@@ -59,6 +59,7 @@ export default function PlayerScreen() {
 
     try {
       await addClip(ownBook.id, ownPosition)
+      ToastAndroid.show('Clip added', ToastAndroid.SHORT)
     } catch (error) {
       console.error('Error adding clip:', error)
       Alert.alert('Error', 'Failed to add clip')
