@@ -22,7 +22,7 @@ export const createShareClip: ActionFactory<ShareClipDeps, ShareClip> = (deps) =
       throw new Error('Clip not found')
     }
 
-    const title = clip.note || clip.file_name || 'Clip'
+    const title = clip.note || clip.file_name || clip.source_title || 'Clip'
     log(`Sharing clip "${title}"`)
 
     // Share using the clip's existing audio file

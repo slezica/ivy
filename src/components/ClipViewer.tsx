@@ -109,7 +109,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{clip.file_title || clip.file_name || 'Unknown book'}</Text>
+        <Text style={styles.title}>{clip.file_title || clip.file_name || clip.source_title || 'Unknown book'}</Text>
         <Text style={styles.subtitle}>{`${formatTime(clip.duration)} (at ${formatTime(clip.start)})`}</Text>
       </View>
 

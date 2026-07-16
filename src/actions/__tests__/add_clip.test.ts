@@ -134,7 +134,9 @@ describe('createAddClip', () => {
         slicerUri,
         10000,
         20000,
-        '' // default empty note
+        '', // default empty note
+        'Test Title',  // source_title snapshot (book title)
+        'Test Artist', // source_artist snapshot
       )
     })
 

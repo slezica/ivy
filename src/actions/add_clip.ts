@@ -57,7 +57,9 @@ export const createAddClip: ActionFactory<AddClipDeps, AddClip> = (deps) => (
       sliceResult.uri,
       position,
       clipDuration,
-      '' // Default empty note
+      '', // Default empty note
+      book.title ?? book.name, // Snapshot: survives the book row disappearing
+      book.artist ?? null,
     )
 
     // Queue for sync

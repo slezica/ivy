@@ -100,7 +100,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{clip.file_title || clip.file_name || 'Unknown book'}</Text>
+        <Text style={styles.title}>{clip.file_title || clip.file_name || clip.source_title || 'Unknown book'}</Text>
         <Text style={styles.subtitle}>{`${formatTime(selectionEnd - selectionStart)} (at ${formatTime(selectionStart)})`}</Text>
       </View>
 
