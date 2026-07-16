@@ -157,6 +157,35 @@ describe('DatabaseService (real SQLite)', () => {
       expect(orphan.file_duration).toBeNull()
     })
 
+    it('keeps the source title/artist snapshot when the book row is hard-deleted', async () => {
+      const db = createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book.mp3', 60000, 0, 'Real Title', 'Real Artist')
+      await db.createClip('clip-1', 'book-1', 'file:///clips/clip-1.m4a', 0, 1000, '', 'Real Title', 'Real Artist')
+
+      await db.deleteBook('book-1')
+
+      const [clip] = await db.getAllClips()
+      expect(clip.file_title).toBeNull()
+      expect(clip.source_title).toBe('Real Title')
+      expect(clip.source_artist).toBe('Real Artist')
+    })
+
+    it('does not null the snapshot when a legacy backup (no snapshot) wins LWW', async () => {
+      const db = createDb()
+      await db.createClip('clip-1', 'book-1', 'file:///clips/clip-1.m4a', 0, 1000, '', 'Snapshot Title', 'Snapshot Artist')
+
+      // Remote payload from an old app version: newer updated_at, no snapshot fields
+      await db.restoreClipFromBackup(
+        'clip-1', 'book-1', 'file:///clips/clip-1.m4a',
+        0, 1000, 'edited elsewhere', null, 1000, Date.now() + 10_000, 'other-device',
+      )
+
+      const [clip] = await db.getAllClips()
+      expect(clip.note).toBe('edited elsewhere')
+      expect(clip.source_title).toBe('Snapshot Title')
+      expect(clip.source_artist).toBe('Snapshot Artist')
+    })
+
     it('lists sessions whose book is missing, with null book fields', async () => {
       const db = createDb()
       await db.createSession('no-such-book')

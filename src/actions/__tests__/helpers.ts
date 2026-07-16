@@ -65,6 +65,8 @@ export function createMockClip(overrides: Partial<ClipWithFile> = {}): ClipWithF
     duration: 5000,
     note: 'Test clip',
     transcription: null,
+    source_title: null,
+    source_artist: null,
     created_at: 1000,
     updated_at: 1000,
     updated_by: null,

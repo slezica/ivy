@@ -51,6 +51,8 @@ export interface Clip {
   duration: number         // milliseconds
   note: string
   transcription: string | null  // Auto-generated from audio
+  source_title: string | null   // Book title (or file name) snapshotted at creation
+  source_artist: string | null  // Book artist snapshotted at creation
   created_at: number
   updated_at: number
   updated_by: string | null // device ID that last modified this entity
@@ -286,6 +288,19 @@ const migrations: Migration[] = [
   // Migration 7: Add last_played_at to files (local-only, drives startup auto-load)
   (db) => {
     db.execSync('ALTER TABLE files ADD COLUMN last_played_at INTEGER')
+  },
+
+  // Migration 8: Snapshot book title/artist onto clips, so they survive the
+  // book row disappearing (tombstoned archived books, cross-device gaps).
+  // Backfill from the book where it still exists; long-orphaned clips stay null.
+  (db) => {
+    db.execSync('ALTER TABLE clips ADD COLUMN source_title TEXT')
+    db.execSync('ALTER TABLE clips ADD COLUMN source_artist TEXT')
+    db.execSync(`
+      UPDATE clips SET
+        source_title = (SELECT COALESCE(files.title, files.name) FROM files WHERE files.id = clips.source_id),
+        source_artist = (SELECT files.artist FROM files WHERE files.id = clips.source_id)
+    `)
   },
 ]
 
@@ -651,11 +666,14 @@ export class DatabaseService {
     )
   }
 
-  async createClip(id: string, sourceId: string, uri: string, start: number, duration: number, note: string): Promise<Clip> {
+  async createClip(
+    id: string, sourceId: string, uri: string, start: number, duration: number, note: string,
+    sourceTitle: string | null = null, sourceArtist: string | null = null,
+  ): Promise<Clip> {
     const now = Date.now()
     await this.db.runAsync(
-      'INSERT INTO clips (id, source_id, uri, start, duration, note, created_at, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, sourceId, uri, start, duration, note, now, now, this.deviceId]
+      'INSERT INTO clips (id, source_id, uri, start, duration, note, source_title, source_artist, created_at, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, sourceId, uri, start, duration, note, sourceTitle, sourceArtist, now, now, this.deviceId]
     )
 
     return {
@@ -666,6 +684,8 @@ export class DatabaseService {
       duration,
       note,
       transcription: null,
+      source_title: sourceTitle,
+      source_artist: sourceArtist,
       created_at: now,
       updated_at: now,
       updated_by: this.deviceId,
@@ -775,18 +795,22 @@ export class DatabaseService {
     transcription: string | null,
     created_at: number,
     updated_at: number,
-    updated_by: string | null = null
+    updated_by: string | null = null,
+    sourceTitle: string | null = null,
+    sourceArtist: string | null = null,
   ): Promise<void> {
     await this.db.runAsync(
-      `INSERT INTO clips (id, source_id, uri, start, duration, note, transcription, created_at, updated_at, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO clips (id, source_id, uri, start, duration, note, transcription, source_title, source_artist, created_at, updated_at, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          source_id = excluded.source_id, uri = excluded.uri,
          start = excluded.start, duration = excluded.duration,
          note = excluded.note, transcription = excluded.transcription,
+         source_title = COALESCE(excluded.source_title, clips.source_title),
+         source_artist = COALESCE(excluded.source_artist, clips.source_artist),
          updated_at = excluded.updated_at, updated_by = excluded.updated_by
        WHERE excluded.updated_at >= clips.updated_at`,
-      [id, sourceId, uri, start, duration, note, transcription, created_at, updated_at, updated_by]
+      [id, sourceId, uri, start, duration, note, transcription, sourceTitle, sourceArtist, created_at, updated_at, updated_by]
     )
   }
 

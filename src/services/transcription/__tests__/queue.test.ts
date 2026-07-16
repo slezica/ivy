@@ -39,6 +39,8 @@ describe('TranscriptionQueueService', () => {
       duration: 5000,
       note: '',
       transcription: null,
+      source_title: null,
+      source_artist: null,
       created_at: 1000,
       updated_at: 1000,
       updated_by: null,
