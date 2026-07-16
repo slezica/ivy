@@ -10,30 +10,37 @@
 // stay < 100); Play requires it to strictly increase across uploads.
 const { withAppBuildGradle } = require('expo/config-plugins')
 
+// Each step guards on its own output (not a blanket "already applied" check),
+// so a prebuild without --clean repairs a build.gradle where an earlier plugin
+// version applied only some of the replacements.
 function apply(contents) {
-  if (contents.includes('appVersionName')) {
-    return contents // already applied
+  if (!contents.includes('def appVersionCode')) {
+    const projectRootDef = /(\ndef projectRoot = [^\n]+\n)/
+    if (!projectRootDef.test(contents)) {
+      throw new Error('withIvyVersionName: projectRoot anchor not found in app/build.gradle')
+    }
+    contents = contents.replace(
+      projectRootDef,
+      '$1\ndef appVersionName = new groovy.json.JsonSlurper().parseText(file("$projectRoot/package.json").text).version\n' +
+      'def appSemver = appVersionName.split(\'\\\\.\').collect { it.toInteger() }\n' +
+      'def appVersionCode = appSemver[0] * 10000 + appSemver[1] * 100 + appSemver[2]\n'
+    )
   }
-  const projectRootDef = /(\ndef projectRoot = [^\n]+\n)/
-  if (!projectRootDef.test(contents)) {
-    throw new Error('withIvyVersionName: projectRoot anchor not found in app/build.gradle')
+  if (!contents.includes('versionName appVersionName')) {
+    const versionName = /versionName ("[^"]*"|'[^']*')/
+    if (!versionName.test(contents)) {
+      throw new Error('withIvyVersionName: versionName anchor not found in app/build.gradle')
+    }
+    contents = contents.replace(versionName, 'versionName appVersionName')
   }
-  contents = contents.replace(
-    projectRootDef,
-    '$1\ndef appVersionName = new groovy.json.JsonSlurper().parseText(file("$projectRoot/package.json").text).version\n' +
-    'def appSemver = appVersionName.split(\'\\\\.\').collect { it.toInteger() }\n' +
-    'def appVersionCode = appSemver[0] * 10000 + appSemver[1] * 100 + appSemver[2]\n'
-  )
-  const versionName = /versionName ("[^"]*"|'[^']*')/
-  if (!versionName.test(contents)) {
-    throw new Error('withIvyVersionName: versionName anchor not found in app/build.gradle')
+  if (!contents.includes('versionCode appVersionCode')) {
+    const versionCode = /versionCode \d+/
+    if (!versionCode.test(contents)) {
+      throw new Error('withIvyVersionName: versionCode anchor not found in app/build.gradle')
+    }
+    contents = contents.replace(versionCode, 'versionCode appVersionCode')
   }
-  contents = contents.replace(versionName, 'versionName appVersionName')
-  const versionCode = /versionCode \d+/
-  if (!versionCode.test(contents)) {
-    throw new Error('withIvyVersionName: versionCode anchor not found in app/build.gradle')
-  }
-  return contents.replace(versionCode, 'versionCode appVersionCode')
+  return contents
 }
 
 module.exports = function withIvyVersionName(config) {
