@@ -32,6 +32,8 @@ export interface ClipBackup {
   duration: number
   note: string
   transcription: string | null
+  source_title?: string | null   // Book title snapshot (absent in legacy backups)
+  source_artist?: string | null  // Book artist snapshot (absent in legacy backups)
   created_at: number
   updated_at: number
   updated_by: string | null  // device ID (null for legacy backups)

@@ -804,6 +804,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       remote.start, remote.duration, remote.note,
       remote.transcription, remote.created_at,
       remote.updated_at, remote.updated_by ?? null,
+      remote.source_title ?? null, remote.source_artist ?? null,
     )
 
     await this.db.upsertManifestEntry({
@@ -1177,6 +1178,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       duration: clip.duration,
       note: clip.note,
       transcription: clip.transcription,
+      source_title: clip.source_title,
+      source_artist: clip.source_artist,
       created_at: clip.created_at,
       updated_at: clip.updated_at,
       updated_by: clip.updated_by,
