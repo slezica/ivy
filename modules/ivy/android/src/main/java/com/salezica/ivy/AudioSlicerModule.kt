@@ -37,15 +37,7 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
                 val nativeLibDir = reactApplicationContext.applicationInfo.nativeLibraryDir
                 val ffmpegPath = File(nativeLibDir, "libffmpeg.so").absolutePath
-
-                // Shared libs are spread across extracted package dirs (mirrors YoutubeDL.kt)
-                val packagesDir = File(reactApplicationContext.noBackupFilesDir, "youtubedl-android/packages")
-                val ldLibraryPath = listOf(
-                    "$packagesDir/python/usr/lib",
-                    "$packagesDir/ffmpeg/usr/lib",
-                    "$packagesDir/aria2c/usr/lib",
-                    nativeLibDir
-                ).joinToString(":")
+                val ldLibraryPath = FFmpegEnvironment.ldLibraryPath(reactApplicationContext)
 
                 val startSec = startTimeMs / 1000.0
                 val durationSec = (endTimeMs - startTimeMs) / 1000.0

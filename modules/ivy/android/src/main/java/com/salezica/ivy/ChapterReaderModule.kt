@@ -29,14 +29,7 @@ class ChapterReaderModule(reactContext: ReactApplicationContext) : ReactContextB
 
                 val nativeLibDir = reactApplicationContext.applicationInfo.nativeLibraryDir
                 val ffmpegPath = File(nativeLibDir, "libffmpeg.so").absolutePath
-
-                val packagesDir = File(reactApplicationContext.noBackupFilesDir, "youtubedl-android/packages")
-                val ldLibraryPath = listOf(
-                    "$packagesDir/python/usr/lib",
-                    "$packagesDir/ffmpeg/usr/lib",
-                    "$packagesDir/aria2c/usr/lib",
-                    nativeLibDir
-                ).joinToString(":")
+                val ldLibraryPath = FFmpegEnvironment.ldLibraryPath(reactApplicationContext)
 
                 // Use ffmpeg to extract metadata in ffmetadata format.
                 // This outputs INI-style text with [CHAPTER] sections.
