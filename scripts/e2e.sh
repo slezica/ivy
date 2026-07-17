@@ -27,10 +27,16 @@ echo "[e2e] pushing + media-scanning $FIXTURE"
 "$ADB" push "$FIXTURE" "$DEST" >/dev/null
 "$ADB" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$DEST" >/dev/null
 
-if [ "$#" -gt 0 ]; then
+# Default to the whole suite unless the args already name a flow path, so
+# `-- --device <serial>` (options only) still runs everything.
+has_path=false
+for a in "$@"; do
+  case "$a" in maestro/*|*.yaml|*.yml) has_path=true ;; esac
+done
+if [ "$has_path" = true ]; then
   echo "[e2e] maestro test $*"
   exec maestro test "$@"
 else
-  echo "[e2e] maestro test maestro/"
-  exec maestro test maestro/
+  echo "[e2e] maestro test $* maestro/"
+  exec maestro test "$@" maestro/
 fi
