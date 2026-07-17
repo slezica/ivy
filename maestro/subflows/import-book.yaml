@@ -6,9 +6,9 @@ appId: com.salezica.ivy
 #
 # Prerequisite (see maestro/README.md): the test file must be pushed AND
 # media-scanned so the picker's search can find it:
-#   adb push assets/test/test-audio.mp3 /sdcard/Download/test-audio.mp3
+#   adb push assets/test/test-audio.m4a /sdcard/Download/test-audio.m4a
 #   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
-#     -d file:///sdcard/Download/test-audio.mp3
+#     -d file:///sdcard/Download/test-audio.m4a
 #
 # clearState wipes app data — only run against test devices/emulators.
 
@@ -28,9 +28,9 @@ appId: com.salezica.ivy
     id: ".*:id/option_menu_search"
 - inputText: "test-audio"
 - extendedWaitUntil:
-    visible: "test-audio.mp3"
+    visible: "test-audio.m4a"
     timeout: 10000
-- tapOn: "test-audio.mp3"
+- tapOn: "test-audio.m4a"
 
 # Import copies the file and reads metadata + chapters. Chapter extraction is
 # the first FFmpeg call after clearState, so it pays a one-time cold cost:
@@ -39,5 +39,5 @@ appId: com.salezica.ivy
 # timeout is sized well above that; the real fix is a warm-up step (see
 # maestro/README.md "Known hotspot").
 - extendedWaitUntil:
-    visible: "The Selfish Gene"
+    visible: "Ivy Test Book"
     timeout: 150000

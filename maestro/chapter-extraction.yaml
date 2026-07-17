@@ -6,11 +6,11 @@ appId: com.salezica.ivy
 # so this asserts the extracted chapter is actually present — the exact guard
 # the original clip-add packaging bug lacked.
 #
-# The bundled test file carries one chapter ("Chapter 1").
+# The bundled test file carries two chapters ("Chapter One", "Chapter Two").
 
 - runFlow: subflows/import-book.yaml
 
-- tapOn: "The Selfish Gene"
+- tapOn: "Ivy Test Book"
 
 # Open the chapters dialog
 - tapOn:
@@ -19,6 +19,6 @@ appId: com.salezica.ivy
 
 # Extraction succeeded → the chapter shows and the empty-state does NOT.
 # assertNotVisible is the regression guard against the silent empty-list bug.
-- assertVisible: "Chapter 1"
+- assertVisible: "Chapter One"
 - assertNotVisible: "No chapters in this file"
 - takeScreenshot: screenshots/chapters-01-extracted

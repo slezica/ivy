@@ -7,7 +7,7 @@ appId: com.salezica.ivy
 - runFlow: subflows/import-book.yaml
 
 # Create a clip
-- tapOn: "The Selfish Gene"
+- tapOn: "Ivy Test Book"
 - tapOn:
     id: "add-clip-button"
 - extendedWaitUntil:

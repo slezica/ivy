@@ -6,7 +6,7 @@ appId: com.salezica.ivy
 # (playback still works after the gesture sequence).
 
 - runFlow: subflows/import-book.yaml
-- tapOn: "The Selfish Gene"
+- tapOn: "Ivy Test Book"
 
 # Pause so the timeline stays still (import auto-plays)
 - tapOn:

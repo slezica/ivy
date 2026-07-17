@@ -8,7 +8,7 @@ appId: com.salezica.ivy
 
 - runFlow: subflows/import-book.yaml
 
-- tapOn: "The Selfish Gene"
+- tapOn: "Ivy Test Book"
 - assertVisible:
     id: "add-clip-button"
 
@@ -23,6 +23,6 @@ appId: com.salezica.ivy
 # The clip must appear in the Clips tab, attributed to the book
 - tapOn: "Clips"
 - extendedWaitUntil:
-    visible: "The Selfish Gene"
+    visible: "Ivy Test Book"
     timeout: 5000
 - takeScreenshot: screenshots/clip-02-clip-listed

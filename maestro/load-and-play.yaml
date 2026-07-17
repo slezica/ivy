@@ -7,7 +7,7 @@ appId: com.salezica.ivy
 - takeScreenshot: screenshots/load-01-library-with-file
 
 # Open the book in the player
-- tapOn: "The Selfish Gene"
+- tapOn: "Ivy Test Book"
 
 # Verify play/pause round trip
 - assertVisible:
@@ -22,5 +22,5 @@ appId: com.salezica.ivy
 
 # Back to the library list
 - tapOn: "Library"
-- assertVisible: "The Selfish Gene"
+- assertVisible: "Ivy Test Book"
 - takeScreenshot: screenshots/load-04-library

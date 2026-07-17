@@ -20,9 +20,9 @@ the test audio present and **media-scanned** so the system picker's search can
 find it:
 
 ```bash
-adb -s <serial> push assets/test/test-audio.mp3 /sdcard/Download/test-audio.mp3
+adb -s <serial> push assets/test/test-audio.m4a /sdcard/Download/test-audio.m4a
 adb -s <serial> shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
-  -d file:///sdcard/Download/test-audio.mp3
+  -d file:///sdcard/Download/test-audio.m4a
 ```
 
 Flows that use `launchApp.clearState` wipe app data — **only run against test
