@@ -1,15 +1,13 @@
 appId: com.salezica.ivy
 ---
-# Smoke test: Verify app launches and shows empty state
+# Smoke test: Verify app launches and shows empty state.
+# clearState wipes app data — only run against test devices/emulators.
 
-- launchApp
-
-# Reset to ensure clean state
-- tapOn: "Reset"
-- tapOn: "Reset"  # Confirm
+- launchApp:
+    clearState: true
 
 # Library screen should show empty state
-- assertVisible: "No files yet"
+- assertVisible: "No books yet"
 - assertVisible: "Open an audio file to add it to your library"
 
 # Tab bar should be visible
