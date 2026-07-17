@@ -56,7 +56,25 @@ function neededSonames(readelf, file) {
   return [...out.matchAll(/NEEDED.*\[(.+)\]/g)].map(m => m[1])
 }
 
-function checkAbi(readelf, workDir, abi) {
+// Parse FFmpegEnvironment.kt's SYMLINKED_LIBS (soname -> mangled jniLib name).
+// This is the runtime source of truth: a vendored versioned soname resolves on
+// device ONLY if it's symlinked here. The closure check must agree with it, or
+// a mangled lib present in jniLibs but absent from this map passes the check
+// and still crashes at link time (the original bug, reborn).
+function parseSymlinkMap() {
+  const kt = path.join(__dirname, '..', 'modules', 'ivy', 'android', 'src', 'main',
+    'java', 'com', 'salezica', 'ivy', 'FFmpegEnvironment.kt')
+  if (!fs.existsSync(kt)) fail(`FFmpegEnvironment.kt not found at ${kt}`)
+  const src = fs.readFileSync(kt, 'utf8')
+  const block = src.match(/SYMLINKED_LIBS\s*=\s*mapOf\(([\s\S]*?)\)/)
+  if (!block) fail('could not find SYMLINKED_LIBS mapOf in FFmpegEnvironment.kt')
+  const map = new Map()
+  for (const m of block[1].matchAll(/"([^"]+)"\s+to\s+"([^"]+)"/g)) map.set(m[1], m[2])
+  if (map.size === 0) fail('SYMLINKED_LIBS parsed as empty — regex drift?')
+  return map
+}
+
+function checkAbi(readelf, workDir, abi, symlinkMap) {
   const apkLibDir = path.join(workDir, 'lib', abi)
   const ffmpegBin = path.join(apkLibDir, 'libffmpeg.so')
   const packageZip = path.join(apkLibDir, 'libffmpeg.zip.so')
@@ -68,19 +86,24 @@ function checkAbi(readelf, workDir, abi) {
   unzip(packageZip, pkgDir, ['usr/lib/*'])
   const pkgLibDir = path.join(pkgDir, 'usr/lib')
 
-  // A soname resolves if a file (or symlink) with that exact name exists in
-  // the package libs or the APK's jniLibs; system libs come from the OS.
-  // Versioned sonames can't be jniLib filenames, so FFmpegEnvironment.kt ships
-  // them mangled (libfoo.so.N → libfoo_N.so) and symlinks them at runtime —
-  // accept the mangled name in the APK as providing the soname.
+  // A soname resolves if a real file with that exact name exists in the package
+  // libs or the APK's jniLibs (system libs come from the OS). Versioned sonames
+  // can't be jniLib filenames, so vendored ones ship mangled (libfoo.so.N →
+  // libfoo_N.so) and FFmpegEnvironment.kt symlinks them at runtime. A mangled
+  // jniLib only resolves on device if its soname is in that runtime map — so a
+  // mangled file present but NOT mapped is reported as `unmapped`, not resolved.
+  const unmapped = new Map() // soname -> mangled file that exists but isn't symlinked at runtime
   const locate = (soname) => {
-    const mangled = soname.includes('.so.') ? soname.replace(/\.so\./, '_') + '.so' : null
     for (const dir of [pkgLibDir, apkLibDir]) {
-      const candidate = path.join(dir, soname)
-      if (fs.existsSync(candidate)) return candidate
-      if (mangled && dir === apkLibDir) {
-        const mangledPath = path.join(dir, mangled)
-        if (fs.existsSync(mangledPath)) return mangledPath
+      if (fs.existsSync(path.join(dir, soname))) return path.join(dir, soname)
+    }
+    // Not present under its real name; a vendored mangled jniLib may cover it,
+    // but only if the runtime symlink map actually creates that link.
+    if (soname.includes('.so.')) {
+      const mangled = soname.replace(/\.so\./, '_') + '.so'
+      if (fs.existsSync(path.join(apkLibDir, mangled))) {
+        if (symlinkMap.get(soname) === mangled) return path.join(apkLibDir, mangled)
+        unmapped.set(soname, mangled) // exists in jniLibs but no runtime symlink → link fails
       }
     }
     return null
@@ -104,9 +127,20 @@ function checkAbi(readelf, workDir, abi) {
     }
   }
 
-  if (missing.size > 0) {
+  // Runtime map entries must reference jniLibs that actually exist, or the
+  // symlink target is dangling on device.
+  for (const [soname, mangled] of symlinkMap) {
+    if (!fs.existsSync(path.join(apkLibDir, mangled))) {
+      unmapped.set(soname, `${mangled} (symlink target missing from jniLibs)`)
+    }
+  }
+
+  if (missing.size > 0 || unmapped.size > 0) {
     for (const [soname, neededBy] of missing) {
       console.error(`  ${abi}: ${soname} (needed by ${neededBy}) does not resolve`)
+    }
+    for (const [soname, mangled] of unmapped) {
+      console.error(`  ${abi}: ${soname} present as ${mangled} but not in FFmpegEnvironment.SYMLINKED_LIBS — won't link at runtime`)
     }
     return false
   }
@@ -118,12 +152,13 @@ const apk = process.argv[2]
 if (!apk || !fs.existsSync(apk)) fail(`usage: check-ffmpeg-closure.js <path-to-apk> (got: ${apk})`)
 
 const readelf = findReadelf()
+const symlinkMap = parseSymlinkMap()
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ffmpeg-closure-'))
 try {
   unzip(apk, workDir, ['lib/*'])
   const abis = fs.readdirSync(path.join(workDir, 'lib'))
   console.log(`Checking FFmpeg dependency closure in ${path.basename(apk)} (${abis.join(', ')})`)
-  const ok = abis.map(abi => checkAbi(readelf, workDir, abi)).every(Boolean)
+  const ok = abis.map(abi => checkAbi(readelf, workDir, abi, symlinkMap)).every(Boolean)
   if (!ok) fail('unresolved sonames — the ffmpeg binary will fail to link on device (fresh installs)')
 } finally {
   fs.rmSync(workDir, { recursive: true, force: true })
