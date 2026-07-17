@@ -129,7 +129,9 @@ export interface SyncCheckpoint {
 
 type Migration = (db: SQLite.SQLiteDatabase) => void
 
-const migrations: Migration[] = [
+// Exported for migration tests: the array IS the schema history, so a test can
+// reconstruct any past version by running a prefix of it (see migrations.test.ts).
+export const migrations: Migration[] = [
   // Migration 0: Initial schema
   (db) => {
     // Status table (for tracking migrations)
