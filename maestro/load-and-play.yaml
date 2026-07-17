@@ -1,47 +1,55 @@
 appId: com.salezica.ivy
 ---
-# Flow 1: Load test file and verify playback controls
-# Prerequisites: Test file pushed to /sdcard/Download/test-audio.mp3
+# Flow 1: Import a file through the real document picker and verify playback.
+# Prerequisites: test file pushed to the device:
+#   adb push assets/test/test-audio.mp3 /sdcard/Download/test-audio.mp3
+# clearState wipes app data — only run against test devices/emulators.
 
-- launchApp
+- launchApp:
+    clearState: true
 
-# Reset app state first (tap Reset, then confirm)
-- tapOn: "Reset"
-- tapOn: "Reset"  # Confirm in alert
-
-# Wait for reset to complete and verify empty state
-- assertVisible: "No files yet"
+- assertVisible: "No books yet"
 - takeScreenshot: screenshots/load-01-empty-state
 
-# Tap Sample button to load test file (dev-only feature)
-- tapOn: "Sample"
+# Import via the header menu → system document picker
+- tapOn:
+    id: "library-menu-button"
+- tapOn: "Add from files"
 
-# Wait for file to load (adding + loading states)
+# System picker (documentsui): search by filename — version-tolerant, avoids
+# the flaky roots-drawer navigation. The file is indexed under MediaStore
+# (the test harness media-scans it before launching).
+- tapOn:
+    id: ".*:id/option_menu_search"  # AOSP or Google documentsui variant
+- inputText: "test-audio"
+- extendedWaitUntil:
+    visible: "test-audio.mp3"
+    timeout: 10000
+- tapOn: "test-audio.mp3"
+
+# Import copies the file and reads metadata + chapters (chapter extraction
+# shells out to ffmpeg — slow on an emulator, hence the generous timeout),
+# then the book appears in the library list.
 - extendedWaitUntil:
     visible: "The Selfish Gene"
-    timeout: 15000
+    timeout: 90000
+- takeScreenshot: screenshots/load-02-library-with-file
 
-# Verify we're on player screen with file loaded
-- takeScreenshot: screenshots/load-02-player-with-file
+# Open the book in the player
+- tapOn: "The Selfish Gene"
 
-# Verify play button is visible and tap it
+# Verify play/pause round trip
 - assertVisible:
     id: "play-pause-button"
 - tapOn:
     id: "play-pause-button"
-
-# Wait a moment for playback to start
 - waitForAnimationToEnd
-
-# Take screenshot of playing state
 - takeScreenshot: screenshots/load-03-playing
-
-# Tap again to pause
 - tapOn:
     id: "play-pause-button"
 - takeScreenshot: screenshots/load-04-paused
 
-# Navigate back to library to verify file appears there
+# Back to the library list
 - tapOn: "Library"
 - assertVisible: "The Selfish Gene"
-- takeScreenshot: screenshots/load-05-library-with-file
+- takeScreenshot: screenshots/load-05-library

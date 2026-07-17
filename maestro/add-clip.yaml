@@ -1,0 +1,29 @@
+appId: com.salezica.ivy
+---
+# Flow 2: Create a clip from the player and verify it exists.
+# This exercises the exec'd FFmpeg slicer end-to-end — the exact path that
+# breaks when native packaging regresses (see docs/CLIPS.md "Vendored shared
+# libs"), which JS tests can never see.
+# Prerequisites: run after load-and-play.yaml (imports the test book), or with
+# a book already loaded in the player.
+
+- launchApp
+
+# Player should be on the imported book
+- tapOn: "Player"
+- assertVisible: "The Selfish Gene"
+
+# Add a clip — the toast only shows after the FFmpeg slice succeeds
+- tapOn:
+    id: "add-clip-button"
+- extendedWaitUntil:
+    visible: "Clip added"
+    timeout: 10000
+- takeScreenshot: screenshots/clip-01-toast
+
+# The clip must appear in the Clips tab, attributed to the book
+- tapOn: "Clips"
+- extendedWaitUntil:
+    visible: "The Selfish Gene"
+    timeout: 5000
+- takeScreenshot: screenshots/clip-02-clip-listed
