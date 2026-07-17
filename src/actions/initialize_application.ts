@@ -1,4 +1,4 @@
-import type { DatabaseService } from '../services'
+import type { DatabaseService, AudioSlicerService } from '../services'
 import type { SetState, Action, ActionFactory } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
@@ -10,6 +10,7 @@ import { MAIN_PLAYER_OWNER_ID } from '../utils'
 
 export interface InitializeApplicationDeps {
   db: DatabaseService
+  slicer: AudioSlicerService
   set: SetState
   fetchBooks: FetchBooks
   fetchClips: FetchClips
@@ -22,9 +23,13 @@ export type InitializeApplication = Action<[]>
 
 export const createInitializeApplication: ActionFactory<InitializeApplicationDeps, InitializeApplication> = (deps) => (
   async () => {
-    const { db, set, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription } = deps
+    const { db, slicer, set, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription } = deps
 
     try {
+      // Warm the FFmpeg runtime in the background (unpack + cold-link) so the
+      // first clip slice / chapter read isn't slow. Fire-and-forget.
+      slicer.warmUp().catch(() => {})
+
       // Hydrate store with data
       await Promise.all([fetchBooks(), fetchClips(), fetchSessions()])
 

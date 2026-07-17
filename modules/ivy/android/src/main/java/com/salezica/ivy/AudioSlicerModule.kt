@@ -4,13 +4,30 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
-import com.yausername.ffmpeg.FFmpeg
 import java.io.File
 
 class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     override fun getName(): String {
         return "AudioSlicer"
+    }
+
+    /**
+     * Warm the FFmpeg runtime (unpack + cold-link) off the UI thread, so the
+     * first real slice or chapter read doesn't pay that one-time cost. Called
+     * fire-and-forget at app startup; safe to race with real slices — they
+     * funnel through the same idempotent FFmpegEnvironment.ensureReady().
+     */
+    @ReactMethod
+    fun warmUp(promise: Promise) {
+        Thread {
+            try {
+                FFmpegEnvironment.ensureReady(reactApplicationContext)
+            } catch (e: Exception) {
+                android.util.Log.w("AudioSlicer", "warmUp failed (non-fatal): ${e.message}")
+            }
+            promise.resolve(null)
+        }.start()
     }
 
     @ReactMethod
@@ -32,8 +49,8 @@ class AudioSlicerModule(reactContext: ReactApplicationContext) : ReactContextBas
                 val outputFile = File("$outputPath.m4a")
                 outputFile.parentFile?.mkdirs()
 
-                // Ensure FFmpeg libs are extracted (idempotent)
-                FFmpeg.getInstance().init(reactApplicationContext)
+                // Unpack + warm FFmpeg (idempotent; shared with chapter reader + startup warm-up)
+                FFmpegEnvironment.ensureReady(reactApplicationContext)
 
                 val nativeLibDir = reactApplicationContext.applicationInfo.nativeLibraryDir
                 val ffmpegPath = File(nativeLibDir, "libffmpeg.so").absolutePath

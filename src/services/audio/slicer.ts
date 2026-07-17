@@ -130,6 +130,15 @@ export class AudioSlicerService {
       await RNFS.mkdir(dirPath)
     }
   }
+
+  /**
+   * Warm the FFmpeg runtime in the background (unpacks the library bundle and
+   * pays the one-time cold-link cost), so the first clip slice or chapter read
+   * isn't slow. Fire-and-forget; safe to call before any real slice.
+   */
+  async warmUp(): Promise<void> {
+    await AudioSlicer.warmUp()
+  }
 }
 
 
@@ -144,6 +153,7 @@ interface AudioSlicerInterface {
     endTimeMs: number,
     outputPath: string
   ): Promise<string>
+  warmUp(): Promise<void>
 }
 
 const { AudioSlicer } = NativeModules as {

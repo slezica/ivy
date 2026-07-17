@@ -2,6 +2,8 @@ package com.salezica.ivy
 
 import android.content.Context
 import android.system.Os
+import android.util.Log
+import com.yausername.ffmpeg.FFmpeg
 import java.io.File
 
 /**
@@ -26,6 +28,37 @@ object FFmpegEnvironment {
 
     @Volatile
     private var prepared = false
+
+    @Volatile
+    private var ready = false
+
+    /**
+     * Idempotent, thread-safe one-time preparation of the FFmpeg runtime:
+     * unpack the ~35MB library bundle (FFmpeg.init) and pay the first-exec
+     * cold-link cost with a throwaway `-version` run, so the first real slice
+     * or chapter read is fast. The slicer, chapter reader, and the app-startup
+     * warm-up all funnel through here, so the unpack never races or duplicates
+     * across callers (upstream FFmpeg.init is itself synchronized; this adds the
+     * single-shot warm exec and one door for every caller).
+     */
+    @Synchronized
+    fun ensureReady(context: Context) {
+        if (ready) return
+        FFmpeg.getInstance().init(context)
+        try {
+            val ffmpeg = File(context.applicationInfo.nativeLibraryDir, "libffmpeg.so").absolutePath
+            val process = ProcessBuilder(ffmpeg, "-version")
+                .redirectErrorStream(true)
+                .also { it.environment()["LD_LIBRARY_PATH"] = ldLibraryPath(context) }
+                .start()
+            process.inputStream.readBytes()
+            process.waitFor()
+        } catch (e: Exception) {
+            // Warm-up is best-effort — a real slice/chapter call will surface any error.
+            Log.w("FFmpegEnvironment", "Warm-up exec failed (non-fatal): ${e.message}")
+        }
+        ready = true
+    }
 
     fun ldLibraryPath(context: Context): String {
         val nativeLibDir = context.applicationInfo.nativeLibraryDir

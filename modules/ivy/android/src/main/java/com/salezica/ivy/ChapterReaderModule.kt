@@ -6,7 +6,6 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableArray
-import com.yausername.ffmpeg.FFmpeg
 import java.io.File
 
 class ChapterReaderModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -25,7 +24,7 @@ class ChapterReaderModule(reactContext: ReactApplicationContext) : ReactContextB
             try {
                 android.util.Log.d(TAG, "Reading chapters from: $filePath")
 
-                FFmpeg.getInstance().init(reactApplicationContext)
+                FFmpegEnvironment.ensureReady(reactApplicationContext)
 
                 val nativeLibDir = reactApplicationContext.applicationInfo.nativeLibraryDir
                 val ffmpegPath = File(nativeLibDir, "libffmpeg.so").absolutePath

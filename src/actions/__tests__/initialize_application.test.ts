@@ -12,6 +12,7 @@ function createDeps(overrides: Partial<InitializeApplicationDeps> = {}) {
       getLastPlayedBook: jest.fn(() => null),
       getSettings: jest.fn(() => ({ sync_enabled: false, transcription_enabled: false })),
     }),
+    slicer: { warmUp: jest.fn(async () => {}) } as any,
     set: createImmerSet(state),
     fetchBooks: jest.fn(async () => {}),
     fetchClips: jest.fn(async () => {}),
@@ -38,6 +39,7 @@ describe('createInitializeApplication', () => {
     expect(deps.fetchBooks).toHaveBeenCalled()
     expect(deps.fetchClips).toHaveBeenCalled()
     expect(deps.fetchSessions).toHaveBeenCalled()
+    expect(deps.slicer.warmUp).toHaveBeenCalled()  // FFmpeg warmed in background
     expect(state.initialized).toBe(true)
   })
 
