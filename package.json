@@ -11,6 +11,7 @@
     "test": "jest --silent",
     "test:verbose": "jest",
     "test:watch": "jest --watch",
+    "test:e2e": "bash scripts/e2e.sh",
     "clean": "rm -rf modules/ivy/android/build && find node_modules -maxdepth 3 -type d \\( -path '*/android/build' -o -name .cxx \\) -prune -exec rm -rf {} + && npx expo prebuild --clean --platform android",
     "build:debug": "cd android && ./gradlew assembleDebug",
     "build:preview": "cd android && ./gradlew assemblePreview",

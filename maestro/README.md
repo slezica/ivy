@@ -8,22 +8,21 @@ fails the slice on device).
 
 ## Running
 
-Against any attached device or emulator:
+With one device/emulator attached, run the whole suite like the Jest tests:
 
 ```bash
-adb devices                        # find the target's serial
-maestro --device <serial> test maestro/<flow>.yaml
+npm run test:e2e                              # full suite
+npm run test:e2e -- maestro/add-clip.yaml     # a single flow
+npm run test:e2e -- --device <serial>         # target a specific device
 ```
 
-Flows that import a file (`load-and-play`, and anything chaining off it) need
-the test audio present and **media-scanned** so the system picker's search can
-find it:
+`scripts/e2e.sh` pushes and **media-scans** the test fixture first (the picker's
+search needs it indexed) — the one prerequisite the import flows require. With
+multiple devices attached, set `ANDROID_SERIAL=<serial>` (adb honors it) and also
+pass `--device <serial>` through to maestro.
 
-```bash
-adb -s <serial> push assets/test/test-audio.m4a /sdcard/Download/test-audio.m4a
-adb -s <serial> shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
-  -d file:///sdcard/Download/test-audio.m4a
-```
+To bypass the wrapper (e.g. debugging one flow), the raw command is
+`maestro --device <serial> test maestro/<flow>.yaml`, after pushing the fixture.
 
 Flows that use `launchApp.clearState` wipe app data — **only run against test
 devices/emulators**, never a device with real library data.
