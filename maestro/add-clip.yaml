@@ -36,9 +36,9 @@ appId: com.salezica.ivy
 - tapOn: "Library"
 - tapOn:
     id: "book-menu-button"
-- tapOn: "Archive"
-- assertVisible: "and delete the file"   # the confirmation alert body
-- tapOn: "Archive"                       # confirm
+- tapOn: "Archive"                       # menu item
+- assertVisible: "Archive Book"          # the confirmation alert (title; body text isn't exposed)
+- tapOn: "ARCHIVE"                       # confirm (Android upper-cases alert buttons)
 
 # Open the clip and play it. If the slice were garbage/empty, the player would
 # fail to load and never reach the playing state — this is the real guard.
