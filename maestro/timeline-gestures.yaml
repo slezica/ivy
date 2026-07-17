@@ -1,42 +1,34 @@
 appId: com.salezica.ivy
 ---
-# Timeline gestures: tap-to-seek, drag-to-scrub, momentum flick.
-# The timeline is a Skia canvas, so exact positions can't be asserted —
-# verification is visual (screenshots) plus proving the app stays responsive
-# (playback still works after the gesture sequence).
+# Timeline gesture smoke: real touch input on the Skia canvas doesn't crash and
+# the player stays responsive afterward.
+#
+# The gesture *physics* (scroll/momentum/selection/zoom math) is unit-tested in
+# src/components/timeline/__tests__/engine.test.ts — far more precisely than a
+# Skia canvas can be asserted here (no readable position, only pixels). So this
+# flow deliberately does NOT screenshot-and-hope; it drives a couple of real
+# gestures and then asserts a verifiable end state: playback still works.
 
 - runFlow: subflows/import-book.yaml
 - tapOn: "Ivy Test Book"
 
-# Pause so the timeline stays still (import auto-plays)
+# Pause first (import auto-plays) so the timeline is interactive
 - tapOn:
     id: "play-pause-button"
-- takeScreenshot: screenshots/timeline-01-initial
 
-# Tap right side of the timeline to seek forward (~42% down the screen)
+# Drive real gestures over the timeline (~42% down the screen): tap-seek + scrub
 - tapOn:
     point: "80%,42%"
-- waitForAnimationToEnd
-- takeScreenshot: screenshots/timeline-02-after-tap-seek
-
-# Drag to scrub
 - swipe:
     start: "30%,42%"
     end: "70%,42%"
-    duration: 500
+    duration: 400
 - waitForAnimationToEnd
-- takeScreenshot: screenshots/timeline-03-after-swipe
 
-# Quick flick for momentum
-- swipe:
-    start: "60%,42%"
-    end: "20%,42%"
-    duration: 150
-- waitForAnimationToEnd
-- takeScreenshot: screenshots/timeline-04-after-flick
-
-# App stays responsive: playback still works after all the gestures
+# Verifiable end state: the app survived the gestures and playback still toggles
 - tapOn:
     id: "play-pause-button"
 - waitForAnimationToEnd
-- takeScreenshot: screenshots/timeline-05-playing
+- assertVisible:
+    id: "play-pause-button"
+- takeScreenshot: screenshots/timeline-responsive

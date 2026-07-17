@@ -1,10 +1,14 @@
 appId: com.salezica.ivy
 ---
-# Create a clip from the player and verify it exists.
+# Create a clip and verify the produced audio is genuinely playable.
 # This exercises the exec'd FFmpeg slicer end-to-end — the exact path that
 # breaks when native packaging regresses (see docs/CLIPS.md "Vendored shared
-# libs"), which JS tests can never see. The "Clip added" toast only appears
-# after the slice succeeds.
+# libs"), which JS tests can never see.
+#
+# The "Clip added" toast only proves the slice exited 0 with a non-empty file.
+# To prove the file actually decodes and plays, we archive the source book so
+# the clip must fall back to its OWN sliced audio, then play it and confirm the
+# player enters the playing state. (This also covers clips surviving archival.)
 
 - runFlow: subflows/import-book.yaml
 
@@ -12,7 +16,7 @@ appId: com.salezica.ivy
 - assertVisible:
     id: "add-clip-button"
 
-# Add a clip — toast confirms the FFmpeg slice succeeded
+# Add a clip — toast confirms the FFmpeg slice exited successfully
 - tapOn:
     id: "add-clip-button"
 - extendedWaitUntil:
@@ -20,9 +24,33 @@ appId: com.salezica.ivy
     timeout: 10000
 - takeScreenshot: screenshots/clip-01-toast
 
-# The clip must appear in the Clips tab, attributed to the book
+# It appears in the Clips tab, attributed to the book
 - tapOn: "Clips"
 - extendedWaitUntil:
     visible: "Ivy Test Book"
     timeout: 5000
 - takeScreenshot: screenshots/clip-02-clip-listed
+
+# Archive the source book → the clip's source_file becomes unavailable, so the
+# viewer must play the clip's OWN sliced .m4a rather than the original book.
+- tapOn: "Library"
+- tapOn:
+    id: "book-menu-button"
+- tapOn: "Archive"
+- assertVisible: "and delete the file"   # the confirmation alert body
+- tapOn: "Archive"                       # confirm
+
+# Open the clip and play it. If the slice were garbage/empty, the player would
+# fail to load and never reach the playing state — this is the real guard.
+- tapOn: "Clips"
+- tapOn:
+    id: "clip-card"
+- assertVisible:
+    id: "clip-viewer-play-button"
+- tapOn:
+    id: "clip-viewer-play-button"
+- extendedWaitUntil:
+    visible:
+      id: "clip-viewer-pause-button"     # flips to pause → the sliced file loaded and plays
+    timeout: 10000
+- takeScreenshot: screenshots/clip-03-playing-sliced
