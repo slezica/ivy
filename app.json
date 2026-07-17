@@ -60,7 +60,8 @@
       "./plugins/withIvySigning.js",
       "./plugins/withIvyPreviewBuildType.js",
       "./plugins/withIvyHermesFix.js",
-      "./plugins/withIvyVersionName.js"
+      "./plugins/withIvyVersionName.js",
+      "./plugins/withIvyFfmpegClosureCheck.js"
     ],
     "experiments": {
       "typedRoutes": true

@@ -500,7 +500,7 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 
 Any change touching native packaging — `modules/ivy` jniLibs, `FFmpegEnvironment.kt`, the youtubedl-android `:ffmpeg` artifact, `expo.useLegacyPackaging` — needs two checks JS tests can't provide:
 
-1. **Closure check (automated):** run `node scripts/check-ffmpeg-closure.js <apk>` on the built APK. It walks the `NEEDED` graph from `libffmpeg.so` and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs").
+1. **Closure check (build-enforced):** `checkFfmpegClosure` runs automatically as a finalizer of `assembleRelease` and `assemblePreview` (via `plugins/withIvyFfmpegClosureCheck.js`), so a broken closure **fails the build** — no one has to remember. It walks the `NEEDED` graph from `libffmpeg.so`, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it by hand with `node scripts/check-ffmpeg-closure.js <apk>`.
 2. **Fresh-install smoke test (manual):** create a clip / import a chaptered file on a **freshly installed** app, not an upgrade — `no_backup/` survives updates, and stale extracted libs there can mask linking failures that break fresh installs (this happened: see git history of `FFmpegEnvironment.kt`). **Uninstalling requires explicit user approval** — the user knows the device's installation state and whether the upgrade path (e.g. pending DB migrations) must be tested before wiping it.
 
 
