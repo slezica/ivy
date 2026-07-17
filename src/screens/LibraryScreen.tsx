@@ -220,7 +220,7 @@ export default function LibraryScreen() {
                 <Ionicons name="search" size={24} color={Color.TEXT} />
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => setIsHeaderMenuOpen(true)}>
+              <TouchableOpacity onPress={() => setIsHeaderMenuOpen(true)} testID="library-menu-button">
                 <Ionicons name="ellipsis-vertical" size={24} color={Color.TEXT} />
               </TouchableOpacity>
             </View>
