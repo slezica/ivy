@@ -52,8 +52,32 @@ $ANDROID_HOME/emulator/emulator -avd <name> -no-audio -no-boot-anim &
 |------|----------------|
 | `smoke-test.yaml` | App launches, empty state, tab bar |
 | `load-and-play.yaml` | Import via document picker → metadata/chapters → playback |
-| `add-clip.yaml` | Clip creation → FFmpeg slice → toast → clip listed (chains off `load-and-play`) |
+| `add-clip.yaml` | Clip creation → FFmpeg slice → toast → clip listed |
+| `chapter-extraction.yaml` | Chapter extraction (the other native FFmpeg consumer) → chapter shown, not empty-state |
+| `clip-crud.yaml` | Clip create → edit note → verify persistence → delete |
+| `timeline-gestures.yaml` | Tap-seek / scrub / flick on the Skia timeline; app stays responsive |
 
-Picker interaction uses **search by filename** (`option_menu_search` +
-`inputText`), which is tolerant of DocumentsUI variants (AOSP vs Google) and
-avoids the flaky roots-drawer navigation.
+Every flow is **independently runnable** — each pulls in `subflows/import-book.yaml`
+via `runFlow` to set up its own book, so `maestro test maestro/` (which runs
+flows alphabetically) has no ordering dependency. `config.yaml` scopes the suite
+to top-level `*.yaml`, excluding `subflows/`.
+
+### Conventions learned the hard way
+
+- **Picker: search by filename** (`option_menu_search` + `inputText`) — tolerant
+  of DocumentsUI variants (AOSP vs Google), avoids flaky roots-drawer navigation.
+- **Saving after text input**: the first tap on a button with the keyboard up is
+  consumed dismissing the keyboard, not delivered. Tap, then conditionally tap
+  again `when: visible` the button. Don't use `hideKeyboard` — on Android it
+  sends Back, which dialogs treat as Cancel.
+- **Editor Cancel returns to the ClipViewer, not the list** — `Close` the viewer
+  to reach the list.
+
+### Known hotspot
+
+The import flows take ~90s each on the emulator, almost entirely the one-time
+`FFmpeg.init()` unpack + cold-link on the first ffmpeg call after `clearState`
+(chapter extraction during import). It's fixed cost per fresh install; the actual
+slice/extraction work is ~40ms. A warm-up step (one throwaway ffmpeg call before
+the timed assertions, or not clearing state between flows) is the lever if the
+suite's ~8min runtime becomes a problem.

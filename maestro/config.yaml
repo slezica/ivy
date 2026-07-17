@@ -1,0 +1,5 @@
+# Maestro workspace config. Top-level *.yaml are the suite's flows; the
+# `subflows/` directory holds reusable fragments pulled in via `runFlow` and
+# is deliberately excluded from the suite (the glob is non-recursive).
+flows:
+  - "*.yaml"

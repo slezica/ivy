@@ -1,0 +1,24 @@
+appId: com.salezica.ivy
+---
+# Verify chapter extraction — the *other* native FFmpeg consumer besides the
+# slicer (ChapterReaderModule shells out to `libffmpeg.so -f ffmetadata`).
+# It fails silently (resolves an empty chapter list) when packaging regresses,
+# so this asserts the extracted chapter is actually present — the exact guard
+# the original clip-add packaging bug lacked.
+#
+# The bundled test file carries one chapter ("Chapter 1").
+
+- runFlow: subflows/import-book.yaml
+
+- tapOn: "The Selfish Gene"
+
+# Open the chapters dialog
+- tapOn:
+    id: "chapters-button"
+- assertVisible: "Chapters"
+
+# Extraction succeeded → the chapter shows and the empty-state does NOT.
+# assertNotVisible is the regression guard against the silent empty-list bug.
+- assertVisible: "Chapter 1"
+- assertNotVisible: "No chapters in this file"
+- takeScreenshot: screenshots/chapters-01-extracted

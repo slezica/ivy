@@ -1,80 +1,58 @@
 appId: com.salezica.ivy
 ---
-# Flow 2: Clip CRUD - Create, Read, Update, Delete
-# Tests clip creation, editing notes, and deletion
+# Clip lifecycle: create → edit note → verify persistence → delete.
+# Note: the clip card does NOT render the note (only title/time/transcription),
+# so note persistence is verified by reopening the editor, not reading the card.
 
-- launchApp
+- runFlow: subflows/import-book.yaml
 
-# Reset to clean state
-- tapOn: "Reset"
-- tapOn: "Reset"  # Confirm
-- assertVisible: "No files yet"
-
-# Load test file
-- tapOn: "Sample"
-- extendedWaitUntil:
-    visible: "The Selfish Gene"
-    timeout: 15000
-
-# Create a clip at current position
+# Create a clip
+- tapOn: "The Selfish Gene"
 - tapOn:
     id: "add-clip-button"
+- extendedWaitUntil:
+    visible: "Clip added"
+    timeout: 10000
 
-# Navigate to Clips tab
+# It appears in the Clips tab
 - tapOn: "Clips"
+- assertVisible:
+    id: "clip-card"
+- takeScreenshot: screenshots/crud-01-created
 
-# Verify clip appears with file title
-- assertVisible: "THE SELFISH GENE"
-- takeScreenshot: screenshots/clip-01-created
-
-# Open menu on the clip (tap the 3-dot icon)
+# Edit the note via the clip menu → Edit (opens the ClipEditor)
 - tapOn:
     id: "clip-menu-button"
-
-# Wait for menu to appear and tap "Add note"
-- assertVisible: "Add note"
-- tapOn: "Add note"
-
-# Edit modal should appear - wait for it
-- extendedWaitUntil:
-    visible: "Edit Clip"
-    timeout: 5000
-- inputText: "This is a test note for the clip"
+- tapOn: "Edit"
+- assertVisible: "Add note (optional)"   # editor's note field placeholder
+- tapOn: "Add note (optional)"
+- inputText: "A test note"
+# With the keyboard up, the first tap is consumed dismissing it rather than
+# clicking Save; tap again if the editor is still showing.
 - tapOn: "Save"
+- runFlow:
+    when:
+      visible: "Save"
+    commands:
+      - tapOn: "Save"
 
-# Verify note appears in the clip card
-- assertVisible: "This is a test note for the clip"
-- takeScreenshot: screenshots/clip-02-with-note
-
-# Open menu again to edit the note
+# Reopen the editor to confirm the note persisted (card doesn't show it)
 - tapOn:
     id: "clip-menu-button"
-- assertVisible: "Edit note"
-- tapOn: "Edit note"
+- tapOn: "Edit"
+- assertVisible: "A test note"
+- takeScreenshot: screenshots/crud-02-note-persisted
+# Editor Cancel drops to the ClipViewer (not the list); Close returns to the list
+- tapOn: "Cancel"
+- tapOn: "Close"
 
-# Wait for edit modal
-- extendedWaitUntil:
-    visible: "Edit Clip"
-    timeout: 5000
-
-# Clear and update the note
-- eraseText: 50
-- inputText: "Updated note text"
-- tapOn: "Save"
-
-# Verify updated note
-- assertVisible: "Updated note text"
-- takeScreenshot: screenshots/clip-03-note-updated
-
-# Now delete the clip
+# Delete the clip
 - tapOn:
     id: "clip-menu-button"
 - tapOn: "Delete"
-
-# Confirm deletion in alert
 - assertVisible: "Are you sure you want to delete this clip?"
 - tapOn: "Delete"
 
-# Verify clip is gone - should show empty state
+# Back to empty state
 - assertVisible: "No clips yet"
-- takeScreenshot: screenshots/clip-04-deleted
+- takeScreenshot: screenshots/crud-03-deleted

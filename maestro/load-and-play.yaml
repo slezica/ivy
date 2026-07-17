@@ -1,39 +1,10 @@
 appId: com.salezica.ivy
 ---
-# Flow 1: Import a file through the real document picker and verify playback.
-# Prerequisites: test file pushed to the device:
-#   adb push assets/test/test-audio.mp3 /sdcard/Download/test-audio.mp3
-# clearState wipes app data — only run against test devices/emulators.
+# Import a book (via the real document picker) and verify playback controls.
+# Exercises the SAF import path, metadata/chapter extraction, and TrackPlayer.
 
-- launchApp:
-    clearState: true
-
-- assertVisible: "No books yet"
-- takeScreenshot: screenshots/load-01-empty-state
-
-# Import via the header menu → system document picker
-- tapOn:
-    id: "library-menu-button"
-- tapOn: "Add from files"
-
-# System picker (documentsui): search by filename — version-tolerant, avoids
-# the flaky roots-drawer navigation. The file is indexed under MediaStore
-# (the test harness media-scans it before launching).
-- tapOn:
-    id: ".*:id/option_menu_search"  # AOSP or Google documentsui variant
-- inputText: "test-audio"
-- extendedWaitUntil:
-    visible: "test-audio.mp3"
-    timeout: 10000
-- tapOn: "test-audio.mp3"
-
-# Import copies the file and reads metadata + chapters (chapter extraction
-# shells out to ffmpeg — slow on an emulator, hence the generous timeout),
-# then the book appears in the library list.
-- extendedWaitUntil:
-    visible: "The Selfish Gene"
-    timeout: 90000
-- takeScreenshot: screenshots/load-02-library-with-file
+- runFlow: subflows/import-book.yaml
+- takeScreenshot: screenshots/load-01-library-with-file
 
 # Open the book in the player
 - tapOn: "The Selfish Gene"
@@ -44,12 +15,12 @@ appId: com.salezica.ivy
 - tapOn:
     id: "play-pause-button"
 - waitForAnimationToEnd
-- takeScreenshot: screenshots/load-03-playing
+- takeScreenshot: screenshots/load-02-playing
 - tapOn:
     id: "play-pause-button"
-- takeScreenshot: screenshots/load-04-paused
+- takeScreenshot: screenshots/load-03-paused
 
 # Back to the library list
 - tapOn: "Library"
 - assertVisible: "The Selfish Gene"
-- takeScreenshot: screenshots/load-05-library
+- takeScreenshot: screenshots/load-04-library

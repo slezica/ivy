@@ -1,0 +1,43 @@
+appId: com.salezica.ivy
+---
+# Reusable setup: fresh-install the app and import the bundled test book.
+# Every flow that needs a book in the library runs this via `runFlow`, so the
+# document-picker interaction lives in exactly one place.
+#
+# Prerequisite (see maestro/README.md): the test file must be pushed AND
+# media-scanned so the picker's search can find it:
+#   adb push assets/test/test-audio.mp3 /sdcard/Download/test-audio.mp3
+#   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+#     -d file:///sdcard/Download/test-audio.mp3
+#
+# clearState wipes app data — only run against test devices/emulators.
+
+- launchApp:
+    clearState: true
+
+- assertVisible: "No books yet"
+
+# Import via the header menu → system document picker
+- tapOn:
+    id: "library-menu-button"
+- tapOn: "Add from files"
+
+# Search by filename — tolerant of DocumentsUI variants (AOSP vs Google),
+# avoids the flaky roots-drawer navigation.
+- tapOn:
+    id: ".*:id/option_menu_search"
+- inputText: "test-audio"
+- extendedWaitUntil:
+    visible: "test-audio.mp3"
+    timeout: 10000
+- tapOn: "test-audio.mp3"
+
+# Import copies the file and reads metadata + chapters. Chapter extraction is
+# the first FFmpeg call after clearState, so it pays a one-time cold cost:
+# FFmpeg.init() unpacking the ~35MB library bundle + cold-linking it (~88s on
+# this emulator, amplified by concurrent Whisper-model download retries). The
+# timeout is sized well above that; the real fix is a warm-up step (see
+# maestro/README.md "Known hotspot").
+- extendedWaitUntil:
+    visible: "The Selfish Gene"
+    timeout: 150000
