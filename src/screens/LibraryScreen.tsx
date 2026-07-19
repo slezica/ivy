@@ -253,7 +253,7 @@ export default function LibraryScreen() {
       ) : (
         <EmptyState
           title="No books yet"
-          subtitle="Open an audio file to add it to your library"
+          subtitle="Add a file from the menu on the top-right"
         />
       )}
 
@@ -274,7 +274,7 @@ export default function LibraryScreen() {
           if (action === 'settings') router.push('/settings')
         }}
         items={[
-          { key: 'add-file', label: 'Add from files', icon: 'add-outline' },
+          { key: 'add-file', label: 'Import audio file', icon: 'add-outline' },
           { key: 'history', label: 'History', icon: 'time-outline' },
           { key: 'settings', label: 'Settings', icon: 'settings-outline' },
         ]}

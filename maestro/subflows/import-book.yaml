@@ -20,7 +20,7 @@ appId: com.salezica.ivy
 # Import via the header menu → system document picker
 - tapOn:
     id: "library-menu-button"
-- tapOn: "Add from files"
+- tapOn: "Import audio file"
 
 # Search by filename — tolerant of DocumentsUI variants (AOSP vs Google),
 # avoids the flaky roots-drawer navigation.

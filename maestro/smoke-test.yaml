@@ -8,7 +8,7 @@ appId: com.salezica.ivy
 
 # Library screen should show empty state
 - assertVisible: "No books yet"
-- assertVisible: "Open an audio file to add it to your library"
+- assertVisible: "Add a file from the menu on the top-right"
 
 # Tab bar should be visible
 - assertVisible: "Library"
