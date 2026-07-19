@@ -7,17 +7,14 @@ import type { SessionWithBook } from '../services'
 type Span = 'day' | 'week' | 'month' | 'year'
 
 const BAR_COUNT = 10
-const BAR_AREA_HEIGHT = 80
-const BAR_TOP_PADDING = 8
-const MAX_BAR_HEIGHT = BAR_AREA_HEIGHT - BAR_TOP_PADDING
+const BAR_AREA_HEIGHT = 96
+const VALUE_LABEL_SPACE = 16
+const MAX_BAR_HEIGHT = BAR_AREA_HEIGHT - VALUE_LABEL_SPACE
 const MIN_BAR_HEIGHT = 2
 
-const SPAN_LETTERS: Record<Span, string> = {
-  day: 'D',
-  week: 'W',
-  month: 'M',
-  year: 'Y',
-}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec']
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th']
 
 const MENU_ITEMS = [
   { key: 'day',   label: 'Days',   icon: 'today-outline' as const },
@@ -31,6 +28,26 @@ function formatCompact(ms: number): string {
   if (totalMinutes < 60) return `${totalMinutes}m`
   const hours = Math.round(totalMinutes / 60)
   return `${hours}h`
+}
+
+function formatBucketLabel(start: number, span: Span): string {
+  const d = new Date(start)
+  if (span === 'day')   return DAYS[d.getDay()]
+  if (span === 'month') return MONTHS[d.getMonth()]
+  if (span === 'year')  return String(d.getFullYear())
+  // Weeks are labeled by their end-point: a week ending Feb 3rd is "1st"
+  const end = new Date(start)
+  end.setDate(end.getDate() + 6)
+  return ORDINALS[Math.ceil(end.getDate() / 7) - 1]
+}
+
+function formatStartDate(start: number, span: Span): string {
+  const d = new Date(start)
+  if (span === 'year')  return String(d.getFullYear())
+  if (span === 'month') return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+  const dayAndMonth = `${MONTHS[d.getMonth()]} ${d.getDate()}`
+  if (d.getFullYear() === new Date().getFullYear()) return dayAndMonth
+  return `${dayAndMonth}, ${d.getFullYear()}`
 }
 
 function getBucketStart(date: Date, span: Span): number {
@@ -63,7 +80,12 @@ function subtractSpans(date: Date, span: Span, count: number): Date {
   return d
 }
 
-function computeBuckets(sessions: SessionWithBook[], span: Span): number[] {
+interface Bucket {
+  start: number
+  value: number
+}
+
+function computeBuckets(sessions: SessionWithBook[], span: Span): Bucket[] {
   const now = new Date()
   const currentBucketStart = getBucketStart(now, span)
 
@@ -73,7 +95,7 @@ function computeBuckets(sessions: SessionWithBook[], span: Span): number[] {
     boundaries.push(getBucketStart(subtractSpans(new Date(currentBucketStart), span, i), span))
   }
 
-  const buckets = new Array(BAR_COUNT).fill(0)
+  const values = new Array(BAR_COUNT).fill(0)
 
   for (const session of sessions) {
     const duration = session.ended_at - session.started_at
@@ -84,14 +106,14 @@ function computeBuckets(sessions: SessionWithBook[], span: Span): number[] {
     for (let i = BAR_COUNT - 1; i >= 0; i--) {
       if (sessionBucket >= boundaries[i]) {
         if (sessionBucket === boundaries[i]) {
-          buckets[i] += duration
+          values[i] += duration
         }
         break
       }
     }
   }
 
-  return buckets
+  return boundaries.map((start, i) => ({ start, value: values[i] }))
 }
 
 interface SessionHistogramProps {
@@ -103,27 +125,33 @@ export default function SessionHistogram({ sessions }: SessionHistogramProps) {
   const [menuVisible, setMenuVisible] = useState(false)
 
   const buckets = useMemo(() => computeBuckets(sessions, span), [sessions, span])
-  const maxValue = Math.max(...buckets)
+  const maxValue = Math.max(...buckets.map((b) => b.value))
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        style={styles.spanBadge}
-        onPress={() => setMenuVisible(true)}
-        hitSlop={8}
-      >
-        <Text style={styles.spanBadgeText}>{SPAN_LETTERS[span]}</Text>
-      </TouchableOpacity>
+      <View style={styles.header}>
+        <Text style={styles.startDate}>{formatStartDate(buckets[0].start, span)}</Text>
+        <TouchableOpacity
+          style={styles.spanBadge}
+          onPress={() => setMenuVisible(true)}
+          hitSlop={8}
+        >
+          <Text style={styles.spanBadgeText}>{span.toUpperCase()}</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.barArea}>
-        {buckets.map((value, i) => {
+        {buckets.map((bucket, i) => {
           const isPresent = i === BAR_COUNT - 1
           const barHeight = maxValue > 0
-            ? Math.max(MIN_BAR_HEIGHT, (value / maxValue) * MAX_BAR_HEIGHT)
+            ? Math.max(MIN_BAR_HEIGHT, (bucket.value / maxValue) * MAX_BAR_HEIGHT)
             : MIN_BAR_HEIGHT
 
           return (
             <View key={i} style={styles.barColumn}>
+              {bucket.value > 0 && (
+                <Text style={styles.valueLabel}>{formatCompact(bucket.value)}</Text>
+              )}
               <View
                 style={[
                   styles.bar,
@@ -139,9 +167,9 @@ export default function SessionHistogram({ sessions }: SessionHistogramProps) {
       </View>
 
       <View style={styles.labelRow}>
-        {buckets.map((value, i) => (
-          <Text key={i} style={styles.barLabel}>
-            {value > 0 ? formatCompact(value) : ''}
+        {buckets.map((bucket, i) => (
+          <Text key={i} style={styles.periodLabel}>
+            {formatBucketLabel(bucket.start, span)}
           </Text>
         ))}
       </View>
@@ -166,11 +194,18 @@ const styles = StyleSheet.create({
     padding: Space.CARD_PADDING,
     marginBottom: 16,
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  startDate: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Color.TEXT_3,
+  },
   spanBadge: {
-    position: 'absolute',
-    top: Space.CARD_PADDING,
-    right: Space.CARD_PADDING,
-    zIndex: 1,
     backgroundColor: Color.BACKGROUND_3,
     borderRadius: 4,
     paddingHorizontal: 6,
@@ -185,13 +220,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     height: BAR_AREA_HEIGHT,
-    paddingTop: BAR_TOP_PADDING,
     gap: 6,
   },
   barColumn: {
     flex: 1,
     justifyContent: 'flex-end',
     height: '100%',
+  },
+  valueLabel: {
+    fontSize: 9,
+    color: Color.TEXT_3,
+    textAlign: 'center',
+    marginBottom: 3,
   },
   bar: {
     borderRadius: 3,
@@ -201,7 +241,7 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 4,
   },
-  barLabel: {
+  periodLabel: {
     flex: 1,
     fontSize: 10,
     color: Color.TEXT_3,
