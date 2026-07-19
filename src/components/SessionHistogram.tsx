@@ -130,7 +130,7 @@ export default function SessionHistogram({ sessions }: SessionHistogramProps) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.startDate}>{formatStartDate(buckets[0].start, span)}</Text>
+        <Text style={styles.startDate}>From {formatStartDate(buckets[0].start, span)}</Text>
         <TouchableOpacity
           style={styles.spanBadge}
           onPress={() => setMenuVisible(true)}
