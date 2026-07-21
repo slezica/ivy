@@ -47,6 +47,7 @@ import { createUpdateBook } from '../actions/update_book'
 import { createSetSpeed } from '../actions/set_speed'
 import { createCleanupOrphanedFiles } from '../actions/cleanup_orphaned_files'
 import { createInitializeApplication } from '../actions/initialize_application'
+import { createSeedDemoData } from '../actions/seed_demo_data'
 
 
 export const useStore = create<AppState>()(immer((set, get) => {
@@ -105,8 +106,9 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const fetchSessions = createFetchSessions(deps)
   const trackSession = createTrackSession(deps)
   const finalizeSession = createFinalizeSession(deps)
+  const seedDemoData = createSeedDemoData(deps)
   const initializeApplication = createInitializeApplication({
-    ...deps, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription,
+    ...deps, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription, seedDemoData,
   })
 
   // Event listeners -------------------------------------------------------------------------------
