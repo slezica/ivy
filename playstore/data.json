@@ -1,0 +1,126 @@
+{
+  "comment": "Demo data for Play Store screenshots. books[0] is the hero: newest in the library and auto-loaded into the player, so its audio file is generated at full honest length (positions survive the player's hardware position sync). Edit freely, then re-run scripts/playstore-shots.sh.",
+  "books": [
+    {
+      "id": "demo-meditations",
+      "name": "meditations-marcus-aurelius.mp3",
+      "title": "Meditations",
+      "artist": "Marcus Aurelius",
+      "duration": 21452000,
+      "position": 12656000,
+      "audio": "meditations.mp3",
+      "artwork": "demo-meditations.png",
+      "cover": { "bg1": "#1f4e5f", "bg2": "#10303c", "fg": "#f2e8d5" }
+    },
+    {
+      "id": "demo-odyssey",
+      "name": "the-odyssey-homer.mp3",
+      "title": "The Odyssey",
+      "artist": "Homer",
+      "duration": 40967000,
+      "position": 8236000,
+      "audio": "short.mp3",
+      "artwork": "demo-odyssey.png",
+      "cover": { "bg1": "#1e2a52", "bg2": "#121a36", "fg": "#d9b36c" }
+    },
+    {
+      "id": "demo-frankenstein",
+      "name": "frankenstein-mary-shelley.mp3",
+      "title": "Frankenstein",
+      "artist": "Mary Shelley",
+      "duration": 30914000,
+      "position": 13911000,
+      "audio": "short.mp3",
+      "artwork": "demo-frankenstein.png",
+      "cover": { "bg1": "#33383b", "bg2": "#1c2023", "fg": "#c9d6c1" }
+    },
+    {
+      "id": "demo-walden",
+      "name": "walden-henry-david-thoreau.mp3",
+      "title": "Walden",
+      "artist": "Henry David Thoreau",
+      "duration": 46086000,
+      "position": 39634000,
+      "audio": "short.mp3",
+      "artwork": "demo-walden.png",
+      "cover": { "bg1": "#3a4a23", "bg2": "#232e13", "fg": "#e8e6c9" }
+    },
+    {
+      "id": "demo-pride",
+      "name": "pride-and-prejudice-jane-austen.mp3",
+      "title": "Pride and Prejudice",
+      "artist": "Jane Austen",
+      "duration": 41714000,
+      "position": 0,
+      "audio": "short.mp3",
+      "artwork": "demo-pride.png",
+      "cover": { "bg1": "#5a2a33", "bg2": "#38181f", "fg": "#ecd5d0" }
+    },
+    {
+      "id": "demo-artofwar",
+      "name": "the-art-of-war-sun-tzu.mp3",
+      "title": "The Art of War",
+      "artist": "Sun Tzu",
+      "duration": 4365000,
+      "position": 4365000,
+      "archived": true,
+      "artwork": "demo-artofwar.png",
+      "cover": { "bg1": "#5c1f1f", "bg2": "#361111", "fg": "#e6d3a3" }
+    }
+  ],
+  "clips": [
+    {
+      "id": "demo-clip-meditations",
+      "book": "demo-meditations",
+      "start": 12610000,
+      "duration": 32000,
+      "note": "Morning reflection",
+      "transcription": "You have power over your mind, not outside events. Realize this, and you will find strength.",
+      "audio": "clip.mp3",
+      "daysAgo": 0
+    },
+    {
+      "id": "demo-clip-walden",
+      "book": "demo-walden",
+      "start": 5420000,
+      "duration": 41000,
+      "note": "Read this again",
+      "transcription": "I went to the woods because I wished to live deliberately, to front only the essential facts of life, and see if I could not learn what it had to teach.",
+      "audio": "clip.mp3",
+      "daysAgo": 1
+    },
+    {
+      "id": "demo-clip-frankenstein",
+      "book": "demo-frankenstein",
+      "start": 20150000,
+      "duration": 28000,
+      "note": "",
+      "transcription": "Beware; for I am fearless, and therefore powerful.",
+      "audio": "clip.mp3",
+      "daysAgo": 3
+    },
+    {
+      "id": "demo-clip-odyssey",
+      "book": "demo-odyssey",
+      "start": 310000,
+      "duration": 36000,
+      "note": "Opening lines",
+      "transcription": "Tell me, O muse, of that ingenious hero who travelled far and wide after he had sacked the famous town of Troy.",
+      "audio": "clip.mp3",
+      "daysAgo": 5
+    }
+  ],
+  "sessions": [
+    { "book": "demo-meditations", "daysAgo": 0, "startHour": 8.1, "minutes": 47 },
+    { "book": "demo-meditations", "daysAgo": 1, "startHour": 21.25, "minutes": 65 },
+    { "book": "demo-walden", "daysAgo": 1, "startHour": 13.2, "minutes": 32 },
+    { "book": "demo-odyssey", "daysAgo": 2, "startHour": 19.5, "minutes": 75 },
+    { "book": "demo-frankenstein", "daysAgo": 3, "startHour": 22.0, "minutes": 70 },
+    { "book": "demo-meditations", "daysAgo": 3, "startHour": 7.75, "minutes": 30 },
+    { "book": "demo-walden", "daysAgo": 4, "startHour": 18.3, "minutes": 45 },
+    { "book": "demo-odyssey", "daysAgo": 5, "startHour": 8.5, "minutes": 40 },
+    { "book": "demo-artofwar", "daysAgo": 5, "startHour": 12.0, "minutes": 40 },
+    { "book": "demo-frankenstein", "daysAgo": 6, "startHour": 20.25, "minutes": 75 },
+    { "book": "demo-meditations", "daysAgo": 6, "startHour": 7.8, "minutes": 30 }
+  ]
+}
