@@ -493,6 +493,7 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 **Run tests:** `npm test`
 **Run tests with console logs**: `npm test:verbose`
 **Run e2e tests:** `maestro test maestro/`
+**Recreate Play Store screenshots:** `npm run screenshots` (see docs/2026-07-21-playstore-screenshots.md)
 **Check ffmpeg native linking:** `node scripts/check-ffmpeg-closure.js <built-apk>`
 
 
