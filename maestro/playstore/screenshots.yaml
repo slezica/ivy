@@ -1,0 +1,44 @@
+appId: com.salezica.ivy
+---
+# Play Store screenshot flow. NOT part of the test suite (config.yaml's glob is
+# non-recursive) — run via scripts/playstore-shots.sh, which clears app data and
+# pushes the demo seed bundle first. The app seeds itself on launch.
+#
+# Shots land in maestro/playstore/shots/ and are collected by the script.
+
+- launchApp
+
+# Library: seeded books with covers, progress, and an archived section
+- extendedWaitUntil:
+    visible: "Meditations"
+    timeout: 30000
+- assertVisible: "The Art of War"        # archived section rendered
+- takeScreenshot: shots/01-library
+
+# Player: hero book auto-loaded at its saved position
+- tapOn: "Player"
+- assertVisible: "Marcus Aurelius"
+- takeScreenshot: shots/02-player
+
+# Clips: notes + transcriptions
+- tapOn: "Clips"
+- assertVisible:
+    id: "clip-card"
+- takeScreenshot: shots/03-clips
+
+# Clip viewer: transcription with the source book's timeline
+- tapOn:
+    id: "clip-card"
+    index: 0
+- assertVisible:
+    id: "clip-viewer-play-button"
+- takeScreenshot: shots/04-clip
+- tapOn: "Close"
+
+# History: session histogram + list
+- tapOn: "Library"
+- tapOn:
+    id: "library-menu-button"
+- tapOn: "History"
+- assertVisible: "History"
+- takeScreenshot: shots/05-history
