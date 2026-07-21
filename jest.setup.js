@@ -4,6 +4,7 @@
 // Mock react-native-fs
 jest.mock('react-native-fs', () => ({
   DocumentDirectoryPath: '/mock/documents',
+  ExternalDirectoryPath: '/mock/external',
   exists: jest.fn().mockResolvedValue(true),
   mkdir: jest.fn().mockResolvedValue(undefined),
   readFile: jest.fn().mockResolvedValue(''),

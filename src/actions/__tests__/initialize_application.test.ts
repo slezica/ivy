@@ -19,6 +19,7 @@ function createDeps(overrides: Partial<InitializeApplicationDeps> = {}) {
     fetchSessions: jest.fn(async () => {}),
     loadBook: jest.fn(async () => {}),
     startTranscription: jest.fn(async () => {}),
+    seedDemoData: jest.fn(async () => false),
     ...overrides,
   }
 
@@ -105,5 +106,31 @@ describe('createInitializeApplication', () => {
     await initializeApplication()
 
     expect(deps.startTranscription).not.toHaveBeenCalled()
+  })
+
+  it('seeds demo data before hydrating', async () => {
+    const calls: string[] = []
+    const { deps } = createDeps({
+      seedDemoData: jest.fn(async () => { calls.push('seed'); return true }),
+      fetchBooks: jest.fn(async () => { calls.push('fetchBooks') }),
+    })
+    const initializeApplication = createInitializeApplication(deps)
+
+    await initializeApplication()
+
+    expect(calls[0]).toBe('seed')
+    expect(calls).toContain('fetchBooks')
+  })
+
+  it('initializes normally when seeding fails', async () => {
+    const { state, deps } = createDeps({
+      seedDemoData: jest.fn(async () => { throw new Error('bad seed') }),
+    })
+    const initializeApplication = createInitializeApplication(deps)
+
+    await initializeApplication()
+
+    expect(deps.fetchBooks).toHaveBeenCalled()
+    expect(state.initialized).toBe(true)
   })
 })
