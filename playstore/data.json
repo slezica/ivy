@@ -121,6 +121,26 @@
     { "book": "demo-odyssey", "daysAgo": 5, "startHour": 8.5, "minutes": 40 },
     { "book": "demo-artofwar", "daysAgo": 5, "startHour": 12.0, "minutes": 40 },
     { "book": "demo-frankenstein", "daysAgo": 6, "startHour": 20.25, "minutes": 75 },
-    { "book": "demo-meditations", "daysAgo": 6, "startHour": 7.8, "minutes": 30 }
+    { "book": "demo-meditations", "daysAgo": 6, "startHour": 7.8, "minutes": 30 },
+    { "book": "demo-walden", "daysAgo": 7, "startHour": 21.0, "minutes": 55 },
+    { "book": "demo-odyssey", "daysAgo": 8, "startHour": 8.25, "minutes": 35 },
+    { "book": "demo-frankenstein", "daysAgo": 10, "startHour": 20.5, "minutes": 80 },
+    { "book": "demo-meditations", "daysAgo": 12, "startHour": 7.75, "minutes": 30 },
+    { "book": "demo-odyssey", "daysAgo": 14, "startHour": 19.0, "minutes": 90 },
+    { "book": "demo-walden", "daysAgo": 16, "startHour": 12.5, "minutes": 40 },
+    { "book": "demo-frankenstein", "daysAgo": 18, "startHour": 21.5, "minutes": 65 },
+    { "book": "demo-odyssey", "daysAgo": 21, "startHour": 20.0, "minutes": 85 },
+    { "book": "demo-meditations", "daysAgo": 23, "startHour": 8.0, "minutes": 25 },
+    { "book": "demo-artofwar", "daysAgo": 26, "startHour": 13.0, "minutes": 45 },
+    { "book": "demo-odyssey", "daysAgo": 28, "startHour": 19.75, "minutes": 70 },
+    { "book": "demo-frankenstein", "daysAgo": 32, "startHour": 21.0, "minutes": 55 },
+    { "book": "demo-walden", "daysAgo": 35, "startHour": 17.5, "minutes": 35 },
+    { "book": "demo-odyssey", "daysAgo": 38, "startHour": 20.5, "minutes": 95 },
+    { "book": "demo-artofwar", "daysAgo": 42, "startHour": 12.25, "minutes": 30 },
+    { "book": "demo-frankenstein", "daysAgo": 45, "startHour": 19.5, "minutes": 60 },
+    { "book": "demo-walden", "daysAgo": 49, "startHour": 8.5, "minutes": 40 },
+    { "book": "demo-odyssey", "daysAgo": 53, "startHour": 21.0, "minutes": 75 },
+    { "book": "demo-frankenstein", "daysAgo": 58, "startHour": 20.0, "minutes": 50 },
+    { "book": "demo-walden", "daysAgo": 62, "startHour": 18.75, "minutes": 45 }
   ]
 }
