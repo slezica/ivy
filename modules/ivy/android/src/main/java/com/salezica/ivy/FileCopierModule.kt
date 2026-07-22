@@ -1,6 +1,7 @@
 package com.salezica.ivy
 
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.util.Base64
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -263,6 +264,34 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
         }
 
         promise.resolve(null)
+    }
+
+    /**
+     * Delete the original source document. file:// paths are deleted directly;
+     * content:// URIs go through DocumentsContract, which the provider may
+     * refuse (not all providers support delete on picked documents).
+     */
+    @ReactMethod
+    fun deleteSource(sourceUri: String, promise: Promise) {
+        Thread {
+            try {
+                val uri = Uri.parse(sourceUri)
+
+                val deleted = if (uri.scheme == "file") {
+                    uri.path?.let { java.io.File(it).delete() } ?: false
+                } else {
+                    DocumentsContract.deleteDocument(reactApplicationContext.contentResolver, uri)
+                }
+
+                if (deleted) {
+                    promise.resolve(null)
+                } else {
+                    promise.reject("DELETE_FAILED", "Provider refused to delete: $sourceUri")
+                }
+            } catch (e: Exception) {
+                promise.reject("DELETE_FAILED", "deleteSource failed: ${e.message}", e)
+            }
+        }.start()
     }
 
     // Required for NativeEventEmitter (RN >= 0.65). Events are sent via RCTDeviceEventEmitter,

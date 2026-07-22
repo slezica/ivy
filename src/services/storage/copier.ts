@@ -97,6 +97,15 @@ export class FileCopierService {
     log(`Cancelling copy ${opId}`)
     await NativeFileCopier.cancelCopy(opId)
   }
+
+  /**
+   * Delete the original source document. Rejects if the provider doesn't
+   * support deletion of the picked document.
+   */
+  async deleteSource(sourceUri: string): Promise<void> {
+    log(`Deleting source ${sourceUri}`)
+    await NativeFileCopier.deleteSource(sourceUri)
+  }
 }
 
 
@@ -118,6 +127,8 @@ interface NativeFileCopierInterface {
   }>
 
   cancelCopy(opId: string): Promise<void>
+
+  deleteSource(sourceUri: string): Promise<void>
 }
 
 const { FileCopier: NativeFileCopier } = NativeModules as {
