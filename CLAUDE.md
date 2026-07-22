@@ -27,6 +27,8 @@ Git messages are one-liners in the form '<scope>: <change>', without extended de
 
 Respecting this convention forces you to commit changes in tightly scoped units, and away from large commits with entire features or refactors. Commit as you work to avoid accumulation of changes across scopes.
 
+Git worktrees go in `worktrees/` (e.g. `git worktree add worktrees/my-feature`). That path is gitignored and excluded from jest, tsc, eslint, metro, and container builds — a worktree anywhere else pollutes them all with a duplicate checkout.
+
 
 ## Topics
 

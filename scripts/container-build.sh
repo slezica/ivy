@@ -35,6 +35,7 @@ rsync -a --delete \
   --exclude '/modules/ivy/android/build' \
   --exclude '.cxx' \
   --exclude '/.expo' \
+  --exclude '/worktree*' \
   "$SRC/" "$DIR/"
 
 # Mirror is a fresh checkout as far as gradle is concerned, except node_modules

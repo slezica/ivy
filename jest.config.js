@@ -1,7 +1,7 @@
 module.exports = {
   preset: 'jest-expo',
   testMatch: ['**/__tests__/**/*.test.ts?(x)'],
-  // Sibling git worktrees (worktree2/, worktree3/, ...) are full checkouts —
+  // Git worktrees (worktrees/, plus legacy root worktreeN/) are full checkouts —
   // without this, jest runs their test copies too
   testPathIgnorePatterns: ['/node_modules/', '<rootDir>/worktree'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
