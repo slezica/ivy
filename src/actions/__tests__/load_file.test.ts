@@ -32,6 +32,7 @@ function createMockDeps(overrides: Partial<LoadFileDeps> = {}): LoadFileDeps {
     metadata: createMockMetadata(),
     chapters: createMockChapterReader(),
     syncQueue: createMockSyncQueue(),
+    toast: jest.fn(),
     set: createImmerSet(state),
     get: createMockGet(state),
     fetchBooks: jest.fn(async () => {}),
@@ -602,7 +603,7 @@ describe('createLoadFile', () => {
       expect(deps.copier.deleteSource).not.toHaveBeenCalled()
     })
 
-    it('a refused delete does not fail the import', async () => {
+    it('a refused delete does not fail the import, and shows a toast', async () => {
       const state = createMockState({ settings: { delete_original_after_import: true } })
       const deps = createMockDeps({
         copier: createMockCopier({
@@ -617,6 +618,17 @@ describe('createLoadFile', () => {
 
       expect(deps.db.upsertBook).toHaveBeenCalled()
       expect(state.library.status).toBe('idle') // not 'error'
+      expect(deps.toast).toHaveBeenCalledWith('Could not delete original file')
+    })
+
+    it('no toast when the delete succeeds', async () => {
+      const deps = depsWithDeleteEnabled()
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.copier.deleteSource).toHaveBeenCalled()
+      expect(deps.toast).not.toHaveBeenCalled()
     })
   })
 

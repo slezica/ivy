@@ -12,6 +12,7 @@ export interface LoadFileDeps {
   metadata: AudioMetadataService
   chapters: ChapterReaderService
   syncQueue: SyncQueueService
+  toast: (message: string) => void
   get: GetState
   set: SetState
   fetchBooks: FetchBooks
@@ -161,7 +162,10 @@ async function handleNewBook(
 
     // Best-effort: the import already succeeded, a refusing provider is not an error
     if (get().settings.delete_original_after_import) {
-      await copier.deleteSource(file.uri).catch((error) => ctx.log('Could not delete original:', error))
+      await copier.deleteSource(file.uri).catch((error) => {
+        ctx.log('Could not delete original:', error)
+        ctx.toast('Could not delete original file')
+      })
     }
 
     updateLibrary(resetLibrary)
