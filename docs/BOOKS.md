@@ -21,7 +21,7 @@ Books go through a lifecycle: they're added to the library, played, and eventual
 
 External URIs (from file pickers, Google Drive, etc.) become invalid after app restart on Android. To avoid this, every imported file is **copied to app-owned storage** at `{DocumentDirectory}/audio/`. The database stores only local `file://` paths. This is the foundation of reliable playback.
 
-The original file is normally left untouched. With the **"Delete original after import"** setting enabled (`settings.delete_original_after_import`, off by default), a successful new import or restore also deletes the picked source document via `DocumentsContract.deleteDocument` (`copier.deleteSource`). This is best-effort: providers that don't support deleting picked documents refuse, and the import still succeeds. Active duplicates and failed imports never delete the original.
+The original file is normally left untouched. With the **"Delete original after import"** setting enabled (`settings.delete_original_after_import`, off by default), a successful new import or restore also deletes the picked source document via `DocumentsContract.deleteDocument` (`copier.deleteSource`). This is best-effort: providers that don't support deleting picked documents refuse, and the import still succeeds. Deletion is verified natively (a provider reporting success while the source still opens counts as a failure), and a failed delete shows a "Could not delete original file" toast. Active duplicates and failed imports never delete the original.
 
 ### 2. File fingerprinting
 
