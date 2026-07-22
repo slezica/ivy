@@ -11,6 +11,7 @@ import Dialog from '../components/shared/Dialog'
 import ScreenArea from '../components/shared/ScreenArea'
 import EmptyState from '../components/shared/EmptyState'
 import { MAIN_PLAYER_OWNER_ID, formatTime } from '../utils'
+import { SKIP_BACKWARD_MS, SKIP_FORWARD_MS } from '../actions/constants'
 import type { Book, Chapter } from '../services'
 
 export default function PlayerScreen() {
@@ -162,6 +163,7 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
         onSeek={onSeek}
         leftColor={Color.TEXT_DISABLED}
         rightColor={Color.PRIMARY}
+        tapSkip={{ backward: SKIP_BACKWARD_MS, forward: SKIP_FORWARD_MS }}
         showTime='top'
       />
 
