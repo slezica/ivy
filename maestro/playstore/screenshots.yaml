@@ -4,7 +4,8 @@ appId: com.salezica.ivy
 # non-recursive) — run via scripts/playstore-shots.sh, which clears app data and
 # pushes the demo seed bundle first. The app seeds itself on launch.
 #
-# Shots land in maestro/playstore/shots/ and are collected by the script.
+# Screenshot paths are sandboxed into the run's artifact dir; the script sets
+# --test-output-dir and collects takeScreenshot/*.png from it.
 
 - launchApp
 
@@ -13,18 +14,18 @@ appId: com.salezica.ivy
     visible: "Meditations"
     timeout: 30000
 - assertVisible: "The Art of War"        # archived section rendered
-- takeScreenshot: shots/01-library
+- takeScreenshot: 01-library
 
 # Player: hero book auto-loaded at its saved position
 - tapOn: "Player"
 - assertVisible: "Marcus Aurelius"
-- takeScreenshot: shots/02-player
+- takeScreenshot: 02-player
 
 # Clips: notes + transcriptions
 - tapOn: "Clips"
 - assertVisible:
     id: "clip-card"
-- takeScreenshot: shots/03-clips
+- takeScreenshot: 03-clips
 
 # Clip viewer: transcription with the source book's timeline
 - tapOn:
@@ -32,7 +33,7 @@ appId: com.salezica.ivy
     index: 0
 - assertVisible:
     id: "clip-viewer-play-button"
-- takeScreenshot: shots/04-clip
+- takeScreenshot: 04-clip
 - tapOn: "Close"
 
 # History: session histogram + list
@@ -41,4 +42,4 @@ appId: com.salezica.ivy
     id: "library-menu-button"
 - tapOn: "History"
 - assertVisible: "History"
-- takeScreenshot: shots/05-history
+- takeScreenshot: 05-history

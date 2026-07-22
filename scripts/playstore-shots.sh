@@ -42,14 +42,26 @@ echo "[shots] pushing seed bundle"
 # seed.json last: its presence triggers seeding, so the rest must already be there
 "$ADB" push playstore/data.json "$DEMO/seed.json" >/dev/null
 
+# Clean status bar while shooting: fixed 9:00 clock, full battery and signal,
+# no notification icons. Always restored, even if maestro fails.
+demo_mode_exit() { "$ADB" shell am broadcast -a com.android.systemui.demo -e command exit >/dev/null 2>&1 || true; }
+trap demo_mode_exit EXIT
+echo "[shots] entering status bar demo mode"
+"$ADB" shell settings put global sysui_demo_allowed 1
+"$ADB" shell am broadcast -a com.android.systemui.demo -e command enter >/dev/null
+"$ADB" shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0900 >/dev/null
+"$ADB" shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false >/dev/null
+"$ADB" shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4 -e fully true -e mobile hide >/dev/null
+"$ADB" shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false >/dev/null
+
 echo "[shots] running maestro flow"
-rm -rf maestro/playstore/shots
-maestro test "$@" maestro/playstore/screenshots.yaml
+OUT=playstore/.maestro-out
+rm -rf "$OUT" playstore/shots
+maestro test --test-output-dir "$OUT" "$@" maestro/playstore/screenshots.yaml
 
 echo "[shots] collecting screenshots"
-rm -rf playstore/shots
 mkdir -p playstore/shots
-mv maestro/playstore/shots/* playstore/shots/
-rmdir maestro/playstore/shots
+find "$OUT" -name '*.png' -path '*takeScreenshot*' -exec cp {} playstore/shots/ \;
+rm -rf "$OUT"
 
 echo "[shots] done: $(ls playstore/shots | wc -l | tr -d ' ') screenshots in playstore/shots/"
