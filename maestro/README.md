@@ -16,10 +16,14 @@ npm run test:e2e -- maestro/add-clip.yaml     # a single flow
 npm run test:e2e -- --device <serial>         # target a specific device
 ```
 
-`scripts/e2e.sh` pushes and **media-scans** the test fixture first (the picker's
-search needs it indexed) — the one prerequisite the import flows require. With
-multiple devices attached, set `ANDROID_SERIAL=<serial>` (adb honors it) and also
-pass `--device <serial>` through to maestro.
+`scripts/e2e.sh` pushes and **media-scans** the test fixtures first (the picker's
+search needs them indexed) — the one prerequisite the import flows require: the
+main fixture (`test-audio.m4a`) plus a disposable copy (`delete-me.m4a`) that
+`delete-original.yaml` imports with "delete original after import" enabled. After
+the run, the script asserts the disposable copy is actually gone — the deletion
+is filesystem state the flow itself can't see. With multiple devices attached,
+set `ANDROID_SERIAL=<serial>` (adb honors it) and also pass `--device <serial>`
+through to maestro.
 
 To bypass the wrapper (e.g. debugging one flow), the raw command is
 `maestro --device <serial> test maestro/<flow>.yaml`, after pushing the fixture.

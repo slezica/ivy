@@ -1,0 +1,43 @@
+appId: com.salezica.ivy
+---
+# Delete-original-after-import: enable the setting, import a disposable file,
+# and verify the import succeeds without a deletion-failure toast.
+#
+# The actual deletion is filesystem state Maestro can't see — scripts/e2e.sh
+# pushes the disposable fixture (delete-me.m4a) before the suite and asserts
+# afterwards that it's gone from /sdcard/Download.
+#
+# clearState wipes app data — only run against test devices/emulators.
+
+- launchApp:
+    clearState: true
+
+- assertVisible: "No books yet"
+
+# Enable the setting
+- tapOn:
+    id: "library-menu-button"
+- tapOn: "Settings"
+- tapOn:
+    id: "delete-original-switch"
+- back
+
+# Import the disposable file via the document picker (same search approach as
+# subflows/import-book.yaml, different fixture)
+- tapOn:
+    id: "library-menu-button"
+- tapOn: "Import audio file"
+- tapOn:
+    id: ".*:id/option_menu_search"
+- inputText: "delete-me"
+- extendedWaitUntil:
+    visible: "delete-me.m4a"
+    timeout: 10000
+- tapOn: "delete-me.m4a"
+
+# Import completes (cold-FFmpeg timeout, see subflows/import-book.yaml) and the
+# deletion-failure toast did not appear
+- extendedWaitUntil:
+    visible: "Ivy Test Book"
+    timeout: 150000
+- assertNotVisible: "Could not delete original file"
