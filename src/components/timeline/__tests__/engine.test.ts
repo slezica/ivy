@@ -342,6 +342,54 @@ describe('TimelinePhysicsEngine', () => {
     })
   })
 
+  describe('tap-to-skip', () => {
+    const TAP_SKIP = { backward: 30_000, forward: 25_000 }
+
+    it('skips backward on left-half tap', () => {
+      const { engine, callbacks } = createEngine({ position: 60_000, tapSkip: TAP_SKIP })
+
+      engine.touchDown(100, 45, 0)
+      engine.tap(100, 0)
+      runTicks(engine, 16)
+
+      expect(callbacks.onSeek).toHaveBeenCalledTimes(1)
+      const seekPos = (callbacks.onSeek as jest.Mock).mock.calls[0][0]
+      expect(seekPos).toBeCloseTo(30_000, 0)
+    })
+
+    it('skips forward on right-half tap', () => {
+      const { engine, callbacks } = createEngine({ position: 60_000, tapSkip: TAP_SKIP })
+
+      engine.touchDown(300, 45, 0)
+      engine.tap(300, 0)
+      runTicks(engine, 16)
+
+      const seekPos = (callbacks.onSeek as jest.Mock).mock.calls[0][0]
+      expect(seekPos).toBeCloseTo(85_000, 0)
+    })
+
+    it('clamps skips to timeline bounds', () => {
+      const { engine, callbacks } = createEngine({
+        duration: 40_000,
+        position: 10_000,
+        tapSkip: TAP_SKIP,
+      })
+
+      // Backward past the start clamps to 0
+      engine.touchDown(100, 45, 0)
+      engine.tap(100, 0)
+      runTicks(engine, 16)
+      expect((callbacks.onSeek as jest.Mock).mock.calls[0][0]).toBeCloseTo(0, 0)
+
+      // Forward past the end clamps to duration
+      engine.setExternalPosition(30_000, 1000)
+      engine.touchDown(300, 45, 1000)
+      engine.tap(300, 1000)
+      runTicks(engine, 1016)
+      expect((callbacks.onSeek as jest.Mock).mock.calls[1][0]).toBeCloseTo(40_000, 0)
+    })
+  })
+
   // --------------------------------------------------------------------------
   // 5. Tap-stops-momentum
   // --------------------------------------------------------------------------

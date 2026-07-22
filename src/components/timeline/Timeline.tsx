@@ -31,7 +31,7 @@
  *
  *   - **Drag** to scrub through the audio
  *   - **Flick** to scroll with momentum
- *   - **Tap** to seek to that position
+ *   - **Tap** to seek to that position (or skip ± when `tapSkip` is set)
  *   - **Drag handles** (when selection enabled) to adjust selection bounds
  *   - **Pinch** (when canZoom) to zoom in/out by scaling bar width
  */
@@ -94,6 +94,11 @@ export interface TimelineProps {
 
   // Zoom (optional)
   canZoom?: boolean
+
+  // Tap behavior (optional)
+  // When set, taps skip relative to the current position instead of seeking
+  // to the tapped point: left half skips back, right half skips forward.
+  tapSkip?: { backward: number; forward: number }
 
   // Display (optional)
   showTime?: 'top' | 'bottom' | 'hidden'
@@ -263,6 +268,7 @@ export function Timeline({
   selectionEnd,
   onSelectionChange,
   canZoom = false,
+  tapSkip,
   showTime = 'bottom',
 }: TimelineProps) {
   const [containerWidth, setContainerWidth] = useState(0)
@@ -364,6 +370,7 @@ export function Timeline({
       ? { start: selectionStart!, end: selectionEnd!, onChange: onSelectionChange! }
       : undefined,
     canZoom,
+    tapSkip,
   })
 
   // Rebuild picture when structural parameters change (slow path).

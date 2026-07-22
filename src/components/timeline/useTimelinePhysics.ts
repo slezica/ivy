@@ -38,6 +38,8 @@ export interface UseTimelinePhysicsOptions {
   onFrame?: () => void
   selection?: SelectionConfig
   canZoom?: boolean
+  /** Tap skips ±ms from current position instead of seeking to the tapped point */
+  tapSkip?: { backward: number; forward: number }
 }
 
 export interface TimelinePhysicsResult {
@@ -62,6 +64,7 @@ export function useTimelinePhysics({
   onFrame,
   selection,
   canZoom = false,
+  tapSkip,
 }: UseTimelinePhysicsOptions): TimelinePhysicsResult {
   // React state that triggers re-renders (only for time indicator text)
   const [displayPosition, setDisplayPosition] = useState(externalPosition)
@@ -107,6 +110,7 @@ export function useTimelinePhysics({
         position: externalPosition,
         selection: selection ? { start: selection.start, end: selection.end } : undefined,
         canZoom,
+        tapSkip,
       },
       {
         onSeek: (pos) => onSeekRef.current(pos),

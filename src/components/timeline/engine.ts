@@ -69,6 +69,11 @@ export interface EngineConfig {
   position: number
   selection?: { start: number; end: number }
   canZoom?: boolean
+  /**
+   * When set, taps skip relative to the current position instead of seeking
+   * to the tapped point: left half skips back, right half skips forward.
+   */
+  tapSkip?: { backward: number; forward: number }
 }
 
 export interface EngineCallbacks {
@@ -98,6 +103,7 @@ export class TimelinePhysicsEngine {
   private _containerWidth: number
   private _canZoom: boolean
   private _selection: { start: number; end: number } | null
+  private _tapSkip: { backward: number; forward: number } | null
 
   // --- Scroll position ---
   private _scrollOffset: number
@@ -171,6 +177,7 @@ export class TimelinePhysicsEngine {
     this._containerWidth = config.containerWidth
     this._canZoom = config.canZoom ?? false
     this._selection = config.selection ?? null
+    this._tapSkip = config.tapSkip ?? null
 
     // Initialize scroll to the provided position
     this._scrollOffset = this._tx(config.position)
@@ -267,7 +274,8 @@ export class TimelinePhysicsEngine {
    * Called when a tap gesture completes (finger down + up without dragging).
    *
    * If the touch was used to stop momentum, we suppress the tap. Otherwise,
-   * we start an animated scroll to the tapped position.
+   * we start an animated scroll — to the tapped position (seek mode), or to
+   * the current position ± the skip amount (tapSkip mode, split by half).
    */
   tap(x: number, now: number): void {
     // Suppress tap if it was used to stop momentum, end a handle drag, or during pinch cooldown
@@ -277,8 +285,19 @@ export class TimelinePhysicsEngine {
       return
     }
 
-    // Convert screen x to a time position and animate there
     const halfWidth = this._containerWidth / 2
+
+    // Skip mode: left half skips back, right half skips forward
+    if (this._tapSkip) {
+      const currentTime = this._xt(this._scrollOffset)
+      const delta = x < halfWidth ? -this._tapSkip.backward : this._tapSkip.forward
+      const targetTime = clamp(currentTime + delta, 0, this._duration)
+
+      this._animateToPosition(this._tx(targetTime), now)
+      return
+    }
+
+    // Seek mode: convert screen x to a time position and animate there
     const offsetFromCenter = x - halfWidth
     const tappedTime = this._xt(this._scrollOffset + offsetFromCenter)
     const clampedTime = clamp(tappedTime, 0, this._duration)
