@@ -112,6 +112,17 @@ export default function SettingsScreen() {
           </View>
         )}
 
+        <View style={[styles.settingRow, { marginTop: 24 }]}>
+          <Text style={styles.settingLabel}>Delete original after import</Text>
+
+          <Switch
+            value={settings.delete_original_after_import}
+            onValueChange={(enabled) => updateSettings({ ...settings, delete_original_after_import: enabled })}
+            trackColor={{ false: Color.TEXT_DISABLED, true: Color.PRIMARY }}
+            thumbColor={Color.TEXT}
+          />
+        </View>
+
       </View>
     </ScreenArea>
   )
