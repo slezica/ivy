@@ -89,6 +89,7 @@ export interface SessionWithBook extends Session {
 export interface Settings {
   sync_enabled: boolean
   transcription_enabled: boolean
+  delete_original_after_import: boolean
 }
 
 // Sync-related interfaces
@@ -303,6 +304,11 @@ export const migrations: Migration[] = [
         source_title = (SELECT COALESCE(files.title, files.name) FROM files WHERE files.id = clips.source_id),
         source_artist = (SELECT files.artist FROM files WHERE files.id = clips.source_id)
     `)
+  },
+
+  // Migration 9: Add delete_original_after_import to settings
+  (db) => {
+    db.execSync('ALTER TABLE settings ADD COLUMN delete_original_after_import INTEGER NOT NULL DEFAULT 0')
   },
 ]
 
@@ -929,19 +935,20 @@ export class DatabaseService {
   // ---------------------------------------------------------------------------
 
   getSettings(): Settings {
-    const row = this.db.getFirstSync<{ sync_enabled: number; transcription_enabled: number }>(
-      'SELECT sync_enabled, transcription_enabled FROM settings WHERE id = 1'
+    const row = this.db.getFirstSync<{ sync_enabled: number; transcription_enabled: number; delete_original_after_import: number }>(
+      'SELECT sync_enabled, transcription_enabled, delete_original_after_import FROM settings WHERE id = 1'
     )
     return {
       sync_enabled: row?.sync_enabled === 1,
       transcription_enabled: row?.transcription_enabled !== 0, // default true
+      delete_original_after_import: row?.delete_original_after_import === 1,
     }
   }
 
   async setSettings(settings: Settings): Promise<void> {
     await this.db.runAsync(
-      'UPDATE settings SET sync_enabled = ?, transcription_enabled = ? WHERE id = 1',
-      [settings.sync_enabled ? 1 : 0, settings.transcription_enabled ? 1 : 0]
+      'UPDATE settings SET sync_enabled = ?, transcription_enabled = ?, delete_original_after_import = ? WHERE id = 1',
+      [settings.sync_enabled ? 1 : 0, settings.transcription_enabled ? 1 : 0, settings.delete_original_after_import ? 1 : 0]
     )
   }
 
