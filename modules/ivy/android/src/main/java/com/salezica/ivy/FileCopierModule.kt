@@ -283,7 +283,9 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                     DocumentsContract.deleteDocument(reactApplicationContext.contentResolver, uri)
                 }
 
-                if (deleted) {
+                // A provider can report success without deleting — trust only a URI
+                // that no longer opens
+                if (deleted && !sourceStillOpens(uri)) {
                     promise.resolve(null)
                 } else {
                     promise.reject("DELETE_FAILED", "Provider refused to delete: $sourceUri")
@@ -292,6 +294,14 @@ class FileCopierModule(reactContext: ReactApplicationContext) : ReactContextBase
                 promise.reject("DELETE_FAILED", "deleteSource failed: ${e.message}", e)
             }
         }.start()
+    }
+
+    private fun sourceStillOpens(uri: Uri): Boolean {
+        return try {
+            reactApplicationContext.contentResolver.openInputStream(uri)?.use { } != null
+        } catch (_: Exception) {
+            false
+        }
     }
 
     // Required for NativeEventEmitter (RN >= 0.65). Events are sent via RCTDeviceEventEmitter,
