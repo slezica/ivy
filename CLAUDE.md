@@ -338,6 +338,7 @@ value TEXT NOT NULL
 id INTEGER PRIMARY KEY CHECK (id = 1)  -- Enforces single row
 sync_enabled INTEGER NOT NULL DEFAULT 0
 transcription_enabled INTEGER NOT NULL DEFAULT 1
+delete_original_after_import INTEGER NOT NULL DEFAULT 0
 ```
 
 **status table** (migration tracking):
@@ -380,7 +381,7 @@ sync: {
   lastSyncTime: number | null   // Timestamp of last successful sync
   error: string | null          // Last sync error (null if successful)
 }
-settings: { sync_enabled: boolean, transcription_enabled: boolean }
+settings: { sync_enabled: boolean, transcription_enabled: boolean, delete_original_after_import: boolean }
 sessions: Record<string, SessionWithBook>  // Listening history (keyed by id)
 currentSessionBookId: string | null
 ```

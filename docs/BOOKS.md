@@ -21,6 +21,8 @@ Books go through a lifecycle: they're added to the library, played, and eventual
 
 External URIs (from file pickers, Google Drive, etc.) become invalid after app restart on Android. To avoid this, every imported file is **copied to app-owned storage** at `{DocumentDirectory}/audio/`. The database stores only local `file://` paths. This is the foundation of reliable playback.
 
+The original file is normally left untouched. With the **"Delete original after import"** setting enabled (`settings.delete_original_after_import`, off by default), a successful new import or restore also deletes the picked source document via `DocumentsContract.deleteDocument` (`copier.deleteSource`). This is best-effort: providers that don't support deleting picked documents refuse, and the import still succeeds. Active duplicates and failed imports never delete the original.
+
 ### 2. File fingerprinting
 
 Each book stores its `file_size` (bytes) and `fingerprint` (first 4KB of the file as a BLOB). This pair uniquely identifies the audio content. When a file is added, the system checks for an existing book with the same fingerprint before creating a new one. If the source provider doesn't report a size (returns `-1`), the lookup falls back to fingerprint-only matching, and the real size is backfilled from the bytes actually copied — `-1` is never persisted.
