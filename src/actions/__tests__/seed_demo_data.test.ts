@@ -137,7 +137,7 @@ describe('createSeedDemoData', () => {
 
     await createSeedDemoData(deps)()
 
-    const settings = { sync_enabled: false, transcription_enabled: false }
+    const settings = { sync_enabled: false, transcription_enabled: false, delete_original_after_import: false }
     expect(deps.db.setSettings).toHaveBeenCalledWith(settings)
     expect(state.settings).toEqual(settings)
     expect(RNFS.unlink).toHaveBeenCalledWith(DEMO_DIR)
