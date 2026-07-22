@@ -111,7 +111,7 @@ async function handleNewBook(
   fingerprint: Uint8Array,
   existingBook: Book | null | undefined,
 ) {
-  const { db, files, metadata, chapters: chapterReader, syncQueue, updateLibrary } = ctx
+  const { db, files, copier, metadata, chapters: chapterReader, syncQueue, get, updateLibrary } = ctx
 
   const bookId = existingBook?.id ?? generateId()
   const { destPath, bytesWritten } = await copyFile(ctx, bookId, file.name)
@@ -157,6 +157,11 @@ async function handleNewBook(
       await db.upsertBook(bookId, fileUri, file.name, duration, 0, title, artist, artwork, actualFileSize, fingerprint, chapters)
 
       await syncQueue.queueChange('book', bookId, 'upsert')
+    }
+
+    // Best-effort: the import already succeeded, a refusing provider is not an error
+    if (get().settings.delete_original_after_import) {
+      await copier.deleteSource(file.uri).catch((error) => ctx.log('Could not delete original:', error))
     }
 
     updateLibrary(resetLibrary)

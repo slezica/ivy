@@ -534,6 +534,92 @@ describe('createLoadFile', () => {
     })
   })
 
+  // -- Delete original after import -------------------------------------------
+
+  describe('delete original after import', () => {
+    function depsWithDeleteEnabled(overrides: Partial<LoadFileDeps> = {}) {
+      const state = createMockState({ settings: { delete_original_after_import: true } })
+      return createMockDeps({ set: createImmerSet(state), get: createMockGet(state), ...overrides })
+    }
+
+    it('deletes the original after a successful new import', async () => {
+      const deps = depsWithDeleteEnabled()
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.copier.deleteSource).toHaveBeenCalledWith(INPUT.uri)
+    })
+
+    it('deletes the original after a successful restore', async () => {
+      const archivedBook = createMockBook({ id: 'archived-1', uri: null })
+      const deps = depsWithDeleteEnabled({
+        db: createMockDb({
+          getBookByFingerprint: jest.fn(() => archivedBook),
+          restoreBook: jest.fn(() => createMockBook({ id: 'archived-1' })),
+        }),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.copier.deleteSource).toHaveBeenCalledWith(INPUT.uri)
+    })
+
+    it('does not delete when the setting is off', async () => {
+      const deps = createMockDeps()
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.copier.deleteSource).not.toHaveBeenCalled()
+    })
+
+    it('does not delete for an active duplicate', async () => {
+      const activeBook = createMockBook({ id: 'active-1', uri: 'file:///audio/active-1.mp3' })
+      const deps = depsWithDeleteEnabled({
+        db: createMockDb({
+          getBookByFingerprint: jest.fn(() => activeBook),
+        }),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.copier.deleteSource).not.toHaveBeenCalled()
+    })
+
+    it('does not delete when the import fails', async () => {
+      const deps = depsWithDeleteEnabled({
+        db: createMockDb({
+          upsertBook: jest.fn(() => { throw new Error('db failed') }),
+        }),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.copier.deleteSource).not.toHaveBeenCalled()
+    })
+
+    it('a refused delete does not fail the import', async () => {
+      const state = createMockState({ settings: { delete_original_after_import: true } })
+      const deps = createMockDeps({
+        copier: createMockCopier({
+          deleteSource: jest.fn(async () => { throw new Error('DELETE_FAILED') }),
+        }),
+        set: createImmerSet(state),
+        get: createMockGet(state),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.upsertBook).toHaveBeenCalled()
+      expect(state.library.status).toBe('idle') // not 'error'
+    })
+  })
+
   // -- Late cancellation (cancel lands after the native op already completed) --
 
   describe('late cancellation', () => {

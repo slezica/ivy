@@ -85,6 +85,7 @@ export function createMockState(overrides: {
   books?: Record<string, Book>,
   sessions?: Record<string, SessionWithBook>,
   clips?: Record<string, ClipWithFile>,
+  settings?: Partial<AppState['settings']>,
 } = {}) {
   return {
     playback: createMockPlayback(overrides.playback),
@@ -92,6 +93,7 @@ export function createMockState(overrides: {
     books: overrides.books ?? {} as Record<string, Book>,
     sessions: overrides.sessions ?? {} as Record<string, SessionWithBook>,
     clips: overrides.clips ?? {} as Record<string, ClipWithFile>,
+    settings: { sync_enabled: false, transcription_enabled: true, delete_original_after_import: false, ...overrides.settings },
   }
 }
 
@@ -197,6 +199,7 @@ export function createMockCopier(overrides: Record<string, jest.Mock | (() => an
       bytesWritten: 1024,
     })),
     cancelCopy: jest.fn(async () => {}),
+    deleteSource: jest.fn(async () => {}),
     ...overrides,
   } as any
 }
