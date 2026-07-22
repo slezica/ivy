@@ -46,6 +46,7 @@ export default function SettingsScreen() {
           <Text style={styles.settingLabel}>Auto-transcribe clips</Text>
 
           <Switch
+            testID="transcription-switch"
             value={settings.transcription_enabled}
             onValueChange={handleTranscriptionToggle}
             trackColor={{ false: Color.TEXT_DISABLED, true: Color.PRIMARY }}
@@ -76,6 +77,7 @@ export default function SettingsScreen() {
           <Text style={styles.settingLabel}>Sync metadata to Drive</Text>
 
           <Switch
+            testID="sync-switch"
             value={settings.sync_enabled}
             onValueChange={handleSyncToggle}
             trackColor={{ false: Color.TEXT_DISABLED, true: Color.PRIMARY }}
@@ -116,6 +118,7 @@ export default function SettingsScreen() {
           <Text style={styles.settingLabel}>Delete original after import</Text>
 
           <Switch
+            testID="delete-original-switch"
             value={settings.delete_original_after_import}
             onValueChange={(enabled) => updateSettings({ ...settings, delete_original_after_import: enabled })}
             trackColor={{ false: Color.TEXT_DISABLED, true: Color.PRIMARY }}
