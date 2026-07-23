@@ -243,3 +243,7 @@ src/screens/
 
 src/components/timeline/  → GPU-accelerated Skia waveform (see code for details)
 ```
+
+Note: during playback the timeline animates its own smooth motion from a
+`playbackRate` prop; the 1 Hz position events only correct drift. See
+docs/2026-07-23-timeline-smooth-playback.md.

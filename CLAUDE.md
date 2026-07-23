@@ -173,7 +173,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── LibraryLoadingDialog.tsx # "Adding..." / "Loading..." dialog
   │   ├── timeline/               # GPU-accelerated timeline component
   │   │   ├── Timeline.tsx        # Unified timeline (playback + selection)
-  │   │   ├── useTimelinePhysics.ts # Scroll/momentum/selection/zoom hook
+  │   │   ├── engine.ts           # Pure physics engine (scroll, momentum, playback follow)
+  │   │   ├── useTimelinePhysics.ts # React adapter hook (gestures, rAF loop)
   │   │   ├── constants.ts        # Dimensions, physics, animation, zoom constants
   │   │   ├── utils.ts            # timeToX, xToTime, bar heights
   │   │   └── index.ts            # Barrel exports
