@@ -55,6 +55,9 @@ maestro/screenshots/
 playstore/cache/
 playstore/shots/
 
+# Play Store release bundles (delivered by the release flow, uploaded by hand)
+playstore/*.aab
+
 # Git worktrees (standard location; also excluded from jest/tsc/eslint/metro/builds)
 /worktrees/
 .claude/

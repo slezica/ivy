@@ -530,7 +530,7 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
    - In container: `npx expo prebuild --clean --platform android`, then `KEYSTORE_PASSWORD=... scripts/container-build.sh :app:assembleRelease :app:bundleRelease` (password must be provided by the user; never stored)
    - Both build `assembleRelease` alongside `bundleRelease` so the ffmpeg closure gate runs (it doesn't finalize `bundleRelease`).
 4. **Tag:** `vX.Y.Z` — only after the build succeeds.
-5. **Deliver:** copy the AAB to `dist/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload.
+5. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload. (`dist/` is the website build output — see `script/build` — not a delivery location.)
 
 
 ## Native Packaging Changes
