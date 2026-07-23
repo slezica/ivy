@@ -4,7 +4,7 @@ A guide for Ivy's listening history tracking.
 
 ## The Big Picture
 
-Ivy automatically tracks how long the user listens to each book. Every time the user plays an audiobook in the main player, a **session** is created — a record with a start time and an end time. These sessions form the listening history, viewable from the player screen.
+Ivy automatically tracks how long the user listens to each book. Every time the user plays an audiobook in the main player, a **session** is created — a record with a start time and an end time. These sessions form the listening history, opened from the Library screen's header menu ("History").
 
 **What gets tracked:**
 - Which book was playing
@@ -74,7 +74,7 @@ The system has no dedicated service — it's built from two store actions (`trac
 
 When playback starts, `trackSession(bookId)` queries for a recent session on this book. If one exists within the 5-minute window, it extends that session by updating `ended_at`; otherwise it creates a new one. While playback continues, the throttle fires `trackSession` every 5 seconds to keep `ended_at` current.
 
-When the session's conditions stop holding — playback pauses, the book changes, or a clip component takes playback ownership — `finalizeSession` runs immediately (not throttled). Sessions shorter than `MIN_SESSION_DURATION_MS` (1 second) are deleted and a sync `delete` is queued so the cleanup propagates; the rest get a final `ended_at` update. Both `trackSession` and `finalizeSession` queue a sync `upsert` for the session they touch.
+When the session's conditions stop holding — playback pauses, the book changes, or a clip component takes playback ownership — `finalizeSession` runs immediately (not throttled). Sessions shorter than `MIN_SESSION_DURATION_MS` (1 second) are deleted and a sync `delete` is queued so the cleanup propagates; the rest get a final `ended_at` update. `finalizeSession` queues a sync `upsert`; `trackSession` queues one only when it *extends* an existing session — a newly created session is first queued on a later extend tick or on finalization.
 
 ---
 
@@ -126,7 +126,11 @@ src/store/
 
 src/screens/
   SessionsScreen.tsx     → History list UI
-  PlayerScreen.tsx       → Clock icon navigating to sessions
+  LibraryScreen.tsx      → "History" menu item navigating to sessions
+
+src/components/
+  SessionHistogram.tsx   → Listening time by day/week/month/year
+  SessionItem.tsx        → Single session row
 
 src/utils/
   index.ts               → throttle(), throttleSameArgs(), formatTime()
