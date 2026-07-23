@@ -5,7 +5,7 @@
 // Layout
 export const SEGMENT_WIDTH = 4
 export const SEGMENT_GAP = 2
-export const SEGMENT_DURATION = 5000 // 5 seconds per segment
+export const SEGMENT_DURATION = 1000 // 1 second per segment
 
 // Zoom bounds (expressed as factor on SEGMENT_WIDTH)
 export const MIN_ZOOM = 1             // SEGMENT_WIDTH * 1 = 4px
