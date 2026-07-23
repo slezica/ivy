@@ -74,7 +74,7 @@ The system has no dedicated service — it's built from two store actions (`trac
 
 When playback starts, `trackSession(bookId)` queries for a recent session on this book. If one exists within the 5-minute window, it extends that session by updating `ended_at`; otherwise it creates a new one. While playback continues, the throttle fires `trackSession` every 5 seconds to keep `ended_at` current.
 
-When the session's conditions stop holding — playback pauses, the book changes, or a clip component takes playback ownership — `finalizeSession` runs immediately (not throttled). Sessions shorter than `MIN_SESSION_DURATION_MS` (1 second) are deleted and a sync `delete` is queued so the cleanup propagates; the rest get a final `ended_at` update. `finalizeSession` queues a sync `upsert`; `trackSession` queues one only when it *extends* an existing session — a newly created session is first queued on a later extend tick or on finalization.
+When the session's conditions stop holding — playback pauses, the book changes, or a clip component takes playback ownership — `finalizeSession` runs immediately (not throttled). Sessions shorter than `MIN_SESSION_DURATION_MS` (1 second) are deleted and a sync `delete` is queued so the cleanup propagates; the rest get a final `ended_at` update. `finalizeSession` queues a sync `upsert`; `trackSession` queues one only when it *extends* an existing session — a newly created session is first queued on a later extend tick or on finalization. This is intentional: a session that dies before its first 5-second tick isn't worth syncing.
 
 ---
 
