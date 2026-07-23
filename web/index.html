@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ivy — Audiobook &amp; Podcast Player</title>
+  <meta name="description" content="Ivy is a local-first audiobook and podcast player for Android. Your files, your device, your data.">
+  <link rel="icon" href="assets/icon.png">
+  <style>
+    :root {
+      --primary: #8aaa6c;
+      --primary-contrast: #242424;
+      --bg: #2a2a2a;
+      --bg-2: #212121;
+      --bg-3: #393939;
+      --text: #dadada;
+      --text-2: #aeaeb2;
+      --border: #38383a;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    header {
+      text-align: center;
+      padding: 72px 24px 56px;
+    }
+
+    header img {
+      width: 96px;
+      height: 96px;
+      border-radius: 24px;
+      background: #ffffff;
+    }
+
+    header h1 {
+      margin-top: 20px;
+      font-size: 2.6rem;
+      letter-spacing: 0.02em;
+    }
+
+    header p.tagline {
+      margin-top: 8px;
+      font-size: 1.15rem;
+      color: var(--text-2);
+    }
+
+    .store-button {
+      display: inline-block;
+      margin-top: 28px;
+      padding: 14px 32px;
+      background: var(--primary);
+      color: var(--primary-contrast);
+      font-size: 1.05rem;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 10px;
+    }
+
+    .store-button:hover { filter: brightness(1.08); }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px 64px;
+    }
+
+    section.feature {
+      display: flex;
+      align-items: center;
+      gap: 48px;
+      padding: 48px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    section.feature:nth-child(even) { flex-direction: row-reverse; }
+
+    section.feature img {
+      width: 280px;
+      max-width: 100%;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      display: block;
+    }
+
+    section.feature h2 {
+      font-size: 1.6rem;
+      color: var(--primary);
+      margin-bottom: 12px;
+    }
+
+    section.feature p {
+      color: var(--text-2);
+      font-size: 1.05rem;
+    }
+
+    @media (max-width: 720px) {
+      section.feature,
+      section.feature:nth-child(even) {
+        flex-direction: column;
+        text-align: center;
+      }
+      section.feature img { width: 240px; }
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      background: var(--bg-2);
+      text-align: center;
+      padding: 32px 24px;
+      color: var(--text-2);
+      font-size: 0.95rem;
+    }
+
+    footer a { color: var(--primary); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <img src="assets/icon.png" alt="Ivy logo">
+    <h1>Ivy</h1>
+    <p class="tagline">A local-first audiobook &amp; podcast player</p>
+    <a class="store-button" href="#">Get it on Google Play</a>
+  </header>
+
+  <main>
+    <section class="feature">
+      <img src="assets/01-library.png" alt="Library screen">
+      <div>
+        <h2>Your library, your files</h2>
+        <p>
+          Import audiobooks and podcasts straight from your device.
+          Ivy keeps its own copies, remembers where you left off in every
+          book, and picks up right where you stopped — even across devices.
+        </p>
+      </div>
+    </section>
+
+    <section class="feature">
+      <img src="assets/02-player.png" alt="Player screen">
+      <div>
+        <h2>A player built for long listens</h2>
+        <p>
+          A smooth, zoomable timeline makes scrubbing through hours of audio
+          effortless. Chapters, playback speed, and full support for lock
+          screen and Bluetooth controls.
+        </p>
+      </div>
+    </section>
+
+    <section class="feature">
+      <img src="assets/03-clips.png" alt="Clips screen">
+      <div>
+        <h2>Clip the moments worth keeping</h2>
+        <p>
+          Save passages as standalone audio clips. Add notes, get automatic
+          on-device transcriptions, and share clips with anyone — no account
+          needed, nothing leaves your phone unless you say so.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Ivy is local-first: no accounts, no tracking, no servers.</p>
+    <p><a href="privacy.html">Privacy Policy</a></p>
+  </footer>
+
+</body>
+</html>
