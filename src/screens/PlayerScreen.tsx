@@ -164,6 +164,7 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
         leftColor={Color.TEXT_DISABLED}
         rightColor={Color.PRIMARY}
         tapSkip={{ backward: SKIP_BACKWARD_MS, forward: SKIP_FORWARD_MS }}
+        playbackRate={isPlaying ? book.speed / 100 : 0}
         showTime='top'
       />
 
