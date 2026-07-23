@@ -16,7 +16,8 @@
     "clean": "rm -rf modules/ivy/android/build && find node_modules -maxdepth 3 -type d \\( -path '*/android/build' -o -name .cxx \\) -prune -exec rm -rf {} + && npx expo prebuild --clean --platform android",
     "build:debug": "cd android && ./gradlew assembleDebug",
     "build:preview": "cd android && ./gradlew assemblePreview",
-    "build:release": "read -p \"Password: \" -s KEYSTORE_PASSWORD && expo prebuild && cd android && KEYSTORE_PASSWORD=\"$KEYSTORE_PASSWORD\" ./gradlew assembleRelease"
+    "build:release": "read -p \"Password: \" -s KEYSTORE_PASSWORD && expo prebuild && cd android && KEYSTORE_PASSWORD=\"$KEYSTORE_PASSWORD\" ./gradlew assembleRelease",
+    "build:bundle": "read -p \"Password: \" -s KEYSTORE_PASSWORD && expo prebuild --clean && cd android && KEYSTORE_PASSWORD=\"$KEYSTORE_PASSWORD\" ./gradlew assembleRelease bundleRelease"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
