@@ -114,6 +114,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
         selectionStart={selectionStart}
         selectionEnd={selectionEnd}
         onSelectionChange={handleSelectionChange}
+        playbackRate={isPlaying ? 1 : 0}
         showTime="hidden"
       />
 
