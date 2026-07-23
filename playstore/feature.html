@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; }
+  body {
+    width: 1024px; height: 500px;
+    background: #1c1c1c;
+    display: flex; align-items: center; justify-content: center; gap: 56px;
+    font-family: "Liberation Sans", "Noto Sans", sans-serif;
+    overflow: hidden;
+  }
+  img { height: 300px; }
+  h1 { color: #dadada; font-size: 96px; letter-spacing: 2px; }
+  p { color: #aeaeb2; font-size: 30px; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <!-- Feature graphic source. Render with:
+       chromium --headless --window-size=1024,500 --force-device-scale-factor=1 \
+         --screenshot=feature-graphic.png feature.html -->
+  <img src="../web/assets/logo-dark.png">
+  <div>
+    <h1>Ivy</h1>
+    <p>A local-first audiobook<br>&amp; podcast player</p>
+  </div>
+</body>
+</html>
