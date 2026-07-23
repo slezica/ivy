@@ -172,7 +172,7 @@ If `loadBook()` throws inside `play()`, the catch sets status to `'paused'` when
 
 ### Playback speed
 
-Each book has a per-book `speed` (integer percentage, 100 = 1.0x). `loadBook`'s `applyRate` applies it on **every** path — including same-file loads — but only when the owner is the main player; clip owners (ClipViewer, ClipEditor) always play at 1.0x. The `setSpeed` action persists a new speed to the book (queued for sync) and applies it immediately if that book is playing in the main player.
+Each book has a per-book `speed` (integer percentage, 100 = 1.0x). `loadBook`'s `applyRate` applies it on **every** path — including same-file loads — but only when the owner is the main player; clip owners (ClipViewer, ClipEditor) always play at 1.0x. The `setSpeed` action persists a new speed to the book (queued for sync) and applies it immediately if that book is loaded in the main player (playing or paused — the guard checks uri and ownership, not status).
 
 ---
 

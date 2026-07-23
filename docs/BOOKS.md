@@ -62,10 +62,10 @@ Archive and delete actions update the Zustand store immediately (optimistic), th
 │  File  │ │Metadata│ │Database│ │  Sync  │
 │Storage │ │Service │ │Service │ │ Queue  │
 └────────┘ └────────┘ └────────┘ └────────┘
-  copy,      title,     upsert,    queue
-  rename,    artist,    archive,   changes
-  delete,    artwork,   hide,
-  fingerprint duration   restore
+  delete,    title,     upsert,    queue
+  list,      artist,    archive,   changes
+  fingerprint artwork,   hide,
+             duration   restore
 ```
 
 No dedicated "library service" — the actions coordinate the storage, metadata, and database services directly.
@@ -226,9 +226,9 @@ This is why not bumping `updated_at` matters: the sync engine re-queues an upser
 
 Restoration is automatic — it happens when adding a file that matches a known fingerprint (Case A in the Three Loading Cases). There's no explicit "restore" button.
 
-Key preservation rules in `db.restoreBook()`:
+Key preservation rules (precedence resolved in `loadFile` before calling `db.restoreBook()`, which persists the already-resolved values):
 
-- **Metadata** — existing title, artist, artwork win over ID3 tags (protects user edits); falls back to ID3 values only when existing fields are null
+- **Metadata** — existing title, artist, artwork win over ID3 tags (protects user edits); falls back to ID3 values only when existing fields are null (`existingBook.title ?? title` in `load_file.ts`)
 - **Position** — the user's saved playback position is preserved
 
 ---
@@ -268,7 +268,7 @@ src/store/
   index.ts               → Wires book actions, position sync, auto-sync trigger
   types.ts               → Book type, library status in AppState
 
-android/.../
+modules/ivy/android/src/main/java/com/salezica/ivy/
   AudioMetadataModule.kt    → Native metadata extraction (MediaMetadataRetriever)
   FileCopierModule.kt       → Native file copy with progress, fingerprint, cancellation
   ChapterReaderModule.kt    → Native chapter extraction via bundled FFmpeg (-f ffmetadata)
