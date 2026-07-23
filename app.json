@@ -61,7 +61,8 @@
       "./plugins/withIvyPreviewBuildType.js",
       "./plugins/withIvyHermesFix.js",
       "./plugins/withIvyVersionName.js",
-      "./plugins/withIvyFfmpegClosureCheck.js"
+      "./plugins/withIvyFfmpegClosureCheck.js",
+      "./plugins/withIvyApkPathPrint.js"
     ],
     "experiments": {
       "typedRoutes": true
