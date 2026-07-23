@@ -781,4 +781,153 @@ describe('TimelinePhysicsEngine', () => {
       expect(engine.isActive).toBe(false)
     })
   })
+
+  // --------------------------------------------------------------------------
+  // 14. Playback follow
+  // --------------------------------------------------------------------------
+
+  describe('playback follow', () => {
+    /** Tick the engine over a span at fixed dt (playback ticks never end) */
+    function tickSpan(engine: TimelinePhysicsEngine, from: number, to: number, dt = 16) {
+      for (let t = from; t <= to; t += dt) {
+        engine.tick(t)
+      }
+    }
+
+    it('does not tick when rate is 0', () => {
+      const { engine } = createEngine({ position: 0 })
+      expect(engine.tick(16)).toBe(false)
+      expect(engine.scrollOffset).toBe(0)
+    })
+
+    it('advances at the playback rate', () => {
+      const { engine } = createEngine({ position: 0 })
+      engine.setPlaybackRate(1, 0)
+
+      tickSpan(engine, 16, 1000)
+
+      // After ~1s of ticks the timeline should have advanced ~1000ms
+      expect(engine.scrollOffset).toBeCloseTo(tx(1000), 0)
+    })
+
+    it('scales advancement with rate', () => {
+      const { engine } = createEngine({ position: 0 })
+      engine.setPlaybackRate(2, 0)
+
+      tickSpan(engine, 16, 1000)
+
+      expect(engine.scrollOffset).toBeCloseTo(tx(2000), 0)
+    })
+
+    it('stops advancing when rate returns to 0', () => {
+      const { engine } = createEngine({ position: 0 })
+      engine.setPlaybackRate(1, 0)
+      tickSpan(engine, 16, 496)
+
+      engine.setPlaybackRate(0, 500)
+      const offsetAtPause = engine.scrollOffset
+
+      expect(engine.tick(516)).toBe(false)
+      expect(engine.scrollOffset).toBe(offsetAtPause)
+    })
+
+    it('folds small drift in gradually instead of snapping', () => {
+      const { engine } = createEngine({ position: 0 })
+      engine.setPlaybackRate(1, 0)
+      tickSpan(engine, 16, 1000)
+
+      // Player reports 500ms ahead of where we are — within snap threshold
+      const reported = engine.displayPosition + 500
+      engine.setExternalPosition(reported, 1000)
+
+      // No immediate jump
+      expect(engine.scrollOffset).toBeCloseTo(tx(1000), 0)
+
+      // After the fold window passes, position ≈ reported + elapsed since report
+      tickSpan(engine, 1016, 2000)
+      expect(engine.scrollOffset).toBeCloseTo(tx(reported + 1000), 0)
+    })
+
+    it('snaps on drift larger than the threshold (external seek)', () => {
+      const { engine } = createEngine({ position: 0 })
+      engine.setPlaybackRate(1, 0)
+      tickSpan(engine, 16, 1000)
+
+      engine.setExternalPosition(60_000, 1000)
+
+      expect(engine.scrollOffset).toBeCloseTo(tx(60_000), 1)
+    })
+
+    it('snaps external positions when paused (rate 0)', () => {
+      const { engine } = createEngine({ position: 0 })
+
+      engine.setExternalPosition(30_000, 100)
+
+      expect(engine.scrollOffset).toBeCloseTo(tx(30_000), 1)
+    })
+
+    it('suspends while dragging and resumes after release', () => {
+      const { engine } = createEngine({ position: 0 })
+      engine.setPlaybackRate(1, 0)
+      tickSpan(engine, 16, 496)
+
+      engine.panStart(200, 45, 500)
+      expect(engine.tick(516)).toBe(false) // gesture drives frames, not the loop
+
+      engine.panUpdate(-60, 550)
+      engine.panEnd(0, 600) // slow release: no momentum, commits a seek
+
+      // Loop restarts (hook calls scheduleTick on panEnd) and follows again
+      expect(engine.tick(616)).toBe(true)
+      const before = engine.scrollOffset
+      engine.tick(716)
+      expect(engine.scrollOffset).toBeGreaterThan(before)
+    })
+
+    it('keeps the tick loop alive when momentum ends during playback', () => {
+      const { engine, callbacks } = createEngine({ position: 0 })
+      engine.setPlaybackRate(1, 0)
+
+      // Fling to start momentum
+      engine.panStart(200, 45, 0)
+      engine.panUpdate(-40, 16)
+      engine.panUpdate(-80, 32)
+      engine.panUpdate(-120, 48)
+      engine.panUpdate(-160, 64)
+      engine.panEnd(0, 64)
+      expect(engine.isActive).toBe(true)
+
+      // Run until momentum exhausts — tick must keep returning true throughout
+      let t = 80
+      while (engine.isActive && t < 20_000) {
+        expect(engine.tick(t)).toBe(true)
+        t += 16
+      }
+      expect(engine.isActive).toBe(false)
+      expect(callbacks.onSeek).toHaveBeenCalledTimes(1) // momentum-end seek
+
+      // And playback follow continues advancing
+      const before = engine.scrollOffset
+      engine.tick(t + 16)
+      expect(engine.scrollOffset).toBeGreaterThan(before)
+    })
+
+    it('clamps at the end of the timeline', () => {
+      const { engine } = createEngine({ duration: 10_000, position: 9_900 })
+      engine.setPlaybackRate(1, 0)
+
+      tickSpan(engine, 16, 2000)
+
+      expect(engine.scrollOffset).toBe(tx(10_000))
+    })
+
+    it('never fires onSeek from playback follow', () => {
+      const { engine, callbacks } = createEngine({ position: 0 })
+      engine.setPlaybackRate(1, 0)
+
+      tickSpan(engine, 16, 2000)
+
+      expect(callbacks.onSeek).not.toHaveBeenCalled()
+    })
+  })
 })

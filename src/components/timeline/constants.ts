@@ -27,5 +27,12 @@ export const MIN_VELOCITY = 30          // px/s — stop momentum below this
 // Animation
 export const SCROLL_TO_DURATION = 200 // ms for tap-to-seek animation
 
+// Playback follow (smooth scroll while audio plays)
+//
+// The engine advances the timeline itself at the playback rate; the periodic
+// position events from the player act as drift correction, not motion source.
+export const DRIFT_SNAP_THRESHOLD = 2000 // ms — larger drift means an external seek: snap
+export const DRIFT_FOLD_WINDOW = 1000    // ms — ~95% of smaller drift folded in within this window
+
 // Selection constraints
 export const MIN_SELECTION_DURATION = 1000 // 1 second minimum between handles

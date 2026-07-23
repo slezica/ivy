@@ -1,8 +1,8 @@
 /**
  * TimelinePhysicsEngine
  *
- * Pure physics engine for timeline scroll, momentum, tap-to-seek, selection
- * handle dragging, and pinch-to-zoom.
+ * Pure physics engine for timeline scroll, momentum, tap-to-seek, playback
+ * follow, selection handle dragging, and pinch-to-zoom.
  *
  * This class contains ALL the state and logic that was previously spread across
  * refs and callbacks in the useTimelinePhysics hook. It has:
@@ -29,6 +29,8 @@ import {
   MIN_ZOOM,
   MAX_ZOOM,
   TIMELINE_HEIGHT,
+  DRIFT_SNAP_THRESHOLD,
+  DRIFT_FOLD_WINDOW,
 } from './constants'
 import { timeToX, xToTime, clamp } from './utils'
 
@@ -142,6 +144,15 @@ export class TimelinePhysicsEngine {
   private _hasMomentum = false
   private _lastTickTime = 0  // timestamp of previous tick, for computing dt
 
+  // --- Playback follow ---
+  //
+  // While audio plays, the engine advances the scroll offset itself at the
+  // playback rate (0 = paused), so motion is smooth at display refresh rate.
+  // External position events become drift corrections: small drift is folded
+  // in gradually over DRIFT_FOLD_WINDOW, large drift (an external seek) snaps.
+  private _playbackRate = 0
+  private _pendingDrift = 0  // ms of correction left to fold in
+
   // --- Touch state ---
   //
   // When the user touches down while momentum/animation is active, we stop
@@ -220,13 +231,41 @@ export class TimelinePhysicsEngine {
   /**
    * Sync scroll position to an externally-provided playback position.
    * Only takes effect when the engine is idle (not dragging/animating).
+   *
+   * While playback follow is driving the scroll, small differences are treated
+   * as drift and folded in gradually; only large ones (external seeks, e.g.
+   * notification buttons) snap.
    */
   setExternalPosition(position: number, now: number): void {
     if (this.isActive) return
 
+    if (this._isPlaybackFollowing()) {
+      const drift = position - this._xt(this._scrollOffset)
+      if (Math.abs(drift) <= DRIFT_SNAP_THRESHOLD) {
+        this._pendingDrift = drift
+        return
+      }
+      this._pendingDrift = 0
+      // Fall through: drift too large, snap to the reported position
+    }
+
     this._scrollOffset = this._tx(position)
     this._updateDisplayPosition(position, now, true)
     this._callbacks.onFrame()
+  }
+
+  /**
+   * Set the playback rate driving the timeline's own motion (0 = paused).
+   * The hook calls this when the playbackRate prop changes.
+   */
+  setPlaybackRate(rate: number, now: number): void {
+    if (rate > 0 && this._playbackRate === 0) {
+      this._lastTickTime = now // fresh dt baseline for the first playback tick
+    }
+    if (rate === 0) {
+      this._pendingDrift = 0
+    }
+    this._playbackRate = rate
   }
 
   updateSelection(start: number, end: number): void {
@@ -415,10 +454,10 @@ export class TimelinePhysicsEngine {
 
     // Use EMA-smoothed velocity for momentum (ignoring raw gesture velocityX)
     this._velocity = this._emaVelocity
+    this._lastTickTime = now // dt baseline for momentum or playback follow
 
     if (Math.abs(this._velocity) > MIN_VELOCITY) {
       this._hasMomentum = true
-      this._lastTickTime = now
     } else {
       this._callbacks.onSeek(this._xt(this._scrollOffset))
     }
@@ -465,12 +504,18 @@ export class TimelinePhysicsEngine {
   // =========================================================================
 
   tick(now: number): boolean {
+    // Momentum and tap-to-seek take priority; when one finishes with playback
+    // follow active, keep the loop alive so following resumes seamlessly.
     if (this._hasMomentum) {
-      return this._tickMomentum(now)
+      return this._tickMomentum(now) || this._isPlaybackFollowing()
     }
 
     if (this._animation) {
-      return this._tickAnimation(now)
+      return this._tickAnimation(now) || this._isPlaybackFollowing()
+    }
+
+    if (this._isPlaybackFollowing()) {
+      return this._tickPlayback(now)
     }
 
     return false
@@ -527,6 +572,38 @@ export class TimelinePhysicsEngine {
   }
 
   // =========================================================================
+  // Private: playback follow tick
+  //
+  // Advances the scroll offset at the playback rate using real elapsed time,
+  // folding in a time-proportional share of any pending drift correction.
+  // Never fires onSeek — the audio player is the source of truth here.
+  // =========================================================================
+
+  private _isPlaybackFollowing(): boolean {
+    return this._playbackRate > 0
+      && !this._isDragging
+      && this._draggingHandle === null
+      && !this._isPinching
+  }
+
+  private _tickPlayback(now: number): boolean {
+    const dt = Math.min((now - this._lastTickTime) / 1000, 0.1) // seconds, capped at 100ms
+    this._lastTickTime = now
+
+    // Exponential fold: each slice absorbs a share of the remaining drift,
+    // with time constant WINDOW/3 so ~95% is corrected within the window
+    const fold = this._pendingDrift * Math.min(1, (dt * 3000) / DRIFT_FOLD_WINDOW)
+    this._pendingDrift -= fold
+
+    const position = this._xt(this._scrollOffset) + dt * 1000 * this._playbackRate + fold
+    this._scrollOffset = clamp(this._tx(position), 0, this._maxOffset())
+
+    this._updateDisplayPosition(this._xt(this._scrollOffset), now)
+    this._callbacks.onFrame()
+    return true
+  }
+
+  // =========================================================================
   // Private: tap-to-seek animation tick
   //
   // Smoothly scrolls from startOffset to targetOffset over SCROLL_TO_DURATION
@@ -541,6 +618,8 @@ export class TimelinePhysicsEngine {
       this._animation = null
       return false
     }
+
+    this._lastTickTime = now // keep the playback-follow dt baseline fresh
 
     const elapsed = now - this._animation.startTime
     const progress = Math.min(elapsed / SCROLL_TO_DURATION, 1)
