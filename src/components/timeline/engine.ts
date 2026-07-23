@@ -310,6 +310,24 @@ export class TimelinePhysicsEngine {
   }
 
   /**
+   * Called when the touch sequence is fully finalized (gesture onFinalize,
+   * which fires whether the gesture succeeded, failed, or was cancelled).
+   *
+   * A handle touch whose gesture neither completes as a tap nor activates as
+   * a pan (e.g. held past the tap timeout and released without moving) would
+   * leave `_draggingHandle` set forever — making `isActive` permanently true,
+   * which blocks both playback follow and external position sync: audio keeps
+   * playing but the timeline freezes. This guarantees the state is cleared.
+   *
+   * `_stoppedMomentum` is intentionally left alone: touchDown set it, and a
+   * tap() may still run after this (gesture callback order isn't guaranteed),
+   * relying on it for suppression.
+   */
+  touchUp(): void {
+    this._draggingHandle = null
+  }
+
+  /**
    * Called when a tap gesture completes (finger down + up without dragging).
    *
    * If the touch was used to stop momentum, we suppress the tap. Otherwise,

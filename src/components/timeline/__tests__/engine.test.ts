@@ -634,6 +634,31 @@ describe('TimelinePhysicsEngine', () => {
       const [newStart] = (callbacks.onSelectionChange as jest.Mock).mock.calls[0]
       expect(newStart).toBeLessThanOrEqual(20_000 - MIN_SELECTION_DURATION)
     })
+
+    it('recovers from a handle touch that never becomes a tap or pan', () => {
+      const { engine } = createEngine({
+        position: 15_000,
+        selection: { start: 10_000, end: 20_000 },
+      })
+      engine.setPlaybackRate(1, 0)
+
+      // Touch the start handle, then release without moving after the tap
+      // timeout: neither tap() nor panStart/panEnd ever fire — only the
+      // gesture finalizer (touchUp)
+      const startX = handleScreenX(engine, 10_000)
+      const handleY = 90 - 10 + 12
+      engine.touchDown(startX, handleY, 0)
+
+      // Stuck handle drag blocks playback follow and external sync
+      expect(engine.isActive).toBe(true)
+      expect(engine.tick(16)).toBe(false)
+
+      engine.touchUp()
+
+      // Cleared: engine idle again, playback follow ticks resume
+      expect(engine.isActive).toBe(false)
+      expect(engine.tick(616)).toBe(true)
+    })
   })
 
   // --------------------------------------------------------------------------

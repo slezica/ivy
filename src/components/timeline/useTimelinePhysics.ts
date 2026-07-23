@@ -211,6 +211,14 @@ export function useTimelinePhysics({
       engine.panEnd(event.velocityX, performance.now())
       scheduleTick() // momentum may have started
     })
+    // Fires for success, failure, and cancellation alike — the pan gesture
+    // reaches a terminal state on every touch, so this guarantees leaked
+    // handle-drag state is cleared and playback follow can resume even when
+    // neither tap.onEnd nor pan.onEnd fired (e.g. a held-then-released touch).
+    .onFinalize(() => {
+      engine.touchUp()
+      scheduleTick() // resume playback follow if the touch had blocked it
+    })
 
   const tapGesture = Gesture.Tap()
     .runOnJS(true)
