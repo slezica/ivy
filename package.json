@@ -16,8 +16,9 @@
     "clean": "rm -rf modules/ivy/android/build && find node_modules -maxdepth 3 -type d \\( -path '*/android/build' -o -name .cxx \\) -prune -exec rm -rf {} + && npx expo prebuild --clean --platform android",
     "build:debug": "cd android && ./gradlew assembleDebug",
     "build:preview": "cd android && ./gradlew assemblePreview",
-    "build:release": "read -p \"Password: \" -s KEYSTORE_PASSWORD && expo prebuild && cd android && KEYSTORE_PASSWORD=\"$KEYSTORE_PASSWORD\" ./gradlew assembleRelease",
-    "build:bundle": "read -p \"Password: \" -s KEYSTORE_PASSWORD && expo prebuild --clean && cd android && KEYSTORE_PASSWORD=\"$KEYSTORE_PASSWORD\" ./gradlew assembleRelease bundleRelease"
+    "keystore:check": "keytool -list -keystore credentials/release.keystore -alias ivy -storepass \"$KEYSTORE_PASSWORD\" > /dev/null && echo 'keystore password OK'",
+    "build:release": "read -r -p \"Password: \" -s KEYSTORE_PASSWORD && export KEYSTORE_PASSWORD && npm run -s keystore:check && expo prebuild --platform android && cd android && ./gradlew assembleRelease",
+    "build:bundle": "read -r -p \"Password: \" -s KEYSTORE_PASSWORD && export KEYSTORE_PASSWORD && npm run -s keystore:check && expo prebuild --clean --platform android && cd android && ./gradlew assembleRelease bundleRelease"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
