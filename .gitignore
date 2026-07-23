@@ -60,4 +60,7 @@ playstore/*.aab
 
 # Git worktrees (standard location; also excluded from jest/tsc/eslint/metro/builds)
 /worktrees/
+
+# Server logs
+/log/
 .claude/
