@@ -6,7 +6,7 @@ A guide for Ivy's on-device clip transcription.
 
 When a user creates a clip (a bookmarked audio segment), Ivy automatically transcribes it using on-device speech recognition. No server, no internet, no data leaving the phone. The transcription appears in the clip viewer as quoted text.
 
-This is powered by [Whisper](https://github.com/openai/whisper), OpenAI's open-source speech recognition model, running natively via `whisper.rn`. The model (~150MB) downloads once on first use and is cached locally.
+This is powered by [Whisper](https://github.com/openai/whisper), OpenAI's open-source speech recognition model, running natively via `whisper.rn`. The model (~465MB) downloads once on first use and is cached locally.
 
 **What gets transcribed:**
 - The first **60 seconds** of each clip's audio
@@ -95,7 +95,7 @@ The Whisper service wraps the native `whisper.rn` library. It handles three conc
 
 ### Model download
 
-On first use, the service downloads `ggml-small.bin` (~150MB) from HuggingFace:
+On first use, the service downloads `ggml-small.bin` (~465MB) from HuggingFace:
 
 1. Check if model exists at `{DocumentDirectory}/whisper/ggml-small.bin`
 2. If not, download to a `.download` temp file
@@ -103,7 +103,7 @@ On first use, the service downloads `ggml-small.bin` (~150MB) from HuggingFace:
 
 This atomic-rename pattern means a partial download (from a crash or lost connection) is simply overwritten on the next attempt. The app never tries to load a corrupt model file.
 
-A `downloading` flag prevents concurrent download attempts — if two calls race to initialize, the second one gets an error rather than starting a duplicate download.
+Concurrent `initialize()` calls share the same initialization promise (see below), so the download never runs twice in practice. A `downloading` flag inside `ensureModelDownloaded` remains as a defensive guard: a hypothetical concurrent entry would throw rather than start a duplicate download.
 
 ### Audio preparation
 
