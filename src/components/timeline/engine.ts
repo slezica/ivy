@@ -501,15 +501,17 @@ export class TimelinePhysicsEngine {
     this._lastTickTime = now
 
     if (Math.abs(this._velocity) > MIN_VELOCITY) {
-      // Advance position by velocity * dt (displacement over this time slice)
+      // Advance position by the exact displacement of the decay curve over
+      // this time slice: ∫ v0 * D^t dt = v0 * (D^dt - 1) / ln(D)
+      const decay = Math.pow(DECELERATION, dt)
       this._scrollOffset = clamp(
-        this._scrollOffset + this._velocity * dt,
+        this._scrollOffset + this._velocity * (decay - 1) / Math.log(DECELERATION),
         0,
         this._maxOffset()
       )
 
       // Decay velocity: v *= DECELERATION^dt
-      this._velocity *= Math.pow(DECELERATION, dt)
+      this._velocity *= decay
 
       this._updateDisplayPosition(this._xt(this._scrollOffset), now)
       this._callbacks.onFrame()
