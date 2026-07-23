@@ -114,7 +114,6 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
         selectionStart={selectionStart}
         selectionEnd={selectionEnd}
         onSelectionChange={handleSelectionChange}
-        canZoom
         showTime="hidden"
       />
 
