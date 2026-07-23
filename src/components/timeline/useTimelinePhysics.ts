@@ -40,6 +40,12 @@ export interface UseTimelinePhysicsOptions {
   canZoom?: boolean
   /** Tap skips ±ms from current position instead of seeking to the tapped point */
   tapSkip?: { backward: number; forward: number }
+  /**
+   * Playback rate driving smooth timeline motion (0 = paused).
+   * While > 0 the engine advances the scroll itself each frame and treats
+   * externalPosition updates as drift corrections.
+   */
+  playbackRate?: number
 }
 
 export interface TimelinePhysicsResult {
@@ -65,6 +71,7 @@ export function useTimelinePhysics({
   selection,
   canZoom = false,
   tapSkip,
+  playbackRate = 0,
 }: UseTimelinePhysicsOptions): TimelinePhysicsResult {
   // React state that triggers re-renders (only for time indicator text)
   const [displayPosition, setDisplayPosition] = useState(externalPosition)
@@ -171,6 +178,13 @@ export function useTimelinePhysics({
       engine.updateSelection(selection.start, selection.end)
     }
   }, [engine, selection?.start, selection?.end])
+
+  useEffect(() => {
+    engine.setPlaybackRate(playbackRate, performance.now())
+    if (playbackRate > 0) {
+      scheduleTick() // start the playback-follow loop (no-op if already running)
+    }
+  }, [engine, playbackRate, scheduleTick])
 
   // Cleanup rAF on unmount
   useEffect(() => {

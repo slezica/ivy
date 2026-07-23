@@ -100,6 +100,11 @@ export interface TimelineProps {
   // to the tapped point: left half skips back, right half skips forward.
   tapSkip?: { backward: number; forward: number }
 
+  // Playback follow (optional)
+  // Rate of the audio currently playing (0 = paused). While > 0 the timeline
+  // scrolls smoothly on its own; `position` updates become drift corrections.
+  playbackRate?: number
+
   // Display (optional)
   showTime?: 'top' | 'bottom' | 'hidden'
 }
@@ -269,6 +274,7 @@ export function Timeline({
   onSelectionChange,
   canZoom = false,
   tapSkip,
+  playbackRate = 0,
   showTime = 'bottom',
 }: TimelineProps) {
   const [containerWidth, setContainerWidth] = useState(0)
@@ -371,6 +377,7 @@ export function Timeline({
       : undefined,
     canZoom,
     tapSkip,
+    playbackRate,
   })
 
   // Rebuild picture when structural parameters change (slow path).
