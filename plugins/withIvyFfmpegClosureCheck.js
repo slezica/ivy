@@ -18,7 +18,7 @@ const GRADLE_BLOCK = [
   "// won't dynamically link on device (scripts/check-ffmpeg-closure.js).",
   'tasks.register("checkFfmpegClosure") {',
   '    doLast {',
-  '        def apkDirs = ["release", "preview"]',
+  '        def apkDirs = ["release", "preview", "maestro"]',
   '            .collect { layout.buildDirectory.dir("outputs/apk/$it").get().asFile }',
   '            .findAll { it.exists() }',
   '        def apks = apkDirs.collectMany { it.listFiles().findAll { f -> f.name.endsWith(".apk") } }',
@@ -31,7 +31,7 @@ const GRADLE_BLOCK = [
   '        }',
   '    }',
   '}',
-  'tasks.matching { it.name == "assembleRelease" || it.name == "assemblePreview" }',
+  'tasks.matching { it.name == "assembleRelease" || it.name == "assemblePreview" || it.name == "assembleMaestro" }',
   '    .configureEach { finalizedBy("checkFfmpegClosure") }',
 ].join('\n')
 
