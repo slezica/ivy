@@ -256,6 +256,7 @@ describe('onAudioStatus session lifecycle (store)', () => {
         uri: opts.uri ?? null,
         duration: 60000,
         ownerId: opts.ownerId ?? null,
+        sleepTimer: null,
       },
     })
   }

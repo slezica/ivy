@@ -52,6 +52,7 @@ export function createMockPlayback(overrides: Partial<AppState['playback']> = {}
     uri: null,
     duration: 0,
     ownerId: null,
+    sleepTimer: null,
     ...overrides,
   }
 }
@@ -131,6 +132,8 @@ export function createMockAudio(overrides: Record<string, jest.Mock> = {}) {
     load: jest.fn(async () => 60000),
     seek: jest.fn(async () => {}),
     setRate: jest.fn(async () => {}),
+    fadeOut: jest.fn(async () => true),
+    resetVolume: jest.fn(async () => {}),
     ...overrides,
   } as any
 }

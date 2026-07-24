@@ -11,6 +11,7 @@ import type { ArchiveBook } from '../actions/archive_book'
 import type { DeleteBook } from '../actions/delete_book'
 import type { Play } from '../actions/play'
 import type { Pause } from '../actions/pause'
+import type { SetSleepTimer } from '../actions/set_sleep_timer'
 import type { Seek } from '../actions/seek'
 import type { SeekClip } from '../actions/seek_clip'
 import type { SkipForward } from '../actions/skip_forward'
@@ -54,6 +55,7 @@ export interface AppState {
     uri: string | null       // URI currently loaded in player
     duration: number         // Duration of loaded audio
     ownerId: string | null   // ID of component that last took control
+    sleepTimer: { endsAt: number, duration: number } | null  // wall-clock; null = off
   }
 
   transcription: {
@@ -83,6 +85,7 @@ export interface AppState {
   setSpeed: SetSpeed
   play: Play
   pause: Pause
+  setSleepTimer: SetSleepTimer
   seek: Seek
   seekClip: SeekClip
   skipForward: SkipForward
