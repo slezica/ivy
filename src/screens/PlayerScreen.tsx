@@ -339,7 +339,13 @@ function SpeedControl({ speed, onChange }: SpeedControlProps) {
 // Sleep Timer
 // =============================================================================
 
-const SLEEP_PRESET_MINUTES = [10, 30, 60]
+// 15s dev-only preset: quick way to watch a full fade-out cycle (5s + 10s fade)
+const SLEEP_PRESETS: { label: string, durationMs: number }[] = [
+  ...(__DEV__ ? [{ label: '15s', durationMs: 15_000 }] : []),
+  { label: '10m', durationMs: 10 * 60_000 },
+  { label: '30m', durationMs: 30 * 60_000 },
+  { label: '60m', durationMs: 60 * 60_000 },
+]
 
 interface SleepTimerControlProps {
   sleepTimer: SleepTimer
@@ -356,12 +362,12 @@ function SleepTimerControl({ sleepTimer, remaining, onChange }: SleepTimerContro
       </Text>
       <View style={styles.sleepOptions}>
         <SleepOption label="Off" current={sleepTimer === null} onPress={() => onChange(null)} />
-        {SLEEP_PRESET_MINUTES.map(minutes => (
+        {SLEEP_PRESETS.map(preset => (
           <SleepOption
-            key={minutes}
-            label={`${minutes}m`}
-            current={sleepTimer?.duration === minutes * 60_000}
-            onPress={() => onChange(minutes * 60_000)}
+            key={preset.label}
+            label={preset.label}
+            current={sleepTimer?.duration === preset.durationMs}
+            onPress={() => onChange(preset.durationMs)}
           />
         ))}
       </View>
