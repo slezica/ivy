@@ -37,22 +37,23 @@ at any time.
   forbid the tap — and re-tapping the same option must work (reset / changed my
   mind about changing my mind). Comfort over correctness; evaluate in practice.
 
-## Countdown semantics — OPEN DECISION
+## Countdown semantics — DECIDED
 
-Three variants recorded; final choice pending real-world feel.
+**Pure wall-clock, starts on set.** `endsAt = now + duration`, exactly like
+setting a timer in a clock app. Decided after user interviews (2026-07-24):
+opinions differed, but the clock-app mental model won.
 
-1. **Pure wall-clock.** `endsAt = now + duration`, starts on selection.
-   Problem (classic in Audible): anxiety. Timer starts while you're still
-   walking to bed — TIME RUNNING OUT. Stupid but real.
-2. **Arm on set, start on play** (middle ground, current favorite). Framing:
-   armed timer = "next listening session capped at N minutes". Set while
-   playing → starts immediately. Set while paused → waits, armed; a leftover
-   armed timer next morning is a harmless standing instruction. Once running,
-   pure wall-clock — pausing does not freeze it. No state machine.
-3. **SET-button dialog.** Vertical full-text options ("Off", "10 minutes", …),
-   tick on selected, single "SET" button. Deliberate confirmation UX. Note:
-   this does NOT solve the anxiety problem — it moves the start by seconds.
-   Orthogonal to variant 2; could combine.
+Discarded alternatives, kept for the record:
+
+1. **Arm on set, start on play.** Framing: armed timer = "next listening
+   session capped at N minutes". Set while playing → starts immediately; set
+   while paused → waits, armed. Motivated by the anxiety problem (classic in
+   Audible): timer starts while you're still walking to bed — TIME RUNNING
+   OUT. Stupid but real. Interviews outweighed it.
+2. **SET-button dialog.** Vertical full-text options ("Off", "10 minutes", …),
+   tick on selected, single "SET" button. Deliberate confirmation UX. Does
+   not solve the anxiety problem — moves the start by seconds. Orthogonal to
+   variant 1; could have combined.
 
 Playback-linked countdown (freezes while paused) was considered and rejected:
 requires a pause/resume state machine, and a timer still ticking next morning
