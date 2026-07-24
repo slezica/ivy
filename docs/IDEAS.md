@@ -41,7 +41,7 @@ and again 2026-07-23.
 ## Testing
 
 19. **Screen tests** — store, sync, database, and action coordination tests now exist; screens still have zero tests.
-20. **Cover remaining untested services** — gaps narrowed to `audio/player.ts`, system services (sharing), and `start/stop_transcription` actions.
+20. **Cover remaining untested services** — gaps narrowed to `audio/player.ts` (fade is covered since 2026-07-24; load/play/seek are not), system services (sharing), and `start/stop_transcription` actions.
 21. **Snapshot / visual regression testing** — 7 Maestro flows exist (plus subflows and screenshot flows), but no Storybook or screenshot comparison; styling regressions still uncaught.
 
 ## Known-good areas (from audit)

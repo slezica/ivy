@@ -197,7 +197,7 @@ Position updates still flow through regardless — only the status field is prot
 
 Design doc: `docs/2026-07-24-sleep-timer.md`.
 
-`setSleepTimer(durationMs | null)` arms (or clears) a **wall-clock** countdown: `endsAt = now + duration`, exactly like a clock-app timer. State lives in `playback.sleepTimer`; the action factory's closure holds the scheduled timeout. On expiry: volume ramps to zero over the last `SLEEP_TIMER_FADE_MS` (10s, *included* in the interval), then `pause()` — global, whoever owns playback — then volume resets to full and the timer clears to off.
+`setSleepTimer(durationMs | null)` arms (or clears) a **wall-clock** countdown: `endsAt = now + duration`, exactly like a clock-app timer. State lives in `playback.sleepTimer`; the action factory's closure holds the scheduled timeout. On expiry: volume ramps to zero over the last `SLEEP_TIMER_FADE_MS` (10s, *included* in the interval; per-call override via `setSleepTimer(duration, fadeMs)` — the 5s test preset uses 2s), then `pause()` — global, whoever owns playback — then volume resets to full and the timer clears to off.
 
 Rules:
 
