@@ -119,10 +119,9 @@ export default function LibraryScreen() {
   }
 
   const handleDeleteBook = (bookId: string) => {
-    const book = books[bookId]
     Alert.alert(
-      'Remove from Library',
-      `Remove "${book?.title || book?.name}" from your library completely?`,
+      'Remove Book',
+      'Permanently remove all information about this book?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -166,7 +165,7 @@ export default function LibraryScreen() {
     if (isArchived) {
       return [
         { key: 'edit', label: 'Edit details', icon: 'create-outline' },
-        { key: 'delete', label: 'Remove from library', icon: 'trash-outline', destructive: true },
+        { key: 'delete', label: 'Remove forever', icon: 'trash-outline', destructive: true },
       ]
     }
 
