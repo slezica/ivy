@@ -827,19 +827,30 @@ export class DatabaseService {
     artwork: string | null,
     fileSize: number,
     fingerprint: Uint8Array,
-    speed: number = 100
+    speed: number = 100,
+    extras?: BookExtras & { metadata_version: number | null },
   ): Promise<void> {
+    // Whole-entity LWW: a payload without extras (old app) legitimately nulls them
+    const e = extras ?? {
+      summary: null, narrator: null, series: null, part: null,
+      subtitle: null, date: null, language: null, metadata_version: null,
+    }
     await this.db.runAsync(
-      `INSERT INTO files (id, uri, name, duration, position, updated_at, updated_by, title, artist, artwork, file_size, fingerprint, hidden, speed)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+      `INSERT INTO files (id, uri, name, duration, position, updated_at, updated_by, title, artist, artwork, file_size, fingerprint, hidden, speed,
+                          summary, narrator, series, part, subtitle, date, language, metadata_version)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name, duration = excluded.duration,
          position = excluded.position, updated_at = excluded.updated_at, updated_by = excluded.updated_by,
          title = excluded.title, artist = excluded.artist, artwork = excluded.artwork,
          file_size = excluded.file_size, fingerprint = excluded.fingerprint,
-         speed = excluded.speed
+         speed = excluded.speed,
+         summary = excluded.summary, narrator = excluded.narrator, series = excluded.series,
+         part = excluded.part, subtitle = excluded.subtitle, date = excluded.date,
+         language = excluded.language, metadata_version = excluded.metadata_version
        WHERE excluded.updated_at >= files.updated_at`,
-      [id, name, duration, position, updated_at, updated_by, title, artist, artwork, fileSize, fingerprint, speed]
+      [id, name, duration, position, updated_at, updated_by, title, artist, artwork, fileSize, fingerprint, speed,
+       e.summary, e.narrator, e.series, e.part, e.subtitle, e.date, e.language, e.metadata_version]
     )
   }
 

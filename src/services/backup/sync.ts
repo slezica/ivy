@@ -668,6 +668,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       remote.title, remote.artist, remote.artwork,
       remote.file_size, fingerprint,
       remote.speed ?? 100,
+      backupExtras(remote),
     )
 
     await this.db.upsertManifestEntry({
@@ -710,6 +711,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       remote.title, remote.artist, remote.artwork,
       remote.file_size, base64ToUint8Array(remote.fingerprint),
       remote.speed ?? 100,
+      backupExtras(remote),
     )
 
     await this.db.upsertManifestEntry({
@@ -1152,6 +1154,14 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       file_size: book.file_size,
       fingerprint: uint8ArrayToBase64(book.fingerprint),
       speed: book.speed,
+      summary: book.summary,
+      narrator: book.narrator,
+      series: book.series,
+      part: book.part,
+      subtitle: book.subtitle,
+      date: book.date,
+      language: book.language,
+      metadata_version: book.metadata_version,
     }
 
     const filename = `book_${book.id}.json`
@@ -1671,6 +1681,20 @@ function parseBackup<T extends BookBackup | ClipBackup | SessionBackup>(content:
     throw new Error(`Backup payload requires format version ${compat}, newer than supported (${BACKUP_VERSION}) — update the app`)
   }
   return payload
+}
+
+/** Metadata extras of a book payload; absent fields (legacy backups) read as null. */
+function backupExtras(remote: BookBackup) {
+  return {
+    summary: remote.summary ?? null,
+    narrator: remote.narrator ?? null,
+    series: remote.series ?? null,
+    part: remote.part ?? null,
+    subtitle: remote.subtitle ?? null,
+    date: remote.date ?? null,
+    language: remote.language ?? null,
+    metadata_version: remote.metadata_version ?? null,
+  }
 }
 
 /**

@@ -38,6 +38,15 @@ export interface BookBackup {
   file_size: number
   fingerprint: string // base64-encoded
   speed?: number      // Playback speed as integer percentage (100 = 1.0x). Optional for backward compat.
+  // Metadata extras (additive, absent in legacy backups — read as null)
+  summary?: string | null
+  narrator?: string | null
+  series?: string | null
+  part?: string | null
+  subtitle?: string | null
+  date?: string | null
+  language?: string | null
+  metadata_version?: number | null // Extractor version that produced the extras
   deleted?: boolean   // Tombstone marker (full payload + deleted: true)
   merged_into?: string // Identity retirement: this id merged into the given (smaller) book id
 }

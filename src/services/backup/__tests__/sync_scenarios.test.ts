@@ -1401,6 +1401,41 @@ describe('sync scenarios', () => {
     })
   })
 
+  describe('book metadata extras', () => {
+    const EXTRAS = {
+      summary: 'A story.', narrator: 'A Voice', series: 'Saga', part: '2',
+      subtitle: 'Sub', date: '2012', language: 'English',
+    }
+
+    it('syncs extras to a second device', async () => {
+      const drive = new FakeDrive()
+      const deviceA = createSyncHarness(drive)
+      const deviceB = createSyncHarness(drive)
+
+      await addBook(deviceA)
+      await deviceA.db.setBookExtras(BOOK_ID, EXTRAS, 1)
+      await deviceA.sync.syncNow()
+
+      expect(drive.readJson(`book_${BOOK_ID}.json`)).toMatchObject({ ...EXTRAS, metadata_version: 1 })
+
+      await deviceB.sync.syncNow()
+      const book = await deviceB.db.getBookById(BOOK_ID)
+      expect(book).toMatchObject({ ...EXTRAS, metadata_version: 1 })
+    })
+
+    it('reads legacy payloads without extras as null', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson())
+      await device.sync.syncNow()
+
+      const book = await device.db.getBookById(BOOK_ID)
+      expect(book!.summary).toBeNull()
+      expect(book!.metadata_version).toBeNull()
+    })
+  })
+
   describe('payload format versioning', () => {
     it('stamps uploaded payloads with the writer and compat versions', async () => {
       const drive = new FakeDrive()
