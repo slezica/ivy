@@ -9,11 +9,8 @@ appId: com.salezica.ivy
 
 - runFlow: subflows/import-book.yaml
 
+# Opening a book from the library starts playback — expiry has something to pause
 - tapOn: "Ivy Test Book"
-
-# Start playback so expiry has something to pause
-- tapOn:
-    id: "play-pause-button"
 - assertVisible: "Pause"
 
 # Arm the 5s preset; dialog dismisses on selection
