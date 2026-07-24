@@ -135,12 +135,11 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
           backgroundColor={isLoading ? Color.TEXT_DISABLED : Color.PRIMARY}
         />
         <IconButton
-          iconName={linked ? 'link' : 'link-outline'}
+          iconName="link"
           onPress={toggleLinked}
           testID="clip-editor-link-toggle"
           size={36}
-          backgroundColor={linked ? Color.PRIMARY : Color.BACKGROUND_2}
-          iconColor={linked ? Color.PRIMARY_CONTRAST : Color.TEXT_MUTED}
+          variant={linked ? 'filled' : 'outline'}
           style={styles.linkButton}
         />
       </View>
