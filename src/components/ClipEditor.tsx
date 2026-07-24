@@ -132,14 +132,15 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
           iconName={isPlaying ? 'pause' : 'play'}
           onPress={handlePlayPause}
           size={48}
-          backgroundColor={isLoading ? Color.TEXT_DISABLED : Color.PRIMARY}
+          active={isPlaying}
+          backgroundColor={isLoading ? Color.TEXT_DISABLED : undefined}
         />
         <IconButton
           iconName="link"
           onPress={toggleLinked}
           testID="clip-editor-link-toggle"
           size={36}
-          variant={linked ? 'filled' : 'outline'}
+          active={linked}
           style={styles.linkButton}
         />
       </View>
