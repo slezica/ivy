@@ -34,6 +34,10 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   const [selectionStart, setSelectionStart] = useState(clip.start)
   const [selectionEnd, setSelectionEnd] = useState(clip.start + clip.duration)
 
+  // Bounds follow playhead: while linked, playhead movement (scrub or
+  // playback) pushes the selection anchors — listen and delimit in one go
+  const [linked, setLinked] = useState(true)
+
   // Local state - the position this editor remembers
   const [ownPosition, setOwnPosition] = useState(clip.start)
 
@@ -114,6 +118,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
         selectionStart={selectionStart}
         selectionEnd={selectionEnd}
         onSelectionChange={handleSelectionChange}
+        linkedSelection={linked}
         playbackRate={isPlaying ? 1 : 0}
         showTime="hidden"
       />
@@ -124,6 +129,15 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
           onPress={handlePlayPause}
           size={48}
           backgroundColor={isLoading ? Color.TEXT_DISABLED : Color.PRIMARY}
+        />
+        <IconButton
+          iconName={linked ? 'link' : 'link-outline'}
+          onPress={() => setLinked((value) => !value)}
+          testID="clip-editor-link-toggle"
+          size={36}
+          backgroundColor={linked ? Color.PRIMARY : Color.BACKGROUND_2}
+          iconColor={linked ? Color.PRIMARY_CONTRAST : Color.TEXT_MUTED}
+          style={styles.linkButton}
         />
       </View>
 
@@ -176,6 +190,11 @@ const styles = StyleSheet.create({
   playButtonContainer: {
     alignItems: 'center',
     marginTop: -8
+  },
+  linkButton: {
+    position: 'absolute',
+    right: 0,
+    top: 6, // vertically centered against the 48px play button
   },
   input: {
     borderWidth: 1,
