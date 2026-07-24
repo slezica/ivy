@@ -22,7 +22,8 @@ at any time.
 - Icon: Ionicons `moon-outline`. Provisional — Ionicons has no clock-with-z;
   breaking the one-lib rule for MaterialIcons `snooze` remains an option if
   moon reads poorly in context.
-- **Active state:** button swaps icon for live remaining time, speed-button
+- **Active state:** button gets the shared `active` treatment (filled — see
+  button-design branch) and swaps icon for live remaining time, speed-button
   style ("12m"). Round minutes **up**, stop at "1m" — no seconds.
 
 ### Dialog
