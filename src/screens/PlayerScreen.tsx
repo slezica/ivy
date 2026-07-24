@@ -174,30 +174,30 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
           iconName={isPlaying ? 'pause' : 'play'}
           onPress={onPlayPause}
           testID="play-pause-button"
-          variant="outline"
+          active={isPlaying}
         />
 
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={styles.speedButton}
+            style={[styles.speedButton, book.speed !== 100 && styles.speedButtonActive]}
             onPress={() => setSpeedOpen(true)}
             testID="speed-button"
           >
-            <Text style={styles.speedButtonLabel}>{speedLabel}</Text>
+            <Text style={[styles.speedButtonLabel, book.speed !== 100 && styles.speedButtonLabelActive]}>
+              {speedLabel}
+            </Text>
           </TouchableOpacity>
           <IconButton
             iconName="bookmark"
             onPress={onAddClip}
             testID="add-clip-button"
             size={48}
-            variant="outline"
           />
           <IconButton
             iconName="list"
             onPress={() => setChaptersOpen(true)}
             testID="chapters-button"
             size={48}
-            variant="outline"
           />
         </View>
       </View>
@@ -351,10 +351,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  speedButtonActive: {
+    backgroundColor: Color.PRIMARY,
+    elevation: 4,
+  },
   speedButtonLabel: {
     fontSize: 13,
     fontWeight: '700',
     color: Color.PRIMARY,
+  },
+  speedButtonLabelActive: {
+    color: Color.PRIMARY_CONTRAST,
   },
   speedControl: {
     paddingVertical: 24,
