@@ -189,12 +189,14 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
             onPress={onAddClip}
             testID="add-clip-button"
             size={48}
+            variant="outline"
           />
           <IconButton
             iconName="list"
             onPress={() => setChaptersOpen(true)}
             testID="chapters-button"
             size={48}
+            variant="outline"
           />
         </View>
       </View>
@@ -343,15 +345,15 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: Color.PRIMARY,
+    borderWidth: 1.5,
+    borderColor: Color.PRIMARY,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
   },
   speedButtonLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: Color.PRIMARY_CONTRAST,
+    color: Color.PRIMARY,
   },
   speedControl: {
     paddingVertical: 24,
