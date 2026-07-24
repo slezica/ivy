@@ -17,6 +17,7 @@ class IvyPackage : ReactPackage {
         AudioMetadataPackage(),
         FileCopierPackage(),
         ChapterReaderPackage(),
+        BuildInfoPackage(),
     )
 
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
