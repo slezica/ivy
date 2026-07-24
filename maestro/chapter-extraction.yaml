@@ -12,9 +12,10 @@ appId: com.salezica.ivy
 
 - tapOn: "Ivy Test Book"
 
-# Open the chapters dialog
+# Open the chapters dialog (via the player's three-dot menu)
 - tapOn:
-    id: "chapters-button"
+    id: "player-menu-button"
+- tapOn: "Show chapters"
 - assertVisible: "Chapters"
 
 # Extraction succeeded → the chapter shows and the empty-state does NOT.

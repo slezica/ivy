@@ -2,20 +2,24 @@ import { useState, useEffect, useCallback } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ToastAndroid } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import Slider from '@react-native-community/slider'
+import { Ionicons } from '@expo/vector-icons'
 
 import { Color, Space } from '../theme'
 import { useStore } from '../store'
 import { Timeline } from '../components/timeline'
 import IconButton from '../components/shared/IconButton'
 import Dialog from '../components/shared/Dialog'
+import ActionMenu from '../components/shared/ActionMenu'
 import ScreenArea from '../components/shared/ScreenArea'
 import EmptyState from '../components/shared/EmptyState'
 import { MAIN_PLAYER_OWNER_ID, formatTime } from '../utils'
 import { SKIP_BACKWARD_MS, SKIP_FORWARD_MS } from '../actions/constants'
 import type { Book, Chapter } from '../services'
 
+type SleepTimer = { endsAt: number, duration: number } | null
+
 export default function PlayerScreen() {
-  const { playback, addClip, play, pause, seek, setSpeed, fetchPlaybackState } = useStore()
+  const { playback, addClip, play, pause, seek, setSpeed, setSleepTimer, fetchPlaybackState } = useStore()
 
   // Remember which book we're showing (survives ownership changes)
   const [ownBookId, setOwnBookId] = useState<string | null>(null)
@@ -108,10 +112,12 @@ export default function PlayerScreen() {
               book={ownBook}
               position={ownPosition}
               isPlaying={isPlaying}
+              sleepTimer={playback.sleepTimer}
               onPlayPause={handlePlayPause}
               onAddClip={handleAddClip}
               onSeek={handleSeek}
               onSpeedChange={(speed) => setSpeed(ownBook.id, speed)}
+              onSleepTimerChange={setSleepTimer}
             />
           : <EmptyState title="Not playing" subtitle="Select a book from your library" />
         }
@@ -124,15 +130,36 @@ interface PlayerProps {
   book: Book
   position: number
   isPlaying: boolean
+  sleepTimer: SleepTimer
   onPlayPause: () => void
   onAddClip: () => void
   onSeek: (position: number) => void
   onSpeedChange: (speed: number) => void
+  onSleepTimerChange: (durationMs: number | null) => void
 }
 
-function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onSpeedChange }: PlayerProps) {
+/** Current time, ticking once per second while enabled. */
+function useNow(enabled: boolean) {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!enabled) return
+    setNow(Date.now())
+    const interval = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(interval)
+  }, [enabled])
+
+  return now
+}
+
+function Player({
+  book, position, isPlaying, sleepTimer,
+  onPlayPause, onAddClip, onSeek, onSpeedChange, onSleepTimerChange,
+}: PlayerProps) {
+  const [menuOpen, setMenuOpen] = useState(false)
   const [chaptersOpen, setChaptersOpen] = useState(false)
   const [speedOpen, setSpeedOpen] = useState(false)
+  const [sleepOpen, setSleepOpen] = useState(false)
   const chapters = book.chapters ?? []
 
   const handleChapterPress = (chapter: Chapter) => {
@@ -140,10 +167,35 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
     setChaptersOpen(false)
   }
 
+  const handleMenuAction = (action: string) => {
+    setMenuOpen(false)
+    if (action === 'chapters') setChaptersOpen(true)
+  }
+
+  const handleSleepTimerChange = (durationMs: number | null) => {
+    onSleepTimerChange(durationMs)
+    setSleepOpen(false)
+  }
+
   const speedLabel = book.speed === 100 ? '1×' : `${(book.speed / 100).toFixed(1)}×`
+
+  // Sleep button label: minutes remaining, rounded up, floor "1m"
+  const now = useNow(sleepTimer !== null)
+  const sleepRemaining = sleepTimer ? Math.max(0, sleepTimer.endsAt - now) : null
+  const sleepLabel = sleepRemaining !== null
+    ? `${Math.max(1, Math.ceil(sleepRemaining / 60_000))}m`
+    : null
 
   return (
     <View style={styles.playerContainer}>
+      <TouchableOpacity
+        style={styles.menuButton}
+        onPress={() => setMenuOpen(true)}
+        testID="player-menu-button"
+      >
+        <Ionicons name="ellipsis-vertical" size={24} color={Color.TEXT} />
+      </TouchableOpacity>
+
       <View style={styles.spacerTop} />
 
       <View style={styles.bookInfo}>
@@ -179,11 +231,11 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
 
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.speedButton, book.speed !== 100 && styles.speedButtonActive]}
+            style={[styles.circleButton, book.speed !== 100 && styles.circleButtonActive]}
             onPress={() => setSpeedOpen(true)}
             testID="speed-button"
           >
-            <Text style={[styles.speedButtonLabel, book.speed !== 100 && styles.speedButtonLabelActive]}>
+            <Text style={[styles.circleButtonLabel, book.speed !== 100 && styles.circleButtonLabelActive]}>
               {speedLabel}
             </Text>
           </TouchableOpacity>
@@ -193,12 +245,16 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
             testID="add-clip-button"
             size={48}
           />
-          <IconButton
-            iconName="list"
-            onPress={() => setChaptersOpen(true)}
-            testID="chapters-button"
-            size={48}
-          />
+          <TouchableOpacity
+            style={[styles.circleButton, sleepTimer !== null && styles.circleButtonActive]}
+            onPress={() => setSleepOpen(true)}
+            testID="sleep-timer-button"
+          >
+            {sleepLabel !== null
+              ? <Text style={[styles.circleButtonLabel, styles.circleButtonLabelActive]}>{sleepLabel}</Text>
+              : <Ionicons name="moon-outline" size={24} color={Color.PRIMARY} />
+            }
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -216,6 +272,23 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
           onChange={onSpeedChange}
         />
       </Dialog>
+
+      <Dialog visible={sleepOpen} onClose={() => setSleepOpen(false)}>
+        <SleepTimerControl
+          sleepTimer={sleepTimer}
+          remaining={sleepRemaining}
+          onChange={handleSleepTimerChange}
+        />
+      </Dialog>
+
+      <ActionMenu
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onAction={handleMenuAction}
+        items={[
+          { key: 'chapters', label: 'Show chapters', icon: 'list' },
+        ]}
+      />
 
     <View style={styles.spacerBottom} />
   </View>
@@ -258,6 +331,60 @@ function SpeedControl({ speed, onChange }: SpeedControlProps) {
         <Text style={styles.speedLabelText}>2×</Text>
       </View>
     </View>
+  )
+}
+
+
+// =============================================================================
+// Sleep Timer
+// =============================================================================
+
+const SLEEP_PRESET_MINUTES = [10, 30, 60]
+
+interface SleepTimerControlProps {
+  sleepTimer: SleepTimer
+  remaining: number | null
+  onChange: (durationMs: number | null) => void
+}
+
+function SleepTimerControl({ sleepTimer, remaining, onChange }: SleepTimerControlProps) {
+  return (
+    <View style={styles.sleepControl}>
+      <Text style={styles.sleepControlTitle}>Sleep timer</Text>
+      <Text style={styles.sleepControlValue}>
+        {remaining !== null ? formatTime(remaining) : 'Off'}
+      </Text>
+      <View style={styles.sleepOptions}>
+        <SleepOption label="Off" current={sleepTimer === null} onPress={() => onChange(null)} />
+        {SLEEP_PRESET_MINUTES.map(minutes => (
+          <SleepOption
+            key={minutes}
+            label={`${minutes}m`}
+            current={sleepTimer?.duration === minutes * 60_000}
+            onPress={() => onChange(minutes * 60_000)}
+          />
+        ))}
+      </View>
+    </View>
+  )
+}
+
+interface SleepOptionProps {
+  label: string
+  current: boolean  // marks the current state; stays tappable (re-tap = reset)
+  onPress: () => void
+}
+
+function SleepOption({ label, current, onPress }: SleepOptionProps) {
+  return (
+    <TouchableOpacity
+      style={[styles.sleepOption, current && styles.sleepOptionCurrent]}
+      onPress={onPress}
+    >
+      <Text style={[styles.sleepOptionLabel, current && styles.sleepOptionLabelCurrent]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
   )
 }
 
@@ -310,6 +437,13 @@ const styles = StyleSheet.create({
     gap: 48,
     paddingHorizontal: 12
   },
+  menuButton: {
+    position: 'absolute',
+    top: 8,
+    left: 4,
+    padding: 8,
+    zIndex: 1,
+  },
   spacerTop: {
     flex: 8,
   },
@@ -342,7 +476,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
   },
-  speedButton: {
+  circleButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -351,16 +485,58 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  speedButtonActive: {
+  circleButtonActive: {
     backgroundColor: Color.PRIMARY,
     elevation: 4,
   },
-  speedButtonLabel: {
+  circleButtonLabel: {
     fontSize: 13,
     fontWeight: '700',
     color: Color.PRIMARY,
   },
-  speedButtonLabelActive: {
+  circleButtonLabelActive: {
+    color: Color.PRIMARY_CONTRAST,
+  },
+  sleepControl: {
+    paddingVertical: 24,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    gap: 8,
+  },
+  sleepControlTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Color.TEXT,
+    marginBottom: 8,
+  },
+  sleepControlValue: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: Color.PRIMARY,
+  },
+  sleepOptions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  sleepOption: {
+    minWidth: 56,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: Space.BORDER_RADIUS,
+    borderWidth: 1.5,
+    borderColor: Color.PRIMARY,
+    alignItems: 'center',
+  },
+  sleepOptionCurrent: {
+    backgroundColor: Color.PRIMARY,
+  },
+  sleepOptionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Color.PRIMARY,
+  },
+  sleepOptionLabelCurrent: {
     color: Color.PRIMARY_CONTRAST,
   },
   speedControl: {
