@@ -17,6 +17,7 @@ and again 2026-07-23.
 9. **Auto-open clip editor from player with uninterrupted playback** — hitting the clip button opens the editor directly, audio keeps playing; combined with linked bounds (playhead pushes anchors), clipping becomes listen-and-pause in one motion.
 10. **More readable settings** - always have subtitles below settings explaining use or state.
 11. **Sync indicators in screens** - show in library, clips and sessions that missing items are being synced (only if missing, not at all times during any sync)
+12. **Strong danger language** - use phrases like "Remove forever" instead of just "Delete clip" for example
 
 ## Refactors / Architecture
 
