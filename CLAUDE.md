@@ -48,6 +48,7 @@ File import (local files), metadata editing, archiving, deletion, and restoratio
 - Archive/delete are optimistic with rollback — update store first, then DB
 - Every book mutation must queue for sync (`db.queueChange`) — except archive/delete, which are per-device and must NOT queue or bump `updated_at` (see docs/SYNC.md)
 - On restore, existing metadata (title/artist/artwork) wins over ID3 tags — protects user edits
+- Metadata extras (summary, narrator, series, ...) come only from ffmetadata (best-effort; ffmpeg failure → null); lazy re-extraction is gated by `metadata_version` vs `EXTRACTED_METADATA_VERSION`
 
 ### Playback
 
@@ -172,6 +173,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   └── SettingsScreen.tsx      # App settings (sync, transcription)
   ├── components/
   │   ├── MetadataEditor.tsx      # Book metadata editing (title, artist; artwork read-only)
+  │   ├── BookDetails.tsx         # Read-only book details (metadata extras; lazy extraction)
   │   ├── ClipViewer.tsx          # Clip playback (own position state, timeline, transcription)
   │   ├── ClipEditor.tsx          # Clip editing (own position state, selection timeline, note)
   │   ├── BookItem.tsx            # Library list row
@@ -289,6 +291,14 @@ hidden INTEGER NOT NULL DEFAULT 0  -- Soft-deleted (1 = removed from library)
 chapters TEXT                  -- JSON array of chapter metadata
 speed INTEGER NOT NULL DEFAULT 100  -- Playback speed (100 = 1.0x)
 last_played_at INTEGER         -- Local-only (never synced); drives startup auto-load
+summary TEXT                   -- Extras extracted from ffmetadata tags (see docs/BOOKS.md):
+narrator TEXT                  --   summary=comment, narrator=composer
+series TEXT
+part TEXT                      -- TEXT: parts can be "0.5" or "1-3"
+subtitle TEXT
+date TEXT
+language TEXT
+metadata_version INTEGER       -- Extractor version that produced the extras (NULL = never extracted)
 ```
 
 **clips table:**

@@ -170,6 +170,23 @@ A new book is created:
 
 ---
 
+## Metadata Extras
+
+Beyond title/artist/artwork/duration, a book carries seven optional **extras** columns extracted from the file's ffmetadata tags: `summary` (from `comment`), `narrator` (from `composer`), `series`, `part`, `subtitle`, `date`, `language`. Design doc: [2026-07-24-book-metadata-extras.md](2026-07-24-book-metadata-extras.md).
+
+**Two extraction sources, split by failure mode:**
+
+- **Basics** (title, artist, artwork, duration): `AudioMetadataService` / `MediaMetadataRetriever` — in-process platform API, survives ffmpeg breakage. Unchanged by extras.
+- **Extras + chapters**: `FFmetadataService`, which parses the raw ffmetadata text returned by the native `FFmetadataReaderModule` (exec'd `libffmpeg.so`). The retriever *cannot* read `comment` or custom MP4 tags, so ffmetadata is the only source for extras — and it's best-effort: on ffmpeg failure extras stay null.
+
+**Lazy extraction (backfill):** `extractBookExtras(bookId)` re-extracts on demand — called when the Book Details dialog opens. It no-ops unless `book.uri !== null` and `(metadata_version ?? 0) < EXTRACTED_METADATA_VERSION` (in `services/audio/ffmetadata.ts`). `metadata_version` distinguishes "never extracted" (null) from "extracted, file is sparse", and bumping the constant lazily re-extracts every book as it's next viewed. On import, extras are extracted inline and the version stamped; on ffmpeg failure the version stays null so a later view retries.
+
+**Sync:** extras + `metadata_version` ride the book payload (additive fields; old payloads read as null — see [SYNC.md](SYNC.md)). Restore-on-reimport just re-extracts: extras derive from file content and are not user-editable, so overwriting is always correct.
+
+**UI:** `BookDetails.tsx`, a read-only dialog opened from the book's action menu ("Details"). Shows the extras and triggers the lazy extraction ("Analyzing file…" while pending; the store book updates in place).
+
+---
+
 ## Book States
 
 A book exists in one of three states, determined by two fields:
@@ -244,12 +261,14 @@ src/actions/
   fetch_books.ts         → Load all non-hidden books into store
   archive_book.ts        → Set uri=null, delete file
   update_book.ts         → Update title/artist, queue sync
+  extract_book_extras.ts → Lazy metadata extras extraction (summary, narrator, ...)
   delete_book.ts         → Set uri=null + hidden=true, delete file
   cleanup_orphaned_files.ts → Delete app-storage files with no DB record
   constants.ts           → CLIPS_DIR, skip durations (no book-specific constants)
 
 src/components/
   MetadataEditor.tsx     → Dialog content for editing book title/artist (shows artwork read-only)
+  BookDetails.tsx        → Read-only details dialog (extras; triggers lazy extraction)
   LibraryLoadingDialog.tsx → Progress dialog for adding books (copy)
 
 src/services/storage/
@@ -260,6 +279,7 @@ src/services/storage/
 
 src/services/audio/
   metadata.ts            → AudioMetadataService (native ID3 tag extraction)
+  ffmetadata.ts          → FFmetadataService (tags + chapters parsed from raw ffmetadata; extras mapping)
 
 src/screens/
   LibraryScreen.tsx      → Book list with active/archived sections, search, menus

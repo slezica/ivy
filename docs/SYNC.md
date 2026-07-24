@@ -310,6 +310,8 @@ Files are named `{type}_{uuid}.{ext}`:
 
 All JSON payloads include `updated_at` and `updated_by` for version comparison. Legacy payloads missing `updated_by` are handled gracefully (treated as `null`).
 
+Book payloads also carry the metadata extras (`summary`, `narrator`, `series`, `part`, `subtitle`, `date`, `language`, `metadata_version` — see docs/BOOKS.md). These are additive optional fields: absent in old payloads (read as null), and nulled locally when an old-app device rewrites the book under whole-entity LWW (accepted; self-heals via lazy re-extraction wherever the file exists).
+
 ### Payload Format Versioning
 
 Every uploaded payload is stamped with two fields (constants in `types.ts`, both ≡ 1 when absent, so legacy files never need rewriting):
