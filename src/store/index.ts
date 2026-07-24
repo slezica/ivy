@@ -45,6 +45,7 @@ import { createFetchSessions } from '../actions/fetch_sessions'
 import { createTrackSession } from '../actions/track_session'
 import { createFinalizeSession } from '../actions/finalize_session'
 import { createUpdateBook } from '../actions/update_book'
+import { createExtractBookExtras } from '../actions/extract_book_extras'
 import { createSetSpeed } from '../actions/set_speed'
 import { createCleanupOrphanedFiles } from '../actions/cleanup_orphaned_files'
 import { createInitializeApplication } from '../actions/initialize_application'
@@ -80,6 +81,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const archiveBook = createArchiveBook(deps)
   const deleteBook = createDeleteBook(deps)
   const updateBook = createUpdateBook(deps)
+  const extractBookExtras = createExtractBookExtras(deps)
   const setSpeed = createSetSpeed(deps)
   const cleanupOrphanedFiles = createCleanupOrphanedFiles({ db, files })
   const loadFile = createLoadFile({ ...deps, fetchBooks, fetchClips, cleanupOrphanedFiles })
@@ -171,6 +173,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     archiveBook,
     deleteBook,
     updateBook,
+    extractBookExtras,
     setSpeed,
     loadBook,
     play,

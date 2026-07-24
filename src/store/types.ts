@@ -31,6 +31,7 @@ import type { UpdateSettings } from '../actions/update_settings'
 import type { FetchSessions } from '../actions/fetch_sessions'
 import type { TrackSession } from '../actions/track_session'
 import type { UpdateBook } from '../actions/update_book'
+import type { ExtractBookExtras } from '../actions/extract_book_extras'
 import type { SetSpeed } from '../actions/set_speed'
 import type { InitializeApplication } from '../actions/initialize_application'
 
@@ -83,6 +84,7 @@ export interface AppState {
   archiveBook: ArchiveBook
   deleteBook: DeleteBook
   updateBook: UpdateBook
+  extractBookExtras: ExtractBookExtras
   setSpeed: SetSpeed
   loadBook: LoadBook
   play: Play
