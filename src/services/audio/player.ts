@@ -44,10 +44,14 @@ export type AudioPlayerEvents = {
 // Service
 // =============================================================================
 
+const FADE_STEP_MS = 250
+
 export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
   private isSetup = false
   private currentDuration: number = 0
   private eventSubscriptions: EmitterSubscription[] = []
+  private fadeTimer: ReturnType<typeof setInterval> | null = null
+  private fadeResolve: ((completed: boolean) => void) | null = null
 
   async load(uri: string, metadata?: TrackMetadata): Promise<number> {
     log(`Loading: ${metadata?.title || 'unknown'}`)
@@ -109,6 +113,34 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
 
   async setRate(rate: number): Promise<void> {
     await TrackPlayer.setRate(rate)
+  }
+
+  /**
+   * Ramp volume from full to zero over durationMs. Resolves true when the
+   * ramp completes, false if cancelled by resetVolume() before finishing.
+   */
+  async fadeOut(durationMs: number): Promise<boolean> {
+    await this.resetVolume()
+
+    return new Promise((resolve) => {
+      const startedAt = Date.now()
+      this.fadeResolve = resolve
+      this.fadeTimer = setInterval(async () => {
+        const progress = (Date.now() - startedAt) / durationMs
+        if (progress >= 1) {
+          this.clearFade(true)
+          await TrackPlayer.setVolume(0)
+        } else if (this.fadeTimer) {
+          await TrackPlayer.setVolume(1 - progress)
+        }
+      }, FADE_STEP_MS)
+    })
+  }
+
+  /** Cancel any running fade and restore full volume. */
+  async resetVolume(): Promise<void> {
+    this.clearFade(false)
+    await TrackPlayer.setVolume(1)
   }
 
   async skip(offsetMillis: number): Promise<void> {
@@ -208,6 +240,17 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
     )
 
     this.isSetup = true
+  }
+
+  private clearFade(completed: boolean) {
+    if (this.fadeTimer) {
+      clearInterval(this.fadeTimer)
+      this.fadeTimer = null
+    }
+    if (this.fadeResolve) {
+      this.fadeResolve(completed)
+      this.fadeResolve = null
+    }
   }
 
   private async notifyStatusChange(state: State): Promise<void> {
