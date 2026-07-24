@@ -15,6 +15,7 @@ import { GoogleDriveService, DriveFile, DriveApiError, BackupFolder } from './dr
 import { GoogleAuthService } from './auth'
 import { BaseService } from '../base'
 import {
+  BACKUP_VERSION,
   BookBackup,
   ClipBackup,
   SessionBackup,
@@ -398,7 +399,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     if (!resolved) return
 
     const jsonFileId = resolved.file.id
-    const remote: BookBackup = JSON.parse(resolved.content)
+    const remote = parseBackup<BookBackup>(resolved.content)
 
     // Tombstone: branch before any fingerprint or restore logic
     if (remote.deleted) {
@@ -526,7 +527,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     }
 
     const jsonFileId = resolved.file.id
-    const remote: ClipBackup = JSON.parse(resolved.content)
+    const remote = parseBackup<ClipBackup>(resolved.content)
 
     // Tombstone: branch before any audio handling or restore call
     if (remote.deleted) {
@@ -580,7 +581,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     if (!resolved) return
 
     const jsonFileId = resolved.file.id
-    const remote: SessionBackup = JSON.parse(resolved.content)
+    const remote = parseBackup<SessionBackup>(resolved.content)
 
     // Tombstone: branch before any restore call
     if (remote.deleted) {
@@ -765,7 +766,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     let remote: BookBackup
     try {
       const content = await this.drive.downloadFile(remoteFileId, false) as string
-      remote = JSON.parse(content)
+      remote = parseBackup<BookBackup>(content)
     } catch (error) {
       if (error instanceof DriveApiError && error.status === 404) return // remote purged — nothing to retire
       throw error
@@ -1129,6 +1130,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
   private async uploadBook(book: Book, outboxItem: SyncOutboxItem, result: SyncResult): Promise<void> {
     const backup: BookBackup = {
+      version: BACKUP_VERSION,
       id: book.id,
       name: book.name,
       duration: book.duration,
@@ -1172,6 +1174,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
   private async uploadClip(clip: Clip, outboxItem: SyncOutboxItem, result: SyncResult): Promise<void> {
     const backup: ClipBackup = {
+      version: BACKUP_VERSION,
       id: clip.id,
       source_id: clip.source_id,
       start: clip.start,
@@ -1247,6 +1250,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
   private async uploadSession(session: Session, outboxItem: SyncOutboxItem, result: SyncResult): Promise<void> {
     const backup: SessionBackup = {
+      version: BACKUP_VERSION,
       id: session.id,
       book_id: session.book_id,
       started_at: session.started_at,
@@ -1303,7 +1307,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     let remote: T
     try {
       const content = await this.drive.downloadFile(remoteFileId, false) as string
-      remote = JSON.parse(content)
+      remote = parseBackup<T>(content)
     } catch (error) {
       if (error instanceof DriveApiError && error.status === 404) {
         // Remote purged (user cleanup) — nothing to tombstone
@@ -1417,7 +1421,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         const resolved = await this.resolveJsonFile('book', bookId, jsons)
         if (!resolved) continue
         const fileId = resolved.file.id
-        const remote: BookBackup = JSON.parse(resolved.content)
+        const remote = parseBackup<BookBackup>(resolved.content)
 
         // Tombstone: branch before any fingerprint or restore logic
         if (remote.deleted) {
@@ -1468,7 +1472,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         const resolved = await this.resolveJsonFile('clip', clipId, jsons)
         if (!resolved) continue
         const json = resolved.file
-        const remote: ClipBackup = JSON.parse(resolved.content)
+        const remote = parseBackup<ClipBackup>(resolved.content)
 
         // Tombstones have no audio file — branch on deleted before requiring one
         if (remote.deleted) {
@@ -1520,7 +1524,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         const resolved = await this.resolveJsonFile('session', sessionId, jsons)
         if (!resolved) continue
         const fileId = resolved.file.id
-        const remote: SessionBackup = JSON.parse(resolved.content)
+        const remote = parseBackup<SessionBackup>(resolved.content)
 
         if (remote.deleted) {
           await this.applySessionTombstone(remote, fileId, result, notification)
@@ -1638,6 +1642,21 @@ function parseFilename(name: string): ParsedFilename | null {
     id: match[2],
     extension: match[3] as 'json' | 'mp3' | 'm4a',
   }
+}
+
+/**
+ * Parse a backup payload, rejecting formats newer than this app understands.
+ * The throw rides the existing failure paths — pull reconciles retry then
+ * quarantine, pushes back off — so the entity surfaces as failing and heals
+ * once the app updates. Never interpret (or rewrite) a payload past this gate.
+ */
+function parseBackup<T extends BookBackup | ClipBackup | SessionBackup>(content: string): T {
+  const payload = JSON.parse(content) as T
+  const version = payload.version ?? 1
+  if (version > BACKUP_VERSION) {
+    throw new Error(`Backup payload version ${version} is newer than supported (${BACKUP_VERSION}) — update the app`)
+  }
+  return payload
 }
 
 /**

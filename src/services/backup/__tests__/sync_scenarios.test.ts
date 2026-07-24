@@ -1382,6 +1382,74 @@ describe('sync scenarios', () => {
     })
   })
 
+  describe('payload format versioning', () => {
+    it('stamps uploaded payloads with version 1', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await addClip(device)
+      const session = await device.db.createSession(BOOK_ID)
+      await device.db.queueChange('session', session.id, 'upsert', session.updated_at)
+      drive.putFile('clips', `clip_${CLIP_ID}.m4a`, new Uint8Array([1]))
+      await device.sync.syncNow()
+
+      expect(drive.readJson(`book_${BOOK_ID}.json`).version).toBe(1)
+      expect(drive.readJson(`clip_${CLIP_ID}.json`).version).toBe(1)
+      expect(drive.readJson(`session_${session.id}.json`).version).toBe(1)
+    })
+
+    it('rejects a newer-version payload without touching local state, then applies it once repaired', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await device.sync.syncNow() // uploads the book, establishes a token
+
+      // A future app rewrote the book in a format this app doesn't know
+      const fileId = drive.getFileByName(`book_${BOOK_ID}.json`)!.id
+      await drive.updateFile(fileId, remoteBookJson({ version: 99, updated_at: now + 10_000_000 }))
+
+      const tokenBefore = device.db.getCheckpoint().last_page_token
+      const errors = trackSyncErrors(device)
+      await device.sync.syncNow()
+
+      // Reconcile failed: local untouched, token held for re-delivery
+      expect(errors[errors.length - 1]).not.toBeNull()
+      expect((await device.db.getBookById(BOOK_ID))!.title).toBe('Test Title')
+      expect(device.db.getCheckpoint().last_page_token).toBe(tokenBefore)
+
+      // Repair to a known format (e.g. this app got updated) — applies normally
+      await drive.updateFile(fileId, remoteBookJson({ updated_at: now + 10_000_000 }))
+      await device.sync.syncNow()
+      expect((await device.db.getBookById(BOOK_ID))!.title).toBe('Remote Title')
+    })
+
+    it('refuses to tombstone a newer-version payload (deletion push retries instead)', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await addClip(device)
+      drive.putFile('clips', `clip_${CLIP_ID}.m4a`, new Uint8Array([1]))
+      await device.sync.syncNow() // uploads the clip
+
+      // A future app rewrote the clip; we must not rewrite a format we don't know
+      const fileId = drive.getFileByName(`clip_${CLIP_ID}.json`)!.id
+      await drive.updateFile(fileId, remoteClipJson({ version: 99, updated_at: now + 10_000_000 }))
+
+      await deleteClip(device)
+      await device.sync.syncNow()
+
+      // Remote left untouched, delete op still queued (backed off) for retry
+      expect(drive.readJson(`clip_${CLIP_ID}.json`).deleted).toBeUndefined()
+      const outbox = await device.db.getOutboxItems(Number.MAX_SAFE_INTEGER)
+      expect(outbox).toHaveLength(1)
+      expect(outbox[0].operation).toBe('delete')
+      expect(outbox[0].last_error).toContain('newer than supported')
+    })
+  })
+
   describe('periodic full reconcile', () => {
     it('picks up remote changes the feed never delivered once a week has passed', async () => {
       const drive = new FakeDrive()

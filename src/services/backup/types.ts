@@ -8,7 +8,17 @@
 // Backup Formats (what gets stored in Google Drive)
 // -----------------------------------------------------------------------------
 
+/**
+ * Payload format version stamped into every uploaded JSON. Absent ≡ 1.
+ * Bump only on breaking changes (renamed or reinterpreted fields) — new
+ * optional fields are additive and stay within the current version. Readers
+ * reject payloads newer than this (parseBackup in sync.ts) instead of
+ * misinterpreting a format they don't know.
+ */
+export const BACKUP_VERSION = 1
+
 export interface BookBackup {
+  version?: number   // Payload format version (absent ≡ 1)
   id: string
   name: string
   duration: number
@@ -26,6 +36,7 @@ export interface BookBackup {
 }
 
 export interface ClipBackup {
+  version?: number   // Payload format version (absent ≡ 1)
   id: string
   source_id: string
   start: number
@@ -41,6 +52,7 @@ export interface ClipBackup {
 }
 
 export interface SessionBackup {
+  version?: number   // Payload format version (absent ≡ 1)
   id: string
   book_id: string
   started_at: number

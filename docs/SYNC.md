@@ -310,6 +310,12 @@ Files are named `{type}_{uuid}.{ext}`:
 
 All JSON payloads include `updated_at` and `updated_by` for version comparison. Legacy payloads missing `updated_by` are handled gracefully (treated as `null`).
 
+### Payload Format Versioning
+
+Every uploaded payload is stamped with `version` (`BACKUP_VERSION` in `types.ts`, currently 1). A missing `version` means 1 — legacy files never need rewriting. The version is bumped **only on breaking changes** (renamed or reinterpreted fields); new optional fields are additive and stay within the current version, with readers treating absence as `null`.
+
+Every payload read goes through `parseBackup()` (sync.ts), which **rejects payloads newer than the app understands** rather than misinterpreting them. The throw rides the existing failure paths — pull reconciles retry then quarantine, pushes back off — so the entity surfaces in `failingCount` and heals automatically once the app updates. This also gates tombstone writes: the engine never rewrites a payload whose format it doesn't know. Migration code for old formats (`if version < N`) doesn't exist yet — it gets written when the first breaking change does.
+
 ### Clip Upload Safety
 
 Clips involve two files (JSON + audio). Audio uploads are size-capped at 50MB. If a clip's audio file exceeds this, the upload fails with an error rather than risking OOM. If the audio upload fails after a new JSON file was created, the JSON is deleted (rolled back) to prevent orphans. Update-in-place JSON uploads don't need rollback since the old content remains valid.
