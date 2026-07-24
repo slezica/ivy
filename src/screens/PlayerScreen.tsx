@@ -14,6 +14,7 @@ import ScreenArea from '../components/shared/ScreenArea'
 import EmptyState from '../components/shared/EmptyState'
 import { MAIN_PLAYER_OWNER_ID, formatTime } from '../utils'
 import { SKIP_BACKWARD_MS, SKIP_FORWARD_MS } from '../actions/constants'
+import { isTestBuild } from '../services'
 import type { Book, Chapter } from '../services'
 
 type SleepTimer = { endsAt: number, duration: number } | null
@@ -226,6 +227,7 @@ function Player({
           iconName={isPlaying ? 'pause' : 'play'}
           onPress={onPlayPause}
           testID="play-pause-button"
+          accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
           active={isPlaying}
         />
 
@@ -339,10 +341,10 @@ function SpeedControl({ speed, onChange }: SpeedControlProps) {
 // Sleep Timer
 // =============================================================================
 
-// 5s dev-only preset (3s + 2s fade): watch a full expiry cycle without
-// slowing tests down
+// 5s test-build preset (3s + 2s fade): watch a full expiry cycle without
+// slowing tests down. debug + maestro builds only (see services/system/build)
 const SLEEP_PRESETS: { label: string, durationMs: number, fadeMs?: number }[] = [
-  ...(__DEV__ ? [{ label: '5s', durationMs: 5_000, fadeMs: 2_000 }] : []),
+  ...(isTestBuild() ? [{ label: '5s', durationMs: 5_000, fadeMs: 2_000 }] : []),
   { label: '10m', durationMs: 10 * 60_000 },
   { label: '30m', durationMs: 30 * 60_000 },
   { label: '60m', durationMs: 60 * 60_000 },

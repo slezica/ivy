@@ -8,6 +8,7 @@ interface IconButtonProps {
   onPress: () => void
   onLongPress?: () => void
   testID?: string
+  accessibilityLabel?: string
   size?: number
   active?: boolean
   backgroundColor?: string
@@ -21,6 +22,7 @@ export default function IconButton({
   onPress,
   onLongPress,
   testID,
+  accessibilityLabel,
   size = 64,
   active = false,
   backgroundColor,
@@ -49,6 +51,7 @@ export default function IconButton({
       onPress={onPress}
       onLongPress={onLongPress}
       testID={testID}
+      accessibilityLabel={accessibilityLabel}
     >
       <Ionicons name={iconName} size={iconSize} color={icon} />
     </TouchableOpacity>
