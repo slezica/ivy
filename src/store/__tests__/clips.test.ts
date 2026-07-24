@@ -2,8 +2,12 @@ import { createUpdateClip, UpdateClipDeps } from '../../actions/update_clip'
 import type { ClipWithFile } from '../../services'
 
 // immer ships untransformed ESM under the react-native export condition;
-// point Jest at its CJS build so the real store (zustand + immer) can load
-jest.mock('immer', () => jest.requireActual('../../../node_modules/immer/dist/cjs/index.js'))
+// point Jest at its CJS build so the real store (zustand + immer) can load.
+// Resolved via package.json (an exported subpath) so it also works from
+// worktrees, which have no node_modules of their own.
+jest.mock('immer', () => jest.requireActual(
+  require.resolve('immer/package.json').replace(/package\.json$/, 'dist/cjs/index.js')
+))
 
 // whisper.ts imports this native-only module at the top level
 jest.mock('react-native-audio-api', () => ({
