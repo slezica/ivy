@@ -15,23 +15,32 @@ hit play, pause where the clip should end. Listening *is* delimiting.
 
 ## The Rule
 
-**Link down = playhead is solid; any playhead movement sweeps anchors along.**
+**Link down = playhead is solid, and pushes are outward-only: the start
+anchor can only be pushed backward, the end anchor only forward.**
 
 One rule, no per-source exceptions:
 
 - Applies identically to drag, fling momentum, tap-to-seek animation, and
   playback follow. Playback pushing the end anchor forward falls out
   naturally — no special case.
-- Sweep semantics: an anchor inside the interval the playhead just traveled
-  gets carried to the playhead's new position.
-- Minimum-duration rod: when a push would compress the selection below
-  `MIN_SELECTION_DURATION`, the partner anchor is pushed too — both move,
-  keeping the min gap. Visually intuitive: handles collide, then travel
-  together.
-- Clamped to `[0, duration]` at the timeline edges.
+- Sweep semantics: the eligible anchor inside the interval the playhead just
+  traveled gets carried to the playhead's new position; the reverse movement
+  releases it. Shrinking the selection is manual — use the handles.
+- Pushes only expand the selection, so `MIN_SELECTION_DURATION` is purely a
+  handle-drag constraint; pushes can never violate it.
+- Bounded by `[0, duration]` via scroll clamping.
 - Toggling the link never moves anchors by itself; only subsequent movement
   does. Anchors the playhead already passed while unlinked are not affected
   (no contact — out of the swept path).
+
+### Revision (2026-07-24, after device testing)
+
+The first cut pushed symmetrically — any movement swept any anchor, with a
+min-duration rod carrying the partner when compressed. Unusable in practice:
+once the playhead contacted an anchor, every subsequent movement dragged it
+in *both* directions; the anchor could never be let go. Directional pushes
+fix this — contact in the expanding direction pushes, the returning movement
+releases — and delete the rod logic entirely.
 
 `MIN_SELECTION_DURATION` rises from 1s to **4s**: the distance at which the
 24px handle circles stop overlapping at the editor's fixed zoom. Sub-4s clips
@@ -47,9 +56,9 @@ still open fine; the first interaction enforces the new minimum.
   anyway; exempting them adds a rule and a surprise. Toggle the link up for
   free movement instead.
 
-Known trade-off of the pure push model: pausing *before* the old end anchor
-leaves it untouched (shrinking isn't automatic). Recovery is cheap — scrub
-forward past the anchor, then back to the pause point; it rides the playhead.
+Known trade-off of the push model: pausing *before* the old end anchor
+leaves it untouched — shrinking is never automatic (outward-only pushes),
+it's a handle drag.
 
 ## Implementation
 
