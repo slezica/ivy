@@ -183,9 +183,9 @@ export function createMockMetadata(overrides: Record<string, jest.Mock> = {}) {
   } as any
 }
 
-export function createMockChapterReader(overrides: Record<string, jest.Mock> = {}) {
+export function createMockFFmetadata(overrides: Record<string, jest.Mock> = {}) {
   return {
-    readChapters: jest.fn(async () => []),
+    read: jest.fn(async () => ({ tags: {}, chapters: [] })),
     ...overrides,
   } as any
 }

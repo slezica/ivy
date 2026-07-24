@@ -1,4 +1,4 @@
-import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, ChapterReaderService, SyncQueueService, Book } from '../services'
+import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, FFmetadataService, SyncQueueService, Book } from '../services'
 import type { GetState, SetState, Action, ActionFactory, AppState } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
@@ -10,7 +10,7 @@ export interface LoadFileDeps {
   files: FileStorageService
   copier: FileCopierService
   metadata: AudioMetadataService
-  chapters: ChapterReaderService
+  ffmetadata: FFmetadataService
   syncQueue: SyncQueueService
   toast: (message: string) => void
   get: GetState
@@ -112,7 +112,7 @@ async function handleNewBook(
   fingerprint: Uint8Array,
   existingBook: Book | null | undefined,
 ) {
-  const { db, files, copier, metadata, chapters: chapterReader, syncQueue, get, updateLibrary } = ctx
+  const { db, files, copier, metadata, ffmetadata, syncQueue, get, updateLibrary } = ctx
 
   const bookId = existingBook?.id ?? generateId()
   const { destPath, bytesWritten } = await copyFile(ctx, bookId, file.name)
@@ -130,9 +130,9 @@ async function handleNewBook(
   }
 
   try {
-    const [{ title, artist, artwork, duration }, chapters] = await Promise.all([
+    const [{ title, artist, artwork, duration }, { chapters }] = await Promise.all([
       metadata.readMetadata(fileUri),
-      chapterReader.readChapters(fileUri),
+      ffmetadata.read(fileUri),
     ])
 
     // Check again right before the DB write — metadata extraction takes time

@@ -1,7 +1,7 @@
 import { createLoadFile, LoadFileDeps } from '../load_file'
 import {
   createMockBook, createMockState, createImmerSet, createMockGet,
-  createMockDb, createMockFiles, createMockMetadata, createMockChapterReader, createMockSyncQueue, createMockCopier,
+  createMockDb, createMockFiles, createMockMetadata, createMockFFmetadata, createMockSyncQueue, createMockCopier,
 } from './helpers'
 
 // Mock generateId to return predictable values
@@ -30,7 +30,7 @@ function createMockDeps(overrides: Partial<LoadFileDeps> = {}): LoadFileDeps {
     files: createMockFiles(),
     copier: createMockCopier(),
     metadata: createMockMetadata(),
-    chapters: createMockChapterReader(),
+    ffmetadata: createMockFFmetadata(),
     syncQueue: createMockSyncQueue(),
     toast: jest.fn(),
     set: createImmerSet(state),
@@ -155,20 +155,20 @@ describe('createLoadFile', () => {
       expect(deps.syncQueue.queueChange).toHaveBeenCalledWith('book', 'generated-id-1', 'upsert')
     })
 
-    it('reads chapters from the copied file', async () => {
+    it('reads ffmetadata from the copied file', async () => {
       const deps = createMockDeps()
       const loadFile = createLoadFile(deps)
 
       await loadFile(INPUT)
 
-      expect(deps.chapters.readChapters).toHaveBeenCalledWith(
+      expect(deps.ffmetadata.read).toHaveBeenCalledWith(
         expect.stringContaining('generated-id-1'),
       )
     })
 
     it('persists chapters to the new book record', async () => {
       const deps = createMockDeps({
-        chapters: createMockChapterReader({ readChapters: jest.fn(async () => CHAPTERS) }),
+        ffmetadata: createMockFFmetadata({ read: jest.fn(async () => ({ tags: {}, chapters: CHAPTERS })) }),
       })
       const loadFile = createLoadFile(deps)
 
@@ -303,7 +303,7 @@ describe('createLoadFile', () => {
           getBookByFingerprint: jest.fn(() => archivedBook),
           restoreBook: jest.fn(() => createMockBook({ id: 'archived-1' })),
         }),
-        chapters: createMockChapterReader({ readChapters: jest.fn(async () => CHAPTERS) }),
+        ffmetadata: createMockFFmetadata({ read: jest.fn(async () => ({ tags: {}, chapters: CHAPTERS })) }),
       })
       const loadFile = createLoadFile(deps)
 

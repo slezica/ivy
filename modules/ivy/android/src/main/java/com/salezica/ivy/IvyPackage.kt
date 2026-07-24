@@ -16,7 +16,7 @@ class IvyPackage : ReactPackage {
         AudioSlicerPackage(),
         AudioMetadataPackage(),
         FileCopierPackage(),
-        ChapterReaderPackage(),
+        FFmetadataReaderPackage(),
         BuildInfoPackage(),
     )
 

@@ -144,7 +144,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   │   ├── player.ts           # react-native-track-player wrapper
   │   │   ├── integration.ts      # Playback service for remote control events
   │   │   ├── metadata.ts         # ID3/metadata extraction
-  │   │   ├── chapters.ts         # Chapter extraction (pairs with ChapterReaderModule.kt)
+  │   │   ├── ffmetadata.ts       # Tags + chapter extraction (parses raw text from FFmetadataReaderModule.kt)
   │   │   └── slicer.ts           # Audio segment extraction (native module)
   │   ├── storage/
   │   │   ├── database.ts         # SQLite operations
@@ -229,8 +229,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
           │   ├── AudioMetadataPackage.kt
           │   ├── FileCopierModule.kt     # Native module for file copy with progress
           │   ├── FileCopierPackage.kt
-          │   ├── ChapterReaderModule.kt  # Native module for chapter extraction (FFmpeg -f ffmetadata)
-          │   ├── ChapterReaderPackage.kt
+          │   ├── FFmetadataReaderModule.kt # Native module for raw ffmetadata dump (FFmpeg -f ffmetadata; parsed in JS)
+          │   ├── FFmetadataReaderPackage.kt
           │   ├── BuildInfoModule.kt      # Exposes ivy_build_variant to JS (test-affordance gate)
           │   └── BuildInfoPackage.kt
           └── yausername/youtubedl_android/

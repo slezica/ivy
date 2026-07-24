@@ -271,5 +271,5 @@ src/store/
 modules/ivy/android/src/main/java/com/salezica/ivy/
   AudioMetadataModule.kt    → Native metadata extraction (MediaMetadataRetriever)
   FileCopierModule.kt       → Native file copy with progress, fingerprint, cancellation
-  ChapterReaderModule.kt    → Native chapter extraction via bundled FFmpeg (-f ffmetadata)
+  FFmetadataReaderModule.kt → Raw ffmetadata dump via bundled FFmpeg (parsed in JS: services/audio/ffmetadata.ts)
 ```

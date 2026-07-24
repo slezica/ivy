@@ -1,5 +1,5 @@
 import { BaseService } from './base'
-import { AudioSlicerService, AudioPlayerService, AudioMetadataService, ChapterReaderService, playbackService } from './audio'
+import { AudioSlicerService, AudioPlayerService, AudioMetadataService, FFmetadataService, playbackService } from './audio'
 import { DatabaseService, FileStorageService, FileCopierService, FilePickerService } from './storage'
 import { WhisperService, TranscriptionQueueService } from './transcription'
 import { SharingService } from './system'
@@ -12,7 +12,7 @@ export type {
   DatabaseService,
   AudioPlayerService,
   AudioMetadataService,
-  ChapterReaderService,
+  FFmetadataService,
   WhisperService,
   FileStorageService,
   FileCopierService,
@@ -88,7 +88,7 @@ export const files = new FileStorageService()
 export const copier = new FileCopierService()
 export const picker = new FilePickerService()
 export const metadata = new AudioMetadataService()
-export const chapters = new ChapterReaderService()
+export const ffmetadata = new FFmetadataService()
 export const slicer = new AudioSlicerService()
 export const whisper = new WhisperService()
 export const sharing = new SharingService()

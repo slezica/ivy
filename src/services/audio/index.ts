@@ -9,4 +9,5 @@ export type { AudioMetadata } from './metadata'
 export { AudioSlicerService } from './slicer'
 export type { SliceOptions, SliceResult } from './slicer'
 
-export { ChapterReaderService } from './chapters'
+export { FFmetadataService, parseFFmetadata } from './ffmetadata'
+export type { FileTags, FileMetadata } from './ffmetadata'
