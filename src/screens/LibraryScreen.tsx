@@ -97,10 +97,9 @@ export default function LibraryScreen() {
   }
 
   const handleArchiveBook = (bookId: string) => {
-    const book = books[bookId]
     Alert.alert(
       'Archive Book',
-      `Archive "${book?.title || book?.name}" and delete the file? You can re-add it later`,
+      'This will delete the audio file. You can import it again later',
       [
         { text: 'Cancel', style: 'cancel' },
         {
