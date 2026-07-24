@@ -358,6 +358,7 @@ id INTEGER PRIMARY KEY CHECK (id = 1)  -- Enforces single row
 sync_enabled INTEGER NOT NULL DEFAULT 0
 transcription_enabled INTEGER NOT NULL DEFAULT 1
 delete_original_after_import INTEGER NOT NULL DEFAULT 0
+clip_editor_linked INTEGER NOT NULL DEFAULT 1  -- Editor link toggle memory
 ```
 
 **status table** (migration tracking):
@@ -400,7 +401,7 @@ sync: {
   lastSyncTime: number | null   // Timestamp of last successful sync
   error: string | null          // Last sync error (null if successful)
 }
-settings: { sync_enabled: boolean, transcription_enabled: boolean, delete_original_after_import: boolean }
+settings: { sync_enabled: boolean, transcription_enabled: boolean, delete_original_after_import: boolean, clip_editor_linked: boolean }
 sessions: Record<string, SessionWithBook>  // Listening history (keyed by id)
 currentSessionBookId: string | null
 ```

@@ -5,9 +5,10 @@
 The clip editor's core friction: listening and adjusting bounds are separate
 gestures. Play, listen, pause, drag handle, replay to verify, repeat.
 
-This feature links the two. A **link toggle** (lower right of the editor,
-default on) makes the playhead **solid**: any playhead movement pushes the
-selection anchors it collides with — like Photoshop's width/height link.
+This feature links the two. A **link toggle** (lower right of the editor)
+makes the playhead **solid**: any playhead movement pushes the selection
+anchors it collides with — like Photoshop's width/height link. The toggle
+state is a remembered preference (`settings.clip_editor_linked`, default on).
 
 Target workflow: scrub to the start point (anchors get pushed into place),
 hit play, pause where the clip should end. Listening *is* delimiting.
@@ -80,11 +81,12 @@ pause, external snap) so React always converges to the final value.
    - `linkedSelection?: boolean` prop, forwarded to the engine. Timeline
      gains no logic — same altitude as `canZoom`/`tapSkip`/`playbackRate`.
 3. **Editor UI** (`ClipEditor.tsx`)
-   - `linked` state, default `true` on every open.
+   - `linked` reads `settings.clip_editor_linked` (migration 10); toggling
+     writes it back via `updateSettings` — last state is remembered.
    - Link IconButton at the lower right of the play-button row: filled
      `link` icon on primary background when down, `link-outline` on muted
      background when up.
-4. **Docs** — CLIPS.md editing section.
+4. **Docs** — CLIPS.md editing section, CLAUDE.md settings schema.
 
 ### Testing
 
