@@ -97,7 +97,7 @@ describe('createAddClip', () => {
       expect(deps.slicer.slice).toHaveBeenCalledWith({
         sourceUri: 'file:///audio/book-1.mp3',
         startMs: 10000,
-        endMs: 30000, // 10000 + 20000 default
+        endMs: 20000, // 10000 + 10000 default
         outputPrefix: 'generated-id',
         outputDir: expect.any(String),
       })
@@ -133,7 +133,7 @@ describe('createAddClip', () => {
         'book-1',
         slicerUri,
         10000,
-        20000,
+        10000,
         '', // default empty note
         'Test Title',  // source_title snapshot (book title)
         'Test Artist', // source_artist snapshot

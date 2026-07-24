@@ -159,7 +159,7 @@ src/actions/
   share_clip.ts       → Shares clip audio via native sheet
   fetch_clips.ts      → Loads all clips with source file metadata
   seek_clip.ts        → Navigates main player to clip's position in source
-  constants.ts        → DEFAULT_CLIP_DURATION_MS (20s), CLIPS_DIR
+  constants.ts        → DEFAULT_CLIP_DURATION_MS (10s), CLIPS_DIR
 
 src/services/
   audio/slicer.ts     → Native audio extraction (Kotlin module wrapper)
