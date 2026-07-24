@@ -154,6 +154,7 @@ export function createMockDb(overrides: Record<string, jest.Mock | jest.Mock<any
     getBookById: jest.fn(async () => createMockBook()),
     upsertBook: jest.fn(async () => {}),
     restoreBook: jest.fn(async () => {}),
+    setBookExtras: jest.fn(async () => {}),
     touchBook: jest.fn(async () => {}),
     archiveBook: jest.fn(async () => {}),
     hideBook: jest.fn(async () => {}),

@@ -1,4 +1,4 @@
-import { parseFFmetadata } from '../ffmetadata'
+import { parseFFmetadata, extrasFromTags } from '../ffmetadata'
 
 /**
  * Tests for the ffmetadata parser (INI-style text from `ffmpeg -f ffmetadata`).
@@ -117,6 +117,33 @@ describe('parseFFmetadata', () => {
       const { chapters } = parseFFmetadata('title=Book\n[CHAPTER]\nSTART=0\nEND=10')
 
       expect(chapters).toHaveLength(1)
+    })
+  })
+})
+
+describe('extrasFromTags', () => {
+  it('maps audiobook tag conventions onto extras fields', () => {
+    const { tags } = parseFFmetadata(LIBATION_SAMPLE)
+
+    expect(extrasFromTags(tags!)).toMatchObject({
+      narrator: 'Angela Lin',
+      series: 'Elantris',
+      part: '2',
+      date: '2012',
+      language: 'English',
+      subtitle: null,
+    })
+  })
+
+  it('nulls missing and empty tags', () => {
+    expect(extrasFromTags({ comment: '', title: 'Kept Elsewhere' })).toEqual({
+      summary: null,
+      narrator: null,
+      series: null,
+      part: null,
+      subtitle: null,
+      date: null,
+      language: null,
     })
   })
 })

@@ -166,6 +166,37 @@ describe('createLoadFile', () => {
       )
     })
 
+    it('persists extras mapped from ffmetadata tags', async () => {
+      const deps = createMockDeps({
+        ffmetadata: createMockFFmetadata({
+          read: jest.fn(async () => ({
+            tags: { comment: 'A story.', composer: 'A Voice', series: 'Saga' },
+            chapters: [],
+          })),
+        }),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.setBookExtras).toHaveBeenCalledWith(
+        'generated-id-1',
+        expect.objectContaining({ summary: 'A story.', narrator: 'A Voice', series: 'Saga' }),
+        1,
+      )
+    })
+
+    it('skips extras when ffmetadata fails, leaving the version unstamped', async () => {
+      const deps = createMockDeps({
+        ffmetadata: createMockFFmetadata({ read: jest.fn(async () => ({ tags: null, chapters: [] })) }),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.setBookExtras).not.toHaveBeenCalled()
+    })
+
     it('persists chapters to the new book record', async () => {
       const deps = createMockDeps({
         ffmetadata: createMockFFmetadata({ read: jest.fn(async () => ({ tags: {}, chapters: CHAPTERS })) }),

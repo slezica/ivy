@@ -1,4 +1,7 @@
 import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, FFmetadataService, SyncQueueService, Book } from '../services'
+// Direct module import: the services barrel instantiates every service on
+// load, which actions (and their tests) must not trigger
+import { extrasFromTags, EXTRACTED_METADATA_VERSION } from '../services/audio/ffmetadata'
 import type { GetState, SetState, Action, ActionFactory, AppState } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
@@ -130,7 +133,7 @@ async function handleNewBook(
   }
 
   try {
-    const [{ title, artist, artwork, duration }, { chapters }] = await Promise.all([
+    const [{ title, artist, artwork, duration }, { tags, chapters }] = await Promise.all([
       metadata.readMetadata(fileUri),
       ffmetadata.read(fileUri),
     ])
@@ -151,14 +154,17 @@ async function handleNewBook(
         actualFileSize, fingerprint,
         chapters,
       )
-
-      await syncQueue.queueChange('book', existingBook.id, 'upsert')
-
     } else {
       await db.upsertBook(bookId, fileUri, file.name, duration, 0, title, artist, artwork, actualFileSize, fingerprint, chapters)
-
-      await syncQueue.queueChange('book', bookId, 'upsert')
     }
+
+    // Extras are best-effort: a null tags result (ffmpeg failure) leaves
+    // metadata_version null, so the lazy extractor retries later
+    if (tags) {
+      await db.setBookExtras(bookId, extrasFromTags(tags), EXTRACTED_METADATA_VERSION)
+    }
+
+    await syncQueue.queueChange('book', bookId, 'upsert')
 
     // Best-effort: the import already succeeded, a refusing provider is not an error
     if (get().settings.delete_original_after_import) {

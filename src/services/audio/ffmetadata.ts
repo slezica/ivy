@@ -14,9 +14,16 @@
 
 import { NativeModules } from 'react-native'
 import { createLogger } from '../../utils'
-import type { Chapter } from '../storage'
+import type { BookExtras, Chapter } from '../storage'
 
 const log = createLogger('FFmetadata')
+
+/**
+ * Version of the tag → extras mapping (extrasFromTags). Bump when the
+ * extractor learns new fields: books stamped with an older version lazily
+ * re-extract on their next details view (see extract_book_extras).
+ */
+export const EXTRACTED_METADATA_VERSION = 1
 
 /** Global tags, keys lowercased (the MP4 demuxer emits custom keys uppercase). */
 export type FileTags = Record<string, string>
@@ -51,6 +58,27 @@ export class FFmetadataService {
       log('Failed to read ffmetadata:', error)
       return { tags: null, chapters: [] }
     }
+  }
+}
+
+// =============================================================================
+// Extras mapping
+// =============================================================================
+
+/**
+ * Map ffmetadata global tags onto Book extras. Sources follow audiobook
+ * tagging conventions (Libation et al): `comment` carries the publisher
+ * summary, `composer` the narrator. Empty values become null.
+ */
+export function extrasFromTags(tags: FileTags): BookExtras {
+  return {
+    summary: tags['comment'] || null,
+    narrator: tags['composer'] || null,
+    series: tags['series'] || null,
+    part: tags['part'] || null,
+    subtitle: tags['subtitle'] || null,
+    date: tags['date'] || null,
+    language: tags['language'] || null,
   }
 }
 

@@ -9,5 +9,5 @@ export type { AudioMetadata } from './metadata'
 export { AudioSlicerService } from './slicer'
 export type { SliceOptions, SliceResult } from './slicer'
 
-export { FFmetadataService, parseFFmetadata } from './ffmetadata'
+export { FFmetadataService, parseFFmetadata, extrasFromTags, EXTRACTED_METADATA_VERSION } from './ffmetadata'
 export type { FileTags, FileMetadata } from './ffmetadata'

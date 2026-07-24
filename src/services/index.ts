@@ -33,7 +33,11 @@ export type {
   AudioMetadata,
   SliceOptions,
   SliceResult,
+  FileTags,
+  FileMetadata,
 } from './audio'
+
+export { extrasFromTags, EXTRACTED_METADATA_VERSION } from './audio'
 
 
 export type {
