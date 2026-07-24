@@ -59,6 +59,14 @@ describe('createTrackSession', () => {
       updated_by: null,
       chapters: null,
       speed: 100,
+      summary: null,
+      narrator: null,
+      series: null,
+      part: null,
+      subtitle: null,
+      date: null,
+      language: null,
+      metadata_version: null,
     }
   }
 
@@ -225,6 +233,14 @@ describe('onAudioStatus session lifecycle (store)', () => {
       hidden: false,
       chapters: null,
       speed: 100,
+      summary: null,
+      narrator: null,
+      series: null,
+      part: null,
+      subtitle: null,
+      date: null,
+      language: null,
+      metadata_version: null,
     }
   }
 

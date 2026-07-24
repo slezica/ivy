@@ -41,6 +41,27 @@ export interface Book {
   hidden: boolean          // Soft-deleted (removed from library)
   chapters: Chapter[] | null  // From file metadata (not synced)
   speed: number            // Playback speed as integer percentage (100 = 1.0x)
+  // Extras extracted from the file's ffmetadata tags (best-effort, synced).
+  // All null until extraction runs — see metadata_version.
+  summary: string | null   // Publisher description (`comment` tag)
+  narrator: string | null  // `composer` tag (audiobook convention)
+  series: string | null
+  part: string | null      // TEXT: parts can be "0.5" or "1-3"
+  subtitle: string | null
+  date: string | null      // Verbatim tag value ("2012", possibly a full date)
+  language: string | null
+  metadata_version: number | null // Extractor version that produced the extras (null = never extracted)
+}
+
+/** The extracted-from-file fields of Book (see extract_book_extras). */
+export interface BookExtras {
+  summary: string | null
+  narrator: string | null
+  series: string | null
+  part: string | null
+  subtitle: string | null
+  date: string | null
+  language: string | null
 }
 
 export interface Clip {
@@ -316,6 +337,18 @@ export const migrations: Migration[] = [
   (db) => {
     db.execSync('ALTER TABLE settings ADD COLUMN clip_editor_linked INTEGER NOT NULL DEFAULT 1')
   },
+
+  // Migration 11: Book metadata extras extracted from ffmetadata tags
+  (db) => {
+    db.execSync('ALTER TABLE files ADD COLUMN summary TEXT')
+    db.execSync('ALTER TABLE files ADD COLUMN narrator TEXT')
+    db.execSync('ALTER TABLE files ADD COLUMN series TEXT')
+    db.execSync('ALTER TABLE files ADD COLUMN part TEXT')
+    db.execSync('ALTER TABLE files ADD COLUMN subtitle TEXT')
+    db.execSync('ALTER TABLE files ADD COLUMN date TEXT')
+    db.execSync('ALTER TABLE files ADD COLUMN language TEXT')
+    db.execSync('ALTER TABLE files ADD COLUMN metadata_version INTEGER')
+  },
 ]
 
 // =============================================================================
@@ -506,6 +539,20 @@ export class DatabaseService {
     await this.db.runAsync(
       'UPDATE files SET updated_at = ?, updated_by = ? WHERE id = ?',
       [now, this.deviceId, id]
+    )
+  }
+
+  /**
+   * Persist extracted metadata extras and stamp the extractor version.
+   * Bumps updated_at/updated_by — callers queue the book for sync afterwards.
+   */
+  async setBookExtras(id: string, extras: BookExtras, metadataVersion: number): Promise<void> {
+    const now = Date.now()
+    await this.db.runAsync(
+      `UPDATE files SET summary = ?, narrator = ?, series = ?, part = ?, subtitle = ?, date = ?, language = ?,
+         metadata_version = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
+      [extras.summary, extras.narrator, extras.series, extras.part, extras.subtitle, extras.date, extras.language,
+       metadataVersion, now, this.deviceId, id]
     )
   }
 

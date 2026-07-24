@@ -44,6 +44,7 @@ export type {
 
 export type {
   Book,
+  BookExtras,
   Chapter,
   Clip,
   ClipWithFile,

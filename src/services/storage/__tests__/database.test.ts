@@ -89,6 +89,31 @@ describe('DatabaseService (real SQLite)', () => {
       expect(after2.updated_at).toBe(before2.updated_at)
       expect(after2.updated_by).toBe(before2.updated_by)
     })
+
+    it('persists metadata extras and stamps the extractor version', async () => {
+      const db = createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
+      const before = (await db.getBookById('book-1'))!
+      expect(before.metadata_version).toBeNull() // never extracted
+
+      await db.setBookExtras('book-1', {
+        summary: 'A story.', narrator: 'A Voice', series: 'Saga', part: '1.5',
+        subtitle: 'Sub', date: '2012', language: 'English',
+      }, 1)
+
+      const book = (await db.getBookById('book-1'))!
+      expect(book.summary).toBe('A story.')
+      expect(book.narrator).toBe('A Voice')
+      expect(book.series).toBe('Saga')
+      expect(book.part).toBe('1.5')
+      expect(book.subtitle).toBe('Sub')
+      expect(book.date).toBe('2012')
+      expect(book.language).toBe('English')
+      expect(book.metadata_version).toBe(1)
+      // Extras are synced entity data — the write competes under LWW
+      expect(book.updated_at).toBeGreaterThanOrEqual(before.updated_at)
+      expect(book.updated_by).not.toBeNull()
+    })
   })
 
   describe('getLastPlayedBook', () => {

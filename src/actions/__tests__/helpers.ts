@@ -25,6 +25,14 @@ export function createMockBook(overrides: Partial<Book> = {}): Book {
     hidden: false,
     chapters: null,
     speed: 100,
+    summary: null,
+    narrator: null,
+    series: null,
+    part: null,
+    subtitle: null,
+    date: null,
+    language: null,
+    metadata_version: null,
     ...overrides,
   }
 }
