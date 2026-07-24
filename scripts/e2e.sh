@@ -25,14 +25,21 @@ command -v maestro >/dev/null || { echo "e2e: maestro not found — install from
 
 echo "[e2e] pushing + media-scanning $FIXTURE"
 "$ADB" push "$FIXTURE" "$DEST" >/dev/null
-"$ADB" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$DEST" >/dev/null
+# push preserves the source mtime — touch, or a week-old checkout falls out of
+# the picker's "Recent" search scope and the import flows can't find it
+"$ADB" shell touch "$DEST"
+scan_file() { # MEDIA_SCANNER_SCAN_FILE broadcast is a no-op on API 29+
+  "$ADB" shell content call --uri content://media/none/media_scanner --method scan_file --arg "$1" >/dev/null
+}
+scan_file "$DEST"
 
 # Disposable copy for delete-original.yaml: the flow imports it with "delete
 # original after import" enabled, and afterwards we assert it's gone. Re-pushed
 # every run, so the suite stays idempotent.
 DELETE_ME="/sdcard/Download/delete-me.m4a"
 "$ADB" push "$FIXTURE" "$DELETE_ME" >/dev/null
-"$ADB" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$DELETE_ME" >/dev/null
+"$ADB" shell touch "$DELETE_ME"
+scan_file "$DELETE_ME"
 
 # Verify deletion after the run — only when the delete-original flow was part
 # of it (whole-suite runs, or the flow named explicitly)
