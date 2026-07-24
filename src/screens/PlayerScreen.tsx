@@ -135,7 +135,7 @@ interface PlayerProps {
   onAddClip: () => void
   onSeek: (position: number) => void
   onSpeedChange: (speed: number) => void
-  onSleepTimerChange: (durationMs: number | null) => void
+  onSleepTimerChange: (durationMs: number | null, fadeMs?: number) => void
 }
 
 /** Current time, ticking once per second while enabled. */
@@ -172,8 +172,8 @@ function Player({
     if (action === 'chapters') setChaptersOpen(true)
   }
 
-  const handleSleepTimerChange = (durationMs: number | null) => {
-    onSleepTimerChange(durationMs)
+  const handleSleepTimerChange = (durationMs: number | null, fadeMs?: number) => {
+    onSleepTimerChange(durationMs, fadeMs)
     setSleepOpen(false)
   }
 
@@ -339,9 +339,10 @@ function SpeedControl({ speed, onChange }: SpeedControlProps) {
 // Sleep Timer
 // =============================================================================
 
-// 15s dev-only preset: quick way to watch a full fade-out cycle (5s + 10s fade)
-const SLEEP_PRESETS: { label: string, durationMs: number }[] = [
-  ...(__DEV__ ? [{ label: '15s', durationMs: 15_000 }] : []),
+// 5s dev-only preset (3s + 2s fade): watch a full expiry cycle without
+// slowing tests down
+const SLEEP_PRESETS: { label: string, durationMs: number, fadeMs?: number }[] = [
+  ...(__DEV__ ? [{ label: '5s', durationMs: 5_000, fadeMs: 2_000 }] : []),
   { label: '10m', durationMs: 10 * 60_000 },
   { label: '30m', durationMs: 30 * 60_000 },
   { label: '60m', durationMs: 60 * 60_000 },
@@ -350,7 +351,7 @@ const SLEEP_PRESETS: { label: string, durationMs: number }[] = [
 interface SleepTimerControlProps {
   sleepTimer: SleepTimer
   remaining: number | null
-  onChange: (durationMs: number | null) => void
+  onChange: (durationMs: number | null, fadeMs?: number) => void
 }
 
 function SleepTimerControl({ sleepTimer, remaining, onChange }: SleepTimerControlProps) {
@@ -367,7 +368,7 @@ function SleepTimerControl({ sleepTimer, remaining, onChange }: SleepTimerContro
             key={preset.label}
             label={preset.label}
             current={sleepTimer?.duration === preset.durationMs}
-            onPress={() => onChange(preset.durationMs)}
+            onPress={() => onChange(preset.durationMs, preset.fadeMs)}
           />
         ))}
       </View>
@@ -443,10 +444,13 @@ const styles = StyleSheet.create({
     gap: 48,
     paddingHorizontal: 12
   },
+  // Aligned with the three-dot in Header (library/clips): icon 24px at 20px
+  // from the right edge, ~18px from the top — stays put across tab switches.
+  // Offsets compensate for playerContainer's 12px padding and own 8px padding.
   menuButton: {
     position: 'absolute',
-    top: 8,
-    left: 4,
+    top: 10,
+    right: 0,
     padding: 8,
     zIndex: 1,
   },
