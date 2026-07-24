@@ -17,6 +17,7 @@ import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
 import Dialog from '../components/shared/Dialog'
 import MetadataEditor from '../components/MetadataEditor'
+import BookDetails from '../components/BookDetails'
 import BookItem from '../components/BookItem'
 import { Color, Space } from '../theme'
 import type { Book } from '../services'
@@ -26,10 +27,11 @@ const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, updateBook, sync, autoSync } = useStore()
+  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, updateBook, extractBookExtras, sync, autoSync } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false)
   const [editingBookId, setEditingBookId] = useState<string | null>(null)
+  const [detailsBookId, setDetailsBookId] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const lastSyncRef = useRef<number>(0)
@@ -146,6 +148,11 @@ export default function LibraryScreen() {
     handleCloseMenu()
 
     switch (action) {
+      case 'details':
+        setDetailsBookId(bookId)
+        // Lazy backfill: no-op unless the file exists and extras are outdated
+        extractBookExtras(bookId).catch(console.error)
+        break
       case 'edit':
         setEditingBookId(bookId)
         break
@@ -164,12 +171,14 @@ export default function LibraryScreen() {
 
     if (isArchived) {
       return [
+        { key: 'details', label: 'Details', icon: 'information-circle-outline' },
         { key: 'edit', label: 'Edit details', icon: 'create-outline' },
         { key: 'delete', label: 'Remove forever', icon: 'trash-outline', destructive: true },
       ]
     }
 
     return [
+      { key: 'details', label: 'Details', icon: 'information-circle-outline' },
       { key: 'edit', label: 'Edit details', icon: 'create-outline' },
       { key: 'archive', label: 'Archive', icon: 'archive-outline' },
     ]
@@ -278,6 +287,12 @@ export default function LibraryScreen() {
         ]}
       />
 
+
+      {detailsBookId && books[detailsBookId] && (
+        <Dialog visible onClose={() => setDetailsBookId(null)}>
+          <BookDetails book={books[detailsBookId]} />
+        </Dialog>
+      )}
 
       {editingBookId && books[editingBookId] && (
         <Dialog visible onClose={() => setEditingBookId(null)}>
