@@ -964,6 +964,24 @@ describe('sync scenarios', () => {
       expect(JSON.parse(drive.files.get(winnerId)!.content as string).deleted).toBeUndefined()
     })
 
+    it('leaves a newer-format losing twin unretired (never rewrite unknown formats)', async () => {
+      const drive = new FakeDrive()
+      const winnerId = drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ title: 'Copy One', updated_at: 5000 }))
+      const loserId = drive.putFile('books', `book_${BOOK_ID}.json`,
+        remoteBookJson({ title: 'Copy Two', updated_at: 6000, version: 99, version_compat: 99 }))
+
+      const device = createSyncHarness(drive)
+      const errors = trackSyncErrors(device)
+      await device.sync.syncNow()
+
+      // Winner selection still converges (only `deleted` is read from the twin)...
+      expect(errors).toEqual([null])
+      expect((await device.db.getManifestEntry('book', BOOK_ID))!.remote_file_id).toBe(winnerId)
+
+      // ...but the future-format twin is left for a capable device to retire
+      expect(JSON.parse(drive.files.get(loserId)!.content as string).deleted).toBeUndefined()
+    })
+
     it('prefers the manifest-tracked file over a smaller-id twin', async () => {
       const drive = new FakeDrive()
       const deviceA = createSyncHarness(drive)

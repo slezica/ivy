@@ -467,12 +467,13 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     if (preferred > 0) ordered.unshift(ordered.splice(preferred, 1)[0])
 
     // Twins: download them all — the winner is the first live one in
-    // preference order (or the first overall when every twin is a tombstone)
-    const parsed: Array<{ file: DriveFile; content: string; deleted: boolean }> = []
+    // preference order (or the first overall when every twin is a tombstone).
+    // Plain parse: winner selection only reads `deleted`, no field interpretation
+    const parsed: Array<{ file: DriveFile; content: string; deleted: boolean; compat: number }> = []
     for (const file of ordered) {
       const content = await this.drive.downloadFile(file.id, false) as string
-      const payload = JSON.parse(content) as { deleted?: boolean }
-      parsed.push({ file, content, deleted: payload.deleted === true })
+      const payload = JSON.parse(content) as { deleted?: boolean; version_compat?: number }
+      parsed.push({ file, content, deleted: payload.deleted === true, compat: payload.version_compat ?? 1 })
     }
 
     const winner = parsed.find(p => !p.deleted) ?? parsed[0]
@@ -480,6 +481,12 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     if (type === 'book') {
       for (const twin of parsed) {
         if (twin === winner || twin.deleted) continue
+        // Never rewrite a payload whose format we don't know (see parseBackup) —
+        // leave the twin for a capable device to retire
+        if (twin.compat > BACKUP_VERSION) {
+          log(`Leaving duplicate remote book file for ${id} unretired: format ${twin.compat} > ${BACKUP_VERSION}`)
+          continue
+        }
         const tombstone = {
           ...JSON.parse(twin.content),
           deleted: true,
