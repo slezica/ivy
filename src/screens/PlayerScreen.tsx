@@ -448,11 +448,12 @@ const styles = StyleSheet.create({
   },
   // Aligned with the three-dot in Header (library/clips): icon 24px at 20px
   // from the right edge, ~18px from the top — stays put across tab switches.
-  // Offsets compensate for playerContainer's 12px padding and own 8px padding.
+  // Yoga ignores the parent's padding for absolute children, so offsets only
+  // compensate for this button's own 8px touch padding.
   menuButton: {
     position: 'absolute',
-    top: 10,
-    right: 0,
+    top: 12,
+    right: 12,
     padding: 8,
     zIndex: 1,
   },
