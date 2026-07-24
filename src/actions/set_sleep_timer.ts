@@ -11,8 +11,9 @@ export interface SetSleepTimerDeps {
   set: SetState
 }
 
-// Duration in milliseconds, or null to turn the timer off
-export type SetSleepTimer = Action<[number | null]>
+// Duration in milliseconds, or null to turn the timer off. fadeMs overrides
+// the fade length (dev/testing presets shorter than the standard fade).
+export type SetSleepTimer = Action<[number | null, number?]>
 
 export const createSetSleepTimer: ActionFactory<SetSleepTimerDeps, SetSleepTimer> = (deps) => {
   const { audio, pause, set } = deps
@@ -20,7 +21,7 @@ export const createSetSleepTimer: ActionFactory<SetSleepTimerDeps, SetSleepTimer
 
   let expiry: ReturnType<typeof setTimeout> | null = null
 
-  return async (durationMs) => {
+  return async (durationMs, fadeMs = SLEEP_TIMER_FADE_MS) => {
     // Cancel any scheduled expiry and any fade already in progress
     if (expiry) {
       clearTimeout(expiry)
@@ -39,16 +40,16 @@ export const createSetSleepTimer: ActionFactory<SetSleepTimerDeps, SetSleepTimer
       state.playback.sleepTimer = { endsAt: Date.now() + durationMs, duration: durationMs }
     })
 
-    // Wall-clock: the fade occupies the last SLEEP_TIMER_FADE_MS of the interval
+    // Wall-clock: the fade occupies the last fadeMs of the interval
     expiry = setTimeout(async () => {
       expiry = null
-      const completed = await audio.fadeOut(SLEEP_TIMER_FADE_MS)
+      const completed = await audio.fadeOut(fadeMs)
       if (!completed) return  // cancelled by a newer set/off
 
       log('Timer expired, pausing')
       await pause()
       await audio.resetVolume()
       set(state => { state.playback.sleepTimer = null })
-    }, Math.max(0, durationMs - SLEEP_TIMER_FADE_MS))
+    }, Math.max(0, durationMs - fadeMs))
   }
 }

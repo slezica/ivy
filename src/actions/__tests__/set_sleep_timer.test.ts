@@ -68,6 +68,61 @@ describe('setSleepTimer', () => {
     expect(state.playback.sleepTimer).toEqual(expect.anything())
   })
 
+  // Audio mock where the fade stays pending until completed or cancelled by
+  // resetVolume — mirrors the real fadeOut/resetVolume contract, so mid-fade
+  // transitions can be exercised
+  function setupWithLinkedFade() {
+    const base = setup()
+    let pendingFade: ((completed: boolean) => void) | null = null
+
+    base.audio.fadeOut.mockImplementation(
+      () => new Promise<boolean>(resolve => { pendingFade = resolve })
+    )
+    base.audio.resetVolume.mockImplementation(async () => {
+      pendingFade?.(false)
+      pendingFade = null
+    })
+    const completeFade = () => {
+      pendingFade?.(true)
+      pendingFade = null
+    }
+
+    return { ...base, completeFade }
+  }
+
+  it('turning off mid-fade cancels the fade without pausing', async () => {
+    const { state, setSleepTimer, audio, pause } = setupWithLinkedFade()
+
+    await setSleepTimer(5_000, 2_000)
+    await jest.advanceTimersByTimeAsync(3_000)  // fade running
+    expect(audio.fadeOut).toHaveBeenCalledWith(2_000)
+
+    await setSleepTimer(null)  // resetVolume cancels the pending fade
+    await jest.advanceTimersByTimeAsync(10_000)
+
+    expect(pause).not.toHaveBeenCalled()
+    expect(state.playback.sleepTimer).toBeNull()
+  })
+
+  it('re-arming mid-fade cancels the fade and starts a fresh cycle', async () => {
+    const { state, setSleepTimer, pause, completeFade } = setupWithLinkedFade()
+    jest.setSystemTime(0)
+
+    await setSleepTimer(5_000, 2_000)
+    await jest.advanceTimersByTimeAsync(3_000)  // t=3s: fade running
+
+    await setSleepTimer(5_000, 2_000)  // re-arm: endsAt now t=8s
+    expect(pause).not.toHaveBeenCalled()  // old fade cancelled, no pause
+    expect(state.playback.sleepTimer).toEqual({ endsAt: 8_000, duration: 5_000 })
+
+    await jest.advanceTimersByTimeAsync(3_000)  // t=6s: new fade starts
+    completeFade()
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(pause).toHaveBeenCalledTimes(1)
+    expect(state.playback.sleepTimer).toBeNull()
+  })
+
   it('re-setting reschedules from now', async () => {
     const { state, setSleepTimer, pause } = setup()
     jest.setSystemTime(0)
