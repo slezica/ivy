@@ -52,7 +52,7 @@ Already-imported books have local files — extras can be extracted on demand, n
 
 ## Sync
 
-The seven fields + `metadata_version` join `BookBackup` as optional fields. Additive change — payload format stays `version: 1`; old payloads read as null (see docs/SYNC.md "Payload Format Versioning").
+The seven fields + `metadata_version` join `BookBackup` as optional fields. Additive change — writer `version` bumps to 2, `version_compat` stays 1 so old readers still apply the payload (unknown fields ignored, extras read as null; see docs/SYNC.md "Payload Format Versioning").
 
 Known caveat (accepted): whole-entity LWW means an old-app device touching a book (even just position) uploads a payload without extras, nulling them on other devices. Self-healing via lazy re-extraction where the file exists locally; otherwise fixed by upgrading both devices.
 

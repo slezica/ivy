@@ -20,7 +20,8 @@
  *   Readers reject payloads with version_compat above what they know
  *   (parseBackup in sync.ts) instead of misinterpreting them.
  */
-export const BACKUP_VERSION = 1
+// History: 1 = original format; 2 = book metadata extras (additive).
+export const BACKUP_VERSION = 2
 export const BACKUP_VERSION_COMPAT = 1
 
 export interface BookBackup {
