@@ -34,6 +34,8 @@ Git worktrees go in `worktrees/` (e.g. `git worktree add worktrees/my-feature`).
 
 These are in-depth guides to aspects of the application. CRITICAL: before you start working on one of the following topics, read the corresponding guide to learn about it.
 
+EQUALLY CRITICAL: the markdowns describe reality — keep them true. When a change alters behavior covered by a guide, or by this file (schema, store state, file structure, quick summaries), update the affected markdowns as part of the same piece of work. Significant features also get a dated design doc in `docs/` (`YYYY-MM-DD-<topic>.md`) recording the idea, rationale, and rejected alternatives.
+
 ### Books and Library
 
 File import (local files), metadata editing, archiving, deletion, and restoration. See **[docs/BOOKS.md](docs/BOOKS.md)** for the full guide.
