@@ -685,12 +685,12 @@ describe('TimelinePhysicsEngine', () => {
       engine.panEnd(0, 32)
     }
 
-    it('forward sweep carries the start anchor to the playhead', () => {
-      const { engine } = createLinked({ position: 50_000 })
+    it('backward sweep carries the start anchor to the playhead', () => {
+      const { engine } = createLinked({ position: 65_000 })
 
-      scrubTo(engine, 50_000, 65_000) // sweeps over start at 60s
+      scrubTo(engine, 65_000, 55_000) // sweeps back over start at 60s
 
-      expect(engine.selection).toEqual({ start: 65_000, end: 80_000 })
+      expect(engine.selection).toEqual({ start: 55_000, end: 80_000 })
     })
 
     it('forward sweep carries the end anchor to the playhead', () => {
@@ -701,51 +701,44 @@ describe('TimelinePhysicsEngine', () => {
       expect(engine.selection).toEqual({ start: 60_000, end: 85_000 })
     })
 
-    it('forward push compresses to min duration, then carries both anchors', () => {
-      const { engine } = createLinked({ position: 50_000 })
+    it('never pushes the start anchor forward', () => {
+      const { engine, callbacks } = createLinked({ position: 50_000 })
 
-      scrubTo(engine, 50_000, 78_000) // start pushed to 78s, rod hits end at 80s
+      scrubTo(engine, 50_000, 70_000) // sweeps forward over start at 60s
 
-      expect(engine.selection).toEqual({
-        start: 78_000,
-        end: 78_000 + MIN_SELECTION_DURATION,
-      })
+      expect(engine.selection).toEqual(SELECTION)
+      expect(callbacks.onSelectionChange).not.toHaveBeenCalled()
     })
 
-    it('backward push compresses to min duration, then carries both anchors', () => {
-      const { engine } = createLinked({ position: 90_000 })
+    it('never pushes the end anchor backward', () => {
+      const { engine, callbacks } = createLinked({ position: 90_000 })
 
-      scrubTo(engine, 90_000, 62_000) // end pushed to 62s, rod hits start at 60s
+      scrubTo(engine, 90_000, 70_000) // sweeps back over end at 80s
 
-      expect(engine.selection).toEqual({
-        start: 62_000 - MIN_SELECTION_DURATION,
-        end: 62_000,
-      })
+      expect(engine.selection).toEqual(SELECTION)
+      expect(callbacks.onSelectionChange).not.toHaveBeenCalled()
     })
 
-    it('clamps at the timeline end, min duration kept', () => {
-      const { engine } = createLinked({
-        position: 585_000,
-        selection: { start: 590_000, end: 596_000 },
-      })
+    it('releases a pushed anchor on the reverse movement (no sticky drag)', () => {
+      const { engine } = createLinked({ position: 65_000 })
 
-      scrubTo(engine, 585_000, 599_000)
+      scrubTo(engine, 65_000, 55_000) // push start back to 55s: contact
+      scrubTo(engine, 55_000, 70_000) // scrub forward again: start must stay
 
-      expect(engine.selection).toEqual({
-        start: 600_000 - MIN_SELECTION_DURATION,
-        end: 600_000,
-      })
+      expect(engine.selection).toEqual({ start: 55_000, end: 80_000 })
     })
 
-    it('clamps at the timeline start, min duration kept', () => {
+    it('pushes are bounded by the timeline edges', () => {
       const { engine } = createLinked({
         position: 12_000,
         selection: { start: 4_000, end: 10_000 },
       })
 
-      scrubTo(engine, 12_000, 1_000)
+      scrubTo(engine, 12_000, 1_000)   // backward past both anchors...
+      expect(engine.selection).toEqual({ start: 1_000, end: 10_000 })
 
-      expect(engine.selection).toEqual({ start: 0, end: MIN_SELECTION_DURATION })
+      scrubTo(engine, 1_000, -5_000)   // ...and against the left edge
+      expect(engine.selection).toEqual({ start: 0, end: 10_000 })
     })
 
     it('does not move anchors outside the swept path', () => {
@@ -759,12 +752,12 @@ describe('TimelinePhysicsEngine', () => {
 
     it('does not push when not linked', () => {
       const { engine, callbacks } = createEngine({
-        position: 50_000,
+        position: 70_000,
         selection: { ...SELECTION },
       })
 
       engine.panStart(200, 45, 0)
-      engine.panUpdate(-tx(30_000), 16) // sweep well past the start anchor
+      engine.panUpdate(-tx(15_000), 16) // sweep well past the end anchor
       engine.panEnd(0, 32)
 
       expect(engine.selection).toEqual(SELECTION)

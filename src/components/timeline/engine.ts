@@ -73,7 +73,8 @@ export interface EngineConfig {
   /**
    * Linked selection: the playhead is solid — any playhead movement (drag,
    * momentum, tap animation, playback follow) pushes the selection anchors
-   * it collides with, keeping MIN_SELECTION_DURATION between them.
+   * outward: the start anchor backward, the end anchor forward. Shrinking
+   * is reserved for the handles.
    */
   linked?: boolean
   canZoom?: boolean
@@ -769,45 +770,34 @@ export class TimelinePhysicsEngine {
   // =========================================================================
   // Private: linked selection push
   //
-  // Link down = the playhead is solid. Any playhead movement sweeps the
-  // anchors it collides with: an anchor inside the interval just traveled is
-  // carried to the new position. When a push would compress the selection
-  // below MIN_SELECTION_DURATION, the partner anchor is pushed too (the
-  // handles collide, then travel together), clamped to [0, duration].
+  // Link down = the playhead is solid, and pushes are outward-only: the
+  // start anchor can only be pushed backward, the end anchor only forward.
+  // A movement sweeping over the eligible anchor carries it to the new
+  // position; the reverse movement releases it — shrinking is what the
+  // handles are for. (Symmetric pushing was tried first: once the playhead
+  // contacted an anchor, every movement dragged it both ways and it could
+  // never be let go.)
   //
   // The same rule applies to every motion source — drag, momentum, tap
-  // animation, playback follow, external snap. No exceptions: predictability
-  // over cleverness.
+  // animation, playback follow, external snap. Pushes only expand the
+  // selection, so MIN_SELECTION_DURATION (a handle-drag constraint) can
+  // never be violated here; scroll clamping bounds the pushes to
+  // [0, duration].
   // =========================================================================
 
   private _pushSelection(prevTime: number, newTime: number, now: number): void {
     if (!this._linked || !this._selection) return
     if (this._draggingHandle !== null) return // handle drag owns the selection
-    if (this._duration <= MIN_SELECTION_DURATION) return
     if (newTime === prevTime) return
 
     let { start, end } = this._selection
 
     if (newTime > prevTime) {
-      // Forward sweep: carry anchors in [prevTime, newTime) to newTime
-      if (start >= prevTime && start < newTime) start = newTime
+      // Forward sweep: carry the end anchor in [prevTime, newTime) forward
       if (end >= prevTime && end < newTime) end = newTime
-      // Min-duration rod: a pushed start drags the end along
-      if (end - start < MIN_SELECTION_DURATION) end = start + MIN_SELECTION_DURATION
-      if (end > this._duration) {
-        end = this._duration
-        start = Math.min(start, end - MIN_SELECTION_DURATION)
-      }
     } else {
-      // Backward sweep: carry anchors in (newTime, prevTime] to newTime
-      if (end > newTime && end <= prevTime) end = newTime
+      // Backward sweep: carry the start anchor in (newTime, prevTime] backward
       if (start > newTime && start <= prevTime) start = newTime
-      // Min-duration rod: a pushed end drags the start along
-      if (end - start < MIN_SELECTION_DURATION) start = end - MIN_SELECTION_DURATION
-      if (start < 0) {
-        start = 0
-        end = Math.max(end, MIN_SELECTION_DURATION)
-      }
     }
 
     if (start === this._selection.start && end === this._selection.end) return

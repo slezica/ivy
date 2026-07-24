@@ -94,8 +94,9 @@ export interface TimelineProps {
 
   // Linked selection (optional, editable selection only)
   // When true the playhead is solid: any playhead movement (drag, fling,
-  // tap animation, playback follow) pushes the selection anchors it collides
-  // with, keeping the minimum duration between them.
+  // tap animation, playback follow) pushes the selection anchors outward —
+  // the start anchor backward, the end anchor forward. Shrinking is
+  // reserved for the handles.
   linkedSelection?: boolean
 
   // Zoom (optional)
