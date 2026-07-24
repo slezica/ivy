@@ -70,6 +70,12 @@ export interface EngineConfig {
   containerWidth: number
   position: number
   selection?: { start: number; end: number }
+  /**
+   * Linked selection: the playhead is solid — any playhead movement (drag,
+   * momentum, tap animation, playback follow) pushes the selection anchors
+   * it collides with, keeping MIN_SELECTION_DURATION between them.
+   */
+  linked?: boolean
   canZoom?: boolean
   /**
    * When set, taps skip relative to the current position instead of seeking
@@ -105,6 +111,7 @@ export class TimelinePhysicsEngine {
   private _containerWidth: number
   private _canZoom: boolean
   private _selection: { start: number; end: number } | null
+  private _linked: boolean
   private _tapSkip: { backward: number; forward: number } | null
 
   // --- Scroll position ---
@@ -178,6 +185,15 @@ export class TimelinePhysicsEngine {
   private _lastDisplayUpdate = -DISPLAY_UPDATE_INTERVAL // no throttle on first update
   private _displayPosition: number
 
+  // --- Linked selection emission throttling ---
+  //
+  // While linked, playback follow pushes the selection every frame. Like the
+  // display position, emissions are throttled to avoid flooding React; the
+  // engine's _selection stays authoritative in between, and motion endpoints
+  // force an emit so React always converges to the final value.
+  private _lastSelectionEmit = -DISPLAY_UPDATE_INTERVAL
+  private _selectionDirty = false
+
   // =========================================================================
   // Construction
   // =========================================================================
@@ -188,6 +204,7 @@ export class TimelinePhysicsEngine {
     this._containerWidth = config.containerWidth
     this._canZoom = config.canZoom ?? false
     this._selection = config.selection ?? null
+    this._linked = config.linked ?? false
     this._tapSkip = config.tapSkip ?? null
 
     // Initialize scroll to the provided position
@@ -204,6 +221,13 @@ export class TimelinePhysicsEngine {
   get segmentGap(): number { return this._segmentGap }
   get displayPosition(): number { return this._displayPosition }
   get zoomFactor(): number { return this._zoomFactor }
+
+  /**
+   * Authoritative selection. During handle drags and linked pushing the
+   * engine mutates this every frame while emissions to React are throttled —
+   * drawing code must read it from here (via onFrame), not from props.
+   */
+  get selection(): { start: number; end: number } | null { return this._selection }
 
   /**
    * True when the engine is busy — dragging, animating, or decelerating.
@@ -249,7 +273,10 @@ export class TimelinePhysicsEngine {
       // Fall through: drift too large, snap to the reported position
     }
 
+    const prevTime = this._xt(this._scrollOffset)
     this._scrollOffset = this._tx(position)
+    this._pushSelection(prevTime, position, now)
+    this._emitSelection(now, true) // snap is a motion endpoint
     this._updateDisplayPosition(position, now, true)
     this._callbacks.onFrame()
   }
@@ -264,12 +291,27 @@ export class TimelinePhysicsEngine {
     }
     if (rate === 0) {
       this._pendingDrift = 0
+      this._emitSelection(now, true) // pause is a motion endpoint
     }
     this._playbackRate = rate
   }
 
+  /**
+   * Sync selection from React props.
+   *
+   * Ignored while the engine itself may be mutating the selection (handle
+   * drag, or linked pushing during any motion): prop updates then are stale
+   * echoes of our own emissions, and applying one would drop an anchor out
+   * of the playhead's swept path — sweep contact could never recover it.
+   * Motion endpoints force-emit, so React converges to the final value.
+   */
   updateSelection(start: number, end: number): void {
+    if (this._selectionLocked()) return
     this._selection = { start, end }
+  }
+
+  setLinked(linked: boolean): void {
+    this._linked = linked
   }
 
   // =========================================================================
@@ -303,6 +345,7 @@ export class TimelinePhysicsEngine {
     if (this._hasMomentum || this._animation !== null) {
       this._stopAnimation()
       this._stoppedMomentum = true
+      this._emitSelection(now, true) // motion stopped mid-flight
       this._callbacks.onSeek(this._xt(this._scrollOffset))
     } else {
       this._stoppedMomentum = false
@@ -411,13 +454,15 @@ export class TimelinePhysicsEngine {
       if (this._draggingHandle === 'start') {
         const maxStart = this._selection.end - MIN_SELECTION_DURATION
         const clampedStart = clamp(newValue, 0, maxStart)
-        this._callbacks.onSelectionChange?.(clampedStart, this._selection.end)
+        this._selection = { start: clampedStart, end: this._selection.end }
       } else {
         const minEnd = this._selection.start + MIN_SELECTION_DURATION
         const clampedEnd = clamp(newValue, minEnd, this._duration)
-        this._callbacks.onSelectionChange?.(this._selection.start, clampedEnd)
+        this._selection = { start: this._selection.start, end: clampedEnd }
       }
 
+      this._selectionDirty = true
+      this._emitSelection(now)
       this._callbacks.onFrame()
       return
     }
@@ -445,7 +490,9 @@ export class TimelinePhysicsEngine {
     }
 
     this._lastDragSample = { time: now, offset: newOffset }
+    const prevTime = this._xt(this._scrollOffset)
     this._scrollOffset = newOffset
+    this._pushSelection(prevTime, this._xt(newOffset), now)
 
     this._updateDisplayPosition(this._xt(this._scrollOffset), now)
     this._callbacks.onFrame()
@@ -456,9 +503,10 @@ export class TimelinePhysicsEngine {
    * using the EMA-smoothed velocity.
    */
   panEnd(_velocityX: number, now: number): void {
-    // Handle drag ends — just clear state
+    // Handle drag ends — clear state and flush the final selection
     if (this._draggingHandle) {
       this._draggingHandle = null
+      this._emitSelection(now, true)
       return
     }
 
@@ -475,8 +523,9 @@ export class TimelinePhysicsEngine {
     this._lastTickTime = now // dt baseline for momentum or playback follow
 
     if (Math.abs(this._velocity) > MIN_VELOCITY) {
-      this._hasMomentum = true
+      this._hasMomentum = true // momentum finalize will flush the selection
     } else {
+      this._emitSelection(now, true)
       this._callbacks.onSeek(this._xt(this._scrollOffset))
     }
   }
@@ -567,11 +616,13 @@ export class TimelinePhysicsEngine {
       // Advance position by the exact displacement of the decay curve over
       // this time slice: ∫ v0 * D^t dt = v0 * (D^dt - 1) / ln(D)
       const decay = Math.pow(DECELERATION, dt)
+      const prevTime = this._xt(this._scrollOffset)
       this._scrollOffset = clamp(
         this._scrollOffset + this._velocity * (decay - 1) / Math.log(DECELERATION),
         0,
         this._maxOffset()
       )
+      this._pushSelection(prevTime, this._xt(this._scrollOffset), now)
 
       // Decay velocity: v *= DECELERATION^dt
       this._velocity *= decay
@@ -584,6 +635,7 @@ export class TimelinePhysicsEngine {
     // Momentum exhausted — finalize
     this._velocity = 0
     this._hasMomentum = false
+    this._emitSelection(now, true)
     this._updateDisplayPosition(this._xt(this._scrollOffset), now, true)
     this._callbacks.onSeek(this._xt(this._scrollOffset))
     return false
@@ -613,8 +665,10 @@ export class TimelinePhysicsEngine {
     const fold = this._pendingDrift * Math.min(1, (dt * 3000) / DRIFT_FOLD_WINDOW)
     this._pendingDrift -= fold
 
-    const position = this._xt(this._scrollOffset) + dt * 1000 * this._playbackRate + fold
+    const prevTime = this._xt(this._scrollOffset)
+    const position = prevTime + dt * 1000 * this._playbackRate + fold
     this._scrollOffset = clamp(this._tx(position), 0, this._maxOffset())
+    this._pushSelection(prevTime, this._xt(this._scrollOffset), now)
 
     this._updateDisplayPosition(this._xt(this._scrollOffset), now)
     this._callbacks.onFrame()
@@ -644,7 +698,9 @@ export class TimelinePhysicsEngine {
     const easedProgress = easeOutCubic(progress)
 
     const { startOffset, targetOffset } = this._animation
+    const prevTime = this._xt(this._scrollOffset)
     this._scrollOffset = startOffset + (targetOffset - startOffset) * easedProgress
+    this._pushSelection(prevTime, this._xt(this._scrollOffset), now)
 
     this._updateDisplayPosition(this._xt(this._scrollOffset), now)
     this._callbacks.onFrame()
@@ -655,6 +711,7 @@ export class TimelinePhysicsEngine {
 
     // Animation complete — finalize
     this._animation = null
+    this._emitSelection(now, true)
     this._updateDisplayPosition(this._xt(this._scrollOffset), now, true)
     this._callbacks.onSeek(this._xt(this._scrollOffset))
     return false
@@ -707,6 +764,85 @@ export class TimelinePhysicsEngine {
       targetOffset: clamp(targetOffset, 0, this._maxOffset()),
       startTime: now,
     }
+  }
+
+  // =========================================================================
+  // Private: linked selection push
+  //
+  // Link down = the playhead is solid. Any playhead movement sweeps the
+  // anchors it collides with: an anchor inside the interval just traveled is
+  // carried to the new position. When a push would compress the selection
+  // below MIN_SELECTION_DURATION, the partner anchor is pushed too (the
+  // handles collide, then travel together), clamped to [0, duration].
+  //
+  // The same rule applies to every motion source — drag, momentum, tap
+  // animation, playback follow, external snap. No exceptions: predictability
+  // over cleverness.
+  // =========================================================================
+
+  private _pushSelection(prevTime: number, newTime: number, now: number): void {
+    if (!this._linked || !this._selection) return
+    if (this._draggingHandle !== null) return // handle drag owns the selection
+    if (this._duration <= MIN_SELECTION_DURATION) return
+    if (newTime === prevTime) return
+
+    let { start, end } = this._selection
+
+    if (newTime > prevTime) {
+      // Forward sweep: carry anchors in [prevTime, newTime) to newTime
+      if (start >= prevTime && start < newTime) start = newTime
+      if (end >= prevTime && end < newTime) end = newTime
+      // Min-duration rod: a pushed start drags the end along
+      if (end - start < MIN_SELECTION_DURATION) end = start + MIN_SELECTION_DURATION
+      if (end > this._duration) {
+        end = this._duration
+        start = Math.min(start, end - MIN_SELECTION_DURATION)
+      }
+    } else {
+      // Backward sweep: carry anchors in (newTime, prevTime] to newTime
+      if (end > newTime && end <= prevTime) end = newTime
+      if (start > newTime && start <= prevTime) start = newTime
+      // Min-duration rod: a pushed end drags the start along
+      if (end - start < MIN_SELECTION_DURATION) start = end - MIN_SELECTION_DURATION
+      if (start < 0) {
+        start = 0
+        end = Math.max(end, MIN_SELECTION_DURATION)
+      }
+    }
+
+    if (start === this._selection.start && end === this._selection.end) return
+
+    this._selection = { start, end }
+    this._selectionDirty = true
+    this._emitSelection(now)
+  }
+
+  /**
+   * Emit the selection to React, throttled like the display position.
+   * `force` is used at motion endpoints (pan end, momentum/animation
+   * finalize, pause, snap) so React always converges to the final value.
+   */
+  private _emitSelection(now: number, force = false): void {
+    if (!this._selectionDirty || !this._selection) return
+    if (!force && now - this._lastSelectionEmit < DISPLAY_UPDATE_INTERVAL) return
+
+    this._lastSelectionEmit = now
+    this._selectionDirty = false
+    this._callbacks.onSelectionChange?.(this._selection.start, this._selection.end)
+  }
+
+  /**
+   * True while the engine itself may be mutating the selection — a handle
+   * drag, or linked pushing during any motion. See updateSelection().
+   */
+  private _selectionLocked(): boolean {
+    if (this._draggingHandle !== null) return true
+    if (!this._linked || !this._selection) return false
+
+    return this._isDragging
+      || this._hasMomentum
+      || this._animation !== null
+      || this._playbackRate > 0
   }
 
   // =========================================================================

@@ -14,10 +14,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Gesture } from 'react-native-gesture-handler'
 
-import {
-  SEGMENT_DURATION,
-  MIN_SELECTION_DURATION,
-} from './constants'
 import { TimelinePhysicsEngine } from './engine'
 // ============================================================================
 // Types (unchanged — preserves the contract with Timeline.tsx)
@@ -37,6 +33,8 @@ export interface UseTimelinePhysicsOptions {
   /** Called on every visual frame — use to push picture imperatively */
   onFrame?: () => void
   selection?: SelectionConfig
+  /** Playhead movement pushes selection anchors (see engine linked mode) */
+  linkedSelection?: boolean
   canZoom?: boolean
   /** Tap skips ±ms from current position instead of seeking to the tapped point */
   tapSkip?: { backward: number; forward: number }
@@ -50,6 +48,13 @@ export interface UseTimelinePhysicsOptions {
 
 export interface TimelinePhysicsResult {
   scrollOffsetRef: React.MutableRefObject<number>
+  /**
+   * The engine's authoritative selection, updated every frame. Drawing code
+   * must read this instead of the selection props: during handle drags and
+   * linked pushing the engine mutates the selection at frame rate while
+   * emissions to React state are throttled.
+   */
+  selectionRef: React.MutableRefObject<{ start: number; end: number } | null>
   /** Current zoom-scaled segment width */
   segmentWidth: number
   /** Current zoom-scaled segment gap */
@@ -69,6 +74,7 @@ export function useTimelinePhysics({
   onSeek,
   onFrame,
   selection,
+  linkedSelection = false,
   canZoom = false,
   tapSkip,
   playbackRate = 0,
@@ -76,8 +82,9 @@ export function useTimelinePhysics({
   // React state that triggers re-renders (only for time indicator text)
   const [displayPosition, setDisplayPosition] = useState(externalPosition)
 
-  // Ref that Timeline.tsx reads during Skia picture creation
+  // Refs that Timeline.tsx reads during Skia picture creation
   const scrollOffsetRef = useRef(0)
+  const selectionRef = useRef<{ start: number; end: number } | null>(null)
 
   // The rAF loop handle
   const rafIdRef = useRef<number | null>(null)
@@ -116,6 +123,7 @@ export function useTimelinePhysics({
         containerWidth,
         position: externalPosition,
         selection: selection ? { start: selection.start, end: selection.end } : undefined,
+        linked: linkedSelection,
         canZoom,
         tapSkip,
       },
@@ -124,6 +132,7 @@ export function useTimelinePhysics({
         onSelectionChange: (start, end) => onSelectionChangeRef.current?.(start, end),
         onFrame: () => {
           scrollOffsetRef.current = engineRef.current!.scrollOffset
+          selectionRef.current = engineRef.current!.selection
           onFrameRef.current?.()
         },
         onDisplayPosition: (position) => {
@@ -132,6 +141,7 @@ export function useTimelinePhysics({
       }
     )
     scrollOffsetRef.current = engineRef.current.scrollOffset
+    selectionRef.current = engineRef.current.selection
   }
 
   const engine = engineRef.current
@@ -176,8 +186,13 @@ export function useTimelinePhysics({
   useEffect(() => {
     if (selection) {
       engine.updateSelection(selection.start, selection.end)
+      selectionRef.current = engine.selection
     }
   }, [engine, selection?.start, selection?.end])
+
+  useEffect(() => {
+    engine.setLinked(linkedSelection)
+  }, [engine, linkedSelection])
 
   useEffect(() => {
     engine.setPlaybackRate(playbackRate, performance.now())
@@ -255,6 +270,7 @@ export function useTimelinePhysics({
 
   return {
     scrollOffsetRef,
+    selectionRef,
     segmentWidth: engine.segmentWidth,
     segmentGap: engine.segmentGap,
     displayPosition,

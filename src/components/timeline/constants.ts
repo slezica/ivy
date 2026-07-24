@@ -35,4 +35,8 @@ export const DRIFT_SNAP_THRESHOLD = 2000 // ms — larger drift means an externa
 export const DRIFT_FOLD_WINDOW = 1000    // ms — ~95% of smaller drift folded in within this window
 
 // Selection constraints
-export const MIN_SELECTION_DURATION = 1000 // 1 second minimum between handles
+//
+// Minimum gap between handles: the distance at which the 24px handle circles
+// stop overlapping at zoom 1 (24px / 6px-per-second = 4s). Also the minimum
+// clip length — sub-4s clips don't make sense for audiobooks.
+export const MIN_SELECTION_DURATION = 4000

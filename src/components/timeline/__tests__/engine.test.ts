@@ -662,6 +662,177 @@ describe('TimelinePhysicsEngine', () => {
   })
 
   // --------------------------------------------------------------------------
+  // 9b. Linked selection push (playhead is solid, movement sweeps anchors)
+  // --------------------------------------------------------------------------
+
+  describe('linked selection push', () => {
+    // Anchors at 60s and 80s in the default 10-minute timeline
+    const SELECTION = { start: 60_000, end: 80_000 }
+
+    function createLinked(configOverrides?: Partial<EngineConfig>) {
+      return createEngine({
+        selection: { ...SELECTION },
+        linked: true,
+        ...configOverrides,
+      })
+    }
+
+    /** Drag the timeline (not a handle) so the playhead lands on targetTime */
+    function scrubTo(engine: TimelinePhysicsEngine, fromTime: number, targetTime: number) {
+      const translationX = -(tx(targetTime) - tx(fromTime))
+      engine.panStart(200, 45, 0) // y=45: middle of the bars, not a handle
+      engine.panUpdate(translationX, 16)
+      engine.panEnd(0, 32)
+    }
+
+    it('forward sweep carries the start anchor to the playhead', () => {
+      const { engine } = createLinked({ position: 50_000 })
+
+      scrubTo(engine, 50_000, 65_000) // sweeps over start at 60s
+
+      expect(engine.selection).toEqual({ start: 65_000, end: 80_000 })
+    })
+
+    it('forward sweep carries the end anchor to the playhead', () => {
+      const { engine } = createLinked({ position: 70_000 })
+
+      scrubTo(engine, 70_000, 85_000) // sweeps over end at 80s
+
+      expect(engine.selection).toEqual({ start: 60_000, end: 85_000 })
+    })
+
+    it('forward push compresses to min duration, then carries both anchors', () => {
+      const { engine } = createLinked({ position: 50_000 })
+
+      scrubTo(engine, 50_000, 78_000) // start pushed to 78s, rod hits end at 80s
+
+      expect(engine.selection).toEqual({
+        start: 78_000,
+        end: 78_000 + MIN_SELECTION_DURATION,
+      })
+    })
+
+    it('backward push compresses to min duration, then carries both anchors', () => {
+      const { engine } = createLinked({ position: 90_000 })
+
+      scrubTo(engine, 90_000, 62_000) // end pushed to 62s, rod hits start at 60s
+
+      expect(engine.selection).toEqual({
+        start: 62_000 - MIN_SELECTION_DURATION,
+        end: 62_000,
+      })
+    })
+
+    it('clamps at the timeline end, min duration kept', () => {
+      const { engine } = createLinked({
+        position: 585_000,
+        selection: { start: 590_000, end: 596_000 },
+      })
+
+      scrubTo(engine, 585_000, 599_000)
+
+      expect(engine.selection).toEqual({
+        start: 600_000 - MIN_SELECTION_DURATION,
+        end: 600_000,
+      })
+    })
+
+    it('clamps at the timeline start, min duration kept', () => {
+      const { engine } = createLinked({
+        position: 12_000,
+        selection: { start: 4_000, end: 10_000 },
+      })
+
+      scrubTo(engine, 12_000, 1_000)
+
+      expect(engine.selection).toEqual({ start: 0, end: MIN_SELECTION_DURATION })
+    })
+
+    it('does not move anchors outside the swept path', () => {
+      const { engine, callbacks } = createLinked({ position: 62_000 })
+
+      scrubTo(engine, 62_000, 75_000) // inside the selection, touches neither anchor
+
+      expect(engine.selection).toEqual(SELECTION)
+      expect(callbacks.onSelectionChange).not.toHaveBeenCalled()
+    })
+
+    it('does not push when not linked', () => {
+      const { engine, callbacks } = createEngine({
+        position: 50_000,
+        selection: { ...SELECTION },
+      })
+
+      engine.panStart(200, 45, 0)
+      engine.panUpdate(-tx(30_000), 16) // sweep well past the start anchor
+      engine.panEnd(0, 32)
+
+      expect(engine.selection).toEqual(SELECTION)
+      expect(callbacks.onSelectionChange).not.toHaveBeenCalled()
+    })
+
+    it('playback follow pushes the end anchor', () => {
+      const { engine } = createLinked({ position: 79_000 })
+
+      engine.setPlaybackRate(1, 0)
+      for (let t = 16; t <= 2000; t += 16) engine.tick(t)
+
+      // Playhead moved ~2s forward, sweeping the end anchor along
+      expect(engine.selection!.start).toBe(60_000)
+      expect(engine.selection!.end).toBeGreaterThan(80_000)
+      expect(engine.selection!.end).toBeCloseTo(engine.displayPosition, -2)
+    })
+
+    it('tap-to-seek animation pushes anchors along its path', () => {
+      const { engine, callbacks } = createLinked({ position: 70_000 })
+
+      // Tap 180px right of center: seek target 70s + 30s = 100s, past the end
+      engine.touchDown(380, 45, 0)
+      engine.tap(380, 0)
+      runTicks(engine, 16)
+
+      expect(engine.selection).toEqual({ start: 60_000, end: 100_000 })
+
+      // Finalize force-emitted the final selection to React
+      const calls = (callbacks.onSelectionChange as jest.Mock).mock.calls
+      expect(calls[calls.length - 1]).toEqual([60_000, 100_000])
+    })
+
+    it('throttles push emissions and force-emits on pause', () => {
+      const { engine, callbacks } = createLinked({ position: 80_000 }) // in contact with end
+
+      engine.setPlaybackRate(1, 0)
+      for (let t = 16; t <= 96; t += 16) engine.tick(t) // 6 pushes in ~100ms
+
+      const during = (callbacks.onSelectionChange as jest.Mock).mock.calls.length
+      expect(during).toBeLessThan(6) // throttled below one emit per tick
+
+      engine.setPlaybackRate(0, 100) // pause: forced emit of the final value
+      const calls = (callbacks.onSelectionChange as jest.Mock).mock.calls
+      expect(calls[calls.length - 1]).toEqual([
+        engine.selection!.start,
+        engine.selection!.end,
+      ])
+    })
+
+    it('ignores prop selection echoes while linked pushing is possible', () => {
+      const { engine } = createLinked({ position: 79_000 })
+
+      engine.setPlaybackRate(1, 0)
+      engine.tick(16)
+
+      // A stale echo from React must not regress the selection mid-playback
+      engine.updateSelection(60_000, 79_000)
+      expect(engine.selection).toEqual(SELECTION)
+
+      // Once paused and idle, prop updates apply again
+      engine.setPlaybackRate(0, 32)
+      engine.updateSelection(10_000, 20_000)
+      expect(engine.selection).toEqual({ start: 10_000, end: 20_000 })
+    })
+  })
+
+  // --------------------------------------------------------------------------
   // 10. External position sync
   // --------------------------------------------------------------------------
 

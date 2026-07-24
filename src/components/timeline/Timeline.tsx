@@ -92,6 +92,12 @@ export interface TimelineProps {
   selectionEnd?: number
   onSelectionChange?: (start: number, end: number) => void
 
+  // Linked selection (optional, editable selection only)
+  // When true the playhead is solid: any playhead movement (drag, fling,
+  // tap animation, playback follow) pushes the selection anchors it collides
+  // with, keeping the minimum duration between them.
+  linkedSelection?: boolean
+
   // Zoom (optional)
   canZoom?: boolean
 
@@ -272,6 +278,7 @@ export function Timeline({
   selectionStart,
   selectionEnd,
   onSelectionChange,
+  linkedSelection = false,
   canZoom = false,
   tapSkip,
   playbackRate = 0,
@@ -324,8 +331,18 @@ export function Timeline({
     const halfWidth = containerWidth / 2
     const playheadX = scrollOffset
 
-    const selStartX = hasVisualSelection ? timeToX(selectionStart!, SEGMENT_DURATION, segmentWidth, segmentGap) : null
-    const selEndX = hasVisualSelection ? timeToX(selectionEnd!, SEGMENT_DURATION, segmentWidth, segmentGap) : null
+    // Editable selections draw from the engine's authoritative value (fresh
+    // every frame in selectionRef) — during handle drags and linked pushing
+    // the props lag behind by the emission throttle. View-only selections
+    // have no engine copy and draw from props.
+    const selection = hasEditableSelection
+      ? selectionRef.current ?? { start: selectionStart!, end: selectionEnd! }
+      : hasVisualSelection
+        ? { start: selectionStart!, end: selectionEnd! }
+        : null
+
+    const selStartX = selection ? timeToX(selection.start, SEGMENT_DURATION, segmentWidth, segmentGap) : null
+    const selEndX = selection ? timeToX(selection.end, SEGMENT_DURATION, segmentWidth, segmentGap) : null
 
     try {
       const pic = createPicture(
@@ -366,7 +383,7 @@ export function Timeline({
     }
   }
 
-  const { scrollOffsetRef, segmentWidth, segmentGap, displayPosition, gesture } = useTimelinePhysics({
+  const { scrollOffsetRef, selectionRef, segmentWidth, segmentGap, displayPosition, gesture } = useTimelinePhysics({
     containerWidth,
     duration,
     externalPosition: position,
@@ -375,6 +392,7 @@ export function Timeline({
     selection: hasEditableSelection
       ? { start: selectionStart!, end: selectionEnd!, onChange: onSelectionChange! }
       : undefined,
+    linkedSelection,
     canZoom,
     tapSkip,
     playbackRate,
