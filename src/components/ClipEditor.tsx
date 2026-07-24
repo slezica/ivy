@@ -22,7 +22,7 @@ interface ClipEditorProps {
 }
 
 export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) {
-  const { playback, play, pause, seek } = useStore()
+  const { playback, settings, play, pause, seek, updateSettings } = useStore()
 
   // The editor is only reachable when the source file and duration exist
   // (menu and viewer gate on them); fall back to the clip's own audio
@@ -35,8 +35,12 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   const [selectionEnd, setSelectionEnd] = useState(clip.start + clip.duration)
 
   // Bounds follow playhead: while linked, playhead movement (scrub or
-  // playback) pushes the selection anchors — listen and delimit in one go
-  const [linked, setLinked] = useState(true)
+  // playback) pushes the selection anchors — listen and delimit in one go.
+  // The toggle state is a remembered preference (settings row).
+  const linked = settings.clip_editor_linked
+  const toggleLinked = () => {
+    updateSettings({ ...settings, clip_editor_linked: !linked })
+  }
 
   // Local state - the position this editor remembers
   const [ownPosition, setOwnPosition] = useState(clip.start)
@@ -132,7 +136,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
         />
         <IconButton
           iconName={linked ? 'link' : 'link-outline'}
-          onPress={() => setLinked((value) => !value)}
+          onPress={toggleLinked}
           testID="clip-editor-link-toggle"
           size={36}
           backgroundColor={linked ? Color.PRIMARY : Color.BACKGROUND_2}

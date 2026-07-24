@@ -93,7 +93,7 @@ export function createMockState(overrides: {
     books: overrides.books ?? {} as Record<string, Book>,
     sessions: overrides.sessions ?? {} as Record<string, SessionWithBook>,
     clips: overrides.clips ?? {} as Record<string, ClipWithFile>,
-    settings: { sync_enabled: false, transcription_enabled: true, delete_original_after_import: false, ...overrides.settings },
+    settings: { sync_enabled: false, transcription_enabled: true, delete_original_after_import: false, clip_editor_linked: true, ...overrides.settings },
   }
 }
 

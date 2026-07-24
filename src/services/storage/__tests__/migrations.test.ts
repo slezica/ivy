@@ -92,5 +92,7 @@ describe('migration upgrade path', () => {
     expect(clip.id).toBe('clip-1')
     expect(clip.note).toBe('a note')
     expect(clip.source_title).toBe('A Book')  // backfilled during upgrade
+
+    expect(service.getSettings().clip_editor_linked).toBe(true) // migration 10 default
   })
 })

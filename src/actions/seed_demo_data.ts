@@ -124,7 +124,7 @@ export const createSeedDemoData = (deps: SeedDemoDataDeps): SeedDemoData => (
     }
 
     // Quiet queues during screenshots: no sync, no Whisper model download
-    const settings = { sync_enabled: false, transcription_enabled: false, delete_original_after_import: false }
+    const settings = { sync_enabled: false, transcription_enabled: false, delete_original_after_import: false, clip_editor_linked: true }
     await db.setSettings(settings)
     set((state) => { state.settings = settings })
 

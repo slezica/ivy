@@ -90,6 +90,7 @@ export interface Settings {
   sync_enabled: boolean
   transcription_enabled: boolean
   delete_original_after_import: boolean
+  clip_editor_linked: boolean  // Remembered state of the editor's link toggle
 }
 
 // Sync-related interfaces
@@ -309,6 +310,11 @@ export const migrations: Migration[] = [
   // Migration 9: Add delete_original_after_import to settings
   (db) => {
     db.execSync('ALTER TABLE settings ADD COLUMN delete_original_after_import INTEGER NOT NULL DEFAULT 0')
+  },
+
+  // Migration 10: Add clip_editor_linked to settings (link toggle memory)
+  (db) => {
+    db.execSync('ALTER TABLE settings ADD COLUMN clip_editor_linked INTEGER NOT NULL DEFAULT 1')
   },
 ]
 
@@ -935,20 +941,21 @@ export class DatabaseService {
   // ---------------------------------------------------------------------------
 
   getSettings(): Settings {
-    const row = this.db.getFirstSync<{ sync_enabled: number; transcription_enabled: number; delete_original_after_import: number }>(
-      'SELECT sync_enabled, transcription_enabled, delete_original_after_import FROM settings WHERE id = 1'
+    const row = this.db.getFirstSync<{ sync_enabled: number; transcription_enabled: number; delete_original_after_import: number; clip_editor_linked: number }>(
+      'SELECT sync_enabled, transcription_enabled, delete_original_after_import, clip_editor_linked FROM settings WHERE id = 1'
     )
     return {
       sync_enabled: row?.sync_enabled === 1,
       transcription_enabled: row?.transcription_enabled !== 0, // default true
       delete_original_after_import: row?.delete_original_after_import === 1,
+      clip_editor_linked: row?.clip_editor_linked !== 0, // default true
     }
   }
 
   async setSettings(settings: Settings): Promise<void> {
     await this.db.runAsync(
-      'UPDATE settings SET sync_enabled = ?, transcription_enabled = ?, delete_original_after_import = ? WHERE id = 1',
-      [settings.sync_enabled ? 1 : 0, settings.transcription_enabled ? 1 : 0, settings.delete_original_after_import ? 1 : 0]
+      'UPDATE settings SET sync_enabled = ?, transcription_enabled = ?, delete_original_after_import = ?, clip_editor_linked = ? WHERE id = 1',
+      [settings.sync_enabled ? 1 : 0, settings.transcription_enabled ? 1 : 0, settings.delete_original_after_import ? 1 : 0, settings.clip_editor_linked ? 1 : 0]
     )
   }
 
