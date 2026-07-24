@@ -1,0 +1,33 @@
+appId: com.salezica.ivy
+---
+# Sleep timer: arm → live countdown on the player button → expiry pauses
+# playback and clears the timer.
+#
+# Uses the 5s test preset (3s + 2s fade), present only in debug/maestro
+# builds (ivy_build_variant — see plugins/withIvyBuildTypes.js). Running this
+# against a preview/release build fails at the "5s" tap.
+
+- runFlow: subflows/import-book.yaml
+
+- tapOn: "Ivy Test Book"
+
+# Start playback so expiry has something to pause
+- tapOn:
+    id: "play-pause-button"
+- assertVisible: "Pause"
+
+# Arm the 5s preset; dialog dismisses on selection
+- tapOn:
+    id: "sleep-timer-button"
+- assertVisible: "Sleep timer"
+- tapOn: "5s"
+- assertNotVisible: "Sleep timer"
+
+# Button shows the countdown (sub-minute remaining rounds up to "1m")
+- assertVisible: "1m"
+
+# Expiry: fade (2s) ends by 5s → playback paused, timer cleared
+- extendedWaitUntil:
+    visible: "Play"
+    timeout: 15000
+- assertNotVisible: "1m"

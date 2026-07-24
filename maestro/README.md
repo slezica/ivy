@@ -6,6 +6,21 @@ playback — so they catch native-packaging regressions JS tests can't see (e.g.
 the clip-add linker crash: a missing `NEEDED` soname is invisible to Jest but
 fails the slice on device).
 
+## Which build to install
+
+Run the suite against the **maestro** build variant — a preview clone whose
+`ivy_build_variant` resource unlocks test affordances (currently: the 5s sleep
+timer preset). Preview and release deliberately carry zero test surface, so
+`sleep-timer.yaml` fails against them; debug works but adds Metro dependency
+and dev-mode overhead.
+
+```bash
+# In the container:
+scripts/container-build.sh :app:assembleMaestro -PreactNativeArchitectures=arm64-v8a
+# On the Mac: cd android && ./gradlew :app:assembleMaestro
+adb install -r <...>/outputs/apk/maestro/app-maestro.apk
+```
+
 ## Running
 
 With one device/emulator attached, run the whole suite like the Jest tests:
@@ -59,6 +74,7 @@ $ANDROID_HOME/emulator/emulator -avd <name> -no-audio -no-boot-anim &
 | `chapter-extraction.yaml` | Chapter extraction (the other native FFmpeg consumer) → chapter shown, not empty-state |
 | `clip-crud.yaml` | Clip create → edit note → verify persistence → delete |
 | `timeline-gestures.yaml` | Tap-seek / scrub / flick on the Skia timeline; app stays responsive |
+| `sleep-timer.yaml` | Arm 5s preset → countdown on button → expiry pauses playback, clears timer (maestro/debug builds only) |
 
 Every flow is **independently runnable** — each pulls in `subflows/import-book.yaml`
 via `runFlow` to set up its own book, so `maestro test maestro/` (which runs
