@@ -9,7 +9,7 @@ interface IconButtonProps {
   onLongPress?: () => void
   testID?: string
   size?: number
-  variant?: 'filled' | 'outline'
+  active?: boolean
   backgroundColor?: string
   iconColor?: string
   style?: ViewStyle
@@ -22,14 +22,13 @@ export default function IconButton({
   onLongPress,
   testID,
   size = 64,
-  variant = 'filled',
+  active = false,
   backgroundColor,
   iconColor,
   style,
 }: IconButtonProps) {
-  const outline = variant === 'outline'
-  const background = backgroundColor ?? (outline ? 'transparent' : Color.PRIMARY)
-  const icon = iconColor ?? (outline ? Color.PRIMARY : Color.PRIMARY_CONTRAST)
+  const background = backgroundColor ?? (active ? Color.PRIMARY : 'transparent')
+  const icon = iconColor ?? (active ? Color.PRIMARY_CONTRAST : Color.PRIMARY)
 
   // Calculate icon size as 50% of button size for balanced appearance
   const iconSize = Math.round(size * 0.5)
@@ -44,7 +43,7 @@ export default function IconButton({
           borderRadius: size / 2,
           backgroundColor: background,
         },
-        outline && styles.outline,
+        active && styles.active,
         style,
       ]}
       onPress={onPress}
@@ -57,14 +56,14 @@ export default function IconButton({
 }
 
 const styles = StyleSheet.create({
+  // Border always present (invisible against active fill) so size never shifts
   button: {
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
-  },
-  outline: {
     borderWidth: 1.5,
     borderColor: Color.PRIMARY,
-    elevation: 0,
+  },
+  active: {
+    elevation: 4,
   },
 })
