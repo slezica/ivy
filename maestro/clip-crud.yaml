@@ -49,8 +49,8 @@ appId: com.salezica.ivy
 # Delete the clip
 - tapOn:
     id: "clip-menu-button"
-- tapOn: "Delete"
-- assertVisible: "Are you sure you want to delete this clip?"
+- tapOn: "Delete forever"
+- assertVisible: "Permanently delete this clip?"
 - tapOn: "Delete"
 
 # Back to empty state

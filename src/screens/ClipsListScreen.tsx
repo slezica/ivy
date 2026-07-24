@@ -76,7 +76,7 @@ export default function ClipsListScreen() {
   const handleDeleteClip = (clipId: string) => {
     Alert.alert(
       'Delete Clip',
-      'Are you sure you want to delete this clip?',
+      'Permanently delete this clip?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -179,7 +179,7 @@ export default function ClipsListScreen() {
         { key: 'goToSource', label: 'Go to source', icon: 'play-circle-outline' } as ActionMenuItem,
       ] : []),
       { key: 'share', label: 'Share', icon: 'share-outline' },
-      { key: 'delete', label: 'Delete', icon: 'trash-outline', destructive: true },
+      { key: 'delete', label: 'Delete forever', icon: 'trash-outline', destructive: true },
     ]
   }
 
