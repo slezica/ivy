@@ -23,6 +23,7 @@ playback: {
   uri: string | null     // what file is loaded
   duration: number       // ms — length of loaded file
   ownerId: string | null // who's controlling playback
+  sleepTimer: { endsAt: number, duration: number } | null  // wall-clock; null = off
 }
 ```
 
@@ -192,6 +193,23 @@ Position updates still flow through regardless — only the status field is prot
 
 ---
 
+## The Sleep Timer
+
+Design doc: `docs/2026-07-24-sleep-timer.md`.
+
+`setSleepTimer(durationMs | null)` arms (or clears) a **wall-clock** countdown: `endsAt = now + duration`, exactly like a clock-app timer. State lives in `playback.sleepTimer`; the action factory's closure holds the scheduled timeout. On expiry: volume ramps to zero over the last `SLEEP_TIMER_FADE_MS` (10s, *included* in the interval), then `pause()` — global, whoever owns playback — then volume resets to full and the timer clears to off.
+
+Rules:
+
+- The fade ramp (`fadeOut`/`resetVolume`) lives in `AudioPlayerService` — it's a volume concern, and the ms↔seconds/TrackPlayer boundary stays there. Scheduling lives in the action.
+- `fadeOut()` resolves `false` when cancelled by `resetVolume()`; the expiry callback then does nothing — a newer `setSleepTimer` call owns the state.
+- Re-setting while running restarts the clock; setting during a fade cancels the fade and restores volume first.
+- Pausing does not freeze the countdown. An expiry while paused is a no-op pause that still clears the timer.
+- The timer is ephemeral — it does not survive app restart, and nothing is persisted.
+- UI countdowns (player button "12m", dialog "12:43") are computed locally from `endsAt` with component-level intervals — the store is never ticked.
+
+---
+
 ## System Media Controls
 
 System media controls (notification, lock screen, Bluetooth) are handled by a separate **playback service** that runs in a background context.
@@ -227,12 +245,13 @@ src/actions/
   load_book.ts        → Load file / seek / claim ownership / apply rate
   play.ts             → Thin wrapper: loadBook + play (no-op while loading)
   pause.ts            → Pause playback
+  set_sleep_timer.ts  → Arm/clear the sleep timer (wall-clock, fade via audio service)
   set_speed.ts        → Persist per-book speed, apply if playing in main player
   seek.ts             → Seek to position (guarded by fileUri match)
   skip_forward.ts     → Skip +25 seconds
   skip_backward.ts    → Skip -30 seconds
   fetch_playback_state.ts → Read current status into store
-  constants.ts        → SKIP_FORWARD_MS (25000), SKIP_BACKWARD_MS (30000)
+  constants.ts        → SKIP_FORWARD_MS (25000), SKIP_BACKWARD_MS (30000), SLEEP_TIMER_FADE_MS (10000)
 
 src/store/
   index.ts            → onAudioStatus handler, playback state, ownership

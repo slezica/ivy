@@ -2,6 +2,9 @@
 
 Feature #1 from IDEAS.md. Count down N minutes, fade out, pause.
 
+**Implemented 2026-07-24** (branch `sleep-timer`). Behavior guide:
+docs/PLAYBACK.md "The Sleep Timer".
+
 ## Rationale
 
 The point is not timing sleep. It's knowing the book won't advance more than N
@@ -34,9 +37,12 @@ at any time.
 - Selecting dismisses the dialog. Re-selecting the running preset resets the
   clock.
 - All buttons always enabled. The current state gets *visual indication only*
-  (border, no fill), never disabled: the goal is "mark what you just did", not
-  forbid the tap — and re-tapping the same option must work (reset / changed my
-  mind about changing my mind). Comfort over correctness; evaluate in practice.
+  (the shared `active` filled treatment), never disabled: the goal is "mark
+  what you just did", not forbid the tap — and re-tapping the same option must
+  work (reset / changed my mind about changing my mind). Comfort over
+  correctness; evaluate in practice. (Original spec said border-no-fill for
+  the current option; inverted when the button-design branch made outline the
+  *default* look and fill the active marker.)
 
 ## Countdown semantics — DECIDED
 

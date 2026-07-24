@@ -390,6 +390,7 @@ playback: {
   uri: string | null            // URI currently loaded in player (hardware state)
   duration: number              // Duration of loaded audio (hardware state)
   ownerId: string | null        // ID of component controlling playback
+  sleepTimer: { endsAt: number, duration: number } | null  // wall-clock; null = off
 }
 clips: Record<string, ClipWithFile>
 transcription: {

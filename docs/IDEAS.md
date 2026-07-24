@@ -6,7 +6,6 @@ and again 2026-07-23.
 
 ## Features
 
-1. **Sleep timer** — count down N minutes, fade out, pause; "end of chapter" mode when chapters exist.
 2. **Playlists / queues** — "play next" queue for podcast-style use, or named playlists.
 3. **Clip collections / tags** — organize flat clip list for heavy clippers.
 4. **Book artwork on player screen** — artwork is stored at import but never rendered on the player.
@@ -51,6 +50,7 @@ Action factories and tests, theme tokens, timeline structure, shared components,
 
 ## Resolved since the audits
 
+- Sleep timer (was feature #1) — implemented 2026-07-24; wall-clock countdown with fade-out ("end of chapter" mode dropped, see docs/2026-07-24-sleep-timer.md).
 - Ingestion pipeline duplication — `load_from_url.ts` deleted with yt-dlp removal; `sanitizeFilename` centralized in `src/utils/`.
 - `uriToPath()` duplication — centralized in `src/utils/index.ts`, imported by all three consumers.
 - Transcription queue race — `processing` flag now reset in `finally` blocks (`queue.ts`).
