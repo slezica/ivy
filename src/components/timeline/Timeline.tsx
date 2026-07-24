@@ -37,7 +37,7 @@
  */
 
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { View, Text, StyleSheet, LayoutChangeEvent } from 'react-native'
+import { View, Text, StyleSheet, LayoutChangeEvent, AppState } from 'react-native'
 import {
   Canvas,
   Picture,
@@ -405,6 +405,16 @@ export function Timeline({
     rebuildRef.current()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [containerWidth, totalSegments, duration, segmentWidth, segmentGap, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
+
+  // Rebuild on foreground: backgrounding (screen off) can recreate the Skia
+  // surface blank, and an idle timeline (paused, no gestures) has no other
+  // trigger to draw again — it would stay invisible until interaction.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') rebuildRef.current()
+    })
+    return () => subscription.remove()
+  }, [])
 
   // Calculate playhead position based on time indicator placement
   const playheadTop = showTime === 'top'
