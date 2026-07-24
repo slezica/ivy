@@ -8,6 +8,7 @@
 import RNFS from 'react-native-fs'
 
 import { FakeDrive, createSyncHarness, SyncHarness } from './harness'
+import { BACKUP_VERSION } from '../types'
 
 // IDs must be hex + hyphens to match the sync filename regex
 const BOOK_ID = 'aaa00001-0000-0000-0000-000000000001'
@@ -1383,7 +1384,7 @@ describe('sync scenarios', () => {
   })
 
   describe('payload format versioning', () => {
-    it('stamps uploaded payloads with version 1', async () => {
+    it('stamps uploaded payloads with the writer and compat versions', async () => {
       const drive = new FakeDrive()
       const device = createSyncHarness(drive)
 
@@ -1394,9 +1395,35 @@ describe('sync scenarios', () => {
       drive.putFile('clips', `clip_${CLIP_ID}.m4a`, new Uint8Array([1]))
       await device.sync.syncNow()
 
-      expect(drive.readJson(`book_${BOOK_ID}.json`).version).toBe(1)
-      expect(drive.readJson(`clip_${CLIP_ID}.json`).version).toBe(1)
-      expect(drive.readJson(`session_${session.id}.json`).version).toBe(1)
+      // version = exact format as-written (bumps on every change);
+      // version_compat = oldest capable reader (bumps only on breaking changes)
+      expect(drive.readJson(`book_${BOOK_ID}.json`).version).toBe(BACKUP_VERSION)
+      expect(drive.readJson(`clip_${CLIP_ID}.json`).version).toBe(BACKUP_VERSION)
+      expect(drive.readJson(`session_${session.id}.json`).version).toBe(BACKUP_VERSION)
+      expect(drive.readJson(`book_${BOOK_ID}.json`).version_compat).toBe(1)
+      expect(drive.readJson(`clip_${CLIP_ID}.json`).version_compat).toBe(1)
+      expect(drive.readJson(`session_${session.id}.json`).version_compat).toBe(1)
+    })
+
+    it('reads a payload from a newer writer as long as version_compat is satisfied', async () => {
+      const drive = new FakeDrive()
+      const device = createSyncHarness(drive)
+
+      await addBook(device)
+      await device.sync.syncNow()
+
+      // Additive future format: higher writer version, unchanged compat
+      const fileId = drive.getFileByName(`book_${BOOK_ID}.json`)!.id
+      await drive.updateFile(fileId, remoteBookJson({
+        version: 99, version_compat: 1, some_future_field: 'ignored',
+        updated_at: now + 10_000_000,
+      }))
+
+      const errors = trackSyncErrors(device)
+      await device.sync.syncNow()
+
+      expect(errors[errors.length - 1]).toBeNull()
+      expect((await device.db.getBookById(BOOK_ID))!.title).toBe('Remote Title')
     })
 
     it('rejects a newer-version payload without touching local state, then applies it once repaired', async () => {
@@ -1408,7 +1435,7 @@ describe('sync scenarios', () => {
 
       // A future app rewrote the book in a format this app doesn't know
       const fileId = drive.getFileByName(`book_${BOOK_ID}.json`)!.id
-      await drive.updateFile(fileId, remoteBookJson({ version: 99, updated_at: now + 10_000_000 }))
+      await drive.updateFile(fileId, remoteBookJson({ version: 99, version_compat: 99, updated_at: now + 10_000_000 }))
 
       const tokenBefore = device.db.getCheckpoint().last_page_token
       const errors = trackSyncErrors(device)
@@ -1436,7 +1463,7 @@ describe('sync scenarios', () => {
 
       // A future app rewrote the clip; we must not rewrite a format we don't know
       const fileId = drive.getFileByName(`clip_${CLIP_ID}.json`)!.id
-      await drive.updateFile(fileId, remoteClipJson({ version: 99, updated_at: now + 10_000_000 }))
+      await drive.updateFile(fileId, remoteClipJson({ version: 99, version_compat: 99, updated_at: now + 10_000_000 }))
 
       await deleteClip(device)
       await device.sync.syncNow()

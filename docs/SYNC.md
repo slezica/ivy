@@ -312,9 +312,12 @@ All JSON payloads include `updated_at` and `updated_by` for version comparison. 
 
 ### Payload Format Versioning
 
-Every uploaded payload is stamped with `version` (`BACKUP_VERSION` in `types.ts`, currently 1). A missing `version` means 1 — legacy files never need rewriting. The version is bumped **only on breaking changes** (renamed or reinterpreted fields); new optional fields are additive and stay within the current version, with readers treating absence as `null`.
+Every uploaded payload is stamped with two fields (constants in `types.ts`, both ≡ 1 when absent, so legacy files never need rewriting):
 
-Every payload read goes through `parseBackup()` (sync.ts), which **rejects payloads newer than the app understands** rather than misinterpreting them. The throw rides the existing failure paths — pull reconciles retry then quarantine, pushes back off — so the entity surfaces in `failingCount` and heals automatically once the app updates. This also gates tombstone writes: the engine never rewrites a payload whose format it doesn't know. Migration code for old formats (`if version < N`) doesn't exist yet — it gets written when the first breaking change does.
+- **`version`** (`BACKUP_VERSION`) — the exact format as-written. Bumped on **every** format change, additive ones included. Identifies the writer: readers can tell "field absent because the writer predates it" from "field cleared", which permits targeted read-side migrations (e.g. preserving local extras when an old writer rewrites a book under whole-entity LWW).
+- **`version_compat`** (`BACKUP_VERSION_COMPAT`) — the oldest reader that can safely interpret the payload. Bumped **only on breaking changes** (renamed or reinterpreted fields). Additive fields keep it unchanged, with readers treating absence as `null`.
+
+Every payload read goes through `parseBackup()` (sync.ts), which **rejects payloads whose `version_compat` exceeds the app's own version** rather than misinterpreting them; a newer `version` alone reads normally (unknown fields ignored). The throw rides the existing failure paths — pull reconciles retry then quarantine, pushes back off — so the entity surfaces in `failingCount` and heals automatically once the app updates. This also gates tombstone writes: the engine never rewrites a payload whose format it doesn't know. Migration code for old formats doesn't exist yet — it gets written when the first change that needs it does.
 
 ### Clip Upload Safety
 

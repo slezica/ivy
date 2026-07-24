@@ -16,6 +16,7 @@ import { GoogleAuthService } from './auth'
 import { BaseService } from '../base'
 import {
   BACKUP_VERSION,
+  BACKUP_VERSION_COMPAT,
   BookBackup,
   ClipBackup,
   SessionBackup,
@@ -1131,6 +1132,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   private async uploadBook(book: Book, outboxItem: SyncOutboxItem, result: SyncResult): Promise<void> {
     const backup: BookBackup = {
       version: BACKUP_VERSION,
+      version_compat: BACKUP_VERSION_COMPAT,
       id: book.id,
       name: book.name,
       duration: book.duration,
@@ -1175,6 +1177,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   private async uploadClip(clip: Clip, outboxItem: SyncOutboxItem, result: SyncResult): Promise<void> {
     const backup: ClipBackup = {
       version: BACKUP_VERSION,
+      version_compat: BACKUP_VERSION_COMPAT,
       id: clip.id,
       source_id: clip.source_id,
       start: clip.start,
@@ -1251,6 +1254,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   private async uploadSession(session: Session, outboxItem: SyncOutboxItem, result: SyncResult): Promise<void> {
     const backup: SessionBackup = {
       version: BACKUP_VERSION,
+      version_compat: BACKUP_VERSION_COMPAT,
       id: session.id,
       book_id: session.book_id,
       started_at: session.started_at,
@@ -1645,16 +1649,19 @@ function parseFilename(name: string): ParsedFilename | null {
 }
 
 /**
- * Parse a backup payload, rejecting formats newer than this app understands.
- * The throw rides the existing failure paths — pull reconciles retry then
- * quarantine, pushes back off — so the entity surfaces as failing and heals
- * once the app updates. Never interpret (or rewrite) a payload past this gate.
+ * Parse a backup payload, rejecting formats this app cannot safely interpret:
+ * version_compat above our own writer version means a breaking format from a
+ * newer app. (A newer `version` alone is fine — additive changes read
+ * normally, unknown fields ignored.) The throw rides the existing failure
+ * paths — pull reconciles retry then quarantine, pushes back off — so the
+ * entity surfaces as failing and heals once the app updates. Never interpret
+ * (or rewrite) a payload past this gate.
  */
 function parseBackup<T extends BookBackup | ClipBackup | SessionBackup>(content: string): T {
   const payload = JSON.parse(content) as T
-  const version = payload.version ?? 1
-  if (version > BACKUP_VERSION) {
-    throw new Error(`Backup payload version ${version} is newer than supported (${BACKUP_VERSION}) — update the app`)
+  const compat = payload.version_compat ?? 1
+  if (compat > BACKUP_VERSION) {
+    throw new Error(`Backup payload requires format version ${compat}, newer than supported (${BACKUP_VERSION}) — update the app`)
   }
   return payload
 }
