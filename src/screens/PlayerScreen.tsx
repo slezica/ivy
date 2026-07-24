@@ -174,6 +174,7 @@ function Player({ book, position, isPlaying, onPlayPause, onAddClip, onSeek, onS
           iconName={isPlaying ? 'pause' : 'play'}
           onPress={onPlayPause}
           testID="play-pause-button"
+          variant="outline"
         />
 
         <View style={styles.actionButtons}>
