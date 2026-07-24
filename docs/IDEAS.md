@@ -15,6 +15,8 @@ and again 2026-07-23.
 7. **Zoom buttons in ClipEditor** — discoverable alternative to the removed pinch zoom (2026-07-23: pinch was hard to execute without moving the timeline). The `canZoom` prop and engine pinch machinery are kept, currently unused by all callers.
 8. **ClipViewer auto-pause precision** — pause at clip end triggers from 1 Hz position updates, so playback overshoots the boundary by up to ~1 s; with smooth playback follow (2026-07-23) the bars now visibly glide past the selection end before pausing.
 9. **Auto-open clip editor from player with uninterrupted playback** — hitting the clip button opens the editor directly, audio keeps playing; combined with linked bounds (playhead pushes anchors), clipping becomes listen-and-pause in one motion.
+10. **More readable settings** - always have subtitles below settings explaining use or state.
+11. **Sync indicators in screens** - show in library, clips and sessions that missing items are being synced (only if missing, not at all times during any sync)
 
 ## Refactors / Architecture
 
