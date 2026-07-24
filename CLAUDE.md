@@ -230,13 +230,15 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
           │   ├── FileCopierModule.kt     # Native module for file copy with progress
           │   ├── FileCopierPackage.kt
           │   ├── ChapterReaderModule.kt  # Native module for chapter extraction (FFmpeg -f ffmetadata)
-          │   └── ChapterReaderPackage.kt
+          │   ├── ChapterReaderPackage.kt
+          │   ├── BuildInfoModule.kt      # Exposes ivy_build_variant to JS (test-affordance gate)
+          │   └── BuildInfoPackage.kt
           └── yausername/youtubedl_android/
               └── YoutubeDLException.kt   # Shim for the removed yt-dlp :library (see docs/2026-06-30-remove-ytdlp.md)
 
 /plugins                          # Expo config plugins (applied in app.json) — recreate all gradle customization on prebuild
   ├── withIvySigning.js           # signingConfigs from credentials/ (release uses $KEYSTORE_PASSWORD)
-  ├── withIvyPreviewBuildType.js  # `preview` buildType (embedded bundle, debug-signed)
+  ├── withIvyBuildTypes.js        # `preview` + `maestro` buildTypes and the ivy_build_variant signal
   ├── withIvyHermesFix.js         # arch-aware hermesc path (arm64 Linux container)
   ├── withIvyVersionName.js       # versionName from package.json at build time
   ├── withIvyFfmpegClosureCheck.js # fail assembleRelease/Preview on broken ffmpeg linking
@@ -258,6 +260,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── chapter-extraction.yaml     # Chaptered import
   ├── delete-original.yaml        # Delete original after import
   ├── timeline-gestures.yaml      # Timeline drag/fling/tap
+  ├── sleep-timer.yaml            # Sleep timer arm/expiry (needs maestro build variant)
   ├── subflows/                   # Shared steps (import-book)
   ├── playstore/ + screenshots/   # Play Store screenshot flows
   └── README.md
@@ -544,7 +547,7 @@ Any change touching native packaging — `modules/ivy` jniLibs, `FFmpegEnvironme
 1. **Closure check (build-enforced):** `checkFfmpegClosure` runs automatically as a finalizer of `assembleRelease` and `assemblePreview` (via `plugins/withIvyFfmpegClosureCheck.js`), so a broken closure **fails the build** — no one has to remember. It walks the `NEEDED` graph from `libffmpeg.so`, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it by hand with `node scripts/check-ffmpeg-closure.js <apk>`.
 2. **Fresh-install smoke test (manual):** create a clip / import a chaptered file on a **freshly installed** app, not an upgrade — `no_backup/` survives updates, and stale extracted libs there can mask linking failures that break fresh installs (this happened: see git history of `FFmpegEnvironment.kt`). **Uninstalling requires explicit user approval** — the user knows the device's installation state and whether the upgrade path (e.g. pending DB migrations) must be tested before wiping it.
 
-**Build-variant note:** release builds do **not** minify (`android.enableMinifyInReleaseBuilds` is unset → R8 off), so the `preview`/`maestro` lineage and `release` behave identically for native loading. Even if R8 were enabled it couldn't affect the exec'd-binary link path (native/filesystem, not JVM), and the module classes stay reachable via `IvyPackage`. The closure check runs on the release APK regardless.
+**Build-variant note:** four buildTypes — `debug` (Metro dev loop), `maestro` (e2e: preview clone + test affordances), `preview` (release twin for on-device testing, zero test surface), `release`. Test affordances gate on the `ivy_build_variant` resource (`debug`/`maestro`/`production`, see `plugins/withIvyBuildTypes.js` + `BuildInfoModule.kt`) — never on `__DEV__`. Release builds do **not** minify (`android.enableMinifyInReleaseBuilds` is unset → R8 off), so the `preview`/`maestro` lineage and `release` behave identically for native loading. Even if R8 were enabled it couldn't affect the exec'd-binary link path (native/filesystem, not JVM), and the module classes stay reachable via `IvyPackage`. The closure check runs on the release APK regardless.
 
 
 ## Environment

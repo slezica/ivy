@@ -70,6 +70,9 @@ is stranger than an armed one.
 
 - **Fade-out:** last 10 seconds of the interval (included in duration) ramp
   volume down, then pause. Gentle — a hard cut startles the half-asleep.
+  Fade length is per-call (`setSleepTimer(duration, fadeMs?)`): the 5s test
+  preset (3s + 2s fade, debug/maestro builds only) exercises a full expiry
+  cycle without slowing tests.
 - **Expiry:** timer clears to "Off" after firing.
 - **Global scope:** timer pauses whatever is playing, regardless of playback
   owner. "Stop audio in N minutes" is the intent.
