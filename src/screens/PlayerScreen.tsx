@@ -70,6 +70,9 @@ export default function PlayerScreen() {
 
   const handleOpenClipEditor = async () => {
     if (!ownBook?.uri) return
+    // While loading, the ownership claim below would no-op (loading guard in
+    // play/loadBook) and the editor would open unowned — don't open at all
+    if (playback.status === 'loading') return
     if (ownBook.duration - ownPosition <= 0) {
       Alert.alert('Error', 'Cannot add clip at the end of the book')
       return
