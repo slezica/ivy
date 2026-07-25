@@ -215,8 +215,18 @@ export default function ClipsListScreen() {
       {(viewingClip || editingClip) && (
         <Dialog visible onClose={editingClip ? handleCancelEditClip : handleCloseViewClip}>
           {editingClip ? (
+            // The editor is only reachable when the source file and duration
+            // exist (menu and viewer gate on them); fall back to the clip's
+            // own audio defensively rather than crash if a stale clip slips
+            // through
             <ClipEditor
-              clip={editingClip}
+              fileUri={editingClip.file_uri ?? editingClip.uri}
+              fileDuration={editingClip.file_duration ?? editingClip.duration}
+              title={editingClip.file_title || editingClip.file_name || editingClip.source_title || 'Unknown book'}
+              ownerId={`clip-editor-${editingClip.id}`}
+              initialStart={editingClip.start}
+              initialEnd={editingClip.start + editingClip.duration}
+              initialNote={editingClip.note}
               onCancel={handleCancelEditClip}
               onSave={handleSaveClip}
             />

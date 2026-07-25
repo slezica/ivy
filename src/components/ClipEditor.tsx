@@ -2,9 +2,14 @@
  * ClipEditor
  *
  * Edit clip bounds and note with selection timeline.
+ *
+ * Mode-free: callers map their own semantics onto normalized props —
+ * ClipsListScreen edits an existing clip, PlayerScreen drafts a new one.
+ * The caller owns the ownerId, so it can claim playback ownership for the
+ * editor before mounting it (seamless handoff from the main player).
  */
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 
 import { useStore } from '../store'
@@ -12,27 +17,36 @@ import { Color, Space } from '../theme'
 import { formatTime } from '../utils'
 import IconButton from './shared/IconButton'
 import { Timeline } from './timeline'
-import type { ClipWithFile } from '../services'
 
 
-interface ClipEditorProps {
-  clip: ClipWithFile
-  onCancel: () => void
-  onSave: (updates: { note?: string; start?: number; duration?: number }) => void
+export interface ClipEditorResult {
+  note: string
+  start: number
+  duration: number
 }
 
-export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) {
+interface ClipEditorProps {
+  fileUri: string
+  fileDuration: number
+  title: string
+  ownerId: string
+  initialStart: number
+  initialEnd: number
+  initialNote: string
+  onCancel: () => void
+  onSave: (result: ClipEditorResult) => void
+}
+
+export default function ClipEditor({
+  fileUri, fileDuration, title, ownerId,
+  initialStart, initialEnd, initialNote,
+  onCancel, onSave,
+}: ClipEditorProps) {
   const { playback, settings, play, pause, seek, updateSettings } = useStore()
 
-  // The editor is only reachable when the source file and duration exist
-  // (menu and viewer gate on them); fall back to the clip's own audio
-  // defensively rather than crash if a stale clip slips through
-  const fileUri = clip.file_uri ?? clip.uri
-  const fileDuration = clip.file_duration ?? clip.duration
-
-  const [note, setNote] = useState(clip.note)
-  const [selectionStart, setSelectionStart] = useState(clip.start)
-  const [selectionEnd, setSelectionEnd] = useState(clip.start + clip.duration)
+  const [note, setNote] = useState(initialNote)
+  const [selectionStart, setSelectionStart] = useState(initialStart)
+  const [selectionEnd, setSelectionEnd] = useState(initialEnd)
 
   // Bounds follow playhead: while linked, playhead movement (scrub or
   // playback) pushes the selection anchors — listen and delimit in one go.
@@ -43,10 +57,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   }
 
   // Local state - the position this editor remembers
-  const [ownPosition, setOwnPosition] = useState(clip.start)
-
-  // Stable owner ID for this instance
-  const ownerId = useRef(`clip-editor-${clip.id}`).current
+  const [ownPosition, setOwnPosition] = useState(initialStart)
 
   // Check ownership and file state from global playback
   const isFileLoaded = playback.uri === fileUri
@@ -108,7 +119,7 @@ export default function ClipEditor({ clip, onCancel, onSave }: ClipEditorProps) 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{clip.file_title || clip.file_name || clip.source_title || 'Unknown book'}</Text>
+        <Text style={styles.title}>{title}</Text>
         <Text style={styles.subtitle}>{`${formatTime(selectionEnd - selectionStart)} (at ${formatTime(selectionStart)})`}</Text>
       </View>
 
