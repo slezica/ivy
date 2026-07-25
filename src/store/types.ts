@@ -9,6 +9,7 @@ import type { LoadFileWithPicker } from '../actions/load_file_with_picker'
 import type { CancelLoadFile } from '../actions/cancel_load_file'
 import type { ArchiveBook } from '../actions/archive_book'
 import type { DeleteBook } from '../actions/delete_book'
+import type { LoadBook } from '../actions/load_book'
 import type { Play } from '../actions/play'
 import type { Pause } from '../actions/pause'
 import type { SetSleepTimer } from '../actions/set_sleep_timer'
@@ -83,6 +84,7 @@ export interface AppState {
   deleteBook: DeleteBook
   updateBook: UpdateBook
   setSpeed: SetSpeed
+  loadBook: LoadBook
   play: Play
   pause: Pause
   setSleepTimer: SetSleepTimer

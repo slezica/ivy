@@ -172,6 +172,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     deleteBook,
     updateBook,
     setSpeed,
+    loadBook,
     play,
     pause,
     setSleepTimer,
