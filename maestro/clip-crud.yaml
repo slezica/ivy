@@ -6,18 +6,19 @@ appId: com.salezica.ivy
 
 - runFlow: subflows/import-book.yaml
 
-# Create a clip
+# Create a clip (the clip button opens the draft editor; Save creates it)
 - tapOn: "Ivy Test Book"
 - tapOn:
     id: "add-clip-button"
-- extendedWaitUntil:
-    visible: "Clip added"
-    timeout: 10000
+- assertVisible: "Save"
+- tapOn: "Save"
 
-# It appears in the Clips tab
+# It appears in the Clips tab — the slice runs after Save, so wait for it
 - tapOn: "Clips"
-- assertVisible:
-    id: "clip-card"
+- extendedWaitUntil:
+    visible:
+      id: "clip-card"
+    timeout: 10000
 - takeScreenshot: screenshots/crud-01-created
 
 # Edit the note via the clip menu → Edit (opens the ClipEditor)

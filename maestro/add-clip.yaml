@@ -5,10 +5,11 @@ appId: com.salezica.ivy
 # breaks when native packaging regresses (see docs/CLIPS.md "Vendored shared
 # libs"), which JS tests can never see.
 #
-# The "Clip added" toast only proves the slice exited 0 with a non-empty file.
-# To prove the file actually decodes and plays, we archive the source book so
-# the clip must fall back to its OWN sliced audio, then play it and confirm the
-# player enters the playing state. (This also covers clips surviving archival.)
+# The clip appearing in the list only proves the slice exited 0 with a
+# non-empty file. To prove the file actually decodes and plays, we archive the
+# source book so the clip must fall back to its OWN sliced audio, then play it
+# and confirm the player enters the playing state. (This also covers clips
+# surviving archival.)
 
 - runFlow: subflows/import-book.yaml
 
@@ -16,19 +17,19 @@ appId: com.salezica.ivy
 - assertVisible:
     id: "add-clip-button"
 
-# Add a clip — toast confirms the FFmpeg slice exited successfully
+# The clip button opens the draft editor; Save creates the clip
 - tapOn:
     id: "add-clip-button"
-- extendedWaitUntil:
-    visible: "Clip added"
-    timeout: 10000
-- takeScreenshot: screenshots/clip-01-toast
+- assertVisible: "Save"
+- takeScreenshot: screenshots/clip-01-draft-editor
+- tapOn: "Save"
 
-# It appears in the Clips tab, attributed to the book
+# It appears in the Clips tab, attributed to the book — the slice runs after
+# Save, so the wait here covers FFmpeg finishing
 - tapOn: "Clips"
 - extendedWaitUntil:
     visible: "Ivy Test Book"
-    timeout: 5000
+    timeout: 10000
 - takeScreenshot: screenshots/clip-02-clip-listed
 
 # Archive the source book → the clip's source_file becomes unavailable, so the
