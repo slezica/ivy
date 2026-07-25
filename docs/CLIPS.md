@@ -77,7 +77,11 @@ The clips system doesn't have a dedicated service — it's built from store acti
 
 ## Creating a Clip
 
-The full creation pipeline is in `add_clip.ts`: validate, calculate duration, slice audio, save to database, queue sync and transcription, reload.
+The clip button on the player opens the **draft clip editor** — the same ClipEditor used for editing, seeded with a selection of `[position, position + 10s]` (capped at the book's end) and an empty note. The user adjusts bounds and note, then Save creates the clip; Cancel creates nothing.
+
+Playback transitions seamlessly in both directions: PlayerScreen claims ownership *for* the editor (ownerId `clip-editor-draft`) before mounting it, and reclaims for the main player before unmounting it — same file, same position, same playing/paused state. The editor plays at 1x (the clip-owner rule; deliberate — you hear what a shared clip's recipient will hear), and the book's speed is restored on return. The hand-back position is the editor's playhead, so scrubbing in the editor moves the book position ("unified players"). See [2026-07-25-player-clip-editor.md](2026-07-25-player-clip-editor.md).
+
+The creation pipeline is in `add_clip.ts`: validate, resolve duration (explicit from the editor, default 10s otherwise, always capped to remaining audio), slice audio, save to database with the note, queue sync and transcription, reload.
 
 ---
 
@@ -154,6 +158,7 @@ The transcription queue never writes the database. Its `finish` event carries th
 ```
 src/actions/
   add_clip.ts         → Creates clip: validates, slices, saves, queues
+                        (optional { duration, note } from the draft editor)
   update_clip.ts      → Updates note/bounds, re-slices if needed
   delete_clip.ts      → Deletes file, record, queues sync
   share_clip.ts       → Shares clip audio via native sheet
@@ -168,7 +173,9 @@ src/services/
 
 src/components/
   ClipViewer.tsx      → Read-only clip modal (playback, transcription, note)
-  ClipEditor.tsx      → Edit bounds and note (requires source file)
+  ClipEditor.tsx      → Edit bounds and note (requires source file); mode-free
+                        normalized props — ClipsListScreen maps an existing
+                        clip, PlayerScreen maps a new-clip draft
 
 src/screens/
   ClipsListScreen.tsx → Full clip list with search, context menus

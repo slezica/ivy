@@ -116,7 +116,9 @@ Multiple components can control playback, but only one "owns" it at a time.
 Each playback component has a stable `ownerId`:
 - PlayerScreen → `MAIN_PLAYER_OWNER_ID` (`'main'`)
 - ClipViewer → `'clip-viewer-{clipId}'`
-- ClipEditor → `'clip-editor-{clipId}'`
+- ClipEditor → `'clip-editor-{clipId}'` (editing an existing clip), `'clip-editor-draft'` (drafting a new clip from the player)
+
+The ownerId is a **prop** of ClipEditor — the caller owns it. This lets PlayerScreen claim ownership *on the editor's behalf* before mounting it (see "Ownership handoff" below).
 
 When a component calls `play()`, it passes its `ownerId`. The store records this in `playback.ownerId`. Components then check ownership before reacting to global state:
 
@@ -144,6 +146,15 @@ This means clip playback (ClipViewer, ClipEditor) never overwrites the book's sa
 ### Pause on unmount
 
 ClipViewer and ClipEditor pause playback when they unmount — but only if they still own it (`playback.ownerId === myOwnerId` at unmount time). If another component has since taken over, unmounting a clip modal leaves that playback untouched.
+
+### Ownership handoff (player ↔ draft clip editor)
+
+The player's clip button opens the draft ClipEditor with a seamless playback transition, in both directions:
+
+- **Open:** before mounting the editor, PlayerScreen claims ownership for it — `play()` if playing, `loadBook()` if paused — with the same file and position. Audio never stops; the rate drops to 1x (clip owners always play at 1x).
+- **Close (save or cancel):** PlayerScreen reads the editor's final position/state from global playback, reclaims with `MAIN_PLAYER_OWNER_ID` **before** unmounting the editor (so the editor's pause-on-unmount sees it no longer owns), then closes. The book's speed is re-applied by the main-owner claim.
+
+Consequences: the hand-back position is the editor's playhead — scrubbing in the editor moves the book position. Sessions finalize when the editor takes over and resume on return (merged by the 5-minute resume window).
 
 ---
 
