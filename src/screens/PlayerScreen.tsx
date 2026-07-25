@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ToastAndroid } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import Slider from '@react-native-community/slider'
 import { Ionicons } from '@expo/vector-icons'
@@ -12,15 +12,20 @@ import Dialog from '../components/shared/Dialog'
 import ActionMenu from '../components/shared/ActionMenu'
 import ScreenArea from '../components/shared/ScreenArea'
 import EmptyState from '../components/shared/EmptyState'
+import ClipEditor, { ClipEditorResult } from '../components/ClipEditor'
 import { MAIN_PLAYER_OWNER_ID, formatTime } from '../utils'
-import { SKIP_BACKWARD_MS, SKIP_FORWARD_MS } from '../actions/constants'
+import { DEFAULT_CLIP_DURATION_MS, SKIP_BACKWARD_MS, SKIP_FORWARD_MS } from '../actions/constants'
 import { isTestBuild } from '../services'
 import type { Book, Chapter } from '../services'
 
 type SleepTimer = { endsAt: number, duration: number } | null
 
+// The draft clip editor is a playback component like any other clip editor;
+// PlayerScreen claims/releases ownership on its behalf around mount/unmount
+const CLIP_DRAFT_OWNER_ID = 'clip-editor-draft'
+
 export default function PlayerScreen() {
-  const { playback, addClip, play, pause, seek, setSpeed, setSleepTimer, fetchPlaybackState } = useStore()
+  const { playback, addClip, loadBook, play, pause, seek, setSpeed, setSleepTimer, fetchPlaybackState } = useStore()
 
   // Remember which book we're showing (survives ownership changes)
   const [ownBookId, setOwnBookId] = useState<string | null>(null)
@@ -60,16 +65,69 @@ export default function PlayerScreen() {
     }, [fetchPlaybackState])
   )
 
-  const handleAddClip = async () => {
-    if (!ownBook) return
+  // Draft clip being edited (start position captured at open), null when closed
+  const [clipDraft, setClipDraft] = useState<{ start: number } | null>(null)
+
+  const handleOpenClipEditor = async () => {
+    if (!ownBook?.uri) return
+    if (ownBook.duration - ownPosition <= 0) {
+      Alert.alert('Error', 'Cannot add clip at the end of the book')
+      return
+    }
 
     try {
-      await addClip(ownBook.id, ownPosition)
-      ToastAndroid.show('Clip added', ToastAndroid.SHORT)
+      // Hand playback to the editor before mounting it: same file, same
+      // position, so audio continues uninterrupted (rate drops to 1x — clip
+      // owners always play at 1x)
+      const context = { fileUri: ownBook.uri, position: ownPosition, ownerId: CLIP_DRAFT_OWNER_ID }
+      if (isPlaying) {
+        await play(context)
+      } else {
+        await loadBook(context)
+      }
+      setClipDraft({ start: ownPosition })
     } catch (error) {
-      console.error('Error adding clip:', error)
-      Alert.alert('Error', 'Failed to add clip')
+      console.error('Error opening clip editor:', error)
+      Alert.alert('Error', 'Failed to open clip editor')
     }
+  }
+
+  const handleCloseClipEditor = async () => {
+    const current = useStore.getState().playback
+    const owned = current.ownerId === CLIP_DRAFT_OWNER_ID
+    const position = owned && current.uri === ownBook?.uri ? current.position : ownPosition
+    const playing = owned && current.status === 'playing'
+
+    setOwnPosition(position)
+
+    // Reclaim ownership before unmounting the editor: its unmount cleanup
+    // pauses only if it still owns playback, so audio continues seamlessly
+    // (and the book's speed is re-applied by loadBook/play for the main owner)
+    if (ownBook?.uri) {
+      try {
+        const context = { fileUri: ownBook.uri, position, ownerId: MAIN_PLAYER_OWNER_ID }
+        if (playing) {
+          await play(context)
+        } else {
+          await loadBook(context)
+        }
+      } catch (error) {
+        console.error('Error returning playback to player:', error)
+      }
+    }
+    setClipDraft(null)
+  }
+
+  const handleSaveClipDraft = (result: ClipEditorResult) => {
+    if (ownBook) {
+      // Fire-and-forget: slicing takes a moment and the editor's job is done
+      addClip(ownBook.id, result.start, { duration: result.duration, note: result.note })
+        .catch((error) => {
+          console.error('Error adding clip:', error)
+          Alert.alert('Error', 'Failed to add clip')
+        })
+    }
+    handleCloseClipEditor()
   }
 
   const handlePlayPause = async () => {
@@ -115,7 +173,7 @@ export default function PlayerScreen() {
               isPlaying={isPlaying}
               sleepTimer={playback.sleepTimer}
               onPlayPause={handlePlayPause}
-              onAddClip={handleAddClip}
+              onAddClip={handleOpenClipEditor}
               onSeek={handleSeek}
               onSpeedChange={(speed) => setSpeed(ownBook.id, speed)}
               onSleepTimerChange={setSleepTimer}
@@ -123,6 +181,22 @@ export default function PlayerScreen() {
           : <EmptyState title="Not playing" subtitle="Select a book from your library" />
         }
       </View>
+
+      {ownBook?.uri && clipDraft && (
+        <Dialog visible onClose={handleCloseClipEditor}>
+          <ClipEditor
+            fileUri={ownBook.uri}
+            fileDuration={ownBook.duration}
+            title={ownBook.title || ownBook.name}
+            ownerId={CLIP_DRAFT_OWNER_ID}
+            initialStart={clipDraft.start}
+            initialEnd={Math.min(clipDraft.start + DEFAULT_CLIP_DURATION_MS, ownBook.duration)}
+            initialNote=""
+            onCancel={handleCloseClipEditor}
+            onSave={handleSaveClipDraft}
+          />
+        </Dialog>
+      )}
     </ScreenArea>
   )
 }
