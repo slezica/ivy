@@ -116,6 +116,34 @@ describe('createAddClip', () => {
         })
       )
     })
+
+    it('uses explicit duration when given', async () => {
+      const { deps } = createDeps()
+      const addClip = createAddClip(deps)
+
+      await addClip('book-1', 10000, { duration: 25000 })
+
+      expect(deps.slicer.slice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startMs: 10000,
+          endMs: 35000,
+        })
+      )
+    })
+
+    it('caps explicit duration to remaining audio length', async () => {
+      const { deps } = createDeps({ bookDuration: 15000 })
+      const addClip = createAddClip(deps)
+
+      await addClip('book-1', 10000, { duration: 25000 })
+
+      expect(deps.slicer.slice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startMs: 10000,
+          endMs: 15000,
+        })
+      )
+    })
   })
 
   describe('persistence', () => {
@@ -137,6 +165,24 @@ describe('createAddClip', () => {
         '', // default empty note
         'Test Title',  // source_title snapshot (book title)
         'Test Artist', // source_artist snapshot
+      )
+    })
+
+    it('creates clip with explicit note when given', async () => {
+      const { deps } = createDeps()
+      const addClip = createAddClip(deps)
+
+      await addClip('book-1', 10000, { note: 'my note' })
+
+      expect(deps.db.createClip).toHaveBeenCalledWith(
+        'generated-id',
+        'book-1',
+        expect.any(String),
+        10000,
+        10000,
+        'my note',
+        'Test Title',
+        'Test Artist',
       )
     })
 

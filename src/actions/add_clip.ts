@@ -14,10 +14,15 @@ export interface AddClipDeps {
   fetchClips: FetchClips
 }
 
-export type AddClip = Action<[string, number]>
+export interface AddClipOptions {
+  duration?: number
+  note?: string
+}
+
+export type AddClip = Action<[string, number, AddClipOptions?]>
 
 export const createAddClip: ActionFactory<AddClipDeps, AddClip> = (deps) => (
-  async (bookId, position) => {
+  async (bookId, position, options) => {
     const { db, slicer, syncQueue, transcription, get, fetchClips } = deps
     const log = createLogger('AddClip')
 
@@ -36,7 +41,7 @@ export const createAddClip: ActionFactory<AddClipDeps, AddClip> = (deps) => (
     if (remainingDuration <= 0) {
       throw new Error('Cannot add clip at the end of the book')
     }
-    const clipDuration = Math.min(DEFAULT_CLIP_DURATION_MS, remainingDuration)
+    const clipDuration = Math.min(options?.duration ?? DEFAULT_CLIP_DURATION_MS, remainingDuration)
 
     // Generate clip ID upfront and use it for filename
     const clipId = generateId()
@@ -57,7 +62,7 @@ export const createAddClip: ActionFactory<AddClipDeps, AddClip> = (deps) => (
       sliceResult.uri,
       position,
       clipDuration,
-      '', // Default empty note
+      options?.note ?? '',
       book.title ?? book.name, // Snapshot: survives the book row disappearing
       book.artist ?? null,
     )
