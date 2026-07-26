@@ -24,7 +24,7 @@ export const TIME_INDICATORS_MARGIN = 8
 // from each other, so handles tolerate a 0px gap without overlapping.
 // Drawing (Timeline.tsx) and hit-testing (engine.ts) share these numbers.
 export const HANDLE_LINE_WIDTH = 2
-export const HANDLE_LINE_HEIGHT = TIMELINE_HEIGHT                    // px — vertical line, centered (matches playhead)
+export const HANDLE_LINE_HEIGHT = 70                                 // px — vertical line, centered
 export const HANDLE_PIN_STUB = 7                                     // px — horizontal stub length
 export const HANDLE_PIN_RADIUS = 6                                   // px — pin circle radius
 export const HANDLE_PIN_OFFSET = HANDLE_PIN_STUB + HANDLE_PIN_RADIUS // handle line → pin center
