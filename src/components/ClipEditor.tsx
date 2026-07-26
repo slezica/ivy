@@ -13,7 +13,7 @@ import { useState, useEffect } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 
 import { useStore } from '../store'
-import { Color, ColorTeal, Space } from '../theme'
+import { Color, Space } from '../theme'
 import { formatTime } from '../utils'
 import IconButton from './shared/IconButton'
 import { Timeline } from './timeline'
@@ -130,7 +130,7 @@ export default function ClipEditor({
         leftColor={Color.TEXT_DISABLED}
         rightColor={Color.TEXT_DISABLED}
         selectionColor={Color.SELECTION}
-        handleColor={ColorTeal.SELECTION}
+        handleColor={Color.SECONDARY}
         selectionStart={selectionStart}
         selectionEnd={selectionEnd}
         onSelectionChange={handleSelectionChange}
