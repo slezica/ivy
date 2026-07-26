@@ -62,6 +62,7 @@ import {
   TIME_INDICATORS_HEIGHT,
   TIME_INDICATORS_MARGIN,
   HANDLE_LINE_WIDTH,
+  HANDLE_LINE_HEIGHT,
   HANDLE_PIN_OFFSET,
   HANDLE_PIN_RADIUS,
   HANDLE_PIN_Y,
@@ -255,8 +256,8 @@ function drawHandle(
   direction: -1 | 1,
   handlePaint: ReturnType<typeof Skia.Paint>
 ) {
-  const handleTop = 10
-  const handleBottom = TIMELINE_HEIGHT - 10
+  const handleTop = (TIMELINE_HEIGHT - HANDLE_LINE_HEIGHT) / 2
+  const handleBottom = handleTop + HANDLE_LINE_HEIGHT
 
   // Vertical line
   canvas.drawRect(
