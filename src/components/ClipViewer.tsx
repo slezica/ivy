@@ -131,7 +131,6 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
           iconName={isPlaying ? 'pause' : 'play'}
           onPress={handlePlayPause}
           size={48}
-          active={isPlaying}
           backgroundColor={isLoading ? Color.TEXT_DISABLED : undefined}
           testID={isPlaying ? 'clip-viewer-pause-button' : 'clip-viewer-play-button'}
         />

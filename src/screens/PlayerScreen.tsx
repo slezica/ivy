@@ -305,7 +305,6 @@ function Player({
           onPress={onPlayPause}
           testID="play-pause-button"
           accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-          active={isPlaying}
         />
 
         <View style={styles.actionButtons}>

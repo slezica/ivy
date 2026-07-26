@@ -24,7 +24,7 @@ export default function IconButton({
   testID,
   accessibilityLabel,
   size = 64,
-  active = false,
+  active = true,
   backgroundColor,
   iconColor,
   style,
