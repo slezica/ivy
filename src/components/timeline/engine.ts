@@ -30,6 +30,7 @@ import {
   MAX_ZOOM,
   DRIFT_SNAP_THRESHOLD,
   DRIFT_FOLD_WINDOW,
+  HANDLE_SHIFT,
   HANDLE_PIN_OFFSET,
   HANDLE_PIN_Y,
   HANDLE_TOUCH_RADIUS,
@@ -874,8 +875,8 @@ export class TimelinePhysicsEngine {
     // Convert screen-space touch to timeline-space coordinate
     const timelineX = this._scrollOffset + (touchX - halfWidth)
 
-    const startPinX = this._tx(this._selection.start) - HANDLE_PIN_OFFSET
-    const endPinX = this._tx(this._selection.end) + HANDLE_PIN_OFFSET
+    const startPinX = this._tx(this._selection.start) - HANDLE_SHIFT - HANDLE_PIN_OFFSET
+    const endPinX = this._tx(this._selection.end) + HANDLE_SHIFT + HANDLE_PIN_OFFSET
 
     // Euclidean distance from touch to each pin center
     const distToStart = Math.sqrt(

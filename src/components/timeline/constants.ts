@@ -25,6 +25,11 @@ export const TIME_INDICATORS_MARGIN = 8
 // Drawing (Timeline.tsx) and hit-testing (engine.ts) share these numbers.
 export const HANDLE_LINE_WIDTH = 2
 export const HANDLE_LINE_HEIGHT = 70                                 // px — vertical line, centered
+// Handles contain the selection instead of sitting on its boundary points
+// (brackets, not markers): each line is shifted outward so its inner edge
+// clears the boundary by half the playhead width — a playhead riding a
+// boundary touches the handle but never overlaps it.
+export const HANDLE_SHIFT = PLAYHEAD_WIDTH / 2 + HANDLE_LINE_WIDTH / 2  // boundary → line center
 export const HANDLE_PIN_STUB = 7                                     // px — horizontal stub length
 export const HANDLE_PIN_RADIUS = 6                                   // px — pin circle radius
 export const HANDLE_PIN_OFFSET = HANDLE_PIN_STUB + HANDLE_PIN_RADIUS // handle line → pin center

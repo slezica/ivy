@@ -63,6 +63,7 @@ import {
   TIME_INDICATORS_MARGIN,
   HANDLE_LINE_WIDTH,
   HANDLE_LINE_HEIGHT,
+  HANDLE_SHIFT,
   HANDLE_PIN_OFFSET,
   HANDLE_PIN_RADIUS,
   HANDLE_PIN_Y,
@@ -259,10 +260,13 @@ function drawHandle(
   const handleTop = (TIMELINE_HEIGHT - HANDLE_LINE_HEIGHT) / 2
   const handleBottom = handleTop + HANDLE_LINE_HEIGHT
 
+  // Line center, shifted outward so the handle contains the boundary point
+  const lineX = x + direction * HANDLE_SHIFT
+
   // Vertical line
   canvas.drawRect(
     Skia.XYWHRect(
-      x - HANDLE_LINE_WIDTH / 2,
+      lineX - HANDLE_LINE_WIDTH / 2,
       handleTop,
       HANDLE_LINE_WIDTH,
       handleBottom - handleTop
@@ -271,14 +275,14 @@ function drawHandle(
   )
 
   // Stub: from the line out to the pin center (circle overlaps its far end)
-  const stubX = direction === 1 ? x : x - HANDLE_PIN_OFFSET
+  const stubX = direction === 1 ? lineX : lineX - HANDLE_PIN_OFFSET
   canvas.drawRect(
     Skia.XYWHRect(stubX, HANDLE_PIN_Y - HANDLE_LINE_WIDTH / 2, HANDLE_PIN_OFFSET, HANDLE_LINE_WIDTH),
     handlePaint
   )
 
   // Pin circle
-  canvas.drawCircle(x + direction * HANDLE_PIN_OFFSET, HANDLE_PIN_Y, HANDLE_PIN_RADIUS, handlePaint)
+  canvas.drawCircle(lineX + direction * HANDLE_PIN_OFFSET, HANDLE_PIN_Y, HANDLE_PIN_RADIUS, handlePaint)
 }
 
 // =============================================================================
