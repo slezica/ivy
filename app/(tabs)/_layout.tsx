@@ -6,7 +6,7 @@ import { useStore } from '../../src/store'
 import { Color } from '../../src/theme'
 
 const DEFAULT_TAB_BAR_HEIGHT = 49 // taken from Router source
-const TAB_BAR_EXTRA_HEIGHT = 8
+const TAB_BAR_EXTRA_HEIGHT = 12
 
 export default function TabsLayout() {
   const { playback } = useStore()
@@ -21,6 +21,9 @@ export default function TabsLayout() {
           borderTopColor: Color.BORDER,
           height: DEFAULT_TAB_BAR_HEIGHT + TAB_BAR_EXTRA_HEIGHT + insets.bottom,
           paddingTop: TAB_BAR_EXTRA_HEIGHT / 2
+        },
+        tabBarLabelStyle: {
+          marginTop: 4
         },
         tabBarActiveTintColor: Color.TEXT,
         tabBarInactiveTintColor: Color.TEXT_DISABLED,
@@ -64,7 +67,7 @@ export default function TabsLayout() {
           title: 'Clips',
           headerShown: false,
           tabBarIcon: ({ color }) => (
-            <Ionicons name="list" size={28} color={color} />
+            <Ionicons name="bookmark" size={28} color={color} />
           ),
         }}
       />
