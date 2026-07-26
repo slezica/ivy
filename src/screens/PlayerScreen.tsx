@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
   },
   playerContainer: {
     flex: 1,
-    gap: 48,
+    gap: 52,
     paddingHorizontal: 12
   },
   // Aligned with the three-dot in Header (library/clips): icon 24px at 20px
@@ -545,7 +545,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
     textAlign: 'center',
     color: Color.TEXT,
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
     backgroundColor: Color.PRIMARY,
   },
   circleButtonLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: Color.PRIMARY_CONTRAST,
   },
