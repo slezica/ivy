@@ -92,6 +92,9 @@ export interface TimelineProps {
   selectionEnd?: number
   onSelectionChange?: (start: number, end: number) => void
 
+  // Handle color (optional) — defaults to selectionColor
+  handleColor?: string
+
   // Linked selection (optional, editable selection only)
   // When true the playhead is solid: any playhead movement (drag, fling,
   // tap animation, playback follow) pushes the selection anchors outward —
@@ -291,6 +294,7 @@ export function Timeline({
   selectionStart,
   selectionEnd,
   onSelectionChange,
+  handleColor,
   linkedSelection = false,
   canZoom = false,
   tapSkip,
@@ -322,8 +326,9 @@ export function Timeline({
     left: createPaint(leftColor),
     right: createPaint(rightColor),
     selection: selectionColor ? createPaint(selectionColor) : null,
+    handle: createPaint(handleColor ?? selectionColor ?? Color.TEXT),
     placeholder: createPaint(Color.TEXT_DISABLED),
-  }), [leftColor, rightColor, selectionColor])
+  }), [leftColor, rightColor, selectionColor, handleColor])
 
   // Picture rebuild — creates a new SkPicture and pushes it to the canvas
   // component. Called from the engine's onFrame (fast path, ~120Hz during
@@ -377,7 +382,7 @@ export function Timeline({
           )
 
           if (hasEditableSelection && selStartX !== null && selEndX !== null) {
-            drawSelectionHandles(canvas, selStartX, selEndX, paints.selection!)
+            drawSelectionHandles(canvas, selStartX, selEndX, paints.handle)
           }
 
           canvas.restore()
