@@ -44,6 +44,10 @@ and again 2026-07-23.
 20. **Cover remaining untested services** — gaps narrowed to `audio/player.ts` (fade is covered since 2026-07-24; load/play/seek are not), system services (sharing), and `start/stop_transcription` actions.
 21. **Snapshot / visual regression testing** — 7 Maestro flows exist (plus subflows and screenshot flows), but no Storybook or screenshot comparison; styling regressions still uncaught.
 
+## Questions
+
+- **Verify everything works with 0-length audio files, books and clips** — import, playback, slicing, transcription, sync.
+
 ## Known-good areas (from audit)
 
 Action factories and tests, theme tokens, timeline structure, shared components, store types, BaseService event system.
