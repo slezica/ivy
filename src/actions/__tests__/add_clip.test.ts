@@ -1,4 +1,5 @@
 import { createAddClip, AddClipDeps } from '../add_clip'
+import { DEFAULT_CLIP_DURATION_MS } from '../constants'
 import {
   createMockBook, createMockState, createMockGet,
   createMockDb, createMockSyncQueue, createMockSlicer, createMockTranscription,
@@ -97,14 +98,14 @@ describe('createAddClip', () => {
       expect(deps.slicer.slice).toHaveBeenCalledWith({
         sourceUri: 'file:///audio/book-1.mp3',
         startMs: 10000,
-        endMs: 20000, // 10000 + 10000 default
+        endMs: 10000 + DEFAULT_CLIP_DURATION_MS,
         outputPrefix: 'generated-id',
         outputDir: expect.any(String),
       })
     })
 
     it('caps clip duration to remaining audio length', async () => {
-      const { deps } = createDeps({ bookDuration: 15000 })
+      const { deps } = createDeps({ bookDuration: 12000 })
       const addClip = createAddClip(deps)
 
       await addClip('book-1', 10000)
@@ -112,7 +113,7 @@ describe('createAddClip', () => {
       expect(deps.slicer.slice).toHaveBeenCalledWith(
         expect.objectContaining({
           startMs: 10000,
-          endMs: 15000, // only 5000ms remaining
+          endMs: 12000, // only 2000ms remaining, less than the default
         })
       )
     })
@@ -161,7 +162,7 @@ describe('createAddClip', () => {
         'book-1',
         slicerUri,
         10000,
-        10000,
+        DEFAULT_CLIP_DURATION_MS,
         '', // default empty note
         'Test Title',  // source_title snapshot (book title)
         'Test Artist', // source_artist snapshot
@@ -179,7 +180,7 @@ describe('createAddClip', () => {
         'book-1',
         expect.any(String),
         10000,
-        10000,
+        DEFAULT_CLIP_DURATION_MS,
         'my note',
         'Test Title',
         'Test Artist',
