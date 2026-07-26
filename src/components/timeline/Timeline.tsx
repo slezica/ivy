@@ -61,14 +61,14 @@ import {
   PLACEHOLDER_HEIGHT,
   TIME_INDICATORS_HEIGHT,
   TIME_INDICATORS_MARGIN,
+  HANDLE_LINE_WIDTH,
+  HANDLE_PIN_OFFSET,
+  HANDLE_PIN_RADIUS,
+  HANDLE_PIN_Y,
   timeToX,
   getSegmentHeight,
 } from '.'
 import { useTimelinePhysics } from './useTimelinePhysics'
-
-// Selection handle dimensions
-const HANDLE_CIRCLE_RADIUS = 12
-const HANDLE_LINE_WIDTH = 2
 
 // =============================================================================
 // Types
@@ -236,33 +236,45 @@ function drawSelectionHandles(
   selectionEndX: number,
   handlePaint: ReturnType<typeof Skia.Paint>
 ) {
+  drawHandle(canvas, selectionStartX, -1, handlePaint) // start: o-|
+  drawHandle(canvas, selectionEndX, 1, handlePaint)    // end:   |-o
+}
+
+/**
+ * One "external pin" handle: a vertical line plus a pin (horizontal stub
+ * ending in a small circle) on the side pointed to by `direction`
+ * (-1 = left of the line, +1 = right). Geometry shared with the engine's
+ * hit-testing via the HANDLE_PIN_* constants.
+ */
+function drawHandle(
+  canvas: SkCanvas,
+  x: number,
+  direction: -1 | 1,
+  handlePaint: ReturnType<typeof Skia.Paint>
+) {
   const handleTop = 10
   const handleBottom = TIMELINE_HEIGHT - 10
-  const circleY = handleBottom + HANDLE_CIRCLE_RADIUS
 
-  // Start handle: vertical line + circle
+  // Vertical line
   canvas.drawRect(
     Skia.XYWHRect(
-      selectionStartX - HANDLE_LINE_WIDTH / 2,
+      x - HANDLE_LINE_WIDTH / 2,
       handleTop,
       HANDLE_LINE_WIDTH,
       handleBottom - handleTop
     ),
     handlePaint
   )
-  canvas.drawCircle(selectionStartX, circleY, HANDLE_CIRCLE_RADIUS, handlePaint)
 
-  // End handle: vertical line + circle
+  // Stub: from the line out to the pin center (circle overlaps its far end)
+  const stubX = direction === 1 ? x : x - HANDLE_PIN_OFFSET
   canvas.drawRect(
-    Skia.XYWHRect(
-      selectionEndX - HANDLE_LINE_WIDTH / 2,
-      handleTop,
-      HANDLE_LINE_WIDTH,
-      handleBottom - handleTop
-    ),
+    Skia.XYWHRect(stubX, HANDLE_PIN_Y - HANDLE_LINE_WIDTH / 2, HANDLE_PIN_OFFSET, HANDLE_LINE_WIDTH),
     handlePaint
   )
-  canvas.drawCircle(selectionEndX, circleY, HANDLE_CIRCLE_RADIUS, handlePaint)
+
+  // Pin circle
+  canvas.drawCircle(x + direction * HANDLE_PIN_OFFSET, HANDLE_PIN_Y, HANDLE_PIN_RADIUS, handlePaint)
 }
 
 // =============================================================================
@@ -312,11 +324,6 @@ export function Timeline({
     selection: selectionColor ? createPaint(selectionColor) : null,
     placeholder: createPaint(Color.TEXT_DISABLED),
   }), [leftColor, rightColor, selectionColor])
-
-  // Canvas height increases when selection handles are shown
-  const canvasHeight = hasEditableSelection
-    ? TIMELINE_HEIGHT + HANDLE_CIRCLE_RADIUS * 2
-    : TIMELINE_HEIGHT
 
   // Picture rebuild — creates a new SkPicture and pushes it to the canvas
   // component. Called from the engine's onFrame (fast path, ~120Hz during
@@ -375,7 +382,7 @@ export function Timeline({
 
           canvas.restore()
         },
-        { width: containerWidth, height: canvasHeight }
+        { width: containerWidth, height: TIMELINE_HEIGHT }
       )
 
       canvasRef.current?.setPicture(pic)
@@ -404,7 +411,7 @@ export function Timeline({
   useEffect(() => {
     rebuildRef.current()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [containerWidth, totalSegments, duration, segmentWidth, segmentGap, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
+  }, [containerWidth, totalSegments, duration, segmentWidth, segmentGap, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints])
 
   // Rebuild on foreground: backgrounding (screen off) can recreate the Skia
   // surface blank, and an idle timeline (paused, no gestures) has no other
@@ -421,11 +428,6 @@ export function Timeline({
     ? TIME_INDICATORS_HEIGHT + TIME_INDICATORS_MARGIN
     : 0
 
-  // Playhead height: align with bottom of handle circles when editable selection is enabled
-  const playheadHeight = hasEditableSelection
-    ? TIMELINE_HEIGHT - 10 + HANDLE_CIRCLE_RADIUS * 2  // Bottom of handle circles
-    : TIMELINE_HEIGHT
-
   return (
     <GestureHandlerRootView style={styles.container}>
       {showTime === 'top' && (
@@ -438,7 +440,7 @@ export function Timeline({
 
       {/* Playhead indicator at center */}
       <View
-        style={[styles.playheadContainer, { top: playheadTop, height: playheadHeight }]}
+        style={[styles.playheadContainer, { top: playheadTop, height: TIMELINE_HEIGHT }]}
         pointerEvents="none"
       >
         <View style={styles.playhead} />
@@ -446,12 +448,12 @@ export function Timeline({
 
       {/* Timeline with gesture handling */}
       <GestureDetector gesture={gesture}>
-        <View style={[styles.timelineContainer, { height: canvasHeight }]} onLayout={handleLayout}>
+        <View style={[styles.timelineContainer, { height: TIMELINE_HEIGHT }]} onLayout={handleLayout}>
           {containerWidth > 0 && (
             <TimelineCanvas
               ref={canvasRef}
               width={containerWidth}
-              height={canvasHeight}
+              height={TIMELINE_HEIGHT}
             />
           )}
         </View>

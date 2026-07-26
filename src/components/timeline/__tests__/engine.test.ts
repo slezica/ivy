@@ -26,6 +26,8 @@ import {
   MIN_VELOCITY,
   SCROLL_TO_DURATION,
   MIN_SELECTION_DURATION,
+  HANDLE_PIN_OFFSET,
+  HANDLE_PIN_Y,
 } from '../constants'
 import { timeToX } from '../utils'
 
@@ -587,12 +589,13 @@ describe('TimelinePhysicsEngine', () => {
   // --------------------------------------------------------------------------
 
   describe('selection handles', () => {
-    // Helper: compute where a handle appears in screen-space, given
-    // the engine's scroll offset and container width
-    function handleScreenX(engine: TimelinePhysicsEngine, time: number): number {
-      const handleTimelineX = tx(time)
+    // Helper: compute where a handle's pin circle appears in screen-space,
+    // given the engine's scroll offset and container width. Pins sit on the
+    // external side of the handle line: start handle left, end handle right.
+    function handlePinScreenX(engine: TimelinePhysicsEngine, time: number, which: 'start' | 'end'): number {
+      const pinTimelineX = tx(time) + (which === 'start' ? -HANDLE_PIN_OFFSET : HANDLE_PIN_OFFSET)
       const halfWidth = 200 // container is 400px
-      return handleTimelineX - engine.scrollOffset + halfWidth
+      return pinTimelineX - engine.scrollOffset + halfWidth
     }
 
     it('drags the start handle and calls onSelectionChange', () => {
@@ -601,11 +604,10 @@ describe('TimelinePhysicsEngine', () => {
         selection: { start: 10_000, end: 20_000 },
       })
 
-      // Touch near the start handle (y at bottom where circles are)
-      const startX = handleScreenX(engine, 10_000)
-      const handleY = 90 - 10 + 12 // TIMELINE_HEIGHT - 10 + HANDLE_CIRCLE_RADIUS
+      // Touch the start handle's pin (external side, vertically centered)
+      const startX = handlePinScreenX(engine, 10_000, 'start')
 
-      engine.panStart(startX, handleY, 0)
+      engine.panStart(startX, HANDLE_PIN_Y, 0)
 
       // Drag left by 30px (moving start earlier)
       engine.panUpdate(-30, 16)
@@ -622,11 +624,10 @@ describe('TimelinePhysicsEngine', () => {
         selection: { start: 19_500, end: 20_000 },
       })
 
-      // Touch near the start handle
-      const startX = handleScreenX(engine, 19_500)
-      const handleY = 90 - 10 + 12
+      // Touch the start handle's pin
+      const startX = handlePinScreenX(engine, 19_500, 'start')
 
-      engine.panStart(startX, handleY, 0)
+      engine.panStart(startX, HANDLE_PIN_Y, 0)
 
       // Drag right, trying to push start past end
       engine.panUpdate(100, 16)
@@ -645,9 +646,8 @@ describe('TimelinePhysicsEngine', () => {
       // Touch the start handle, then release without moving after the tap
       // timeout: neither tap() nor panStart/panEnd ever fire — only the
       // gesture finalizer (touchUp)
-      const startX = handleScreenX(engine, 10_000)
-      const handleY = 90 - 10 + 12
-      engine.touchDown(startX, handleY, 0)
+      const startX = handlePinScreenX(engine, 10_000, 'start')
+      engine.touchDown(startX, HANDLE_PIN_Y, 0)
 
       // Stuck handle drag blocks playback follow and external sync
       expect(engine.isActive).toBe(true)
@@ -680,7 +680,7 @@ describe('TimelinePhysicsEngine', () => {
     /** Drag the timeline (not a handle) so the playhead lands on targetTime */
     function scrubTo(engine: TimelinePhysicsEngine, fromTime: number, targetTime: number) {
       const translationX = -(tx(targetTime) - tx(fromTime))
-      engine.panStart(200, 45, 0) // y=45: middle of the bars, not a handle
+      engine.panStart(200, 5, 0) // y=5: top of the bars, outside the pin hit radius
       engine.panUpdate(translationX, 16)
       engine.panEnd(0, 32)
     }

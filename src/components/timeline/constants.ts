@@ -16,6 +16,20 @@ export const PLACEHOLDER_HEIGHT = 8
 export const TIME_INDICATORS_HEIGHT = 24
 export const TIME_INDICATORS_MARGIN = 8
 
+// Selection handles ("external pin" design)
+//
+// Each handle is a vertical line with a pin on its external side — a short
+// horizontal stub pointing away from the selection, ending in a small
+// circle: o-| for the start handle, |-o for the end handle. Pins point away
+// from each other, so handles tolerate a 0px gap without overlapping.
+// Drawing (Timeline.tsx) and hit-testing (engine.ts) share these numbers.
+export const HANDLE_LINE_WIDTH = 2
+export const HANDLE_PIN_STUB = 7                                     // px — horizontal stub length
+export const HANDLE_PIN_RADIUS = 6                                   // px — pin circle radius
+export const HANDLE_PIN_OFFSET = HANDLE_PIN_STUB + HANDLE_PIN_RADIUS // handle line → pin center
+export const HANDLE_PIN_Y = TIMELINE_HEIGHT / 2                      // pin center, vertically centered
+export const HANDLE_TOUCH_RADIUS = 24                                // px — hit-test radius around pin center
+
 // Physics (frame-rate independent — all units are per-second)
 //
 // Momentum uses continuous exponential decay: v(t) = v0 * DECELERATION^t
