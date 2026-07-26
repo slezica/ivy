@@ -26,7 +26,7 @@ export const ColorGreen = {
   PRIMARY_CONTRAST: '#242424',
   DESTRUCTIVE: '#FF453A',
   SELECTION: '#8aaa6c',
-  SECONDARY: ColorTeal.SELECTION,
+  SECONDARY: '#ffd166',
 
   BACKGROUND: '#2a2a2a',
   BACKGROUND_2: '#212121',
