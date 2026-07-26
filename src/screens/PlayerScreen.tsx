@@ -321,7 +321,7 @@ function Player({
             iconName="bookmark"
             onPress={onAddClip}
             testID="add-clip-button"
-            size={48}
+            size={52}
           />
           <TouchableOpacity
             style={[styles.circleButton]}
@@ -559,16 +559,16 @@ const styles = StyleSheet.create({
   },
   playbackControls: {
     alignItems: 'center',
-    gap: 24,
+    gap: 30,
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 20,
   },
   circleButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 100,
     borderWidth: 1.5,
     borderColor: Color.PRIMARY,
     justifyContent: 'center',
