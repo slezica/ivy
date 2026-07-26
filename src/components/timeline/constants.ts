@@ -50,7 +50,7 @@ export const DRIFT_FOLD_WINDOW = 1000    // ms — ~95% of smaller drift folded 
 
 // Selection constraints
 //
-// Minimum gap between handles: the distance at which the 24px handle circles
-// stop overlapping at zoom 1 (24px / 6px-per-second = 4s). Also the minimum
-// clip length — sub-4s clips don't make sense for audiobooks.
-export const MIN_SELECTION_DURATION = 4000
+// Product sanity floor for clip length — decoupled from handle geometry:
+// the external pins point away from each other, so handles tolerate a 0px
+// gap without overlapping. This only guards against degenerate selections.
+export const MIN_SELECTION_DURATION = 250
