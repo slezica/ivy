@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Alert, AppState } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import Slider from '@react-native-community/slider'
 import { Ionicons } from '@expo/vector-icons'
@@ -64,6 +64,16 @@ export default function PlayerScreen() {
       fetchPlaybackState()
     }, [fetchPlaybackState])
   )
+
+  // ...and when the app returns to foreground (navigation focus doesn't
+  // refire then, and waiting for the next 1 Hz progress event shows a stale
+  // position for up to a second)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') fetchPlaybackState()
+    })
+    return () => subscription.remove()
+  }, [fetchPlaybackState])
 
   // Draft clip being edited (start position captured at open), null when closed
   const [clipDraft, setClipDraft] = useState<{ start: number } | null>(null)
