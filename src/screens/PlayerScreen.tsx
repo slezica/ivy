@@ -309,11 +309,11 @@ function Player({
 
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.circleButton, book.speed !== 100 && styles.circleButtonActive]}
+            style={[styles.circleButton]}
             onPress={() => setSpeedOpen(true)}
             testID="speed-button"
           >
-            <Text style={[styles.circleButtonLabel, book.speed !== 100 && styles.circleButtonLabelActive]}>
+            <Text style={[styles.circleButtonLabel]}>
               {speedLabel}
             </Text>
           </TouchableOpacity>
@@ -324,13 +324,13 @@ function Player({
             size={48}
           />
           <TouchableOpacity
-            style={[styles.circleButton, sleepTimer !== null && styles.circleButtonActive]}
+            style={[styles.circleButton]}
             onPress={() => setSleepOpen(true)}
             testID="sleep-timer-button"
           >
             {sleepLabel !== null
-              ? <Text style={[styles.circleButtonLabel, styles.circleButtonLabelActive]}>{sleepLabel}</Text>
-              : <Ionicons name="moon-outline" size={24} color={Color.PRIMARY} />
+              ? <Text style={[styles.circleButtonLabel]}>{sleepLabel}</Text>
+              : <Ionicons name="moon" size={24} color={Color.PRIMARY_CONTRAST} />
             }
           </TouchableOpacity>
         </View>
@@ -573,17 +573,11 @@ const styles = StyleSheet.create({
     borderColor: Color.PRIMARY,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  circleButtonActive: {
     backgroundColor: Color.PRIMARY,
-    elevation: 4,
   },
   circleButtonLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: Color.PRIMARY,
-  },
-  circleButtonLabelActive: {
     color: Color.PRIMARY_CONTRAST,
   },
   sleepControl: {
