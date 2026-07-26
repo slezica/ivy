@@ -255,7 +255,7 @@ function Player({
     setSleepOpen(false)
   }
 
-  const speedLabel = book.speed === 100 ? '1×' : `${(book.speed / 100).toFixed(1)}×`
+  const speedLabel = book.speed === 100 ? '1x' : `${(book.speed / 100).toFixed(1)}x`
 
   // Sleep button label: minutes remaining, rounded up, floor "1m"
   const now = useNow(sleepTimer !== null)
@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   circleButtonLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: Color.PRIMARY,
   },
