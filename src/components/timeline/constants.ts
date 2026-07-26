@@ -23,13 +23,13 @@ export const TIME_INDICATORS_MARGIN = 8
 // circle: o-| for the start handle, |-o for the end handle. Pins point away
 // from each other, so handles tolerate a 0px gap without overlapping.
 // Drawing (Timeline.tsx) and hit-testing (engine.ts) share these numbers.
-export const HANDLE_LINE_WIDTH = 2
+export const HANDLE_LINE_WIDTH = PLAYHEAD_WIDTH                     // px — same width, handles draw over the playhead
 export const HANDLE_LINE_HEIGHT = 70                                 // px — vertical line, centered
-// Handles contain the selection instead of sitting on its boundary points
-// (brackets, not markers): each line is shifted outward so its inner edge
-// clears the boundary by half the playhead width — a playhead riding a
-// boundary touches the handle but never overlaps it.
-export const HANDLE_SHIFT = PLAYHEAD_WIDTH / 2 + HANDLE_LINE_WIDTH / 2  // boundary → line center
+// Outward shift from the boundary time-point to the line center. 0 = handle
+// sits on the boundary (playhead drawn beneath it). Set to
+// PLAYHEAD_WIDTH / 2 + HANDLE_LINE_WIDTH / 2 for bracket mode: handles
+// contain the interval from outside, clearing the playhead.
+export const HANDLE_SHIFT = 0
 export const HANDLE_PIN_STUB = 7                                     // px — horizontal stub length
 export const HANDLE_PIN_RADIUS = 6                                   // px — pin circle radius
 export const HANDLE_PIN_OFFSET = HANDLE_PIN_STUB + HANDLE_PIN_RADIUS // handle line → pin center

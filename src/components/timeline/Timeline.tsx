@@ -59,7 +59,6 @@ import {
   TIMELINE_HEIGHT,
   PLAYHEAD_WIDTH,
   PLACEHOLDER_HEIGHT,
-  TIME_INDICATORS_HEIGHT,
   TIME_INDICATORS_MARGIN,
   HANDLE_LINE_WIDTH,
   HANDLE_LINE_HEIGHT,
@@ -332,6 +331,7 @@ export function Timeline({
     right: createPaint(rightColor),
     selection: selectionColor ? createPaint(selectionColor) : null,
     handle: createPaint(handleColor ?? selectionColor ?? Color.TEXT),
+    playhead: createPaint(Color.TEXT),
     placeholder: createPaint(Color.TEXT_DISABLED),
   }), [leftColor, rightColor, selectionColor, handleColor])
 
@@ -386,6 +386,12 @@ export function Timeline({
             paints.placeholder
           )
 
+          // Playhead: over the bars, under the handles
+          canvas.drawRect(
+            Skia.XYWHRect(playheadX - PLAYHEAD_WIDTH / 2, 0, PLAYHEAD_WIDTH, TIMELINE_HEIGHT),
+            paints.playhead
+          )
+
           if (hasEditableSelection && selStartX !== null && selEndX !== null) {
             drawSelectionHandles(canvas, selStartX, selEndX, paints.handle)
           }
@@ -433,11 +439,6 @@ export function Timeline({
     return () => subscription.remove()
   }, [])
 
-  // Calculate playhead position based on time indicator placement
-  const playheadTop = showTime === 'top'
-    ? TIME_INDICATORS_HEIGHT + TIME_INDICATORS_MARGIN
-    : 0
-
   return (
     <GestureHandlerRootView style={styles.container}>
       {showTime === 'top' && (
@@ -447,14 +448,6 @@ export function Timeline({
           placement="top"
         />
       )}
-
-      {/* Playhead indicator at center */}
-      <View
-        style={[styles.playheadContainer, { top: playheadTop, height: TIMELINE_HEIGHT }]}
-        pointerEvents="none"
-      >
-        <View style={styles.playhead} />
-      </View>
 
       {/* Timeline with gesture handling */}
       <GestureDetector gesture={gesture}>
@@ -563,23 +556,6 @@ const styles = StyleSheet.create({
   timelineContainer: {
     justifyContent: 'center',
     overflow: 'hidden',
-  },
-  playheadContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  playhead: {
-    width: PLAYHEAD_WIDTH,
-    height: '100%',
-    backgroundColor: Color.TEXT,
-    shadowColor: Color.TEXT,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
   },
   timeContainer: {
     flexDirection: 'row',
