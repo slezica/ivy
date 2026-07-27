@@ -81,7 +81,7 @@ Bookmarks with their own audio files. See **[docs/CLIPS.md](docs/CLIPS.md)** for
 
 On-device automatic clip transcription using Whisper. See **[docs/TRANSCRIPTION.md](docs/TRANSCRIPTION.md)** for the full guide.
 
-**Quick summary:** Clips are queued for transcription on creation → processed sequentially by a background queue → first 60s of audio extracted and fed to on-device Whisper → result persisted via the store's `updateClip` action (the queue never writes the DB; empty results are valid, only errors skip persistence). Controlled by `settings.transcription_enabled`.
+**Quick summary:** Clips are queued for transcription on creation → processed sequentially by a background queue → first 3 minutes of audio extracted and fed to on-device Whisper (longer clips get a `...` suffix) → result persisted via the store's `updateClip` action (the queue never writes the DB; empty results are valid, only errors skip persistence). Controlled by `settings.transcription_enabled`.
 
 
 ### Sessions

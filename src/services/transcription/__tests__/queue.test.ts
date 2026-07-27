@@ -166,6 +166,62 @@ describe('TranscriptionQueueService', () => {
       expect(finished).toEqual([{ clipId: 'clip-1', transcription: '', start: 0, duration: 5000 }])
       expect(deps.database.updateClip).not.toHaveBeenCalled()
     })
+
+    it('extracts at most the max duration and appends "..." for longer clips', async () => {
+      const deps = createMockDeps()
+      const clip = { ...createMockClip('clip-1'), duration: 200000 }  // > 3 min cap
+
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => [clip])
+
+      const finished: { clipId: string; transcription?: string }[] = []
+
+      const service = new TranscriptionQueueService(deps)
+      service.on('finish', (event) => finished.push(event))
+
+      await service.start()
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      expect(deps.slicer.slice).toHaveBeenCalledWith(expect.objectContaining({ endMs: 180000 }))
+      expect(finished[0].transcription).toBe('transcription result...')
+    })
+
+    it('does not append "..." for clips within the max duration', async () => {
+      const deps = createMockDeps()
+      const clip = { ...createMockClip('clip-1'), duration: 180000 }  // exactly at cap
+
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => [clip])
+
+      const finished: { clipId: string; transcription?: string }[] = []
+
+      const service = new TranscriptionQueueService(deps)
+      service.on('finish', (event) => finished.push(event))
+
+      await service.start()
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      expect(finished[0].transcription).toBe('transcription result')
+    })
+
+    it('does not append "..." to an empty truncated result', async () => {
+      const deps = createMockDeps()
+      const clip = { ...createMockClip('clip-1'), duration: 200000 }
+
+      deps.database.getClipsNeedingTranscription = jest.fn(async () => [clip])
+      deps.whisper.transcribe = jest.fn(() => Promise.resolve(''))
+
+      const finished: { clipId: string; transcription?: string }[] = []
+
+      const service = new TranscriptionQueueService(deps)
+      service.on('finish', (event) => finished.push(event))
+
+      await service.start()
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      expect(finished[0].transcription).toBe('')
+    })
   })
 
   describe('stale bounds detection', () => {

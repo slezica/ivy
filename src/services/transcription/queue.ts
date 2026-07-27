@@ -36,7 +36,7 @@ export type TranscriptionQueueEvents = {
 // Constants
 // =============================================================================
 
-const MAX_TRANSCRIPTION_DURATION_MS = 60000  // First 60 seconds of clip
+const MAX_TRANSCRIPTION_DURATION_MS = 180000  // First 3 minutes of clip
 const MAX_START_ATTEMPTS = 3
 const RETRY_DELAYS = [5_000, 15_000, 30_000]
 
@@ -210,7 +210,14 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     try {
       audioPath = await this.extractClipAudio(clip)
 
-      const transcription = await this.whisper.transcribe(audioPath)
+      let transcription = await this.whisper.transcribe(audioPath)
+
+      // Mark truncated transcriptions: only the first N minutes were fed to
+      // Whisper, so the text stops before the clip does
+      if (transcription && clip.duration > MAX_TRANSCRIPTION_DURATION_MS) {
+        transcription += '...'
+      }
+
       log('Completed clip:', clipId, '| Result:', transcription)
 
       // Persistence is the store's job: its 'finish' handler runs the
