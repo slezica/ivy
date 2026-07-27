@@ -33,7 +33,10 @@ npm run test:e2e -- --device <serial>         # target a specific device
 
 `scripts/e2e.sh` pushes and **media-scans** the test fixtures first (the picker's
 search needs them indexed) — the one prerequisite the import flows require: the
-main fixture (`test-audio.m4a`) plus a disposable copy (`delete-me.m4a`) that
+main fixture (`test-audio.m4a`, standard tags: narrator/summary/date + chapters),
+a fully-tagged one (`test-audio-2.m4a`, adds series/part/subtitle/language via
+Libation-style freeform atoms — details-view coverage and manual testing), plus
+a disposable copy (`delete-me.m4a`) that
 `delete-original.yaml` imports with "delete original after import" enabled. After
 the run, the script asserts the disposable copy is actually gone — the deletion
 is filesystem state the flow itself can't see. With multiple devices attached,

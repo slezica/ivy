@@ -33,6 +33,15 @@ scan_file() { # MEDIA_SCANNER_SCAN_FILE broadcast is a no-op on API 29+
 }
 scan_file "$DEST"
 
+# Second fixture: every metadata extra filled via Libation-style freeform
+# atoms (series, part, subtitle, language) — for details-view coverage and
+# manual testing. Not imported by the base subflow.
+FIXTURE2="assets/test/test-audio-2.m4a"
+DEST2="/sdcard/Download/test-audio-2.m4a"
+"$ADB" push "$FIXTURE2" "$DEST2" >/dev/null
+"$ADB" shell touch "$DEST2"
+scan_file "$DEST2"
+
 # Disposable copy for delete-original.yaml: the flow imports it with "delete
 # original after import" enabled, and afterwards we assert it's gone. Re-pushed
 # every run, so the suite stays idempotent.

@@ -270,7 +270,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   └── README.md
 
 /assets/test
-  └── test-audio.m4a              # Bundled test file (chapters + extras tags: narrator, summary, date)
+  ├── test-audio.m4a              # Bundled test file (chapters + standard extras tags: narrator, summary, date)
+  └── test-audio-2.m4a            # Second fixture: all extras filled (Libation-style freeform atoms)
 ```
 
 ## Database Schema
