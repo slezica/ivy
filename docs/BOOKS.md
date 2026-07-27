@@ -181,9 +181,11 @@ Beyond title/artist/artwork/duration, a book carries seven optional **extras** c
 
 **Lazy extraction (backfill):** `extractBookExtras(bookId)` re-extracts on demand — called when the Book Details dialog opens. It no-ops unless `book.uri !== null` and `(metadata_version ?? 0) < EXTRACTED_METADATA_VERSION` (in `services/audio/ffmetadata.ts`). `metadata_version` distinguishes "never extracted" (null) from "extracted, file is sparse", and bumping the constant lazily re-extracts every book as it's next viewed. On import, extras are extracted inline and the version stamped; on ffmpeg failure the version stays null so a later view retries.
 
-**Sync:** extras + `metadata_version` ride the book payload (additive fields; old payloads read as null — see [SYNC.md](SYNC.md)). Restore-on-reimport just re-extracts: extras derive from file content and are not user-editable, so overwriting is always correct.
+**Extras are editable, and edits win over extraction.** Every extraction path (import, restore-on-reimport, lazy backfill) merges via `fillMissingExtras`: only null fields take the file's value. The empty string is a sentinel meaning "edited and cleared" — the editor writes it when the user empties a field that had a value (`editedField` in `MetadataEditor.tsx`), and extraction never refills it. An input left empty on a field that was already null stays null, so extraction may still fill it later. Consequence: `metadata_version` means "the extractor ran", not "extras match the file". Display code must treat `''` like null (hidden).
 
-**UI:** `BookDetails.tsx`, a read-only dialog opened from the book's action menu ("Details"). Shows the extras and triggers the lazy extraction ("Analyzing file…" while pending; the store book updates in place).
+**Sync:** extras + `metadata_version` ride the book payload (additive fields; old payloads read as null — see [SYNC.md](SYNC.md)). Whole-entity LWW applies as usual — the merge semantics above are local, per-device behavior at extraction time.
+
+**UI:** a viewer/editor pair sharing one dialog slot, mirroring the clips screen. `BookDetails.tsx` (action menu → "Show details") is the read-only view: hides null/cleared fields, triggers lazy extraction ("Analyzing file…" while pending), and offers Close/Edit. Edit swaps in `MetadataEditor.tsx`, which shows *all* editable fields (title, artist, and every extra; empty ones blank); Cancel or backdrop dismiss returns to the viewer, Save persists via `updateBook` and closes.
 
 ---
 
@@ -267,8 +269,8 @@ src/actions/
   constants.ts           → CLIPS_DIR, skip durations (no book-specific constants)
 
 src/components/
-  MetadataEditor.tsx     → Dialog content for editing book title/artist (shows artwork read-only)
-  BookDetails.tsx        → Read-only details dialog (extras; triggers lazy extraction)
+  MetadataEditor.tsx     → Dialog content for editing all book metadata fields (shows artwork read-only)
+  BookDetails.tsx        → Read-only details view (extras; Close/Edit buttons; triggers lazy extraction)
   LibraryLoadingDialog.tsx → Progress dialog for adding books (copy)
 
 src/services/storage/

@@ -49,6 +49,7 @@ File import (local files), metadata editing, archiving, deletion, and restoratio
 - Every book mutation must queue for sync (`db.queueChange`) — except archive/delete, which are per-device and must NOT queue or bump `updated_at` (see docs/SYNC.md)
 - On restore, existing metadata (title/artist/artwork) wins over ID3 tags — protects user edits
 - Metadata extras (summary, narrator, series, ...) come only from ffmetadata (best-effort; ffmpeg failure → null); lazy re-extraction is gated by `metadata_version` vs `EXTRACTED_METADATA_VERSION`
+- Extras are editable and edits win: extraction fills only null fields (`fillMissingExtras`); `''` means "edited and cleared" (never refilled, hidden in display)
 
 ### Playback
 
@@ -172,8 +173,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── SessionsScreen.tsx      # Listening history
   │   └── SettingsScreen.tsx      # App settings (sync, transcription)
   ├── components/
-  │   ├── MetadataEditor.tsx      # Book metadata editing (title, artist; artwork read-only)
-  │   ├── BookDetails.tsx         # Read-only book details (metadata extras; lazy extraction)
+  │   ├── MetadataEditor.tsx      # Book metadata editing (all fields; artwork read-only)
+  │   ├── BookDetails.tsx         # Read-only book details (extras; Close/Edit; lazy extraction)
   │   ├── ClipViewer.tsx          # Clip playback (own position state, timeline, transcription)
   │   ├── ClipEditor.tsx          # Clip editing (own position state, selection timeline, note)
   │   ├── BookItem.tsx            # Library list row
