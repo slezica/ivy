@@ -153,9 +153,6 @@ export default function LibraryScreen() {
         // Lazy backfill: no-op unless the file exists and extras are outdated
         extractBookExtras(bookId).catch(console.error)
         break
-      case 'edit':
-        setEditingBookId(bookId)
-        break
       case 'archive':
         handleArchiveBook(bookId)
         break
@@ -171,15 +168,13 @@ export default function LibraryScreen() {
 
     if (isArchived) {
       return [
-        { key: 'details', label: 'Details', icon: 'information-circle-outline' },
-        { key: 'edit', label: 'Edit details', icon: 'create-outline' },
+        { key: 'details', label: 'Show details', icon: 'information-circle-outline' },
         { key: 'delete', label: 'Remove forever', icon: 'trash-outline', destructive: true },
       ]
     }
 
     return [
-      { key: 'details', label: 'Details', icon: 'information-circle-outline' },
-      { key: 'edit', label: 'Edit details', icon: 'create-outline' },
+      { key: 'details', label: 'Show details', icon: 'information-circle-outline' },
       { key: 'archive', label: 'Archive', icon: 'archive-outline' },
     ]
   }
@@ -288,17 +283,35 @@ export default function LibraryScreen() {
       />
 
 
+      {/* Viewer/editor pair sharing one dialog slot, like the clips screen:
+          Edit swaps viewer for editor, Save/Cancel swap back */}
       {detailsBookId && books[detailsBookId] && (
         <Dialog visible onClose={() => setDetailsBookId(null)}>
-          <BookDetails book={books[detailsBookId]} />
+          <BookDetails
+            book={books[detailsBookId]}
+            onClose={() => setDetailsBookId(null)}
+            onEdit={() => {
+              setEditingBookId(detailsBookId)
+              setDetailsBookId(null)
+            }}
+          />
         </Dialog>
       )}
 
       {editingBookId && books[editingBookId] && (
-        <Dialog visible onClose={() => setEditingBookId(null)}>
+        <Dialog
+          visible
+          onClose={() => {
+            setDetailsBookId(editingBookId)
+            setEditingBookId(null)
+          }}
+        >
           <MetadataEditor
             book={books[editingBookId]}
-            onCancel={() => setEditingBookId(null)}
+            onCancel={() => {
+              setDetailsBookId(editingBookId)
+              setEditingBookId(null)
+            }}
             onSave={async (updates) => {
               await updateBook(editingBookId, updates)
               setEditingBookId(null)

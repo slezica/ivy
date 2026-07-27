@@ -1,23 +1,28 @@
 /**
  * BookDetails
  *
- * Read-only dialog showing a book's metadata extras (summary, narrator,
- * series, ...). Opening it triggers lazy extraction for books whose extras
- * predate the current extractor (see extract_book_extras) — the store book
- * updates in place when extraction lands.
+ * Read-only view of a book's metadata extras (summary, narrator, series, ...)
+ * with Close/Edit buttons — Edit switches to MetadataEditor, mirroring the
+ * clip viewer/editor pair. Opening it triggers lazy extraction for books whose
+ * extras predate the current extractor (see extract_book_extras) — the store
+ * book updates in place when extraction lands. Null and cleared ('') fields
+ * are hidden here but stay editable in the editor.
  */
 
 import { View, Text, Image, StyleSheet } from 'react-native'
 import { Color, Space } from '../theme'
 import { EXTRACTED_METADATA_VERSION } from '../services/audio/ffmetadata'
+import TextButton from './shared/TextButton'
 import type { Book } from '../services'
 
 
 interface BookDetailsProps {
   book: Book
+  onClose: () => void
+  onEdit: () => void
 }
 
-export default function BookDetails({ book }: BookDetailsProps) {
+export default function BookDetails({ book, onClose, onEdit }: BookDetailsProps) {
   const extracting =
     book.uri !== null && (book.metadata_version ?? 0) < EXTRACTED_METADATA_VERSION
 
@@ -31,7 +36,8 @@ export default function BookDetails({ book }: BookDetailsProps) {
     ['Released', book.date],
     ['Language', book.language],
   ]
-  const knownFacts = facts.filter(([, value]) => value !== null)
+  // Hide both never-extracted (null) and edited-and-cleared ('') fields
+  const knownFacts = facts.filter(([, value]) => value)
 
   const empty = !extracting && knownFacts.length === 0 && !book.summary && !book.subtitle
 
@@ -43,8 +49,8 @@ export default function BookDetails({ book }: BookDetailsProps) {
 
       <View style={styles.heading}>
         <Text style={styles.title}>{book.title ?? book.name}</Text>
-        {book.subtitle && <Text style={styles.subtitle}>{book.subtitle}</Text>}
-        {book.artist && <Text style={styles.artist}>{book.artist}</Text>}
+        {!!book.subtitle && <Text style={styles.subtitle}>{book.subtitle}</Text>}
+        {!!book.artist && <Text style={styles.artist}>{book.artist}</Text>}
       </View>
 
       {knownFacts.length > 0 && (
@@ -58,10 +64,15 @@ export default function BookDetails({ book }: BookDetailsProps) {
         </View>
       )}
 
-      {book.summary && <Text style={styles.summary}>{book.summary}</Text>}
+      {!!book.summary && <Text style={styles.summary}>{book.summary}</Text>}
 
       {extracting && <Text style={styles.hint}>Analyzing file…</Text>}
       {empty && <Text style={styles.hint}>No details found in the file</Text>}
+
+      <View style={styles.buttons}>
+        <TextButton label="Close" onPress={onClose} style={styles.button} />
+        <TextButton label="Edit" onPress={onEdit} variant="primary" style={styles.button} />
+      </View>
     </View>
   )
 }
@@ -128,5 +139,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Color.TEXT_DISABLED,
     textAlign: 'center',
+  },
+  buttons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  button: {
+    flex: 1,
   },
 })

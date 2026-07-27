@@ -1,31 +1,66 @@
 /**
  * MetadataEditor
  *
- * Dialog for editing a book's title and artist fields.
- * Shows artwork (read-only) for context.
+ * Dialog for editing a book's metadata: title, artist and the extracted
+ * extras (narrator, series, summary, ...). Shows artwork (read-only) for
+ * context. All fields are shown, empty ones blank — unlike BookDetails,
+ * which hides them.
  */
 
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet } from 'react-native'
+import { View, Text, TextInput, Image, StyleSheet } from 'react-native'
 import { Color, Space } from '../theme'
-import type { Book } from '../services'
+import TextButton from './shared/TextButton'
+import type { Book, BookEditableFields } from '../services'
 
+
+/**
+ * Value an input saves back to a field. An empty input stays null when the
+ * field was never set — extraction may still fill it — but becomes '' when
+ * clearing a prior value: the "edited and cleared" marker extraction
+ * respects (see fillMissingExtras).
+ */
+export function editedField(input: string, prior: string | null): string | null {
+  const value = input.trim()
+  if (value === '' && prior === null) return null
+  return value
+}
 
 interface MetadataEditorProps {
   book: Book
-  onSave: (updates: { title: string | null; artist: string | null }) => void
+  onSave: (updates: Partial<BookEditableFields>) => void
   onCancel: () => void
 }
 
+const FIELDS: [keyof BookEditableFields, string, { multiline?: boolean }?][] = [
+  ['title', 'Title', undefined],
+  ['artist', 'Artist', undefined],
+  ['subtitle', 'Subtitle', undefined],
+  ['narrator', 'Narrator', undefined],
+  ['series', 'Series', undefined],
+  ['part', 'Part', undefined],
+  ['date', 'Released', undefined],
+  ['language', 'Language', undefined],
+  ['summary', 'Summary', { multiline: true }],
+]
+
 export default function MetadataEditor({ book, onSave, onCancel }: MetadataEditorProps) {
-  const [title, setTitle] = useState(book.title ?? '')
-  const [artist, setArtist] = useState(book.artist ?? '')
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(FIELDS.map(([field]) => [field, book[field] ?? '']))
+  )
 
   const handleSave = () => {
-    onSave({
-      title: title.trim() || null,
-      artist: artist.trim() || null,
-    })
+    const updates = Object.fromEntries(
+      FIELDS.map(([field]) => [
+        field,
+        // title/artist keep ''→null (display falls back to book.name);
+        // extras distinguish cleared ('') from never-set (null)
+        field === 'title' || field === 'artist'
+          ? values[field].trim() || null
+          : editedField(values[field], book[field]),
+      ])
+    )
+    onSave(updates)
   }
 
   return (
@@ -41,31 +76,24 @@ export default function MetadataEditor({ book, onSave, onCancel }: MetadataEdito
 
       {/* Fields */}
       <View style={styles.fields}>
-        <TextInput
-          style={styles.input}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Title"
-          placeholderTextColor={Color.TEXT_DISABLED}
-          autoFocus
-        />
-        <TextInput
-          style={styles.input}
-          value={artist}
-          onChangeText={setArtist}
-          placeholder="Artist"
-          placeholderTextColor={Color.TEXT_DISABLED}
-        />
+        {FIELDS.map(([field, label, options], index) => (
+          <TextInput
+            key={field}
+            style={[styles.input, options?.multiline && styles.inputMultiline]}
+            value={values[field]}
+            onChangeText={(text) => setValues((v) => ({ ...v, [field]: text }))}
+            placeholder={label}
+            placeholderTextColor={Color.TEXT_DISABLED}
+            multiline={options?.multiline}
+            autoFocus={index === 0}
+          />
+        ))}
       </View>
 
       {/* Buttons */}
       <View style={styles.buttons}>
-        <TouchableOpacity style={styles.button} onPress={onCancel}>
-          <Text style={styles.buttonTextCancel}>Cancel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.button, styles.buttonSave]} onPress={handleSave}>
-          <Text style={styles.buttonTextSave}>Save</Text>
-        </TouchableOpacity>
+        <TextButton label="Cancel" onPress={onCancel} style={styles.button} />
+        <TextButton label="Save" onPress={handleSave} variant="primary" style={styles.button} />
       </View>
     </View>
   )
@@ -107,6 +135,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Color.BORDER,
   },
+  inputMultiline: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
   buttons: {
     flexDirection: 'row',
     gap: 12,
@@ -114,22 +146,5 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    padding: 14,
-    borderRadius: Space.BORDER_RADIUS,
-    alignItems: 'center',
-    backgroundColor: Color.BACKGROUND_3,
-  },
-  buttonSave: {
-    backgroundColor: Color.PRIMARY,
-  },
-  buttonTextCancel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Color.TEXT,
-  },
-  buttonTextSave: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Color.BACKGROUND,
   },
 })
