@@ -26,6 +26,7 @@ import {
   MIN_VELOCITY,
   SCROLL_TO_DURATION,
   MIN_SELECTION_DURATION,
+  HANDLE_SHIFT,
   HANDLE_PIN_OFFSET,
   HANDLE_PIN_Y,
 } from '../constants'
@@ -593,7 +594,8 @@ describe('TimelinePhysicsEngine', () => {
     // given the engine's scroll offset and container width. Pins sit on the
     // external side of the handle line: start handle left, end handle right.
     function handlePinScreenX(engine: TimelinePhysicsEngine, time: number, which: 'start' | 'end'): number {
-      const pinTimelineX = tx(time) + (which === 'start' ? -HANDLE_PIN_OFFSET : HANDLE_PIN_OFFSET)
+      const outward = HANDLE_SHIFT + HANDLE_PIN_OFFSET
+      const pinTimelineX = tx(time) + (which === 'start' ? -outward : outward)
       const halfWidth = 200 // container is 400px
       return pinTimelineX - engine.scrollOffset + halfWidth
     }
@@ -634,6 +636,65 @@ describe('TimelinePhysicsEngine', () => {
 
       const [newStart] = (callbacks.onSelectionChange as jest.Mock).mock.calls[0]
       expect(newStart).toBeLessThanOrEqual(20_000 - MIN_SELECTION_DURATION)
+    })
+
+    it('drags the end handle and calls onSelectionChange', () => {
+      const { engine, callbacks } = createEngine({
+        position: 15_000,
+        selection: { start: 10_000, end: 20_000 },
+      })
+
+      const endX = handlePinScreenX(engine, 20_000, 'end')
+      engine.panStart(endX, HANDLE_PIN_Y, 0)
+
+      // Drag right by 30px (moving end later)
+      engine.panUpdate(30, 16)
+
+      expect(callbacks.onSelectionChange).toHaveBeenCalled()
+      const [newStart, newEnd] = (callbacks.onSelectionChange as jest.Mock).mock.calls[0]
+      expect(newStart).toBe(10_000) // start unchanged
+      expect(newEnd).toBeGreaterThan(20_000) // moved later
+    })
+
+    it('clamps end handle to not undercut start plus MIN_SELECTION_DURATION', () => {
+      const { engine, callbacks } = createEngine({
+        position: 15_000,
+        selection: { start: 10_000, end: 10_500 },
+      })
+
+      const endX = handlePinScreenX(engine, 10_500, 'end')
+      engine.panStart(endX, HANDLE_PIN_Y, 0)
+
+      // Drag left, trying to push end past start
+      engine.panUpdate(-100, 16)
+
+      const [, newEnd] = (callbacks.onSelectionChange as jest.Mock).mock.calls[0]
+      expect(newEnd).toBeGreaterThanOrEqual(10_000 + MIN_SELECTION_DURATION)
+    })
+
+    it('keeps both handles individually grabbable at minimum selection', () => {
+      // The pin design's core promise: external pins point away from each
+      // other, so even a minimum-length selection (~1.5px at zoom 1) leaves
+      // two distinct grab targets.
+      const selection = { start: 10_000, end: 10_000 + MIN_SELECTION_DURATION }
+
+      const startSide = createEngine({ position: 10_000, selection })
+      const startX = handlePinScreenX(startSide.engine, selection.start, 'start')
+      startSide.engine.panStart(startX, HANDLE_PIN_Y, 0)
+      startSide.engine.panUpdate(-30, 16)
+      const [movedStart, endAfterStartDrag] =
+        (startSide.callbacks.onSelectionChange as jest.Mock).mock.calls[0]
+      expect(movedStart).toBeLessThan(selection.start) // start moved
+      expect(endAfterStartDrag).toBe(selection.end)    // end untouched
+
+      const endSide = createEngine({ position: 10_000, selection })
+      const endX = handlePinScreenX(endSide.engine, selection.end, 'end')
+      endSide.engine.panStart(endX, HANDLE_PIN_Y, 0)
+      endSide.engine.panUpdate(30, 16)
+      const [startAfterEndDrag, movedEnd] =
+        (endSide.callbacks.onSelectionChange as jest.Mock).mock.calls[0]
+      expect(startAfterEndDrag).toBe(selection.start) // start untouched
+      expect(movedEnd).toBeGreaterThan(selection.end) // end moved
     })
 
     it('recovers from a handle touch that never becomes a tap or pan', () => {
