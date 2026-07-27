@@ -16,7 +16,7 @@ import ClipEditor, { ClipEditorResult } from '../components/ClipEditor'
 import BookDetailsDialog from '../components/BookDetailsDialog'
 import { MAIN_PLAYER_OWNER_ID, formatTime } from '../utils'
 import { DEFAULT_CLIP_DURATION_MS, SKIP_BACKWARD_MS, SKIP_FORWARD_MS } from '../actions/constants'
-import { isTestBuild } from '../services'
+import { isTestBuild, copyText } from '../services'
 import type { Book, Chapter } from '../services'
 
 type SleepTimer = { endsAt: number, duration: number } | null
@@ -300,11 +300,21 @@ function Player({
       <View style={styles.spacerTop} />
 
       <View style={styles.bookInfo}>
-        <Text style={styles.title} numberOfLines={2}>
+        <Text
+          style={styles.title}
+          numberOfLines={2}
+          onLongPress={() => copyText(book.title || book.name)}
+          testID="player-title"
+        >
           {book.title || book.name}
         </Text>
         {book.artist && (
-          <Text style={styles.artist} numberOfLines={1}>
+          <Text
+            style={styles.artist}
+            numberOfLines={1}
+            onLongPress={() => copyText(book.artist!)}
+            testID="player-artist"
+          >
             {book.artist}
           </Text>
         )}
