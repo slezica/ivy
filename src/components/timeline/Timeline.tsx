@@ -386,10 +386,14 @@ export function Timeline({
             paints.placeholder
           )
 
-          // Playhead: over the bars, under the handles
+          // Playhead: over the bars, under the handles. Takes the handle
+          // color while touching a handle (pushing it, or being pushed back
+          // by a scroll) instead of white-on-yellow.
+          const onBoundary = hasEditableSelection && selStartX !== null && selEndX !== null
+            && (Math.abs(playheadX - selStartX) < 1 || Math.abs(playheadX - selEndX) < 1)
           canvas.drawRect(
             Skia.XYWHRect(playheadX - PLAYHEAD_WIDTH / 2, 0, PLAYHEAD_WIDTH, TIMELINE_HEIGHT),
-            paints.playhead
+            onBoundary ? paints.handle : paints.playhead
           )
 
           if (hasEditableSelection && selStartX !== null && selEndX !== null) {
