@@ -1,0 +1,39 @@
+appId: com.salezica.ivy
+---
+# Book details viewer/editor round trip. Covers: extras extracted on import
+# from the fixture's tags (composer → narrator, comment → summary, date),
+# the read-only details dialog, and editing an extras field end-to-end.
+
+- runFlow: subflows/import-book.yaml
+
+# Open the details viewer from the book's menu
+- tapOn:
+    id: "book-menu-button"
+- tapOn: "Show details"
+
+# Extras extracted at import from the fixture's tags
+- assertVisible: "Ivy Narrator"
+- assertVisible: "2026"
+- assertVisible: ".*automated test suites.*"
+- takeScreenshot: screenshots/details-01-viewer
+
+# Switch to the editor and change the narrator
+- tapOn: "Edit"
+- tapOn: "Ivy Narrator"
+- eraseText
+- inputText: "Edited Narrator"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- takeScreenshot: screenshots/details-02-editor
+- tapOn: "Save"
+
+# Reopen the viewer — the edit persisted
+- tapOn:
+    id: "book-menu-button"
+- tapOn: "Show details"
+- assertVisible: "Edited Narrator"
+- takeScreenshot: screenshots/details-03-edited
+- tapOn: "Close"

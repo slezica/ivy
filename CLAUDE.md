@@ -260,6 +260,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── load-and-play.yaml          # File loading and playback
   ├── add-clip.yaml               # Clip creation
   ├── clip-crud.yaml              # Clip edit/delete lifecycle
+  ├── book-details.yaml           # Book details viewer/editor round trip
   ├── chapter-extraction.yaml     # Chaptered import
   ├── delete-original.yaml        # Delete original after import
   ├── timeline-gestures.yaml      # Timeline drag/fling/tap
@@ -269,7 +270,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   └── README.md
 
 /assets/test
-  └── test-audio.m4a              # Bundled test file for automated tests
+  └── test-audio.m4a              # Bundled test file (chapters + extras tags: narrator, summary, date)
 ```
 
 ## Database Schema

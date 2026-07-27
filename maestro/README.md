@@ -73,6 +73,7 @@ $ANDROID_HOME/emulator/emulator -avd <name> -no-audio -no-boot-anim &
 | `add-clip.yaml` | Clip creation → FFmpeg slice → toast → clip listed |
 | `chapter-extraction.yaml` | Chapter extraction (the other native FFmpeg consumer) → chapter shown, not empty-state |
 | `clip-crud.yaml` | Clip create → edit note → verify persistence → delete |
+| `book-details.yaml` | Extras extracted on import → details viewer → edit narrator → verify persistence |
 | `timeline-gestures.yaml` | Tap-seek / scrub / flick on the Skia timeline; app stays responsive |
 | `sleep-timer.yaml` | Arm 5s preset → countdown on button → expiry pauses playback, clears timer (maestro/debug builds only) |
 
