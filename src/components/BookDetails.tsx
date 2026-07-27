@@ -31,15 +31,18 @@ export default function BookDetails({ book, onClose, onEdit }: BookDetailsProps)
     : null
 
   const facts: [string, string | null][] = [
+    ['Author', book.artist],
+    ['Subtitle', book.subtitle],
     ['Narrator', book.narrator],
     ['Series', seriesLine],
     ['Released', book.date],
     ['Language', book.language],
+    ['Summary', book.summary],
   ]
   // Hide both never-extracted (null) and edited-and-cleared ('') fields
   const knownFacts = facts.filter(([, value]) => value)
 
-  const empty = !extracting && knownFacts.length === 0 && !book.summary && !book.subtitle
+  const empty = !extracting && knownFacts.length === 0
 
   return (
     <View style={styles.container}>
@@ -47,24 +50,14 @@ export default function BookDetails({ book, onClose, onEdit }: BookDetailsProps)
         <Image source={{ uri: book.artwork }} style={styles.artwork} resizeMode="cover" />
       )}
 
-      <View style={styles.heading}>
-        <Text style={styles.title}>{book.title ?? book.name}</Text>
-        {!!book.subtitle && <Text style={styles.subtitle}>{book.subtitle}</Text>}
-        {!!book.artist && <Text style={styles.artist}>{book.artist}</Text>}
-      </View>
+      <Text style={styles.title}>{book.title ?? book.name}</Text>
 
-      {knownFacts.length > 0 && (
-        <View style={styles.facts}>
-          {knownFacts.map(([label, value]) => (
-            <View key={label} style={styles.factRow}>
-              <Text style={styles.factLabel}>{label}</Text>
-              <Text style={styles.factValue}>{value}</Text>
-            </View>
-          ))}
+      {knownFacts.map(([label, value]) => (
+        <View key={label}>
+          <Text style={styles.factLabel}>{label}</Text>
+          <Text style={styles.factValue}>{value}</Text>
         </View>
-      )}
-
-      {!!book.summary && <Text style={styles.summary}>{book.summary}</Text>}
+      ))}
 
       {extracting && <Text style={styles.hint}>Analyzing file…</Text>}
       {empty && <Text style={styles.hint}>No details found in the file</Text>}
@@ -89,51 +82,26 @@ const styles = StyleSheet.create({
     borderRadius: Space.BORDER_RADIUS,
     alignSelf: 'center',
   },
-  heading: {
-    alignItems: 'center',
-    gap: 4,
-  },
   title: {
     fontSize: 18,
     fontWeight: '600',
     color: Color.TEXT,
     textAlign: 'center',
   },
-  subtitle: {
-    fontSize: 14,
-    color: Color.TEXT_2,
-    textAlign: 'center',
-  },
-  artist: {
-    fontSize: 14,
-    color: Color.TEXT_3,
-    textAlign: 'center',
-  },
-  facts: {
-    backgroundColor: Color.BACKGROUND_2,
-    borderRadius: Space.BORDER_RADIUS,
-    padding: 12,
-    gap: 8,
-  },
-  factRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
+  // Property listing matches ClipViewer's transcription/note sections:
+  // uppercase label above a wrapping value, no enclosing box
   factLabel: {
-    fontSize: 14,
-    color: Color.TEXT_3,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Color.TEXT_2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   factValue: {
-    fontSize: 14,
-    color: Color.TEXT,
-    flexShrink: 1,
-    textAlign: 'right',
-  },
-  summary: {
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 15,
     color: Color.TEXT_MUTED,
+    lineHeight: Space.PARAGRAPH_LINE_HEIGHT,
   },
   hint: {
     fontSize: 14,
