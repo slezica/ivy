@@ -180,7 +180,8 @@ src/services/
   storage/database.ts → Clip CRUD, ClipWithFile JOIN queries
 
 src/components/
-  ClipViewer.tsx      → Read-only clip modal (playback, transcription, note)
+  ClipViewer.tsx      → Read-only clip modal (playback, transcription, note;
+                        tap section to expand, long-press to copy to clipboard)
   ClipEditor.tsx      → Edit bounds and note (requires source file); mode-free
                         normalized props — ClipsListScreen maps an existing
                         clip, PlayerScreen maps a new-clip draft

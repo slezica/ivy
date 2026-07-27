@@ -13,6 +13,7 @@ import { formatTime } from '../utils'
 import Header from './shared/Header'
 import IconButton from './shared/IconButton'
 import { Timeline } from './timeline'
+import { copyText } from '../services'
 import type { ClipWithFile } from '../services'
 
 
@@ -137,14 +138,22 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
       </View>
 
       {clip.transcription && (
-        <Pressable style={styles.infoSection} onPress={() => setTranscriptionExpanded(e => !e)}>
+        <Pressable
+          style={styles.infoSection}
+          onPress={() => setTranscriptionExpanded(e => !e)}
+          onLongPress={() => copyText(clip.transcription!)}
+        >
           <Text style={styles.infoLabel}>Transcription</Text>
           <Text style={styles.infoText} numberOfLines={transcriptionExpanded ? undefined : 4}>&ldquo;{clip.transcription}&rdquo;</Text>
         </Pressable>
       )}
 
       {clip.note && (
-        <Pressable style={styles.infoSection} onPress={() => setNoteExpanded(e => !e)}>
+        <Pressable
+          style={styles.infoSection}
+          onPress={() => setNoteExpanded(e => !e)}
+          onLongPress={() => copyText(clip.note!)}
+        >
           <Text style={styles.infoLabel}>Note</Text>
           <Text style={styles.infoText} numberOfLines={noteExpanded ? undefined : 4}>{clip.note}</Text>
         </Pressable>
