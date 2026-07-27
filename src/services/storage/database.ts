@@ -64,6 +64,17 @@ export interface BookExtras {
   language: string | null
 }
 
+/** The user-editable fields of Book (see MetadataEditor / updateBook). */
+export interface BookEditableFields extends BookExtras {
+  title: string | null
+  artist: string | null
+}
+
+// Column whitelist for updateBookFields (keys double as column names)
+const EDITABLE_BOOK_COLUMNS = [
+  'title', 'artist', 'summary', 'narrator', 'series', 'part', 'subtitle', 'date', 'language',
+] as const satisfies readonly (keyof BookEditableFields)[]
+
 export interface Clip {
   id: string
   source_id: string        // References files.id (parent file)
@@ -556,11 +567,16 @@ export class DatabaseService {
     )
   }
 
-  async updateBookMetadata(id: string, title: string | null, artist: string | null): Promise<void> {
+  /** Update any subset of a book's user-editable fields (title, artist, extras). */
+  async updateBookFields(id: string, fields: Partial<BookEditableFields>): Promise<void> {
+    const keys = EDITABLE_BOOK_COLUMNS.filter((key) => fields[key] !== undefined)
+    if (keys.length === 0) return
+
     const now = Date.now()
     await this.db.runAsync(
-      'UPDATE files SET title = ?, artist = ?, updated_at = ?, updated_by = ? WHERE id = ?',
-      [title, artist, now, this.deviceId, id]
+      `UPDATE files SET ${keys.map((key) => `${key} = ?`).join(', ')},
+         updated_at = ?, updated_by = ? WHERE id = ?`,
+      [...keys.map((key) => fields[key] ?? null), now, this.deviceId, id]
     )
   }
 

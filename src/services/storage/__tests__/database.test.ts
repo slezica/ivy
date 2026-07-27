@@ -114,6 +114,24 @@ describe('DatabaseService (real SQLite)', () => {
       expect(book.updated_at).toBeGreaterThanOrEqual(before.updated_at)
       expect(book.updated_by).not.toBeNull()
     })
+
+    it('updates only the fields passed to updateBookFields', async () => {
+      const db = createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, 'Title', 'Artist')
+      await db.setBookExtras('book-1', {
+        summary: 'A story.', narrator: 'A Voice', series: null, part: null,
+        subtitle: null, date: null, language: null,
+      }, 1)
+
+      await db.updateBookFields('book-1', { narrator: '', series: 'Saga' })
+
+      const book = (await db.getBookById('book-1'))!
+      expect(book.narrator).toBe('') // cleared, not nulled
+      expect(book.series).toBe('Saga')
+      expect(book.summary).toBe('A story.') // untouched
+      expect(book.title).toBe('Title')
+      expect(book.metadata_version).toBe(1) // edits never touch the extractor stamp
+    })
   })
 
   describe('getLastPlayedBook', () => {
@@ -124,7 +142,7 @@ describe('DatabaseService (real SQLite)', () => {
 
       db.updateBookPosition('book-1', 1000)  // real playback stamps last_played_at
       await Promise.resolve()                // fire-and-forget write settles
-      await db.updateBookMetadata('book-2', 'Edited Title', null) // bumps updated_at only
+      await db.updateBookFields('book-2', { title: 'Edited Title', artist: null }) // bumps updated_at only
 
       expect(db.getLastPlayedBook()!.id).toBe('book-1')
     })

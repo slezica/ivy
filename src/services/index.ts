@@ -49,6 +49,7 @@ export type {
 export type {
   Book,
   BookExtras,
+  BookEditableFields,
   Chapter,
   Clip,
   ClipWithFile,

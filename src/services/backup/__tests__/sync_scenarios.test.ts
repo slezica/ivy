@@ -119,7 +119,7 @@ describe('sync scenarios', () => {
     await deviceA.sync.syncNow()
     await deviceB.sync.syncNow()
 
-    await deviceA.db.updateBookMetadata(BOOK_ID, 'New Title', 'New Artist')
+    await deviceA.db.updateBookFields(BOOK_ID, { title: 'New Title', artist: 'New Artist' })
     const edited = await deviceA.db.getBookById(BOOK_ID)
     await deviceA.db.queueChange('book', BOOK_ID, 'upsert', edited!.updated_at)
     await deviceA.sync.syncNow()
@@ -213,7 +213,7 @@ describe('sync scenarios', () => {
     await device.sync.syncNow() // push fails → 30s backoff stamped
 
     // A fresh local edit re-queues the entity — the backoff must reset
-    await device.db.updateBookMetadata(BOOK_ID, 'New Title', null)
+    await device.db.updateBookFields(BOOK_ID, { title: 'New Title', artist: null })
     const edited = await device.db.getBookById(BOOK_ID)
     await device.db.queueChange('book', BOOK_ID, 'upsert', edited!.updated_at)
 
@@ -1132,7 +1132,7 @@ describe('sync scenarios', () => {
       const deadId = drive.getFileByName(`book_${BOOK_ID}.json`)!.id
       drive.removeFile(deadId) // user purged Drive out-of-band
 
-      await device.db.updateBookMetadata(BOOK_ID, 'New Title', null)
+      await device.db.updateBookFields(BOOK_ID, { title: 'New Title', artist: null })
       const edited = await device.db.getBookById(BOOK_ID)
       await device.db.queueChange('book', BOOK_ID, 'upsert', edited!.updated_at)
       await device.sync.syncNow()
@@ -1568,7 +1568,7 @@ describe('sync scenarios', () => {
     await deviceA.sync.syncNow()
     await deviceB.sync.syncNow()
 
-    await deviceA.db.updateBookMetadata(BOOK_ID, 'New Title', null)
+    await deviceA.db.updateBookFields(BOOK_ID, { title: 'New Title', artist: null })
     const edited = await deviceA.db.getBookById(BOOK_ID)
     await deviceA.db.queueChange('book', BOOK_ID, 'upsert', edited!.updated_at)
     await deviceA.sync.syncNow()
