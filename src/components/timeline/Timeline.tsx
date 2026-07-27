@@ -546,7 +546,7 @@ function TimeIndicators({ position, duration, placement }: TimeIndicatorsProps) 
     <View style={[styles.timeContainer, marginStyle]}>
       <View style={styles.timeSpacer} />
       <Text style={styles.timeCurrent}>{formatTime(position)}</Text>
-      <Text style={styles.timeTotal}>{formatTime(duration)}</Text>
+      <Text style={styles.timeTotal}>-{formatTime(Math.max(0, duration - position))}</Text>
     </View>
   )
 }
