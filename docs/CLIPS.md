@@ -135,6 +135,14 @@ Editing requires the source book's audio file — if the source is archived, edi
 
 ---
 
+## Sharing a Clip
+
+`shareClip` sends the clip's audio via the native share sheet. Clip files are named by UUID, which recipients would see as the filename — so the file is shared through a **friendly-named copy**: `Clip from <book title> <uuid8>.m4a` (title from `file_title`, falling back to the `source_title` snapshot; sanitized and capped). The uuid fragment keeps names unique across clips and stable per clip, so re-sharing overwrites the same copy.
+
+Copies live in `<cache>/share/`. There is no post-share deletion — recipients (e.g. a backgrounded Drive upload) may read the content URI after the sheet closes. Instead, copies **older than 24h are deleted at the next share**, and the OS purges the cache dir under storage pressure. If the copy fails for any reason, the original UUID-named file is shared instead — never worse than no copy.
+
+---
+
 ## Deleting a Clip
 
 `deleteClip` removes the clip's audio file, deletes the database row, and queues a sync `delete`. Unlike book deletion (which is per-device), clip deletion is **global**: it propagates to every device via a sync tombstone. See [SYNC.md](SYNC.md).
@@ -161,14 +169,14 @@ src/actions/
                         (optional { duration, note } from the draft editor)
   update_clip.ts      → Updates note/bounds, re-slices if needed
   delete_clip.ts      → Deletes file, record, queues sync
-  share_clip.ts       → Shares clip audio via native sheet
+  share_clip.ts       → Shares clip audio via native sheet (friendly filename)
   fetch_clips.ts      → Loads all clips with source file metadata
   seek_clip.ts        → Navigates main player to clip's position in source
   constants.ts        → DEFAULT_CLIP_DURATION_MS (250ms), CLIPS_DIR
 
 src/services/
   audio/slicer.ts     → Native audio extraction (Kotlin module wrapper)
-  system/sharing.ts   → Native share sheet wrapper
+  system/sharing.ts   → Native share sheet wrapper (share-cache copy + cleanup)
   storage/database.ts → Clip CRUD, ClipWithFile JOIN queries
 
 src/components/
