@@ -108,12 +108,12 @@ describe('createAddClip', () => {
       const { deps } = createDeps({ bookDuration: 12000 })
       const addClip = createAddClip(deps)
 
-      await addClip('book-1', 10000)
+      await addClip('book-1', 11900)
 
       expect(deps.slicer.slice).toHaveBeenCalledWith(
         expect.objectContaining({
-          startMs: 10000,
-          endMs: 12000, // only 2000ms remaining, less than the default
+          startMs: 11900,
+          endMs: 12000, // only 100ms remaining, less than the default
         })
       )
     })
