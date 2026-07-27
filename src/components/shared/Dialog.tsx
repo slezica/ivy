@@ -60,6 +60,9 @@ export default function Dialog({ visible, onClose, children }: ModalProps) {
           <View style={styles.content}>
             <ScrollView
               bounces={false}
+              // Buttons must respond on the first tap while the keyboard is
+              // open ('never' swallows it to dismiss the keyboard)
+              keyboardShouldPersistTaps="handled"
               onContentSizeChange={(_, h) => { contentHeight.current = h; updateIndicator() }}
               onLayout={(e) => { layoutHeight.current = e.nativeEvent.layout.height; updateIndicator() }}
               onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; updateIndicator() }}
