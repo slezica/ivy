@@ -76,7 +76,7 @@ export default function MetadataEditor({ book, onSave, onCancel }: MetadataEdito
 
       {/* Fields */}
       <View style={styles.fields}>
-        {FIELDS.map(([field, label, options], index) => (
+        {FIELDS.map(([field, label, options]) => (
           <TextInput
             key={field}
             style={[styles.input, options?.multiline && styles.inputMultiline]}
@@ -85,7 +85,6 @@ export default function MetadataEditor({ book, onSave, onCancel }: MetadataEdito
             placeholder={label}
             placeholderTextColor={Color.TEXT_DISABLED}
             multiline={options?.multiline}
-            autoFocus={index === 0}
           />
         ))}
       </View>
