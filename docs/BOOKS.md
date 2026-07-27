@@ -185,7 +185,7 @@ Beyond title/artist/artwork/duration, a book carries seven optional **extras** c
 
 **Sync:** extras + `metadata_version` ride the book payload (additive fields; old payloads read as null — see [SYNC.md](SYNC.md)). Whole-entity LWW applies as usual — the merge semantics above are local, per-device behavior at extraction time.
 
-**UI:** a viewer/editor pair sharing one dialog slot (`BookDetailsDialog.tsx`), mirroring the clips screen — opened via "Show details" from a book's library menu or the player's menu (current book). `BookDetails.tsx` is the read-only view: hides null/cleared fields, triggers lazy extraction ("Analyzing file…" while pending), and offers Close/Edit. Edit swaps in `MetadataEditor.tsx`, which shows *all* editable fields (title, artist, and every extra; empty ones blank); Cancel or backdrop dismiss returns to the viewer, Save persists via `updateBook` and closes.
+**UI:** a viewer/editor pair sharing one dialog slot (`BookDetailsDialog.tsx`), mirroring the clips screen — opened via "Show details" from a book's library menu or the player's menu (current book). `BookDetails.tsx` is the read-only view: hides null/cleared fields, triggers lazy extraction ("Analyzing file…" while pending), and offers Close/Edit. Long-pressing the title or any field value copies it to the clipboard (`copyText` helper: clipboard + "Copied" toast) — same affordance as the player's title/author. Edit swaps in `MetadataEditor.tsx`, which shows *all* editable fields (title, artist, and every extra; empty ones blank); Cancel or backdrop dismiss returns to the viewer, Save persists via `updateBook` and closes.
 
 ---
 

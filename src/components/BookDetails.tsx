@@ -13,6 +13,7 @@ import { View, Text, Image, StyleSheet } from 'react-native'
 import { Color, Space } from '../theme'
 import { EXTRACTED_METADATA_VERSION } from '../services/audio/ffmetadata'
 import TextButton from './shared/TextButton'
+import { copyText } from '../services'
 import type { Book } from '../services'
 
 
@@ -40,7 +41,7 @@ export default function BookDetails({ book, onClose, onEdit }: BookDetailsProps)
     ['Summary', book.summary],
   ]
   // Hide both never-extracted (null) and edited-and-cleared ('') fields
-  const knownFacts = facts.filter(([, value]) => value)
+  const knownFacts = facts.filter((fact): fact is [string, string] => !!fact[1])
 
   const empty = !extracting && knownFacts.length === 0
 
@@ -50,12 +51,18 @@ export default function BookDetails({ book, onClose, onEdit }: BookDetailsProps)
         <Image source={{ uri: book.artwork }} style={styles.artwork} resizeMode="cover" />
       )}
 
-      <Text style={styles.title}>{book.title ?? book.name}</Text>
+      <Text
+        style={styles.title}
+        onLongPress={() => copyText(book.title ?? book.name)}
+        testID="book-details-title"
+      >
+        {book.title ?? book.name}
+      </Text>
 
       {knownFacts.map(([label, value]) => (
         <View key={label}>
           <Text style={styles.factLabel}>{label}</Text>
-          <Text style={styles.factValue}>{value}</Text>
+          <Text style={styles.factValue} onLongPress={() => copyText(value)}>{value}</Text>
         </View>
       ))}
 

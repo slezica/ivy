@@ -17,6 +17,13 @@ appId: com.salezica.ivy
 - assertVisible: ".*automated test suites.*"
 - takeScreenshot: screenshots/details-01-viewer
 
+# Long-press copies a field to the clipboard. The clipboard itself and the
+# "Copied" toast aren't visible to Maestro — this guards that long-press
+# doesn't crash or trigger navigation (dialog stays open).
+- longPressOn: "Ivy Narrator"
+- assertVisible: "Ivy Narrator"
+- assertVisible: "Edit"
+
 # Switch to the editor and change the narrator.
 # No hideKeyboard here: on Android it sends Back, which cancels the editor
 # (back → viewer). Scrolling works fine with the keyboard open.
