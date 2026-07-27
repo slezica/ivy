@@ -26,6 +26,9 @@ import {
   MIN_VELOCITY,
   SCROLL_TO_DURATION,
   MIN_SELECTION_DURATION,
+  HANDLE_SHIFT,
+  HANDLE_PIN_OFFSET,
+  HANDLE_PIN_Y,
 } from '../constants'
 import { timeToX } from '../utils'
 
@@ -587,12 +590,14 @@ describe('TimelinePhysicsEngine', () => {
   // --------------------------------------------------------------------------
 
   describe('selection handles', () => {
-    // Helper: compute where a handle appears in screen-space, given
-    // the engine's scroll offset and container width
-    function handleScreenX(engine: TimelinePhysicsEngine, time: number): number {
-      const handleTimelineX = tx(time)
+    // Helper: compute where a handle's pin circle appears in screen-space,
+    // given the engine's scroll offset and container width. Pins sit on the
+    // external side of the handle line: start handle left, end handle right.
+    function handlePinScreenX(engine: TimelinePhysicsEngine, time: number, which: 'start' | 'end'): number {
+      const outward = HANDLE_SHIFT + HANDLE_PIN_OFFSET
+      const pinTimelineX = tx(time) + (which === 'start' ? -outward : outward)
       const halfWidth = 200 // container is 400px
-      return handleTimelineX - engine.scrollOffset + halfWidth
+      return pinTimelineX - engine.scrollOffset + halfWidth
     }
 
     it('drags the start handle and calls onSelectionChange', () => {
@@ -601,11 +606,10 @@ describe('TimelinePhysicsEngine', () => {
         selection: { start: 10_000, end: 20_000 },
       })
 
-      // Touch near the start handle (y at bottom where circles are)
-      const startX = handleScreenX(engine, 10_000)
-      const handleY = 90 - 10 + 12 // TIMELINE_HEIGHT - 10 + HANDLE_CIRCLE_RADIUS
+      // Touch the start handle's pin (external side, vertically centered)
+      const startX = handlePinScreenX(engine, 10_000, 'start')
 
-      engine.panStart(startX, handleY, 0)
+      engine.panStart(startX, HANDLE_PIN_Y, 0)
 
       // Drag left by 30px (moving start earlier)
       engine.panUpdate(-30, 16)
@@ -622,17 +626,75 @@ describe('TimelinePhysicsEngine', () => {
         selection: { start: 19_500, end: 20_000 },
       })
 
-      // Touch near the start handle
-      const startX = handleScreenX(engine, 19_500)
-      const handleY = 90 - 10 + 12
+      // Touch the start handle's pin
+      const startX = handlePinScreenX(engine, 19_500, 'start')
 
-      engine.panStart(startX, handleY, 0)
+      engine.panStart(startX, HANDLE_PIN_Y, 0)
 
       // Drag right, trying to push start past end
       engine.panUpdate(100, 16)
 
       const [newStart] = (callbacks.onSelectionChange as jest.Mock).mock.calls[0]
       expect(newStart).toBeLessThanOrEqual(20_000 - MIN_SELECTION_DURATION)
+    })
+
+    it('drags the end handle and calls onSelectionChange', () => {
+      const { engine, callbacks } = createEngine({
+        position: 15_000,
+        selection: { start: 10_000, end: 20_000 },
+      })
+
+      const endX = handlePinScreenX(engine, 20_000, 'end')
+      engine.panStart(endX, HANDLE_PIN_Y, 0)
+
+      // Drag right by 30px (moving end later)
+      engine.panUpdate(30, 16)
+
+      expect(callbacks.onSelectionChange).toHaveBeenCalled()
+      const [newStart, newEnd] = (callbacks.onSelectionChange as jest.Mock).mock.calls[0]
+      expect(newStart).toBe(10_000) // start unchanged
+      expect(newEnd).toBeGreaterThan(20_000) // moved later
+    })
+
+    it('clamps end handle to not undercut start plus MIN_SELECTION_DURATION', () => {
+      const { engine, callbacks } = createEngine({
+        position: 15_000,
+        selection: { start: 10_000, end: 10_500 },
+      })
+
+      const endX = handlePinScreenX(engine, 10_500, 'end')
+      engine.panStart(endX, HANDLE_PIN_Y, 0)
+
+      // Drag left, trying to push end past start
+      engine.panUpdate(-100, 16)
+
+      const [, newEnd] = (callbacks.onSelectionChange as jest.Mock).mock.calls[0]
+      expect(newEnd).toBeGreaterThanOrEqual(10_000 + MIN_SELECTION_DURATION)
+    })
+
+    it('keeps both handles individually grabbable at minimum selection', () => {
+      // The pin design's core promise: external pins point away from each
+      // other, so even a minimum-length selection (~1.5px at zoom 1) leaves
+      // two distinct grab targets.
+      const selection = { start: 10_000, end: 10_000 + MIN_SELECTION_DURATION }
+
+      const startSide = createEngine({ position: 10_000, selection })
+      const startX = handlePinScreenX(startSide.engine, selection.start, 'start')
+      startSide.engine.panStart(startX, HANDLE_PIN_Y, 0)
+      startSide.engine.panUpdate(-30, 16)
+      const [movedStart, endAfterStartDrag] =
+        (startSide.callbacks.onSelectionChange as jest.Mock).mock.calls[0]
+      expect(movedStart).toBeLessThan(selection.start) // start moved
+      expect(endAfterStartDrag).toBe(selection.end)    // end untouched
+
+      const endSide = createEngine({ position: 10_000, selection })
+      const endX = handlePinScreenX(endSide.engine, selection.end, 'end')
+      endSide.engine.panStart(endX, HANDLE_PIN_Y, 0)
+      endSide.engine.panUpdate(30, 16)
+      const [startAfterEndDrag, movedEnd] =
+        (endSide.callbacks.onSelectionChange as jest.Mock).mock.calls[0]
+      expect(startAfterEndDrag).toBe(selection.start) // start untouched
+      expect(movedEnd).toBeGreaterThan(selection.end) // end moved
     })
 
     it('recovers from a handle touch that never becomes a tap or pan', () => {
@@ -645,9 +707,8 @@ describe('TimelinePhysicsEngine', () => {
       // Touch the start handle, then release without moving after the tap
       // timeout: neither tap() nor panStart/panEnd ever fire — only the
       // gesture finalizer (touchUp)
-      const startX = handleScreenX(engine, 10_000)
-      const handleY = 90 - 10 + 12
-      engine.touchDown(startX, handleY, 0)
+      const startX = handlePinScreenX(engine, 10_000, 'start')
+      engine.touchDown(startX, HANDLE_PIN_Y, 0)
 
       // Stuck handle drag blocks playback follow and external sync
       expect(engine.isActive).toBe(true)
@@ -680,7 +741,7 @@ describe('TimelinePhysicsEngine', () => {
     /** Drag the timeline (not a handle) so the playhead lands on targetTime */
     function scrubTo(engine: TimelinePhysicsEngine, fromTime: number, targetTime: number) {
       const translationX = -(tx(targetTime) - tx(fromTime))
-      engine.panStart(200, 45, 0) // y=45: middle of the bars, not a handle
+      engine.panStart(200, 5, 0) // y=5: top of the bars, outside the pin hit radius
       engine.panUpdate(translationX, 16)
       engine.panEnd(0, 32)
     }

@@ -28,18 +28,14 @@ import {
   MIN_SELECTION_DURATION,
   MIN_ZOOM,
   MAX_ZOOM,
-  TIMELINE_HEIGHT,
   DRIFT_SNAP_THRESHOLD,
   DRIFT_FOLD_WINDOW,
+  HANDLE_SHIFT,
+  HANDLE_PIN_OFFSET,
+  HANDLE_PIN_Y,
+  HANDLE_TOUCH_RADIUS,
 } from './constants'
 import { timeToX, xToTime, clamp } from './utils'
-
-// ============================================================================
-// Hit testing: how close a touch must be to a selection handle
-// ============================================================================
-
-const HANDLE_CIRCLE_RADIUS = 12
-const HANDLE_TOUCH_RADIUS = 24
 
 // ============================================================================
 // Display throttling: avoid flooding React with re-renders
@@ -866,7 +862,9 @@ export class TimelinePhysicsEngine {
   // Private: selection handle hit testing
   //
   // Checks if a touch point (in screen coordinates) is close enough to a
-  // selection handle circle to start dragging it.
+  // handle's pin circle to start dragging it. Pins sit on the external side
+  // of each handle line (start: left, end: right), vertically centered —
+  // same geometry Timeline.tsx draws (HANDLE_PIN_* constants).
   // =========================================================================
 
   private _getHandleAtPosition(touchX: number, touchY: number): 'start' | 'end' | null {
@@ -874,21 +872,18 @@ export class TimelinePhysicsEngine {
 
     const halfWidth = this._containerWidth / 2
 
-    // The handle circles sit at the bottom of the timeline
-    const circleY = TIMELINE_HEIGHT - 10 + HANDLE_CIRCLE_RADIUS
-
     // Convert screen-space touch to timeline-space coordinate
     const timelineX = this._scrollOffset + (touchX - halfWidth)
 
-    const startHandleX = this._tx(this._selection.start)
-    const endHandleX = this._tx(this._selection.end)
+    const startPinX = this._tx(this._selection.start) - HANDLE_SHIFT - HANDLE_PIN_OFFSET
+    const endPinX = this._tx(this._selection.end) + HANDLE_SHIFT + HANDLE_PIN_OFFSET
 
-    // Euclidean distance from touch to each handle center
+    // Euclidean distance from touch to each pin center
     const distToStart = Math.sqrt(
-      (timelineX - startHandleX) ** 2 + (touchY - circleY) ** 2
+      (timelineX - startPinX) ** 2 + (touchY - HANDLE_PIN_Y) ** 2
     )
     const distToEnd = Math.sqrt(
-      (timelineX - endHandleX) ** 2 + (touchY - circleY) ** 2
+      (timelineX - endPinX) ** 2 + (touchY - HANDLE_PIN_Y) ** 2
     )
 
     // Prefer the closer handle if both are within touch radius

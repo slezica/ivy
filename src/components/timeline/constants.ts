@@ -16,6 +16,26 @@ export const PLACEHOLDER_HEIGHT = 8
 export const TIME_INDICATORS_HEIGHT = 24
 export const TIME_INDICATORS_MARGIN = 8
 
+// Selection handles ("external pin" design)
+//
+// Each handle is a vertical line with a pin on its external side — a short
+// horizontal stub pointing away from the selection, ending in a small
+// circle: o-| for the start handle, |-o for the end handle. Pins point away
+// from each other, so handles tolerate a 0px gap without overlapping.
+// Drawing (Timeline.tsx) and hit-testing (engine.ts) share these numbers.
+export const HANDLE_LINE_WIDTH = PLAYHEAD_WIDTH                     // px — same width, handles draw over the playhead
+export const HANDLE_LINE_HEIGHT = TIMELINE_HEIGHT                   // px — vertical line, centered
+// Outward shift from the boundary time-point to the line center. 0 = handle
+// sits on the boundary (playhead drawn beneath it). Set to
+// PLAYHEAD_WIDTH / 2 + HANDLE_LINE_WIDTH / 2 for bracket mode: handles
+// contain the interval from outside, clearing the playhead.
+export const HANDLE_SHIFT = 0
+export const HANDLE_PIN_STUB = 9                                     // px — horizontal stub length
+export const HANDLE_PIN_RADIUS = 7                                   // px — pin circle radius
+export const HANDLE_PIN_OFFSET = HANDLE_PIN_STUB + HANDLE_PIN_RADIUS // handle line → pin center
+export const HANDLE_PIN_Y = TIMELINE_HEIGHT / 2                      // pin center, vertically centered
+export const HANDLE_TOUCH_RADIUS = 24                                // px — hit-test radius around pin center
+
 // Physics (frame-rate independent — all units are per-second)
 //
 // Momentum uses continuous exponential decay: v(t) = v0 * DECELERATION^t
@@ -36,7 +56,7 @@ export const DRIFT_FOLD_WINDOW = 1000    // ms — ~95% of smaller drift folded 
 
 // Selection constraints
 //
-// Minimum gap between handles: the distance at which the 24px handle circles
-// stop overlapping at zoom 1 (24px / 6px-per-second = 4s). Also the minimum
-// clip length — sub-4s clips don't make sense for audiobooks.
-export const MIN_SELECTION_DURATION = 4000
+// Product sanity floor for clip length — decoupled from handle geometry:
+// the external pins point away from each other, so handles tolerate a 0px
+// gap without overlapping. This only guards against degenerate selections.
+export const MIN_SELECTION_DURATION = 250

@@ -59,16 +59,17 @@ import {
   TIMELINE_HEIGHT,
   PLAYHEAD_WIDTH,
   PLACEHOLDER_HEIGHT,
-  TIME_INDICATORS_HEIGHT,
   TIME_INDICATORS_MARGIN,
+  HANDLE_LINE_WIDTH,
+  HANDLE_LINE_HEIGHT,
+  HANDLE_SHIFT,
+  HANDLE_PIN_OFFSET,
+  HANDLE_PIN_RADIUS,
+  HANDLE_PIN_Y,
   timeToX,
   getSegmentHeight,
 } from '.'
 import { useTimelinePhysics } from './useTimelinePhysics'
-
-// Selection handle dimensions
-const HANDLE_CIRCLE_RADIUS = 12
-const HANDLE_LINE_WIDTH = 2
 
 // =============================================================================
 // Types
@@ -91,6 +92,9 @@ export interface TimelineProps {
   selectionStart?: number
   selectionEnd?: number
   onSelectionChange?: (start: number, end: number) => void
+
+  // Handle color (optional) — defaults to selectionColor
+  handleColor?: string
 
   // Linked selection (optional, editable selection only)
   // When true the playhead is solid: any playhead movement (drag, fling,
@@ -236,33 +240,48 @@ function drawSelectionHandles(
   selectionEndX: number,
   handlePaint: ReturnType<typeof Skia.Paint>
 ) {
-  const handleTop = 10
-  const handleBottom = TIMELINE_HEIGHT - 10
-  const circleY = handleBottom + HANDLE_CIRCLE_RADIUS
+  drawHandle(canvas, selectionStartX, -1, handlePaint) // start: o-|
+  drawHandle(canvas, selectionEndX, 1, handlePaint)    // end:   |-o
+}
 
-  // Start handle: vertical line + circle
+/**
+ * One "external pin" handle: a vertical line plus a pin (horizontal stub
+ * ending in a small circle) on the side pointed to by `direction`
+ * (-1 = left of the line, +1 = right). Geometry shared with the engine's
+ * hit-testing via the HANDLE_PIN_* constants.
+ */
+function drawHandle(
+  canvas: SkCanvas,
+  x: number,
+  direction: -1 | 1,
+  handlePaint: ReturnType<typeof Skia.Paint>
+) {
+  const handleTop = (TIMELINE_HEIGHT - HANDLE_LINE_HEIGHT) / 2
+  const handleBottom = handleTop + HANDLE_LINE_HEIGHT
+
+  // Line center, shifted outward so the handle contains the boundary point
+  const lineX = x + direction * HANDLE_SHIFT
+
+  // Vertical line
   canvas.drawRect(
     Skia.XYWHRect(
-      selectionStartX - HANDLE_LINE_WIDTH / 2,
+      lineX - HANDLE_LINE_WIDTH / 2,
       handleTop,
       HANDLE_LINE_WIDTH,
       handleBottom - handleTop
     ),
     handlePaint
   )
-  canvas.drawCircle(selectionStartX, circleY, HANDLE_CIRCLE_RADIUS, handlePaint)
 
-  // End handle: vertical line + circle
+  // Stub: from the line out to the pin center (circle overlaps its far end)
+  const stubX = direction === 1 ? lineX : lineX - HANDLE_PIN_OFFSET
   canvas.drawRect(
-    Skia.XYWHRect(
-      selectionEndX - HANDLE_LINE_WIDTH / 2,
-      handleTop,
-      HANDLE_LINE_WIDTH,
-      handleBottom - handleTop
-    ),
+    Skia.XYWHRect(stubX, HANDLE_PIN_Y - HANDLE_LINE_WIDTH / 2, HANDLE_PIN_OFFSET, HANDLE_LINE_WIDTH),
     handlePaint
   )
-  canvas.drawCircle(selectionEndX, circleY, HANDLE_CIRCLE_RADIUS, handlePaint)
+
+  // Pin circle
+  canvas.drawCircle(lineX + direction * HANDLE_PIN_OFFSET, HANDLE_PIN_Y, HANDLE_PIN_RADIUS, handlePaint)
 }
 
 // =============================================================================
@@ -279,6 +298,7 @@ export function Timeline({
   selectionStart,
   selectionEnd,
   onSelectionChange,
+  handleColor,
   linkedSelection = false,
   canZoom = false,
   tapSkip,
@@ -310,13 +330,10 @@ export function Timeline({
     left: createPaint(leftColor),
     right: createPaint(rightColor),
     selection: selectionColor ? createPaint(selectionColor) : null,
+    handle: createPaint(handleColor ?? selectionColor ?? Color.TEXT),
+    playhead: createPaint(Color.TEXT),
     placeholder: createPaint(Color.TEXT_DISABLED),
-  }), [leftColor, rightColor, selectionColor])
-
-  // Canvas height increases when selection handles are shown
-  const canvasHeight = hasEditableSelection
-    ? TIMELINE_HEIGHT + HANDLE_CIRCLE_RADIUS * 2
-    : TIMELINE_HEIGHT
+  }), [leftColor, rightColor, selectionColor, handleColor])
 
   // Picture rebuild — creates a new SkPicture and pushes it to the canvas
   // component. Called from the engine's onFrame (fast path, ~120Hz during
@@ -369,13 +386,23 @@ export function Timeline({
             paints.placeholder
           )
 
+          // Playhead: over the bars, under the handles. Takes the handle
+          // color while touching a handle (pushing it, or being pushed back
+          // by a scroll) instead of white-on-yellow.
+          const onBoundary = hasEditableSelection && selStartX !== null && selEndX !== null
+            && (Math.abs(playheadX - selStartX) < 1 || Math.abs(playheadX - selEndX) < 1)
+          canvas.drawRect(
+            Skia.XYWHRect(playheadX - PLAYHEAD_WIDTH / 2, 0, PLAYHEAD_WIDTH, TIMELINE_HEIGHT),
+            onBoundary ? paints.handle : paints.playhead
+          )
+
           if (hasEditableSelection && selStartX !== null && selEndX !== null) {
-            drawSelectionHandles(canvas, selStartX, selEndX, paints.selection!)
+            drawSelectionHandles(canvas, selStartX, selEndX, paints.handle)
           }
 
           canvas.restore()
         },
-        { width: containerWidth, height: canvasHeight }
+        { width: containerWidth, height: TIMELINE_HEIGHT }
       )
 
       canvasRef.current?.setPicture(pic)
@@ -404,7 +431,7 @@ export function Timeline({
   useEffect(() => {
     rebuildRef.current()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [containerWidth, totalSegments, duration, segmentWidth, segmentGap, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints, canvasHeight])
+  }, [containerWidth, totalSegments, duration, segmentWidth, segmentGap, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints])
 
   // Rebuild on foreground: backgrounding (screen off) can recreate the Skia
   // surface blank, and an idle timeline (paused, no gestures) has no other
@@ -416,16 +443,6 @@ export function Timeline({
     return () => subscription.remove()
   }, [])
 
-  // Calculate playhead position based on time indicator placement
-  const playheadTop = showTime === 'top'
-    ? TIME_INDICATORS_HEIGHT + TIME_INDICATORS_MARGIN
-    : 0
-
-  // Playhead height: align with bottom of handle circles when editable selection is enabled
-  const playheadHeight = hasEditableSelection
-    ? TIMELINE_HEIGHT - 10 + HANDLE_CIRCLE_RADIUS * 2  // Bottom of handle circles
-    : TIMELINE_HEIGHT
-
   return (
     <GestureHandlerRootView style={styles.container}>
       {showTime === 'top' && (
@@ -436,22 +453,14 @@ export function Timeline({
         />
       )}
 
-      {/* Playhead indicator at center */}
-      <View
-        style={[styles.playheadContainer, { top: playheadTop, height: playheadHeight }]}
-        pointerEvents="none"
-      >
-        <View style={styles.playhead} />
-      </View>
-
       {/* Timeline with gesture handling */}
       <GestureDetector gesture={gesture}>
-        <View style={[styles.timelineContainer, { height: canvasHeight }]} onLayout={handleLayout}>
+        <View style={[styles.timelineContainer, { height: TIMELINE_HEIGHT }]} onLayout={handleLayout}>
           {containerWidth > 0 && (
             <TimelineCanvas
               ref={canvasRef}
               width={containerWidth}
-              height={canvasHeight}
+              height={TIMELINE_HEIGHT}
             />
           )}
         </View>
@@ -551,23 +560,6 @@ const styles = StyleSheet.create({
   timelineContainer: {
     justifyContent: 'center',
     overflow: 'hidden',
-  },
-  playheadContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  playhead: {
-    width: PLAYHEAD_WIDTH,
-    height: '100%',
-    backgroundColor: Color.TEXT,
-    shadowColor: Color.TEXT,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
   },
   timeContainer: {
     flexDirection: 'row',

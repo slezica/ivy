@@ -75,15 +75,24 @@ export default function PlayerScreen() {
     return () => subscription.remove()
   }, [fetchPlaybackState])
 
-  // Draft clip being edited (start position captured at open), null when closed
-  const [clipDraft, setClipDraft] = useState<{ start: number } | null>(null)
+  // Draft clip being edited, null when closed. `start` is the live position
+  // captured at open; `at` timestamps that capture while playing (null when
+  // paused) so the editor can extrapolate away its own mount latency.
+  const [clipDraft, setClipDraft] = useState<{ start: number, at: number | null } | null>(null)
 
   const handleOpenClipEditor = async () => {
     if (!ownBook?.uri) return
     // While loading, the ownership claim below would no-op (loading guard in
     // play/loadBook) and the editor would open unowned — don't open at all
     if (playback.status === 'loading') return
-    if (ownBook.duration - ownPosition <= 0) {
+
+    // Store positions update at 1Hz — query the hardware so the editor
+    // opens exactly on the live position, not up to a second behind it
+    await fetchPlaybackState()
+    const position = useStore.getState().playback.position
+    const at = Date.now()
+
+    if (ownBook.duration - position <= 0) {
       Alert.alert('Error', 'Cannot add clip at the end of the book')
       return
     }
@@ -92,13 +101,13 @@ export default function PlayerScreen() {
       // Hand playback to the editor before mounting it: same file, same
       // position, so audio continues uninterrupted (rate drops to 1x — clip
       // owners always play at 1x)
-      const context = { fileUri: ownBook.uri, position: ownPosition, ownerId: CLIP_DRAFT_OWNER_ID }
+      const context = { fileUri: ownBook.uri, position, ownerId: CLIP_DRAFT_OWNER_ID }
       if (isPlaying) {
         await play(context)
       } else {
         await loadBook(context)
       }
-      setClipDraft({ start: ownPosition })
+      setClipDraft({ start: position, at: isPlaying ? at : null })
     } catch (error) {
       console.error('Error opening clip editor:', error)
       Alert.alert('Error', 'Failed to open clip editor')
@@ -204,6 +213,7 @@ export default function PlayerScreen() {
             ownerId={CLIP_DRAFT_OWNER_ID}
             initialStart={clipDraft.start}
             initialEnd={Math.min(clipDraft.start + DEFAULT_CLIP_DURATION_MS, ownBook.duration)}
+            initialPositionAt={clipDraft.at}
             initialNote=""
             onCancel={handleCloseClipEditor}
             onSave={handleSaveClipDraft}

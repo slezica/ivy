@@ -9,7 +9,7 @@
  * editor before mounting it (seamless handoff from the main player).
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 
 import { useStore } from '../store'
@@ -32,6 +32,10 @@ interface ClipEditorProps {
   ownerId: string
   initialStart: number
   initialEnd: number
+  // When set, audio was playing at handoff and initialStart was the live
+  // position at this timestamp — the playhead starts at initialStart plus
+  // the time elapsed since, matching the still-running audio exactly
+  initialPositionAt?: number | null
   initialNote: string
   onCancel: () => void
   onSave: (result: ClipEditorResult) => void
@@ -39,7 +43,7 @@ interface ClipEditorProps {
 
 export default function ClipEditor({
   fileUri, fileDuration, title, ownerId,
-  initialStart, initialEnd, initialNote,
+  initialStart, initialEnd, initialPositionAt, initialNote,
   onCancel, onSave,
 }: ClipEditorProps) {
   const { playback, settings, play, pause, seek, updateSettings } = useStore()
@@ -56,8 +60,13 @@ export default function ClipEditor({
     updateSettings({ ...settings, clip_editor_linked: !linked })
   }
 
-  // Local state - the position this editor remembers
-  const [ownPosition, setOwnPosition] = useState(initialStart)
+  // Local state - the position this editor remembers. With a handoff
+  // timestamp, extrapolate the mount latency (editors play at 1x).
+  const [ownPosition, setOwnPosition] = useState(() => (
+    initialPositionAt != null
+      ? Math.min(initialStart + (Date.now() - initialPositionAt), fileDuration)
+      : initialStart
+  ))
 
   // Check ownership and file state from global playback
   const isFileLoaded = playback.uri === fileUri
@@ -72,8 +81,15 @@ export default function ClipEditor({
     }
   }, [pause, ownerId])
 
-  // Sync position from playback when we own playback
+  // Sync position from playback when we own playback. After an extrapolated
+  // handoff the mount-time store position is the stale value we extrapolated
+  // from — skip that first run, real playback events follow.
+  const skipFirstSync = useRef(initialPositionAt != null)
   useEffect(() => {
+    if (skipFirstSync.current) {
+      skipFirstSync.current = false
+      return
+    }
     if (isOwner && isFileLoaded) {
       setOwnPosition(playback.position)
     }
@@ -130,6 +146,7 @@ export default function ClipEditor({
         leftColor={Color.TEXT_DISABLED}
         rightColor={Color.TEXT_DISABLED}
         selectionColor={Color.SELECTION}
+        handleColor={Color.SECONDARY}
         selectionStart={selectionStart}
         selectionEnd={selectionEnd}
         onSelectionChange={handleSelectionChange}

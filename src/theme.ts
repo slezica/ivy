@@ -4,6 +4,7 @@ export const ColorTeal = {
   PRIMARY_CONTRAST: '#eeeeee',
   DESTRUCTIVE: '#ff453a',
   SELECTION: '#ffd166',
+  SECONDARY: '#ffd166',
 
   // Grayscale (dark theme)
   BACKGROUND: '#222831',
@@ -25,6 +26,7 @@ export const ColorGreen = {
   PRIMARY_CONTRAST: '#242424',
   DESTRUCTIVE: '#FF453A',
   SELECTION: '#8aaa6c',
+  SECONDARY: '#ffd166',
 
   BACKGROUND: '#2a2a2a',
   BACKGROUND_2: '#212121',
