@@ -387,8 +387,8 @@ function Player({
         onClose={() => setMenuOpen(false)}
         onAction={handleMenuAction}
         items={[
-          { key: 'chapters', label: 'Show chapters', icon: 'list' },
           { key: 'details', label: 'Show details', icon: 'information-circle-outline' },
+          { key: 'chapters', label: 'Show chapters', icon: 'list' },
         ]}
       />
 
