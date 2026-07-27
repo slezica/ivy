@@ -13,6 +13,7 @@ import ActionMenu from '../components/shared/ActionMenu'
 import ScreenArea from '../components/shared/ScreenArea'
 import EmptyState from '../components/shared/EmptyState'
 import ClipEditor, { ClipEditorResult } from '../components/ClipEditor'
+import BookDetailsDialog from '../components/BookDetailsDialog'
 import { MAIN_PLAYER_OWNER_ID, formatTime } from '../utils'
 import { DEFAULT_CLIP_DURATION_MS, SKIP_BACKWARD_MS, SKIP_FORWARD_MS } from '../actions/constants'
 import { isTestBuild } from '../services'
@@ -256,6 +257,7 @@ function Player({
 }: PlayerProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [chaptersOpen, setChaptersOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [speedOpen, setSpeedOpen] = useState(false)
   const [sleepOpen, setSleepOpen] = useState(false)
   const chapters = book.chapters ?? []
@@ -268,6 +270,7 @@ function Player({
   const handleMenuAction = (action: string) => {
     setMenuOpen(false)
     if (action === 'chapters') setChaptersOpen(true)
+    if (action === 'details') setDetailsOpen(true)
   }
 
   const handleSleepTimerChange = (durationMs: number | null, fadeMs?: number) => {
@@ -385,7 +388,13 @@ function Player({
         onAction={handleMenuAction}
         items={[
           { key: 'chapters', label: 'Show chapters', icon: 'list' },
+          { key: 'details', label: 'Show details', icon: 'information-circle-outline' },
         ]}
+      />
+
+      <BookDetailsDialog
+        bookId={detailsOpen ? book.id : null}
+        onClose={() => setDetailsOpen(false)}
       />
 
     <View style={styles.spacerBottom} />

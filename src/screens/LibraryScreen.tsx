@@ -15,9 +15,7 @@ import Header from '../components/shared/Header'
 import InputHeader from '../components/shared/InputHeader'
 import EmptyState from '../components/shared/EmptyState'
 import ActionMenu, { ActionMenuItem } from '../components/shared/ActionMenu'
-import Dialog from '../components/shared/Dialog'
-import MetadataEditor from '../components/MetadataEditor'
-import BookDetails from '../components/BookDetails'
+import BookDetailsDialog from '../components/BookDetailsDialog'
 import BookItem from '../components/BookItem'
 import { Color, Space } from '../theme'
 import type { Book } from '../services'
@@ -27,10 +25,9 @@ const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, updateBook, extractBookExtras, sync, autoSync } = useStore()
+  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, sync, autoSync } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false)
-  const [editingBookId, setEditingBookId] = useState<string | null>(null)
   const [detailsBookId, setDetailsBookId] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -150,8 +147,6 @@ export default function LibraryScreen() {
     switch (action) {
       case 'details':
         setDetailsBookId(bookId)
-        // Lazy backfill: no-op unless the file exists and extras are outdated
-        extractBookExtras(bookId).catch(console.error)
         break
       case 'archive':
         handleArchiveBook(bookId)
@@ -283,42 +278,7 @@ export default function LibraryScreen() {
       />
 
 
-      {/* Viewer/editor pair sharing one dialog slot, like the clips screen:
-          Edit swaps viewer for editor, Save/Cancel swap back */}
-      {detailsBookId && books[detailsBookId] && (
-        <Dialog visible onClose={() => setDetailsBookId(null)}>
-          <BookDetails
-            book={books[detailsBookId]}
-            onClose={() => setDetailsBookId(null)}
-            onEdit={() => {
-              setEditingBookId(detailsBookId)
-              setDetailsBookId(null)
-            }}
-          />
-        </Dialog>
-      )}
-
-      {editingBookId && books[editingBookId] && (
-        <Dialog
-          visible
-          onClose={() => {
-            setDetailsBookId(editingBookId)
-            setEditingBookId(null)
-          }}
-        >
-          <MetadataEditor
-            book={books[editingBookId]}
-            onCancel={() => {
-              setDetailsBookId(editingBookId)
-              setEditingBookId(null)
-            }}
-            onSave={async (updates) => {
-              await updateBook(editingBookId, updates)
-              setEditingBookId(null)
-            }}
-          />
-        </Dialog>
-      )}
+      <BookDetailsDialog bookId={detailsBookId} onClose={() => setDetailsBookId(null)} />
 
     </ScreenArea>
   )

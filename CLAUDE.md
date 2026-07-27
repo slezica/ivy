@@ -175,6 +175,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── components/
   │   ├── MetadataEditor.tsx      # Book metadata editing (all fields; artwork read-only)
   │   ├── BookDetails.tsx         # Read-only book details (extras; Close/Edit; lazy extraction)
+  │   ├── BookDetailsDialog.tsx   # Viewer/editor pair dialog (library + player menus)
   │   ├── ClipViewer.tsx          # Clip playback (own position state, timeline, transcription)
   │   ├── ClipEditor.tsx          # Clip editing (own position state, selection timeline, note)
   │   ├── BookItem.tsx            # Library list row
