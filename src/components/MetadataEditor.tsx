@@ -34,7 +34,7 @@ interface MetadataEditorProps {
 
 const FIELDS: [keyof BookEditableFields, string, { multiline?: boolean }?][] = [
   ['title', 'Title', undefined],
-  ['artist', 'Artist', undefined],
+  ['artist', 'Author', undefined],
   ['subtitle', 'Subtitle', undefined],
   ['narrator', 'Narrator', undefined],
   ['series', 'Series', undefined],
@@ -77,15 +77,15 @@ export default function MetadataEditor({ book, onSave, onCancel }: MetadataEdito
       {/* Fields */}
       <View style={styles.fields}>
         {FIELDS.map(([field, label, options]) => (
-          <TextInput
-            key={field}
-            style={[styles.input, options?.multiline && styles.inputMultiline]}
-            value={values[field]}
-            onChangeText={(text) => setValues((v) => ({ ...v, [field]: text }))}
-            placeholder={label}
-            placeholderTextColor={Color.TEXT_DISABLED}
-            multiline={options?.multiline}
-          />
+          <View key={field}>
+            <Text style={styles.fieldLabel}>{label}</Text>
+            <TextInput
+              style={[styles.input, options?.multiline && styles.inputMultiline]}
+              value={values[field]}
+              onChangeText={(text) => setValues((v) => ({ ...v, [field]: text }))}
+              multiline={options?.multiline}
+            />
+          </View>
         ))}
       </View>
 
@@ -124,6 +124,15 @@ const styles = StyleSheet.create({
   fields: {
     width: '100%',
     gap: 12,
+  },
+  // Same label treatment as the read-only view (BookDetails)
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Color.TEXT_2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   input: {
     backgroundColor: Color.BACKGROUND_2,
