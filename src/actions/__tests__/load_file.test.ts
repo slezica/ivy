@@ -295,6 +295,33 @@ describe('createLoadFile', () => {
       )
     })
 
+    it('preserves existing extras over the file tags on restore', async () => {
+      const archivedBook = createMockBook({
+        id: 'archived-1', uri: null, summary: 'Edited summary', narrator: '',
+      })
+      const deps = createMockDeps({
+        db: createMockDb({
+          getBookByFingerprint: jest.fn(() => archivedBook),
+          restoreBook: jest.fn(() => createMockBook({ id: 'archived-1' })),
+        }),
+        ffmetadata: createMockFFmetadata({
+          read: jest.fn(async () => ({
+            tags: { comment: 'File summary', composer: 'A Voice', series: 'Saga' },
+            chapters: [],
+          })),
+        }),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.db.setBookExtras).toHaveBeenCalledWith(
+        'archived-1',
+        expect.objectContaining({ summary: 'Edited summary', narrator: '', series: 'Saga' }),
+        1,
+      )
+    })
+
     it('queues sync upsert for the restored book', async () => {
       const deps = depsWithArchivedBook()
       const loadFile = createLoadFile(deps)

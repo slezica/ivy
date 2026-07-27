@@ -1,4 +1,4 @@
-import { parseFFmetadata, extrasFromTags } from '../ffmetadata'
+import { parseFFmetadata, extrasFromTags, fillMissingExtras } from '../ffmetadata'
 
 /**
  * Tests for the ffmetadata parser (INI-style text from `ffmpeg -f ffmetadata`).
@@ -145,5 +145,34 @@ describe('extrasFromTags', () => {
       date: null,
       language: null,
     })
+  })
+})
+
+describe('fillMissingExtras', () => {
+  const empty = {
+    summary: null, narrator: null, series: null, part: null,
+    subtitle: null, date: null, language: null,
+  }
+
+  it('fills null fields from the extracted values', () => {
+    const extracted = { ...empty, summary: 'A story.', narrator: 'A Voice' }
+
+    expect(fillMissingExtras(empty, extracted)).toEqual(extracted)
+  })
+
+  it('never overwrites non-null fields (edits win)', () => {
+    const current = { ...empty, summary: 'Edited summary', narrator: null }
+    const extracted = { ...empty, summary: 'File summary', narrator: 'A Voice' }
+
+    expect(fillMissingExtras(current, extracted)).toEqual({
+      ...empty, summary: 'Edited summary', narrator: 'A Voice',
+    })
+  })
+
+  it('preserves cleared fields (empty string means edited-and-cleared)', () => {
+    const current = { ...empty, summary: '' }
+    const extracted = { ...empty, summary: 'File summary' }
+
+    expect(fillMissingExtras(current, extracted).summary).toBe('')
   })
 })

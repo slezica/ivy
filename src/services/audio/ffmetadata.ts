@@ -82,6 +82,24 @@ export function extrasFromTags(tags: FileTags): BookExtras {
   }
 }
 
+/**
+ * Merge extracted extras into a book's current extras, filling only null
+ * fields. Non-null values are user-visible state and never overwritten:
+ * a real value may carry an edit, and empty string specifically means
+ * "edited and cleared" (see MetadataEditor) — both survive re-extraction.
+ */
+export function fillMissingExtras(current: BookExtras, extracted: BookExtras): BookExtras {
+  return {
+    summary: current.summary ?? extracted.summary,
+    narrator: current.narrator ?? extracted.narrator,
+    series: current.series ?? extracted.series,
+    part: current.part ?? extracted.part,
+    subtitle: current.subtitle ?? extracted.subtitle,
+    date: current.date ?? extracted.date,
+    language: current.language ?? extracted.language,
+  }
+}
+
 // =============================================================================
 // Parsing
 // =============================================================================

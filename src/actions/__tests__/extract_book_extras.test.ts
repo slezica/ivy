@@ -54,6 +54,23 @@ describe('createExtractBookExtras', () => {
     expect(book.metadata_version).toBe(1)
   })
 
+  it('fills only null fields — edited and cleared values survive', async () => {
+    const state = createMockState({
+      books: { 'book-1': createMockBook({ summary: 'Edited summary', narrator: '' }) },
+    })
+    const deps = createMockDeps(state)
+
+    await createExtractBookExtras(deps)('book-1')
+
+    expect(deps.db.setBookExtras).toHaveBeenCalledWith(
+      'book-1',
+      expect.objectContaining({ summary: 'Edited summary', narrator: '', series: 'Saga' }),
+      1,
+    )
+    expect(state.books['book-1'].summary).toBe('Edited summary')
+    expect(state.books['book-1'].narrator).toBe('')
+  })
+
   it('skips books already at the current extractor version', async () => {
     const state = createMockState({ books: { 'book-1': createMockBook({ metadata_version: 1 }) } })
     const deps = createMockDeps(state)

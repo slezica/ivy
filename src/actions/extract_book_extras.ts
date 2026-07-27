@@ -2,7 +2,7 @@ import type { DatabaseService, FFmetadataService, SyncQueueService } from '../se
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
 // Direct module import: the services barrel instantiates every service on
 // load, which actions (and their tests) must not trigger
-import { extrasFromTags, EXTRACTED_METADATA_VERSION } from '../services/audio/ffmetadata'
+import { extrasFromTags, fillMissingExtras, EXTRACTED_METADATA_VERSION } from '../services/audio/ffmetadata'
 import { createLogger } from '../utils'
 
 
@@ -36,7 +36,8 @@ export const createExtractBookExtras: ActionFactory<ExtractBookExtrasDeps, Extra
     const { tags } = await ffmetadata.read(book.uri)
     if (!tags) return // ffmpeg failed — retry on a later call
 
-    const extras = extrasFromTags(tags)
+    // Fill only null fields — edited values (including cleared '') survive
+    const extras = fillMissingExtras(book, extrasFromTags(tags))
     await db.setBookExtras(id, extras, EXTRACTED_METADATA_VERSION)
     await syncQueue.queueChange('book', id, 'upsert')
 

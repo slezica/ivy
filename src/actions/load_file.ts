@@ -1,7 +1,7 @@
 import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, FFmetadataService, SyncQueueService, Book } from '../services'
 // Direct module import: the services barrel instantiates every service on
 // load, which actions (and their tests) must not trigger
-import { extrasFromTags, EXTRACTED_METADATA_VERSION } from '../services/audio/ffmetadata'
+import { extrasFromTags, fillMissingExtras, EXTRACTED_METADATA_VERSION } from '../services/audio/ffmetadata'
 import type { GetState, SetState, Action, ActionFactory, AppState } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
@@ -159,9 +159,12 @@ async function handleNewBook(
     }
 
     // Extras are best-effort: a null tags result (ffmpeg failure) leaves
-    // metadata_version null, so the lazy extractor retries later
+    // metadata_version null, so the lazy extractor retries later. On restore,
+    // extras the book already carries (possibly edited) win over the file's.
     if (tags) {
-      await db.setBookExtras(bookId, extrasFromTags(tags), EXTRACTED_METADATA_VERSION)
+      const extracted = extrasFromTags(tags)
+      const extras = existingBook ? fillMissingExtras(existingBook, extracted) : extracted
+      await db.setBookExtras(bookId, extras, EXTRACTED_METADATA_VERSION)
     }
 
     await syncQueue.queueChange('book', bookId, 'upsert')
