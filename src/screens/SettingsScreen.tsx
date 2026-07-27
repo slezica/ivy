@@ -54,24 +54,23 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {transcription.status !== 'off' && (
-          <View style={styles.settingSecondary}>
-            <Text style={transcription.status === 'error' ? styles.errorText : styles.secondaryText}>
-              {transcription.status === 'starting' && 'Starting...'}
-              {transcription.status === 'on' && 'Ready'}
-              {transcription.status === 'error' && 'Failed to start'}
-            </Text>
+        <View style={styles.settingSecondary}>
+          <Text style={transcription.status === 'error' ? styles.errorText : styles.secondaryText}>
+            {transcription.status === 'off' && (settings.transcription_enabled ? 'Enabled' : 'Disabled')}
+            {transcription.status === 'starting' && 'Starting...'}
+            {transcription.status === 'on' && 'Enabled'}
+            {transcription.status === 'error' && 'Failed to start'}
+          </Text>
 
-            {transcription.status === 'error' && (
-              <>
-                <Text style={styles.secondaryText}> · </Text>
-                <TouchableOpacity onPress={() => startTranscription()}>
-                  <Text style={styles.linkText}>Retry</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        )}
+          {transcription.status === 'error' && (
+            <>
+              <Text style={styles.secondaryText}> · </Text>
+              <TouchableOpacity onPress={() => startTranscription()}>
+                <Text style={styles.linkText}>Retry</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
 
         <View style={[styles.settingRow, { marginTop: 24 }]}>
           <Text style={styles.settingLabel}>Sync metadata to Drive</Text>
@@ -84,6 +83,12 @@ export default function SettingsScreen() {
             thumbColor={Color.TEXT}
           />
         </View>
+
+        {!settings.sync_enabled && (
+          <View style={styles.settingSecondary}>
+            <Text style={styles.secondaryText}>Disabled</Text>
+          </View>
+        )}
 
         {settings.sync_enabled && (
           <View style={styles.settingSecondary}>
@@ -124,6 +129,12 @@ export default function SettingsScreen() {
             trackColor={{ false: Color.TEXT_DISABLED, true: Color.PRIMARY }}
             thumbColor={Color.TEXT}
           />
+        </View>
+
+        <View style={styles.settingSecondary}>
+          <Text style={styles.secondaryText}>
+            {settings.delete_original_after_import ? 'Enabled' : 'Disabled'}
+          </Text>
         </View>
 
       </View>
