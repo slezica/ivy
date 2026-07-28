@@ -124,6 +124,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
         selectionStart={hasSourceFile ? clip.start : 0}
         selectionEnd={hasSourceFile ? clip.start + clip.duration : clip.duration}
         playbackRate={isPlaying ? 1 : 0}
+        shapeSeed={clip.source_id}
         showTime="hidden"
       />
 

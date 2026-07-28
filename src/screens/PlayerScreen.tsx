@@ -212,6 +212,7 @@ export default function PlayerScreen() {
             fileDuration={ownBook.duration}
             title={ownBook.title || ownBook.name}
             ownerId={CLIP_DRAFT_OWNER_ID}
+            shapeSeed={ownBook.id}
             initialStart={clipDraft.start}
             initialEnd={Math.min(clipDraft.start + DEFAULT_CLIP_DURATION_MS, ownBook.duration)}
             initialPositionAt={clipDraft.at}
@@ -328,6 +329,7 @@ function Player({
         rightColor={Color.PRIMARY}
         tapSkip={{ backward: SKIP_BACKWARD_MS, forward: SKIP_FORWARD_MS }}
         playbackRate={isPlaying ? book.speed / 100 : 0}
+        shapeSeed={book.id}
         showTime='top'
       />
 

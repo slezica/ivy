@@ -224,6 +224,7 @@ export default function ClipsListScreen() {
               fileDuration={editingClip.file_duration ?? editingClip.duration}
               title={editingClip.file_title || editingClip.file_name || editingClip.source_title || 'Unknown book'}
               ownerId={`clip-editor-${editingClip.id}`}
+              shapeSeed={editingClip.source_id}
               initialStart={editingClip.start}
               initialEnd={editingClip.start + editingClip.duration}
               initialNote={editingClip.note}

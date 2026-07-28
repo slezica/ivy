@@ -30,6 +30,7 @@ interface ClipEditorProps {
   fileDuration: number
   title: string
   ownerId: string
+  shapeSeed: string
   initialStart: number
   initialEnd: number
   // When set, audio was playing at handoff and initialStart was the live
@@ -42,7 +43,7 @@ interface ClipEditorProps {
 }
 
 export default function ClipEditor({
-  fileUri, fileDuration, title, ownerId,
+  fileUri, fileDuration, title, ownerId, shapeSeed,
   initialStart, initialEnd, initialPositionAt, initialNote,
   onCancel, onSave,
 }: ClipEditorProps) {
@@ -152,6 +153,7 @@ export default function ClipEditor({
         onSelectionChange={handleSelectionChange}
         linkedSelection={linked}
         playbackRate={isPlaying ? 1 : 0}
+        shapeSeed={shapeSeed}
         showTime="hidden"
       />
 

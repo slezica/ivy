@@ -67,7 +67,7 @@ import {
   HANDLE_PIN_RADIUS,
   HANDLE_PIN_Y,
   timeToX,
-  getSegmentHeight,
+  createSegmentHeightFn,
 } from '.'
 import { useTimelinePhysics } from './useTimelinePhysics'
 
@@ -116,6 +116,11 @@ export interface TimelineProps {
   // scrolls smoothly on its own; `position` updates become drift corrections.
   playbackRate?: number
 
+  // Shape seed (optional)
+  // Drives the decorative waveform shape — pass the book id so each book
+  // gets a distinct, stable silhouette. Omitted = shared default shape.
+  shapeSeed?: string
+
   // Display (optional)
   showTime?: 'top' | 'bottom' | 'hidden'
 }
@@ -133,6 +138,7 @@ function drawTimeline(
   segmentDuration: number,
   segmentWidth: number,
   segmentGap: number,
+  segmentHeight: (index: number) => number,
   playheadX: number,
   selectionStartX: number | null,
   selectionEndX: number | null,
@@ -163,7 +169,7 @@ function drawTimeline(
   const barsPath = Skia.Path.Make()
   for (let i = startSegment; i < endSegment; i++) {
     const x = i * segmentStep
-    const height = getSegmentHeight(i)
+    const height = segmentHeight(i)
     const y = (TIMELINE_HEIGHT - height) / 2
     const width = i === lastSegmentIndex ? lastBarWidth : segmentWidth
     barsPath.addRRect(
@@ -303,9 +309,12 @@ export function Timeline({
   canZoom = false,
   tapSkip,
   playbackRate = 0,
+  shapeSeed = '',
   showTime = 'bottom',
 }: TimelineProps) {
   const [containerWidth, setContainerWidth] = useState(0)
+
+  const segmentHeight = useMemo(() => createSegmentHeightFn(shapeSeed), [shapeSeed])
 
   // Visual selection: paint selection color when color and bounds are provided
   const hasVisualSelection = !!(
@@ -377,6 +386,7 @@ export function Timeline({
             SEGMENT_DURATION,
             segmentWidth,
             segmentGap,
+            segmentHeight,
             playheadX,
             selStartX,
             selEndX,
@@ -431,7 +441,7 @@ export function Timeline({
   useEffect(() => {
     rebuildRef.current()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [containerWidth, totalSegments, duration, segmentWidth, segmentGap, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints])
+  }, [containerWidth, totalSegments, duration, segmentWidth, segmentGap, segmentHeight, hasVisualSelection, hasEditableSelection, selectionStart, selectionEnd, paints])
 
   // Rebuild on foreground: backgrounding (screen off) can recreate the Skia
   // surface blank, and an idle timeline (paused, no gestures) has no other
