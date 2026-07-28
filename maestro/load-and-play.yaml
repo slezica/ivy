@@ -7,19 +7,19 @@ appId: com.salezica.ivy
 - assertNotVisible: ".*Playing"
 - takeScreenshot: screenshots/load-01-library-with-file
 
-# Open the book in the player
+# Open the book in the player — auto-plays on open
 - tapOn: "Ivy Test Book"
 
-# Verify play/pause round trip
+# Verify pause/resume round trip
 - assertVisible:
-    id: "play-pause-button"
-- tapOn:
     id: "play-pause-button"
 - waitForAnimationToEnd
 - takeScreenshot: screenshots/load-02-playing
 - tapOn:
     id: "play-pause-button"
 - takeScreenshot: screenshots/load-03-paused
+- tapOn:
+    id: "play-pause-button"
 
 # Back to the library list — playback resumed above, so the row shows "Playing"
 - tapOn: "Library"
