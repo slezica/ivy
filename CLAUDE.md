@@ -545,13 +545,14 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 "Prepare the release" means exactly this sequence:
 
 1. **Bump versions:** `version` in package.json (becomes versionName via `withIvyVersionName`) and `android.versionCode` in app.json (+1 — Play requires strictly increasing).
-2. **Commit:** `release: bump version to X.Y.Z`
-3. **Build the AAB:**
+2. **Log:** add the new version's section (versionCode + changeset since last tag) to `docs/VERSIONS.md`.
+3. **Commit:** `docs: log X.Y.Z in VERSIONS.md`, then `release: bump version to X.Y.Z`
+4. **Build the AAB:**
    - On Mac: `npm run build:bundle` (prompts for keystore password)
    - In container: `npx expo prebuild --clean --platform android`, then `KEYSTORE_PASSWORD=... scripts/container-build.sh :app:assembleRelease :app:bundleRelease` (password must be provided by the user; never stored)
    - Both build `assembleRelease` alongside `bundleRelease` so the ffmpeg closure gate runs (it doesn't finalize `bundleRelease`).
-4. **Tag:** `vX.Y.Z` — only after the build succeeds.
-5. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload. (`dist/` is the website build output — see `script/build` — not a delivery location.)
+5. **Tag:** `vX.Y.Z` — only after the build succeeds.
+6. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload. (`dist/` is the website build output — see `script/build` — not a delivery location.)
 
 
 ## Native Packaging Changes
