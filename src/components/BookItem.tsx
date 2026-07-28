@@ -6,11 +6,12 @@ import type { Book } from '../services'
 
 interface BookItemProps {
   book: Book
+  isPlaying: boolean
   onPress: (book: Book) => void
   onOpenMenu: (bookId: string) => void
 }
 
-export default function BookItem({ book, onPress, onOpenMenu }: BookItemProps) {
+export default function BookItem({ book, isPlaying, onPress, onOpenMenu }: BookItemProps) {
   const isArchived = book.uri === null
 
   return (
@@ -41,7 +42,7 @@ export default function BookItem({ book, onPress, onOpenMenu }: BookItemProps) {
           </Text>
         )}
         {book.duration > 0 && (
-          <BookProgress book={book} isArchived={isArchived} />
+          <BookProgress book={book} isArchived={isArchived} isPlaying={isPlaying} />
         )}
       </View>
 
@@ -57,16 +58,20 @@ export default function BookItem({ book, onPress, onOpenMenu }: BookItemProps) {
   )
 }
 
-function BookProgress({ book, isArchived }: { book: Book; isArchived: boolean }) {
+function BookProgress({ book, isArchived, isPlaying }: { book: Book; isArchived: boolean; isPlaying: boolean }) {
   const remaining = book.duration - book.position
   const percentLeft = remaining / book.duration
 
+  const playingSuffix = isPlaying && (
+    <>{' • '}<Text style={styles.bookPlaying}>Playing</Text></>
+  )
+
   if (remaining < 60_000 && percentLeft < 0.01) {
-    return <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>Finished</Text>
+    return <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>Finished{playingSuffix}</Text>
   }
 
   if (book.position === 0) {
-    return <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>{formatDuration(book.duration)}</Text>
+    return <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>{formatDuration(book.duration)}{playingSuffix}</Text>
   }
 
   const percent = Math.round((book.position / book.duration) * 100)
@@ -74,7 +79,7 @@ function BookProgress({ book, isArchived }: { book: Book; isArchived: boolean })
   return (
     <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>
       <Text style={[styles.bookProgress, isArchived && styles.textArchived]}>{percent}%</Text>
-      {' • '}{formatDuration(remaining)} left
+      {' • '}{formatDuration(remaining)} left{playingSuffix}
     </Text>
   )
 }
@@ -130,6 +135,9 @@ const styles = StyleSheet.create({
   },
   bookProgress: {
     color: Color.PRIMARY,
+  },
+  bookPlaying: {
+    color: Color.SECONDARY,
   },
   textArchived: {
     color: Color.TEXT_DISABLED,

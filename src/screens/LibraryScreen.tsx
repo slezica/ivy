@@ -25,7 +25,7 @@ const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, sync, autoSync } = useStore()
+  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, sync, autoSync, playback } = useStore()
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false)
   const [detailsBookId, setDetailsBookId] = useState<string | null>(null)
@@ -237,6 +237,11 @@ export default function LibraryScreen() {
           renderItem={({ item }) => (
             <BookItem
               book={item}
+              isPlaying={
+                playback.status === 'playing' &&
+                playback.ownerId === MAIN_PLAYER_OWNER_ID &&
+                playback.uri === item.uri
+              }
               onPress={handleBookPress}
               onOpenMenu={handleOpenMenu}
             />
