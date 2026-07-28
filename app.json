@@ -58,6 +58,7 @@
           }
         }
       ],
+      "./plugins/withIvyGradleMemory.js",
       "./plugins/withIvySigning.js",
       "./plugins/withIvyBuildTypes.js",
       "./plugins/withIvyHermesFix.js",
