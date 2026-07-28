@@ -6,17 +6,7 @@ and again 2026-07-23.
 
 ## Features
 
-2. **Playlists / queues** — "play next" queue for podcast-style use, or named playlists.
-3. **Clip collections / tags** — organize flat clip list for heavy clippers.
-4. **Book artwork on player screen** — artwork is stored at import but never rendered on the player.
-5. **Statistics dashboard** — `SessionHistogram` now shows listening time by day/week/month/year; still missing streaks and aggregate totals.
-6. **Bulk import** — picker is single-file (`assets[0]`); no `multiple: true`, no multi-file action.
-7. **Zoom buttons in ClipEditor** — discoverable alternative to the removed pinch zoom (2026-07-23: pinch was hard to execute without moving the timeline). The `canZoom` prop and engine pinch machinery are kept, currently unused by all callers.
-8. **ClipViewer auto-pause precision** — pause at clip end triggers from 1 Hz position updates, so playback overshoots the boundary by up to ~1 s; with smooth playback follow (2026-07-23) the bars now visibly glide past the selection end before pausing.
-9. **Auto-open clip editor from player with uninterrupted playback** — hitting the clip button opens the editor directly, audio keeps playing; combined with linked bounds (playhead pushes anchors), clipping becomes listen-and-pause in one motion.
-10. **More readable settings** - always have subtitles below settings explaining use or state.
-11. **Sync indicators in screens** - show in library, clips and sessions that missing items are being synced (only if missing, not at all times during any sync)
-13. **Handle dragging during live playback** — the editor timeline freezes while a handle is dragged (playback follow deliberately excludes handle drags in `engine.ts`), then jerks to catch up on release. Live-drag needs: per-tick handle recompute from absolute finger x (drag is delta-based today), per-anchor push skip (`_pushSelection` currently disables both anchors), and a product decision for the linked playhead advancing into the held handle. Middle option: keep the freeze, ease the release catch-up.
+1. **Handle dragging in Editor during live playback** — the editor timeline freezes while a handle is dragged (playback follow deliberately excludes handle drags in `engine.ts`), then jerks to catch up on release. Live-drag needs: per-tick handle recompute from absolute finger x (drag is delta-based today), per-anchor push skip (`_pushSelection` currently disables both anchors), and a product decision for the linked playhead advancing into the held handle. Middle option: keep the freeze, ease the release catch-up.
 
 ## Refactors / Architecture
 
