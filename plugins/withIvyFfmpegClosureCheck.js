@@ -1,5 +1,5 @@
 // Config plugin: make the build FAIL if the bundled FFmpeg's native dependency
-// closure won't link on device. Runs scripts/check-ffmpeg-closure.js against the
+// closure won't link on device. Runs script/check-ffmpeg-closure.js against the
 // built APK as a finalizer of assembleRelease (the shipping gate) and
 // assemblePreview (continuously verified — that's the variant we build here).
 //
@@ -15,7 +15,7 @@ const { withAppBuildGradle } = require('expo/config-plugins')
 const GRADLE_BLOCK = [
   '',
   '// Injected by withIvyFfmpegClosureCheck — fail the build if libffmpeg.so',
-  "// won't dynamically link on device (scripts/check-ffmpeg-closure.js).",
+  "// won't dynamically link on device (script/check-ffmpeg-closure.js).",
   'tasks.register("checkFfmpegClosure") {',
   '    doLast {',
   '        def apkDirs = ["release", "preview", "maestro"]',
@@ -26,7 +26,7 @@ const GRADLE_BLOCK = [
   '        apks.each { apk ->',
   '            exec {',
   '                environment "ANDROID_HOME", android.sdkDirectory.absolutePath',
-  '                commandLine "node", "${rootDir}/../scripts/check-ffmpeg-closure.js", apk.absolutePath',
+  '                commandLine "node", "${rootDir}/../script/check-ffmpeg-closure.js", apk.absolutePath',
   '            }',
   '        }',
   '    }',

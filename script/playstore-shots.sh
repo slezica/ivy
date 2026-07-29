@@ -8,7 +8,7 @@
 #
 # Requirements:
 #   - The app installed on the target (any variant; preview recommended)
-#   - adb + maestro on PATH (same as scripts/e2e.sh)
+#   - adb + maestro on PATH (same as script/e2e.sh)
 #   - An emulator, or a debuggable build on a physical device (adb must be able
 #     to write to /sdcard/Android/data/<app>/files)
 #
@@ -16,8 +16,8 @@
 # re-run playstore/generate-artwork.py (needs Pillow) and commit the PNGs.
 #
 # Usage:
-#   scripts/playstore-shots.sh                      # default device
-#   scripts/playstore-shots.sh --device emulator-5554
+#   script/playstore-shots.sh                      # default device
+#   script/playstore-shots.sh --device emulator-5554
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -10,7 +10,7 @@
 // runtime. This script fails the build instead: it walks the NEEDED graph
 // from libffmpeg.so inside a built APK and asserts every soname resolves.
 //
-// Usage: node scripts/check-ffmpeg-closure.js <path-to-apk>
+// Usage: node script/check-ffmpeg-closure.js <path-to-apk>
 
 const { execFileSync } = require('child_process')
 const fs = require('fs')

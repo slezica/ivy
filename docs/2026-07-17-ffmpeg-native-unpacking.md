@@ -115,7 +115,7 @@ Rationale: the only thing pre-packaging meaningfully buys is emulator test-suite
 speed, and that is already solved more cheaply by "cold-canary + warm-rest" (one
 genuine cold-unpack run per suite catches packaging regressions; subsequent
 flows reuse the warmed `no_backup/`), backed by the build-time
-`scripts/check-ffmpeg-closure.js` static check. The packaging rework buys real
+`script/check-ffmpeg-closure.js` static check. The packaging rework buys real
 users nothing the warm-up doesn't already give them, at the cost of forking
 upstream packaging forever.
 

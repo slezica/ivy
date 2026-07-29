@@ -29,7 +29,7 @@ Everything is data-driven from `playstore/data.json` — books, positions, clips
 | `playstore/gen-audio.js` | Generates silent MP3s into `playstore/cache/` (gitignored, cached) |
 | `src/actions/seed_demo_data.ts` | Seeds DB + files from the bundle, then deletes it |
 | `maestro/playstore/screenshots.yaml` | Navigates and shoots (excluded from the e2e suite) |
-| `scripts/playstore-shots.sh` | The one command: gen → clear → push → maestro → collect |
+| `script/playstore-shots.sh` | The one command: gen → clear → push → maestro → collect |
 
 ## Seeding Semantics
 

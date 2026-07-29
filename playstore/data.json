@@ -1,5 +1,5 @@
 {
-  "comment": "Demo data for Play Store screenshots. books[0] is the hero: newest in the library and auto-loaded into the player, so its audio file is generated at full honest length (positions survive the player's hardware position sync). Edit freely, then re-run scripts/playstore-shots.sh.",
+  "comment": "Demo data for Play Store screenshots. books[0] is the hero: newest in the library and auto-loaded into the player, so its audio file is generated at full honest length (positions survive the player's hardware position sync). Edit freely, then re-run script/playstore-shots.sh.",
   "books": [
     {
       "id": "demo-meditations",

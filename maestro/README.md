@@ -16,7 +16,7 @@ and dev-mode overhead.
 
 ```bash
 # In the container:
-scripts/container-build.sh :app:assembleMaestro -PreactNativeArchitectures=arm64-v8a
+script/container-build.sh :app:assembleMaestro -PreactNativeArchitectures=arm64-v8a
 # On the Mac: cd android && ./gradlew :app:assembleMaestro
 adb install -r <...>/outputs/apk/maestro/app-maestro.apk
 ```
@@ -31,7 +31,7 @@ npm run test:e2e -- maestro/add-clip.yaml     # a single flow
 npm run test:e2e -- --device <serial>         # target a specific device
 ```
 
-`scripts/e2e.sh` pushes and **media-scans** the test fixtures first (the picker's
+`script/e2e.sh` pushes and **media-scans** the test fixtures first (the picker's
 search needs them indexed) — the one prerequisite the import flows require: the
 main fixture (`test-audio.m4a`, standard tags: narrator/summary/date + chapters),
 a fully-tagged one (`test-audio-2.m4a`, adds series/part/subtitle/language via

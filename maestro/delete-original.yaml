@@ -3,7 +3,7 @@ appId: com.salezica.ivy
 # Delete-original-after-import: enable the setting, import a disposable file,
 # and verify the import succeeds without a deletion-failure toast.
 #
-# The actual deletion is filesystem state Maestro can't see — scripts/e2e.sh
+# The actual deletion is filesystem state Maestro can't see — script/e2e.sh
 # pushes the disposable fixture (delete-me.m4a) before the suite and asserts
 # afterwards that it's gone from /sdcard/Download.
 #

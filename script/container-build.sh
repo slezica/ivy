@@ -8,8 +8,8 @@
 # stays pristine and container builds stay incremental across invocations.
 #
 # Usage (from anywhere):
-#   scripts/container-build.sh :app:assembleDebug -PreactNativeArchitectures=arm64-v8a
-#   scripts/container-build.sh :app:compileDebugKotlin
+#   script/container-build.sh :app:assembleDebug -PreactNativeArchitectures=arm64-v8a
+#   script/container-build.sh :app:compileDebugKotlin
 #
 # The mirror includes uncommitted and untracked files (full rsync of the tree,
 # minus node_modules and build outputs). Requires ANDROID_HOME (defaults to the

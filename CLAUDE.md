@@ -537,7 +537,7 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 **Run tests with console logs**: `npm test:verbose`
 **Run e2e tests:** `npm run test:e2e` (or `maestro test maestro/`)
 **Recreate Play Store screenshots:** `npm run screenshots` (see docs/2026-07-21-playstore-screenshots.md)
-**Check ffmpeg native linking:** `node scripts/check-ffmpeg-closure.js <built-apk>`
+**Check ffmpeg native linking:** `node script/check-ffmpeg-closure.js <built-apk>`
 
 
 ## Preparing a Release
@@ -549,7 +549,7 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 3. **Commit:** `docs: log X.Y.Z in VERSIONS.md`, then `release: bump version to X.Y.Z`
 4. **Build the AAB:**
    - On Mac: `npm run build:bundle` (prompts for keystore password)
-   - In container: `npx expo prebuild --clean --platform android`, then `KEYSTORE_PASSWORD=... scripts/container-build.sh :app:assembleRelease :app:bundleRelease` (password must be provided by the user; never stored)
+   - In container: `npx expo prebuild --clean --platform android`, then `KEYSTORE_PASSWORD=... script/container-build.sh :app:assembleRelease :app:bundleRelease` (password must be provided by the user; never stored)
    - Both build `assembleRelease` alongside `bundleRelease` so the ffmpeg closure gate runs (it doesn't finalize `bundleRelease`).
 5. **Tag:** `vX.Y.Z` — only after the build succeeds.
 6. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload. (`dist/` is the website build output — see `script/build` — not a delivery location.)
@@ -559,7 +559,7 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 
 Any change touching native packaging — `modules/ivy` jniLibs, `FFmpegEnvironment.kt`, the youtubedl-android `:ffmpeg` artifact, `expo.useLegacyPackaging` — needs two checks JS tests can't provide:
 
-1. **Closure check (build-enforced):** `checkFfmpegClosure` runs automatically as a finalizer of `assembleRelease` and `assemblePreview` (via `plugins/withIvyFfmpegClosureCheck.js`), so a broken closure **fails the build** — no one has to remember. It walks the `NEEDED` graph from `libffmpeg.so`, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it by hand with `node scripts/check-ffmpeg-closure.js <apk>`.
+1. **Closure check (build-enforced):** `checkFfmpegClosure` runs automatically as a finalizer of `assembleRelease` and `assemblePreview` (via `plugins/withIvyFfmpegClosureCheck.js`), so a broken closure **fails the build** — no one has to remember. It walks the `NEEDED` graph from `libffmpeg.so`, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it by hand with `node script/check-ffmpeg-closure.js <apk>`.
 2. **Fresh-install smoke test (manual):** create a clip / import a chaptered file on a **freshly installed** app, not an upgrade — `no_backup/` survives updates, and stale extracted libs there can mask linking failures that break fresh installs (this happened: see git history of `FFmpegEnvironment.kt`). **Uninstalling requires explicit user approval** — the user knows the device's installation state and whether the upgrade path (e.g. pending DB migrations) must be tested before wiping it.
 
 **Build-variant note:** four buildTypes — `debug` (Metro dev loop), `maestro` (e2e: preview clone + test affordances), `preview` (release twin for on-device testing, zero test surface), `release`. Test affordances gate on the `ivy_build_variant` resource (`debug`/`maestro`/`production`, see `plugins/withIvyBuildTypes.js` + `BuildInfoModule.kt`) — never on `__DEV__`. Release builds do **not** minify (`android.enableMinifyInReleaseBuilds` is unset → R8 off), so the `preview`/`maestro` lineage and `release` behave identically for native loading. Even if R8 were enabled it couldn't affect the exec'd-binary link path (native/filesystem, not JVM), and the module classes stay reachable via `IvyPackage`. The closure check runs on the release APK regardless.
@@ -576,7 +576,7 @@ Rules for Android builds in the container:
 - **NEVER run Gradle in `/workspace` directly.** Use the isolation script, which mirrors the repo to a container-local clone (`/home/claude/ivy-build`) and builds there — incremental across sessions, zero pollution of the mount:
 
   ```bash
-  scripts/container-build.sh :app:assembleDebug -PreactNativeArchitectures=arm64-v8a
+  script/container-build.sh :app:assembleDebug -PreactNativeArchitectures=arm64-v8a
   ```
 
   It rsyncs the full working tree (including uncommitted and untracked files, excluding node_modules and build outputs). Pass any Gradle tasks/flags as arguments.
