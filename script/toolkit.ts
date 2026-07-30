@@ -25,6 +25,7 @@ const HELP = `Ivy toolkit — project CLI (build, test, prepare, drive, inspect)
 Usage: script/toolkit.ts <command> [args] [--device <serial>]
 
 Commands:
+
   build <variant> [--install] [--arch <abi>]
       Variants: debug | maestro | preview | release | web.
       Env-aware: on the Mac builds in android/; in the container mirrors the
@@ -33,12 +34,15 @@ Commands:
       runs prebuild --clean first and needs ${'$'}KEYSTORE_PASSWORD (prompts on
       a TTY). web = copy web/ to dist/. --install installs the built APK on
       the device. --arch limits native ABIs (e.g. arm64-v8a for emulator).
+
   clean
       Recover a Gradle-polluted /workspace: sweep native build outputs and
       regenerate android/ via expo prebuild --clean.
+
   test [--unit] [--e2e]
       No flag = both. --unit = jest. --e2e = full maestro suite; pushes and
       media-scans the fixtures first, verifies delete-original afterwards.
+
   drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>
       Make the running app do something (one mode per call).
         --file    run a maestro flow (fixtures pushed first)
@@ -47,37 +51,48 @@ Commands:
         --tap     find element by resource-id/text/content-desc in the view
                   hierarchy and tap it via adb (fast path, no maestro startup)
         --nav     deep-link via ivy:// scheme (e.g. --nav player)
+
   prepare [--screenshots]
       Play Store preparations; no flag = all. --screenshots recreates
       playstore/shots/ (seed demo data, status-bar demo mode, maestro flow).
       Emulator-only.
+
   doctor
       Full environment report: tools, devices, project state, the
       local.properties pollution check, all built APKs/AABs found (with
       ffmpeg closure check on each APK). Exits nonzero on failures.
+
   device connect
       adb connect to the Mac-hosted emulator (host.docker.internal:5555).
+
   device wipe
       Clear app data (pm clear). Emulator-only.
+
   device fix-media
       Recover a wedged MediaStore (force-stop provider + full volume rescan).
+
   device put [--fixtures] [--samples]
       --fixtures  push + media-scan the e2e test audio files
       --samples   push the demo seed bundle; the app wipes its DB and
                   self-seeds on next launch. Emulator-only.
+
   capture [name]
       Screenshot the device into captures/<name>.png (default: timestamp).
+
   tree [--raw]
       Dump the view hierarchy (uiautomator). Default output is condensed to
       elements with text/resource-id/content-desc; --raw prints full XML.
       Note: React Native testIDs surface as resource-ids.
+
   logs [--tag <tag>] [--follow]
       Logcat scoped to the app's pid (app must be running). Default dumps and
       exits; --follow streams. --tag filters (e.g. ReactNativeJS).
+
   query "<sql>"
       Run SQL against a pulled copy of the app database (read-only; needs the
       debug build variant installed — run-as only works on debuggable builds —
       plus sqlite3 on the host).
+
   help
       This text.
 
