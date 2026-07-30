@@ -63,7 +63,6 @@
       "./plugins/withIvyBuildTypes.js",
       "./plugins/withIvyHermesFix.js",
       "./plugins/withIvyVersionName.js",
-      "./plugins/withIvyFfmpegClosureCheck.js",
       "./plugins/withIvyApkPathPrint.js"
     ],
     "experiments": {
