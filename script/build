@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -e
 
-export PATH="$(dirname "$(command -v node)"):$PATH"
+source ~/.bashrc
 script/toolkit.ts build web
