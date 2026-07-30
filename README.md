@@ -30,10 +30,9 @@ npm install
 
 ```bash
 npm start                                # dev client: build, install, Metro
-npm test                                 # unit tests (jest)
 script/toolkit.ts build debug --install  # build APK + install on device
 script/toolkit.ts build release          # release APK + AAB (needs $KEYSTORE_PASSWORD)
-script/toolkit.ts test --e2e             # maestro e2e suite
+script/toolkit.ts test                   # unit (jest) + e2e (maestro); --unit / --e2e to pick
 script/toolkit.ts doctor                 # environment + built-APK report
 script/toolkit.ts help                   # full command reference
 ```
