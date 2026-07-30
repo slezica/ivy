@@ -25,6 +25,17 @@ android {
     kotlinOptions {
         jvmTarget = '17'
     }
+
+    packaging {
+        jniLibs {
+            // Vendored prebuilts (src/main/jniLibs/) that llvm-strip can't parse;
+            // skip stripping so every build stops warning about them.
+            keepDebugSymbols.add('**/libandroid-posix-semaphore.so')
+            keepDebugSymbols.add('**/libandroid-support.so')
+            keepDebugSymbols.add('**/libcrypto_3.so')
+            keepDebugSymbols.add('**/libexpat_1.so')
+        }
+    }
 }
 
 repositories {
