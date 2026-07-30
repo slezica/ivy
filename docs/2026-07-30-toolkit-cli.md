@@ -58,8 +58,12 @@ toolkit query "<sql>"                    # app DB (pulled copy, read-only)
 - **Fixtures stay inside `test --e2e`** (pushed every run, idempotent), so
   tests never depend on device pre-state; `device put --fixtures` exists only
   for ad-hoc/manual use.
-- **`query` pulls a DB copy** via `run-as` (debuggable builds only) and runs
+- **`query` pulls a DB copy** via `run-as` (debug variant only) and runs
   sqlite3 locally — inherently read-only, no risk of corrupting live app state.
+  Making the maestro variant debuggable was tried and reverted: RN's gradle
+  plugin compiles New-Arch C++ with debug assertions for any debuggable
+  variant while prefab still links release `libreactnative.so`
+  (matchingFallbacks) — undefined `Sealable` symbols at link time.
 - **`drive --tap`** resolves elements from a uiautomator dump and taps via
   `adb input` — an optimization over inline maestro (no JVM startup) with a
   smaller vocabulary. `--nav` uses the `ivy://` scheme (expo-router deep

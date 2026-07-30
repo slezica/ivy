@@ -75,8 +75,9 @@ Commands:
       Logcat scoped to the app's pid (app must be running). Default dumps and
       exits; --follow streams. --tag filters (e.g. ReactNativeJS).
   query "<sql>"
-      Run SQL against a pulled copy of the app database (read-only; needs a
-      debuggable build: debug or maestro, plus sqlite3 on the host).
+      Run SQL against a pulled copy of the app database (read-only; needs the
+      debug build variant installed — run-as only works on debuggable builds —
+      plus sqlite3 on the host).
   help
       This text.
 
@@ -850,7 +851,7 @@ function cmdQuery(args: Args) {
   // adb exec-out can exit 0 with the remote error on stdout — trust only the
   // SQLite magic bytes
   if (res.status !== 0 || !res.stdout.subarray(0, 15).equals(Buffer.from('SQLite format 3'))) {
-    fail('could not pull the database — is a debuggable build (debug/maestro) installed and initialized? ' +
+    fail('could not pull the database — is the debug build variant installed and initialized? ' +
       `(${(res.stdout.toString() + res.stderr.toString()).trim().split('\n')[0]})`)
   }
   fs.writeFileSync(local, res.stdout)

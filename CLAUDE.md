@@ -645,8 +645,9 @@ Commands:
       Logcat scoped to the app's pid (app must be running). Default dumps and
       exits; --follow streams. --tag filters (e.g. ReactNativeJS).
   query "<sql>"
-      Run SQL against a pulled copy of the app database (read-only; needs a
-      debuggable build: debug or maestro, plus sqlite3 on the host).
+      Run SQL against a pulled copy of the app database (read-only; needs the
+      debug build variant installed — run-as only works on debuggable builds —
+      plus sqlite3 on the host).
   help
       This text.
 
