@@ -3,12 +3,12 @@
 Reproducible screenshots with curated demo data. One command regenerates everything:
 
 ```bash
-npm run screenshots        # → playstore/shots/*.png
+script/toolkit.ts prepare --screenshots        # → playstore/shots/*.png
 ```
 
 ## Core Idea
 
-The app seeds itself with demo data when a **seed bundle** is present in its external files directory (`/sdcard/Android/data/com.salezica.ivy/files/demo/`). The driver script clears app data, pushes the bundle via adb, and runs a Maestro flow that navigates the seeded app and takes screenshots.
+The app seeds itself with demo data when a **seed bundle** is present in its external files directory (`/sdcard/Android/data/com.salezica.ivy/files/demo/`). The toolkit clears app data, pushes the bundle via adb, and runs a Maestro flow that navigates the seeded app and takes screenshots.
 
 Everything is data-driven from `playstore/data.json` — books, positions, clips, transcriptions, sessions, cover palettes. Edit it, re-run the command, get new screenshots.
 
@@ -29,12 +29,12 @@ Everything is data-driven from `playstore/data.json` — books, positions, clips
 | `playstore/gen-audio.js` | Generates silent MP3s into `playstore/cache/` (gitignored, cached) |
 | `src/actions/seed_demo_data.ts` | Seeds DB + files from the bundle, then deletes it |
 | `maestro/playstore/screenshots.yaml` | Navigates and shoots (excluded from the e2e suite) |
-| `script/playstore-shots.sh` | The one command: gen → clear → push → maestro → collect |
+| `script/toolkit.ts prepare --screenshots` | The one command: gen → clear → push → maestro → collect |
 
 ## Seeding Semantics
 
 - Runs at startup, inside `initializeApplication`, **before** store hydration; failures are logged and startup continues.
-- Wipes all data (`clearAllData`) — the script also runs `pm clear`, so this only matters when re-pushing a bundle without clearing.
+- Wipes all data (`clearAllData`) — the toolkit also runs `pm clear`, so this only matters when re-pushing a bundle without clearing.
 - Books get explicit descending `updated_at` (fixture order = library order) and no `last_played_at`, making `books[0]` the auto-load hero via the `updated_at` fallback.
 - Book/clip/session inserts use the backup-restore DB methods: no sync queueing, full timestamp control.
 - Sync and transcription are disabled in settings (quiet queues; clips carry pre-written transcriptions).
@@ -49,4 +49,4 @@ Everything is data-driven from `playstore/data.json` — books, positions, clips
 
 ## Requirements
 
-App installed on the target (preview build recommended), adb + maestro on PATH, and an emulator (or a debuggable build, for adb access to `/sdcard/Android/data/<app>/`). Screenshot resolution = device resolution; pick the emulator accordingly.
+App installed on the target (preview build recommended), adb + maestro on PATH, and an emulator (the toolkit refuses physical devices — the pipeline clears app data). Screenshot resolution = device resolution; pick the emulator accordingly.

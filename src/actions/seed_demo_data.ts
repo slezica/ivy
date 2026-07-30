@@ -2,7 +2,7 @@
  * Demo data seeding for Play Store screenshots.
  *
  * At startup, if a seed bundle exists at {ExternalDirectoryPath}/demo/
- * (pushed via adb by script/playstore-shots.sh), the database is wiped and
+ * (pushed via adb by `script/toolkit.ts prepare --screenshots`), the database is wiped and
  * repopulated from it: books with artwork and positions, clips with notes and
  * transcriptions, and listening sessions. The bundle is deleted after seeding,
  * so later launches keep the seeded state without re-seeding.

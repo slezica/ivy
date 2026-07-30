@@ -245,8 +245,10 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── withIvyBuildTypes.js        # `preview` + `maestro` buildTypes and the ivy_build_variant signal
   ├── withIvyHermesFix.js         # arch-aware hermesc path (arm64 Linux container)
   ├── withIvyVersionName.js       # versionName from package.json at build time
-  ├── withIvyFfmpegClosureCheck.js # fail assembleRelease/Preview on broken ffmpeg linking
   └── withIvyApkPathPrint.js      # print APK output path after each assemble task
+
+/script
+  └── toolkit.ts                  # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below
 
 /credentials                      # Keystores (untracked, NEVER commit release.keystore)
   ├── debug.keystore              # Standard RN debug key
@@ -532,12 +534,14 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 
 ## Quick Reference
 
+Everything project-specific goes through the toolkit CLI — `script/toolkit.ts` (full reference at the end of this file).
+
 **Start dev server:** `npm start`
-**Run tests:** `npm test`
-**Run tests with console logs**: `npm test:verbose`
-**Run e2e tests:** `npm run test:e2e` (or `maestro test maestro/`)
-**Recreate Play Store screenshots:** `npm run screenshots` (see docs/2026-07-21-playstore-screenshots.md)
-**Check ffmpeg native linking:** `node script/check-ffmpeg-closure.js <built-apk>`
+**Run unit tests:** `npm test` (with console logs: `npm run test:verbose`)
+**Run e2e tests:** `script/toolkit.ts test --e2e`
+**Build (env-aware, Mac or container):** `script/toolkit.ts build <variant> [--install]`
+**Recreate Play Store screenshots:** `script/toolkit.ts prepare --screenshots` (see docs/2026-07-21-playstore-screenshots.md)
+**Environment + built-APK report (incl. ffmpeg linking):** `script/toolkit.ts doctor`
 
 
 ## Preparing a Release
@@ -547,22 +551,20 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 1. **Bump versions:** `version` in package.json (becomes versionName via `withIvyVersionName`) and `android.versionCode` in app.json (+1 — Play requires strictly increasing).
 2. **Log:** add the new version's section (versionCode + changeset since last tag) to `docs/VERSIONS.md`.
 3. **Commit:** `docs: log X.Y.Z in VERSIONS.md`, then `release: bump version to X.Y.Z`
-4. **Build the AAB:**
-   - On Mac: `npm run build:bundle` (prompts for keystore password)
-   - In container: `npx expo prebuild --clean --platform android`, then `KEYSTORE_PASSWORD=... script/container-build.sh :app:assembleRelease :app:bundleRelease` (password must be provided by the user; never stored)
-   - Both build `assembleRelease` alongside `bundleRelease` so the ffmpeg closure gate runs (it doesn't finalize `bundleRelease`).
-5. **Tag:** `vX.Y.Z` — only after the build succeeds.
-6. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload. (`dist/` is the website build output — see `script/build` — not a delivery location.)
+4. **Build the AAB:** `script/toolkit.ts build release` — env-aware (Mac: builds in `android/`; container: builds in the mirror), runs `expo prebuild --clean` first, verifies the keystore password and builds `assembleRelease` + `bundleRelease`. Needs `$KEYSTORE_PASSWORD` (prompts on a TTY; the password must be provided by the user, never stored).
+5. **Check:** `script/toolkit.ts doctor` — the ffmpeg closure check on the fresh release APK is part of its report.
+6. **Tag:** `vX.Y.Z` — only after the build succeeds.
+7. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload. (`dist/` is the website build output — `script/toolkit.ts build web` — not a delivery location.)
 
 
 ## Native Packaging Changes
 
 Any change touching native packaging — `modules/ivy` jniLibs, `FFmpegEnvironment.kt`, the youtubedl-android `:ffmpeg` artifact, `expo.useLegacyPackaging` — needs two checks JS tests can't provide:
 
-1. **Closure check (build-enforced):** `checkFfmpegClosure` runs automatically as a finalizer of `assembleRelease` and `assemblePreview` (via `plugins/withIvyFfmpegClosureCheck.js`), so a broken closure **fails the build** — no one has to remember. It walks the `NEEDED` graph from `libffmpeg.so`, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it by hand with `node script/check-ffmpeg-closure.js <apk>`.
+1. **Closure check:** `script/toolkit.ts doctor` walks the `NEEDED` graph from `libffmpeg.so` in every built APK it finds, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it after any packaging change. (This used to be a build-time gate — `withIvyFfmpegClosureCheck`, dropped 2026-07-30 once the packaging refactor had settled; revive from git history if packaging churn returns.)
 2. **Fresh-install smoke test (manual):** create a clip / import a chaptered file on a **freshly installed** app, not an upgrade — `no_backup/` survives updates, and stale extracted libs there can mask linking failures that break fresh installs (this happened: see git history of `FFmpegEnvironment.kt`). **Uninstalling requires explicit user approval** — the user knows the device's installation state and whether the upgrade path (e.g. pending DB migrations) must be tested before wiping it.
 
-**Build-variant note:** four buildTypes — `debug` (Metro dev loop), `maestro` (e2e: preview clone + test affordances), `preview` (release twin for on-device testing, zero test surface), `release`. Test affordances gate on the `ivy_build_variant` resource (`debug`/`maestro`/`production`, see `plugins/withIvyBuildTypes.js` + `BuildInfoModule.kt`) — never on `__DEV__`. Release builds do **not** minify (`android.enableMinifyInReleaseBuilds` is unset → R8 off), so the `preview`/`maestro` lineage and `release` behave identically for native loading. Even if R8 were enabled it couldn't affect the exec'd-binary link path (native/filesystem, not JVM), and the module classes stay reachable via `IvyPackage`. The closure check runs on the release APK regardless.
+**Build-variant note:** four buildTypes — `debug` (Metro dev loop), `maestro` (e2e: preview clone + test affordances), `preview` (release twin for on-device testing, zero test surface), `release`. Test affordances gate on the `ivy_build_variant` resource (`debug`/`maestro`/`production`, see `plugins/withIvyBuildTypes.js` + `BuildInfoModule.kt`) — never on `__DEV__`. Release builds do **not** minify (`android.enableMinifyInReleaseBuilds` is unset → R8 off), so the `preview`/`maestro` lineage and `release` behave identically for native loading. Even if R8 were enabled it couldn't affect the exec'd-binary link path (native/filesystem, not JVM), and the module classes stay reachable via `IvyPackage`. `doctor` checks the closure on every variant's APK it finds, release included.
 
 
 ## Environment
@@ -573,15 +575,89 @@ If the current working directory is `/workspace`, you are running inside a conta
 
 Rules for Android builds in the container:
 
-- **NEVER run Gradle in `/workspace` directly.** Use the isolation script, which mirrors the repo to a container-local clone (`/home/claude/ivy-build`) and builds there — incremental across sessions, zero pollution of the mount:
+- **NEVER run Gradle in `/workspace` directly.** Use the toolkit, which in the container mirrors the repo to a container-local clone (`/home/claude/ivy-build`) and builds there — incremental across sessions, zero pollution of the mount:
 
   ```bash
-  script/container-build.sh :app:assembleDebug -PreactNativeArchitectures=arm64-v8a
+  script/toolkit.ts build debug --arch arm64-v8a
   ```
 
-  It rsyncs the full working tree (including uncommitted and untracked files, excluding node_modules and build outputs). Pass any Gradle tasks/flags as arguments.
+  It rsyncs the full working tree (including uncommitted and untracked files, excluding node_modules and build outputs).
 - The whole `android/` tree is untracked (generated by `expo prebuild --clean`), so nothing under it can be committed. Never edit it by hand either — change `modules/ivy` or the `plugins/` config plugins instead, then regenerate.
-- **Recovery only** — if `/workspace` was polluted anyway (a Gradle run in the mount, from either side; symptom above), fix it with `npm run clean` (sweeps `modules/ivy/android/build` and `node_modules/*/android/{build,.cxx}`, then regenerates `android/` from scratch via `expo prebuild --clean`). The next build on the affected machine is a slow full rebuild — that's why the isolation script is the rule, not cleaning.
+- **Recovery only** — if `/workspace` was polluted anyway (a Gradle run in the mount, from either side; symptom above), fix it with `script/toolkit.ts clean` (sweeps `modules/ivy/android/build` and `node_modules/*/android/{build,.cxx}`, then regenerates `android/` from scratch via `expo prebuild --clean`). The next build on the affected machine is a slow full rebuild — that's why the isolated build is the rule, not cleaning.
+
+## Toolkit CLI Reference
+
+Full `script/toolkit.ts help` output (keep in sync when the toolkit changes):
+
+```
+Ivy toolkit — project CLI (build, test, prepare, drive, inspect)
+
+Usage: script/toolkit.ts <command> [args] [--device <serial>]
+
+Commands:
+  build <variant> [--install] [--arch <abi>]
+      Variants: debug | maestro | preview | release | web.
+      Env-aware: on the Mac builds in android/; in the container mirrors the
+      tree to $IVY_BUILD_DIR (default /home/claude/ivy-build) and builds
+      there (never Gradle in /workspace). release = assemble + bundle (AAB),
+      runs prebuild --clean first and needs $KEYSTORE_PASSWORD (prompts on
+      a TTY). web = copy web/ to dist/. --install installs the built APK on
+      the device. --arch limits native ABIs (e.g. arm64-v8a for emulator).
+  clean
+      Recover a Gradle-polluted /workspace: sweep native build outputs and
+      regenerate android/ via expo prebuild --clean.
+  test [--unit] [--e2e]
+      No flag = both. --unit = jest. --e2e = full maestro suite; pushes and
+      media-scans the fixtures first, verifies delete-original afterwards.
+  drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>
+      Make the running app do something (one mode per call).
+        --file    run a maestro flow (fixtures pushed first)
+        --inline  run ad-hoc maestro steps, no flow file needed
+                  e.g. --inline '- tapOn: "Library"'
+        --tap     find element by resource-id/text/content-desc in the view
+                  hierarchy and tap it via adb (fast path, no maestro startup)
+        --nav     deep-link via ivy:// scheme (e.g. --nav player)
+  prepare [--screenshots]
+      Play Store preparations; no flag = all. --screenshots recreates
+      playstore/shots/ (seed demo data, status-bar demo mode, maestro flow).
+      Emulator-only.
+  doctor
+      Full environment report: tools, devices, project state, the
+      local.properties pollution check, all built APKs/AABs found (with
+      ffmpeg closure check on each APK). Exits nonzero on failures.
+  device connect
+      adb connect to the Mac-hosted emulator (host.docker.internal:5555).
+  device wipe
+      Clear app data (pm clear). Emulator-only.
+  device fix-media
+      Recover a wedged MediaStore (force-stop provider + full volume rescan).
+  device put [--fixtures] [--samples]
+      --fixtures  push + media-scan the e2e test audio files
+      --samples   push the demo seed bundle; the app wipes its DB and
+                  self-seeds on next launch. Emulator-only.
+  capture [name]
+      Screenshot the device into captures/<name>.png (default: timestamp).
+  tree [--raw]
+      Dump the view hierarchy (uiautomator). Default output is condensed to
+      elements with text/resource-id/content-desc; --raw prints full XML.
+      Note: React Native testIDs surface as resource-ids.
+  logs [--tag <tag>] [--follow]
+      Logcat scoped to the app's pid (app must be running). Default dumps and
+      exits; --follow streams. --tag filters (e.g. ReactNativeJS).
+  query "<sql>"
+      Run SQL against a pulled copy of the app database (read-only; needs a
+      debuggable build: debug or maestro, plus sqlite3 on the host).
+  help
+      This text.
+
+Global:
+  --device <serial>   target device; defaults to the sole attached device,
+                      honors $ANDROID_SERIAL (same as adb)
+
+Destructive commands (wipe, put --samples, prepare) refuse to run on anything
+that is not verifiably an emulator. There is no override flag.
+```
+
 
 # Next Steps
 

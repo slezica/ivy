@@ -33,7 +33,7 @@ export const createInitializeApplication: ActionFactory<InitializeApplicationDep
       slicer.warmUp().catch(() => {})
 
       // Replace all data with the demo fixture when a seed bundle is present
-      // (Play Store screenshots — see script/playstore-shots.sh)
+      // (Play Store screenshots — see `script/toolkit.ts prepare --screenshots`)
       await seedDemoData().catch((error) => {
         console.error('[Store] Demo seeding failed:', error)
       })

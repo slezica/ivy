@@ -1,7 +1,7 @@
 appId: com.salezica.ivy
 ---
 # Play Store screenshot flow. NOT part of the test suite (config.yaml's glob is
-# non-recursive) — run via script/playstore-shots.sh, which clears app data and
+# non-recursive) — run via `script/toolkit.ts prepare --screenshots`, which clears app data and
 # pushes the demo seed bundle first. The app seeds itself on launch.
 #
 # Screenshot paths are sandboxed into the run's artifact dir; the script sets
