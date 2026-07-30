@@ -245,7 +245,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── withIvyBuildTypes.js        # `preview` + `maestro` buildTypes and the ivy_build_variant signal
   ├── withIvyHermesFix.js         # arch-aware hermesc path (arm64 Linux container)
   ├── withIvyVersionName.js       # versionName from package.json at build time
-  └── withIvyApkPathPrint.js      # print APK output path after each assemble task
+  └── withIvyApkPathPrint.js      # print APK/AAB output paths after assemble/bundle tasks
 
 /script
   └── toolkit.ts                  # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below

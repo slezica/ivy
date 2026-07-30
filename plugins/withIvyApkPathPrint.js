@@ -1,17 +1,23 @@
-// Config plugin: print the absolute path of every produced APK at the end of
-// each assemble task, so build commands end with the artifact location instead
-// of requiring a manual `fd -I apk$` afterwards.
+// Config plugin: print the absolute path of every produced APK/AAB at the end
+// of each assemble/bundle task, so build commands end with the artifact
+// location instead of requiring a manual `fd -I apk$` afterwards.
 const { withAppBuildGradle } = require('expo/config-plugins')
 
 const GRADLE_BLOCK = [
   '',
-  '// Injected by withIvyApkPathPrint — print APK output paths after assembly.',
+  '// Injected by withIvyApkPathPrint — print APK/AAB output paths after assembly.',
   'android.applicationVariants.all { variant ->',
   '    variant.assembleProvider.configure {',
   '        it.doLast {',
   '            variant.outputs.each { output ->',
   '                println "APK: ${output.outputFile.absolutePath}"',
   '            }',
+  '        }',
+  '    }',
+  '    tasks.matching { it.name == "bundle${variant.name.capitalize()}" }.configureEach { task ->',
+  '        task.doLast {',
+  '            def aab = new File(layout.buildDirectory.get().asFile, "outputs/bundle/${variant.name}/app-${variant.name}.aab")',
+  '            println "AAB: ${aab.absolutePath}"',
   '        }',
   '    }',
   '}',
