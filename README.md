@@ -37,7 +37,7 @@ script/toolkit.ts help
 
 # Frequent commands:
 script/toolkit.ts build debug --install  # build APK + install on device
-script/toolkit.ts build release          # release APK + AAB (needs $KEYSTORE_PASSWORD)
+script/toolkit.ts build release          # release APK + AAB (prompts for password, or $KEYSTORE_PASSWORD)
 script/toolkit.ts test                   # unit (jest) + e2e (maestro); --unit / --e2e to pick
 script/toolkit.ts doctor                 # environment + built-APK report
 ```
