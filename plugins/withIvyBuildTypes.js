@@ -31,23 +31,29 @@ const CUSTOM_BLOCK = [
   '            initWith preview',
   '            signingConfig signingConfigs.debug',
   "            matchingFallbacks = ['release', 'debug']",
-  "            resValue 'string', 'ivy_build_variant', 'maestro'",
   '        }',
 ].join('\n')
 
-const DEBUG_RESVALUE = "            resValue 'string', 'ivy_build_variant', 'debug'"
+// resValues are set AFTER the buildTypes declarations: initWith copies them,
+// so setting them inside the blocks makes maestro inherit debug's value via
+// preview and replace it (AGP "value is being replaced" warning).
+const RESVALUE_BLOCK = [
+  '',
+  "android.buildTypes.debug.resValue 'string', 'ivy_build_variant', 'debug'",
+  "android.buildTypes.maestro.resValue 'string', 'ivy_build_variant', 'maestro'",
+].join('\n')
 
 function apply(contents) {
   if (/\n\s*preview\s*\{/.test(contents)) {
     return contents // already applied
   }
   // Anchor on the template's `debug { signingConfig signingConfigs.debug }`
-  // block: inject the debug resValue inside it, the custom buildTypes after it.
-  const debugBuildType = /(buildTypes\s*\{\s*\n\s*debug\s*\{\s*\n\s*signingConfig signingConfigs\.debug\s*\n)(\s*\})/
+  // block: inject the custom buildTypes after it.
+  const debugBuildType = /(buildTypes\s*\{\s*\n\s*debug\s*\{\s*\n\s*signingConfig signingConfigs\.debug\s*\n\s*\})/
   if (!debugBuildType.test(contents)) {
     throw new Error('withIvyBuildTypes: debug buildType anchor not found in app/build.gradle')
   }
-  return contents.replace(debugBuildType, `$1${DEBUG_RESVALUE}\n$2\n${CUSTOM_BLOCK}`)
+  return contents.replace(debugBuildType, `$1\n${CUSTOM_BLOCK}`) + RESVALUE_BLOCK + '\n'
 }
 
 module.exports = function withIvyBuildTypes(config) {
