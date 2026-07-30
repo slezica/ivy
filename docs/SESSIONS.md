@@ -125,7 +125,8 @@ src/store/
   types.ts               → Session state shape in AppState
 
 src/screens/
-  SessionsScreen.tsx     → History list UI
+  SessionsScreen.tsx     → History list UI (search by book title/name/artist;
+                           histogram reflects the filtered sessions)
   LibraryScreen.tsx      → "History" menu item navigating to sessions
 
 src/components/
