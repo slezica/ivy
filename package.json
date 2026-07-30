@@ -10,15 +10,7 @@
     "lint": "expo lint",
     "test": "jest --silent",
     "test:verbose": "jest",
-    "test:watch": "jest --watch",
-    "test:e2e": "bash script/e2e.sh",
-    "screenshots": "bash script/playstore-shots.sh",
-    "clean": "rm -rf modules/ivy/android/build && find node_modules -maxdepth 3 -type d \\( -path '*/android/build' -o -name .cxx \\) -prune -exec rm -rf {} + && npx expo prebuild --clean --platform android",
-    "build:debug": "cd android && ./gradlew assembleDebug",
-    "build:preview": "cd android && ./gradlew assemblePreview",
-    "keystore:check": "keytool -list -keystore credentials/release.keystore -alias ivy -storepass \"$KEYSTORE_PASSWORD\" > /dev/null && echo 'keystore password OK'",
-    "build:release": "read -r -p \"Password: \" -s KEYSTORE_PASSWORD && export KEYSTORE_PASSWORD && npm run -s keystore:check && expo prebuild --platform android && cd android && ./gradlew assembleRelease",
-    "build:bundle": "read -r -p \"Password: \" -s KEYSTORE_PASSWORD && export KEYSTORE_PASSWORD && npm run -s keystore:check && expo prebuild --clean --platform android && cd android && ./gradlew assembleRelease bundleRelease"
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -69,6 +61,7 @@
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
+    "@types/node": "^26.1.2",
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
@@ -76,6 +69,7 @@
     "jest": "^29.7.0",
     "jest-expo": "^54.0.16",
     "patch-package": "^8.0.1",
+    "tsx": "^4.23.1",
     "typescript": "~5.9.2"
   },
   "private": true
