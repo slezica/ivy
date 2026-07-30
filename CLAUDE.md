@@ -551,7 +551,7 @@ Everything project-specific goes through the toolkit CLI — `script/toolkit.ts`
 5. **Check:** `script/toolkit.ts doctor` — the ffmpeg closure check on the fresh release APK is part of its report.
 6. **Tag:** `vX.Y.Z` — only after the build succeeds.
 7. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload. (`dist/` is the website build output — `script/toolkit.ts build web` — not a delivery location.)
-8. **Screenshots (only if UI changed):** after refreshing `web/assets/` screenshots, regenerate the README composite: `convert web/assets/{01-library,02-player,03-clips,05-history}.png -resize x1200 -background none -splice 12x0 +append -chop 12x0 docs/screenshots.png`
+8. **Screenshots (only if UI changed):** after refreshing `web/assets/` screenshots, regenerate the README composite: `convert web/assets/{02-player,01-library,03-clips,05-history}.png -resize x1200 -background none -splice 12x0 +append -chop 12x0 docs/screenshots.png`
 
 
 ## Native Packaging Changes
