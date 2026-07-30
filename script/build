@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
 set -e
 
-source ~/.bashrc
 script/toolkit.ts build web
