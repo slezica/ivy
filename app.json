@@ -63,7 +63,8 @@
       "./plugins/withIvyBuildTypes.js",
       "./plugins/withIvyHermesFix.js",
       "./plugins/withIvyVersionName.js",
-      "./plugins/withIvyApkPathPrint.js"
+      "./plugins/withIvyApkPathPrint.js",
+      "./plugins/withIvyPackaging.js"
     ],
     "experiments": {
       "typedRoutes": true
