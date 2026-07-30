@@ -3,8 +3,12 @@
 **Date:** 2026-07-30
 
 Classification of all warnings in a clean `build release` log (1.3.0-era,
-Expo 54 / RN 0.81.5 / AGP with compileSdk 36). No fixes applied yet —
-this doc records what is worth fixing, worth silencing, or noise to ignore.
+Expo 54 / RN 0.81.5 / AGP with compileSdk 36).
+
+**Status: items 1–4 fixed on 2026-07-30** (IvyPackage → BaseReactPackage +
+dead sub-packages deleted; resValue set post-declaration; keepDebugSymbols in
+`modules/ivy` and `withIvyPackaging.js`). Verified: clean maestro build log,
+481 unit tests, 9/9 e2e flows. Items 5–9 remain intentionally ignored.
 
 ## Worth fixing (our code)
 
