@@ -225,18 +225,13 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
       ├── src/main/jniLibs/       # Vendored ffmpeg runtime deps (libexpat, libcrypto, libandroid-*) per ABI — see docs/CLIPS.md
       └── src/main/java/com/
           ├── salezica/ivy/
-          │   ├── IvyPackage.kt           # Single autolinked ReactPackage (aggregates the four below)
+          │   ├── IvyPackage.kt           # Single autolinked ReactPackage (lazy BaseReactPackage, declares all modules)
           │   ├── FFmpegEnvironment.kt    # LD_LIBRARY_PATH + soname symlinks for exec'ing libffmpeg.so
           │   ├── AudioSlicerModule.kt    # Native module for audio slicing
-          │   ├── AudioSlicerPackage.kt
           │   ├── AudioMetadataModule.kt  # Native module for metadata extraction
-          │   ├── AudioMetadataPackage.kt
           │   ├── FileCopierModule.kt     # Native module for file copy with progress
-          │   ├── FileCopierPackage.kt
           │   ├── FFmetadataReaderModule.kt # Native module for raw ffmetadata dump (FFmpeg -f ffmetadata; parsed in JS)
-          │   ├── FFmetadataReaderPackage.kt
-          │   ├── BuildInfoModule.kt      # Exposes ivy_build_variant to JS (test-affordance gate)
-          │   └── BuildInfoPackage.kt
+          │   └── BuildInfoModule.kt      # Exposes ivy_build_variant to JS (test-affordance gate)
           └── yausername/youtubedl_android/
               └── YoutubeDLException.kt   # Shim for the removed yt-dlp :library (see docs/2026-06-30-remove-ytdlp.md)
 
@@ -245,7 +240,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── withIvyBuildTypes.js        # `preview` + `maestro` buildTypes and the ivy_build_variant signal
   ├── withIvyHermesFix.js         # arch-aware hermesc path (arm64 Linux container)
   ├── withIvyVersionName.js       # versionName from package.json at build time
-  └── withIvyApkPathPrint.js      # print APK/AAB output paths after assemble/bundle tasks
+  ├── withIvyApkPathPrint.js      # print APK/AAB output paths after assemble/bundle tasks
+  └── withIvyPackaging.js         # skip llvm-strip on libffmpeg.zip.so (zip, not ELF)
 
 /script
   └── toolkit.ts                  # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below
