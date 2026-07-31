@@ -27,13 +27,13 @@ Usage: script/toolkit.ts <command> [args] [--device <serial>]
 Commands:
 
   build <variant> [--install] [--arch <abi>]
-      Variants: debug | maestro | preview | release | web.
+      Variants: debug | maestro | preview | release.
       Env-aware: on the Mac builds in android/; in the container mirrors the
       tree to ${'$'}IVY_BUILD_DIR (default /home/claude/ivy-build) and builds
       there (never Gradle in /workspace). release = assemble + bundle (AAB),
       runs prebuild --clean first and needs ${'$'}KEYSTORE_PASSWORD (prompts on
-      a TTY). web = copy web/ to dist/. --install installs the built APK on
-      the device. --arch limits native ABIs (e.g. arm64-v8a for emulator).
+      a TTY). --install installs the built APK on the device. --arch limits
+      native ABIs (e.g. arm64-v8a for emulator).
 
   clean
       Recover a Gradle-polluted /workspace: sweep native build outputs and
@@ -202,8 +202,7 @@ const GRADLE_TASKS: Record<string, string[]> = {
 
 function cmdBuild(args: Args) {
   const variant = args.positionals[0]
-  if (!variant) fail('usage: build <debug|maestro|preview|release|web> [--install] [--arch <abi>]')
-  if (variant === 'web') return buildWeb()
+  if (!variant) fail('usage: build <debug|maestro|preview|release> [--install] [--arch <abi>]')
   if (!(variant in GRADLE_TASKS)) fail(`unknown variant: ${variant}`)
 
   const gradleArgs = [...GRADLE_TASKS[variant]]
@@ -244,14 +243,6 @@ function apkPath(variant: string): string {
 function fixAndroidPerms(base: string) {
   const android = path.join(base, 'android')
   if (fs.existsSync(android)) run('chmod', ['-R', 'u+rwX,go+rX', android])
-}
-
-function buildWeb() {
-  const dist = path.join(ROOT, 'dist')
-  fs.rmSync(dist, { recursive: true, force: true })
-  fs.mkdirSync(dist, { recursive: true })
-  fs.cpSync(path.join(ROOT, 'web'), dist, { recursive: true })
-  log('web/ -> dist/')
 }
 
 // Android build isolation for the container: /workspace is a bind mount of the

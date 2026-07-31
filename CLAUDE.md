@@ -550,7 +550,7 @@ Everything project-specific goes through the toolkit CLI — `script/toolkit.ts`
 4. **Build the AAB:** `script/toolkit.ts build release` — env-aware (Mac: builds in `android/`; container: builds in the mirror), runs `expo prebuild --clean` first, verifies the keystore password and builds `assembleRelease` + `bundleRelease`. Needs `$KEYSTORE_PASSWORD` (prompts on a TTY; the password must be provided by the user, never stored).
 5. **Check:** `script/toolkit.ts doctor` — the ffmpeg closure check on the fresh release APK is part of its report.
 6. **Tag:** `vX.Y.Z` — only after the build succeeds.
-7. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload. (`dist/` is the website build output — `script/toolkit.ts build web` — not a delivery location.)
+7. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload.
 8. **Screenshots (only if UI changed):** after refreshing `web/assets/` screenshots, regenerate the README composite: `convert web/assets/{02-player,01-library,03-clips,05-history}.png -resize x1200 -background none -splice 12x0 +append -chop 12x0 docs/screenshots.png`
 
 
@@ -594,13 +594,13 @@ Usage: script/toolkit.ts <command> [args] [--device <serial>]
 Commands:
 
   build <variant> [--install] [--arch <abi>]
-      Variants: debug | maestro | preview | release | web.
+      Variants: debug | maestro | preview | release.
       Env-aware: on the Mac builds in android/; in the container mirrors the
       tree to $IVY_BUILD_DIR (default /home/claude/ivy-build) and builds
       there (never Gradle in /workspace). release = assemble + bundle (AAB),
       runs prebuild --clean first and needs $KEYSTORE_PASSWORD (prompts on
-      a TTY). web = copy web/ to dist/. --install installs the built APK on
-      the device. --arch limits native ABIs (e.g. arm64-v8a for emulator).
+      a TTY). --install installs the built APK on the device. --arch limits
+      native ABIs (e.g. arm64-v8a for emulator).
 
   clean
       Recover a Gradle-polluted /workspace: sweep native build outputs and
