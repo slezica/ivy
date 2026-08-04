@@ -222,7 +222,10 @@ function cmdBuild(args: Args) {
   }
 
   if (isContainer) containerGradle(gradleArgs, env)
-  else run('./gradlew', gradleArgs.map(t => t.replace(':app:', '')), { cwd: path.join(ROOT, 'android'), env })
+  else {
+    ensureGradlewExec(ROOT)
+    run('./gradlew', gradleArgs.map(t => t.replace(':app:', '')), { cwd: path.join(ROOT, 'android'), env })
+  }
 
   if (args.flags.install) {
     if (variant === 'release') fail('--install: install release builds by hand')
@@ -244,6 +247,12 @@ function apkPath(variant: string): string {
 function fixAndroidPerms(base: string) {
   const android = path.join(base, 'android')
   if (fs.existsSync(android)) run('chmod', ['-R', 'u+rwX,go+rX', android])
+}
+
+// prebuild writes gradlew without the exec bit
+function ensureGradlewExec(base: string) {
+  const gradlew = path.join(base, 'android/gradlew')
+  if (fs.existsSync(gradlew)) fs.chmodSync(gradlew, 0o755)
 }
 
 // Android build isolation for the container: /workspace is a bind mount of the
@@ -283,7 +292,7 @@ function containerGradle(gradleArgs: string[], env: NodeJS.ProcessEnv) {
   if (!fs.existsSync(lpFile) || fs.readFileSync(lpFile, 'utf8') !== lp) fs.writeFileSync(lpFile, lp)
 
   fixAndroidPerms(MIRROR)
-  fs.chmodSync(path.join(MIRROR, 'android/gradlew'), 0o755)
+  ensureGradlewExec(MIRROR)
 
   log(`gradle ${gradleArgs.join(' ')}`)
   run('./gradlew', ['--no-daemon', '--max-workers=8', ...gradleArgs], { cwd: path.join(MIRROR, 'android'), env })
