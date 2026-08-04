@@ -27,7 +27,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "FOREGROUND_SERVICE",
         "WAKE_LOCK"
