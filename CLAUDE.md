@@ -547,7 +547,7 @@ Everything project-specific goes through the toolkit CLI — `script/toolkit.ts`
 1. **Bump version:** `version` in package.json — the single version of record. `withIvyVersionName` derives both versionName and versionCode (major\*10000 + minor\*100 + patch; Play requires strictly increasing, so minor/patch must stay < 100). app.json carries no version fields.
 2. **Log:** add the new version's section (derived versionCode + changeset since last tag) to `docs/VERSIONS.md`.
 3. **Commit:** `docs: log X.Y.Z in VERSIONS.md`, then `release: bump version to X.Y.Z`
-4. **Build the AAB:** `script/toolkit.ts build release` — env-aware (Mac: builds in `android/`; container: builds in the mirror), runs `expo prebuild --clean` first, verifies the keystore password and builds `assembleRelease` + `bundleRelease`. Needs `$KEYSTORE_PASSWORD` (prompts on a TTY; the password must be provided by the user, never stored).
+4. **Build the AAB — done by the user, not the agent:** `script/toolkit.ts build release` needs `$KEYSTORE_PASSWORD` (prompts on a TTY; never stored), so the user runs it on the host Mac. Agent: do steps 1–3, then ask the user to build and wait; continue with step 5 once they confirm.
 5. **Check:** `script/toolkit.ts doctor` — the ffmpeg closure check on the fresh release APK is part of its report.
 6. **Tag:** `vX.Y.Z` — only after the build succeeds.
 7. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload.
