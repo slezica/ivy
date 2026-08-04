@@ -627,7 +627,8 @@ Commands:
   doctor
       Full environment report: tools, devices, project state, the
       local.properties pollution check, all built APKs/AABs found (with
-      ffmpeg closure check on each APK). Exits nonzero on failures.
+      version name/code, and ffmpeg closure check on each APK). Exits
+      nonzero on failures.
 
   device connect
       adb connect to the Mac-hosted emulator (host.docker.internal:5555).

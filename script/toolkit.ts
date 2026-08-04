@@ -60,7 +60,8 @@ Commands:
   doctor
       Full environment report: tools, devices, project state, the
       local.properties pollution check, all built APKs/AABs found (with
-      ffmpeg closure check on each APK). Exits nonzero on failures.
+      version name/code, and ffmpeg closure check on each APK). Exits
+      nonzero on failures.
 
   device connect
       adb connect to the Mac-hosted emulator (host.docker.internal:5555).
@@ -563,7 +564,8 @@ function cmdDoctor() {
   for (const f of found) {
     const stat = fs.statSync(f)
     const mb = (stat.size / 1024 / 1024).toFixed(1)
-    console.log(`  · ${f} (${mb} MB, ${stat.mtime.toISOString().slice(0, 16).replace('T', ' ')})`)
+    const version = artifactVersion(f) ?? 'version unknown'
+    console.log(`  · ${f} (${version}, ${mb} MB, ${stat.mtime.toISOString().slice(0, 16).replace('T', ' ')})`)
     if (f.endsWith('.apk')) checkFfmpegClosure(f)
   }
 
@@ -599,10 +601,60 @@ function findArtifacts(): string[] {
 // it) — it only crashes at runtime on fresh installs. This walks the NEEDED
 // graph from libffmpeg.so inside a built APK and asserts every soname resolves.
 
-function findReadelf(): string | null {
-  const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT
+function sdkHome(): string {
+  return process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT
     || (isContainer ? '/opt/android-sdk' : `${os.homedir()}/Library/Android/sdk`)
-  const ndkRoot = path.join(sdk, 'ndk')
+}
+
+// --- artifact version (doctor) ---
+
+// versionName/versionCode of a built artifact. APKs via aapt2 badging; AABs
+// have a proto-XML manifest (no aapt2/bundletool support here), scanned
+// byte-wise instead — see protoAttr.
+export function artifactVersion(file: string): string | null {
+  try {
+    if (file.endsWith('.apk')) {
+      const aapt2 = findAapt2()
+      if (!aapt2) return null
+      const out = capture(aapt2, ['dump', 'badging', file], { allowFail: true })
+      const m = out.match(/versionCode='(\d+)' versionName='([^']*)'/)
+      return m ? `${m[2]} (${m[1]})` : null
+    }
+    const manifest = execFileSync('unzip', ['-p', file, 'base/manifest/AndroidManifest.xml'])
+    const name = protoAttr(manifest, 'versionName')
+    const code = protoAttr(manifest, 'versionCode')
+    return name && code ? `${name} (${code})` : null
+  } catch {
+    return null
+  }
+}
+
+function findAapt2(): string | null {
+  const bt = path.join(sdkHome(), 'build-tools')
+  if (!fs.existsSync(bt)) return null
+  for (const v of fs.readdirSync(bt).sort().reverse()) {
+    const aapt2 = path.join(bt, v, 'aapt2')
+    if (fs.existsSync(aapt2)) return aapt2
+  }
+  return null
+}
+
+// Extract an attribute value from an aapt2 proto-XML manifest. XmlAttribute
+// serializes as `12 <len> <name> 1a <len> <value>` (field 2 = name, field 3 =
+// value, both length-prefixed strings). Good for values < 128 bytes, which
+// covers version attributes.
+export function protoAttr(buf: Buffer, name: string): string | null {
+  const needle = Buffer.concat([Buffer.from([0x12, name.length]), Buffer.from(name)])
+  const i = buf.indexOf(needle)
+  if (i < 0) return null
+  const p = i + needle.length
+  const len = buf[p + 1]
+  if (buf[p] !== 0x1a || len === undefined || len > 127) return null
+  return buf.subarray(p + 2, p + 2 + len).toString('utf8')
+}
+
+function findReadelf(): string | null {
+  const ndkRoot = path.join(sdkHome(), 'ndk')
   if (!fs.existsSync(ndkRoot)) return null
   for (const ndk of fs.readdirSync(ndkRoot).sort().reverse()) {
     const prebuilt = path.join(ndkRoot, ndk, 'toolchains/llvm/prebuilt')

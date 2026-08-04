@@ -1,4 +1,4 @@
-import { parseArgs, parseHierarchy, nodeCenter } from '../toolkit'
+import { parseArgs, parseHierarchy, nodeCenter, protoAttr } from '../toolkit'
 
 describe('parseArgs', () => {
   it('separates positionals from boolean flags', () => {
@@ -34,5 +34,25 @@ describe('parseHierarchy', () => {
   it('computes element centers from bounds', () => {
     const nodes = parseHierarchy(xml)
     expect(nodeCenter(nodes[1])).toEqual([619, 1352])
+  })
+})
+
+describe('protoAttr', () => {
+  // XmlAttribute wire format: 12 <len> name 1a <len> value
+  const attr = (name: string, value: string) => Buffer.concat([
+    Buffer.from([0x12, name.length]), Buffer.from(name),
+    Buffer.from([0x1a, value.length]), Buffer.from(value),
+  ])
+
+  it('extracts the value following the attribute name', () => {
+    const buf = Buffer.concat([attr('versionCode', '10401'), attr('versionName', '1.4.1')])
+    expect(protoAttr(buf, 'versionName')).toBe('1.4.1')
+    expect(protoAttr(buf, 'versionCode')).toBe('10401')
+  })
+
+  it('returns null for missing attribute or non-string value', () => {
+    expect(protoAttr(attr('other', 'x'), 'versionName')).toBeNull()
+    const intValue = Buffer.concat([Buffer.from([0x12, 4]), Buffer.from('name'), Buffer.from([0x28, 0x05])])
+    expect(protoAttr(intValue, 'name')).toBeNull()
   })
 })
