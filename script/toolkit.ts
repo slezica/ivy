@@ -60,8 +60,8 @@ Commands:
   doctor
       Full environment report: tools, devices, project state, the
       local.properties pollution check, all built APKs/AABs found (with
-      version name/code, and ffmpeg closure check on each APK). Exits
-      nonzero on failures.
+      version name/code, ffmpeg closure check on each APK, and a yt-dlp
+      trace scan on every artifact). Exits nonzero on failures.
 
   device connect
       adb connect to the Mac-hosted emulator (host.docker.internal:5555).
@@ -567,6 +567,7 @@ function cmdDoctor() {
     const version = artifactVersion(f) ?? 'version unknown'
     console.log(`  · ${f} (${version}, ${mb} MB, ${stat.mtime.toISOString().slice(0, 16).replace('T', ' ')})`)
     if (f.endsWith('.apk')) checkFfmpegClosure(f)
+    checkYtdlpTraces(f)
   }
 
   if (doctorFailed) fail('doctor found problems')
@@ -651,6 +652,42 @@ export function protoAttr(buf: Buffer, name: string): string | null {
   const len = buf[p + 1]
   if (buf[p] !== 0x1a || len === undefined || len > 127) return null
   return buf.subarray(p + 2, p + 2 + len).toString('utf8')
+}
+
+// --- yt-dlp trace scan ---
+// The ffmpeg runtime is vendored precisely so shipped artifacts carry no
+// yt-dlp lineage (Play flags YouTube downloaders — see
+// docs/2026-08-04-vendor-ffmpeg.md). Extract the artifact and byte-scan every
+// entry (DEX included) plus entry names for the known fingerprints.
+
+const YTDLP_PATTERNS = ['yausername', 'youtubedl', 'yt-dlp', 'ytdlp', 'junkfood02']
+
+function checkYtdlpTraces(artifact: string) {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ytdlp-scan-'))
+  try {
+    capture('unzip', ['-o', '-q', artifact, '-d', workDir], { allowFail: true })
+    const hits = new Set<string>()
+    const walk = (dir: string) => {
+      for (const name of fs.readdirSync(dir)) {
+        const p = path.join(dir, name)
+        if (fs.statSync(p).isDirectory()) {
+          walk(p)
+          continue
+        }
+        const rel = path.relative(workDir, p)
+        const data = fs.readFileSync(p)
+        for (const pattern of YTDLP_PATTERNS) {
+          if (rel.toLowerCase().includes(pattern)) hits.add(`"${pattern}" in name: ${rel}`)
+          if (data.includes(pattern)) hits.add(`"${pattern}" in ${rel}`)
+        }
+      }
+    }
+    walk(workDir)
+    const detail = hits.size === 0 ? 'none found' : [...hits].slice(0, 4).join(', ')
+    report(hits.size === 0, 'yt-dlp traces', detail)
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true })
+  }
 }
 
 function findReadelf(): string | null {
