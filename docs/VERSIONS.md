@@ -4,6 +4,20 @@ Release log: one section per shipped version, newest first. Record versionName,
 versionCode and the user-facing changeset. Update as part of release preparation
 (see CLAUDE.md "Preparing a Release").
 
+## 1.4.0 (versionCode 4) — 2026-08-04
+
+Features:
+
+- Listening history: search by book title/name/artist
+- Library: playing indicator on the current book
+- Timeline: decorative waveform shape seeded per book
+
+Infra:
+
+- Unified toolkit CLI (`script/toolkit.ts`) replacing script/*; ffmpeg closure check moved from build gate to `doctor`
+- Native: lazy BaseReactPackage, strip skipped on vendored prebuilts (build warning cleanup)
+- Website restyle (screenshots, header, store buttons) + README rework
+
 ## 1.3.0 (versionCode 3) — 2026-07-28
 
 Features:
