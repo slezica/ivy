@@ -122,7 +122,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
 - react-native-safe-area-context (not deprecated SafeAreaView)
 - expo-splash-screen (manual splash control during async initialization)
 - Native Kotlin modules for audio slicing, metadata, file copy (local module in `modules/ivy`, autolinked)
-- youtubedl-android 0.18.1 — `:ffmpeg` artifact only (bundled `libffmpeg.so` for clip slicing + chapter extraction; the yt-dlp engine was removed, see docs/2026-06-30-remove-ytdlp.md)
+- Vendored FFmpeg runtime (termux-packages build, arm64-v8a) in `modules/ivy` jniLibs — `libffmpeg.so` exec'd for clip slicing + chapter extraction; no external dependency (see docs/2026-08-04-vendor-ffmpeg.md)
 - `android/` is generated (`expo prebuild --clean` is safe): never edit or commit it — hand-written native code lives in `modules/ivy`, gradle customization in `plugins/` config plugins
 
 ## File Structure
@@ -171,7 +171,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── PlayerScreen.tsx        # Main player
   │   ├── ClipsListScreen.tsx     # Clip management
   │   ├── SessionsScreen.tsx      # Listening history
-  │   └── SettingsScreen.tsx      # App settings (sync, transcription)
+  │   ├── SettingsScreen.tsx      # App settings (sync, transcription, licenses link)
+  │   └── LicensesScreen.tsx      # Open source licenses (MIT, notices, GPL text for bundled ffmpeg)
   ├── components/
   │   ├── MetadataEditor.tsx      # Book metadata editing (all fields; artwork read-only)
   │   ├── BookDetails.tsx         # Read-only book details (extras; Close/Edit; lazy extraction)
@@ -208,6 +209,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── _layout.tsx                 # Root (splash screen control, initialization gate)
   ├── +not-found.tsx              # Catch-all redirect (handles notification clicks)
   ├── settings.tsx                # Settings screen route
+  ├── licenses.tsx                # Licenses screen route
   ├── sessions.tsx                # Listening history route
   └── (tabs)/
       ├── _layout.tsx             # Tab nav (disables tabs when no file)
@@ -221,19 +223,17 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── package.json                # Internal package name: ivy-native (must differ from root "ivy")
   ├── react-native.config.js      # Registers IvyPackage with RN core autolinking
   └── android/
-      ├── build.gradle            # Library module; carries the youtubedl-android :ffmpeg dependency
-      ├── src/main/jniLibs/       # Vendored ffmpeg runtime deps (libexpat, libcrypto, libandroid-*) per ABI — see docs/CLIPS.md
+      ├── build.gradle            # Library module (no external native deps)
+      ├── src/main/jniLibs/       # Vendored ffmpeg runtime (libffmpeg.so + libffmpeg.zip.so bundle) and its extra deps (libexpat, libcrypto, libandroid-*), arm64-v8a only — see docs/CLIPS.md
       └── src/main/java/com/
-          ├── salezica/ivy/
-          │   ├── IvyPackage.kt           # Single autolinked ReactPackage (lazy BaseReactPackage, declares all modules)
-          │   ├── FFmpegEnvironment.kt    # LD_LIBRARY_PATH + soname symlinks for exec'ing libffmpeg.so
-          │   ├── AudioSlicerModule.kt    # Native module for audio slicing
-          │   ├── AudioMetadataModule.kt  # Native module for metadata extraction
-          │   ├── FileCopierModule.kt     # Native module for file copy with progress
-          │   ├── FFmetadataReaderModule.kt # Native module for raw ffmetadata dump (FFmpeg -f ffmetadata; parsed in JS)
-          │   └── BuildInfoModule.kt      # Exposes ivy_build_variant to JS (test-affordance gate)
-          └── yausername/youtubedl_android/
-              └── YoutubeDLException.kt   # Shim for the removed yt-dlp :library (see docs/2026-06-30-remove-ytdlp.md)
+          └── salezica/ivy/
+              ├── IvyPackage.kt           # Single autolinked ReactPackage (lazy BaseReactPackage, declares all modules)
+              ├── FFmpegEnvironment.kt    # Bundle extraction + LD_LIBRARY_PATH + soname symlinks for exec'ing libffmpeg.so
+              ├── AudioSlicerModule.kt    # Native module for audio slicing
+              ├── AudioMetadataModule.kt  # Native module for metadata extraction
+              ├── FileCopierModule.kt     # Native module for file copy with progress
+              ├── FFmetadataReaderModule.kt # Native module for raw ffmetadata dump (FFmpeg -f ffmetadata; parsed in JS)
+              └── BuildInfoModule.kt      # Exposes ivy_build_variant to JS (test-affordance gate)
 
 /plugins                          # Expo config plugins (applied in app.json) — recreate all gradle customization on prebuild
   ├── withIvySigning.js           # signingConfigs from credentials/ (release uses $KEYSTORE_PASSWORD)
@@ -241,7 +241,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── withIvyHermesFix.js         # arch-aware hermesc path (arm64 Linux container)
   ├── withIvyVersionName.js       # versionName from package.json at build time
   ├── withIvyApkPathPrint.js      # print APK/AAB output paths after assemble/bundle tasks
-  └── withIvyPackaging.js         # skip llvm-strip on libffmpeg.zip.so (zip, not ELF)
+  ├── withIvyPackaging.js         # skip llvm-strip on libffmpeg.zip.so (zip, not ELF)
+  └── withIvyArchitectures.js     # default reactNativeArchitectures=arm64-v8a (vendored ffmpeg is arm64-only)
 
 /script
   └── toolkit.ts                  # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below
@@ -556,7 +557,7 @@ Everything project-specific goes through the toolkit CLI — `script/toolkit.ts`
 
 ## Native Packaging Changes
 
-Any change touching native packaging — `modules/ivy` jniLibs, `FFmpegEnvironment.kt`, the youtubedl-android `:ffmpeg` artifact, `expo.useLegacyPackaging` — needs two checks JS tests can't provide:
+Any change touching native packaging — `modules/ivy` jniLibs (including the vendored ffmpeg runtime), `FFmpegEnvironment.kt`, `expo.useLegacyPackaging` — needs two checks JS tests can't provide:
 
 1. **Closure check:** `script/toolkit.ts doctor` walks the `NEEDED` graph from `libffmpeg.so` in every built APK it finds, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it after any packaging change. (This used to be a build-time gate — `withIvyFfmpegClosureCheck`, dropped 2026-07-30 once the packaging refactor had settled; revive from git history if packaging churn returns.)
 2. **Fresh-install smoke test (manual):** create a clip / import a chaptered file on a **freshly installed** app, not an upgrade — `no_backup/` survives updates, and stale extracted libs there can mask linking failures that break fresh installs (this happened: see git history of `FFmpegEnvironment.kt`). **Uninstalling requires explicit user approval** — the user knows the device's installation state and whether the upgrade path (e.g. pending DB migrations) must be tested before wiping it.
@@ -627,8 +628,8 @@ Commands:
   doctor
       Full environment report: tools, devices, project state, the
       local.properties pollution check, all built APKs/AABs found (with
-      version name/code, and ffmpeg closure check on each APK). Exits
-      nonzero on failures.
+      version name/code, ffmpeg closure check on each APK, and a yt-dlp
+      trace scan on every artifact). Exits nonzero on failures.
 
   device connect
       adb connect to the Mac-hosted emulator (host.docker.internal:5555).
