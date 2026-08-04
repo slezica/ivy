@@ -544,8 +544,8 @@ Everything project-specific goes through the toolkit CLI — `script/toolkit.ts`
 
 "Prepare the release" means exactly this sequence:
 
-1. **Bump versions:** `version` in package.json (becomes versionName via `withIvyVersionName`) and `android.versionCode` in app.json (+1 — Play requires strictly increasing).
-2. **Log:** add the new version's section (versionCode + changeset since last tag) to `docs/VERSIONS.md`.
+1. **Bump version:** `version` in package.json — the single version of record. `withIvyVersionName` derives both versionName and versionCode (major\*10000 + minor\*100 + patch; Play requires strictly increasing, so minor/patch must stay < 100). app.json carries no version fields.
+2. **Log:** add the new version's section (derived versionCode + changeset since last tag) to `docs/VERSIONS.md`.
 3. **Commit:** `docs: log X.Y.Z in VERSIONS.md`, then `release: bump version to X.Y.Z`
 4. **Build the AAB:** `script/toolkit.ts build release` — env-aware (Mac: builds in `android/`; container: builds in the mirror), runs `expo prebuild --clean` first, verifies the keystore password and builds `assembleRelease` + `bundleRelease`. Needs `$KEYSTORE_PASSWORD` (prompts on a TTY; the password must be provided by the user, never stored).
 5. **Check:** `script/toolkit.ts doctor` — the ffmpeg closure check on the fresh release APK is part of its report.

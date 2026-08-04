@@ -1,10 +1,11 @@
 # Version History
 
 Release log: one section per shipped version, newest first. Record versionName,
-versionCode and the user-facing changeset. Update as part of release preparation
+versionCode (derived from semver: major\*10000 + minor\*100 + patch, see
+`plugins/withIvyVersionName.js`) and the user-facing changeset. Update as part of release preparation
 (see CLAUDE.md "Preparing a Release").
 
-## 1.4.0 (versionCode 4) — 2026-08-04
+## 1.4.0 (versionCode 10400) — 2026-08-04
 
 Features:
 
@@ -18,7 +19,7 @@ Infra:
 - Native: lazy BaseReactPackage, strip skipped on vendored prebuilts (build warning cleanup)
 - Website restyle (screenshots, header, store buttons) + README rework
 
-## 1.3.0 (versionCode 3) — 2026-07-28
+## 1.3.0 (versionCode 10300) — 2026-07-28
 
 Features:
 
