@@ -2,6 +2,7 @@
   "name": "ivy",
   "main": "./index.js",
   "version": "1.4.2",
+  "license": "MIT",
   "scripts": {
     "postinstall": "patch-package",
     "start": "expo run:android",
