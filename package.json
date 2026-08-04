@@ -1,7 +1,7 @@
 {
   "name": "ivy",
   "main": "./index.js",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "license": "MIT",
   "scripts": {
     "postinstall": "patch-package",
