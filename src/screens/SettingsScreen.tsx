@@ -22,7 +22,9 @@ export default function SettingsScreen() {
   function handleSyncToggle(enabled: boolean) {
     updateSettings({ ...settings, sync_enabled: enabled })
 
-    if (enabled && sync.pendingCount > 0) {
+    // Unconditional: syncNow is the only path with interactive sign-in, and
+    // the first enable must pull remote data even with an empty outbox
+    if (enabled) {
       syncNow()
     }
   }
@@ -93,7 +95,7 @@ export default function SettingsScreen() {
         {settings.sync_enabled && (
           <View style={styles.settingSecondary}>
             <Text style={styles.secondaryText}>
-              {sync.pendingCount > 0 ? pendingLabel : 'Up to date'}
+              {sync.pendingCount > 0 ? pendingLabel : sync.lastSyncTime ? 'Up to date' : 'Not synced yet'}
             </Text>
 
             {sync.error && (
