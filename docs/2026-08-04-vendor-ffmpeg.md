@@ -35,7 +35,11 @@ Two independent problems, one root:
   x264/x265 et al). Provenance kept here, not in code.
 - `FFmpegEnvironment.ensureExtracted` replaces `FFmpeg.getInstance().init`:
   extracts the zip to `no_backup/ivy-native/ffmpeg`, marker = zip size,
-  wipe-and-re-extract on mismatch, zip-slip guarded. The
+  wipe-and-re-extract on mismatch, zip-slip guarded. The zip stores lib alias
+  symlinks as entries `java.util.zip` extracts as tiny files holding the
+  target name (upstream used commons-compress, which restores them); a
+  post-extraction pass recreates them as real symlinks — without it the
+  linker fails with "too small to be an ELF executable". The
   `com.yausername.youtubedl_android.YoutubeDLException` shim is gone.
   Installs upgraded from ≤ 1.4.x keep an orphaned ~35MB legacy extraction dir:
   deleting it would require naming it in code — the exact trace this change

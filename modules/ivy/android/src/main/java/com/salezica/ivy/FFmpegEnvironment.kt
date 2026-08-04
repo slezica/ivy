@@ -24,6 +24,9 @@ import java.util.zip.ZipInputStream
  */
 object FFmpegEnvironment {
 
+    // Anything larger is a real file, not a stored symlink target path
+    private const val MAX_SYMLINK_BYTES = 200L
+
     // soname the dynamic linker looks up → jniLib filename in nativeLibraryDir
     private val SYMLINKED_LIBS = mapOf(
         "libexpat.so.1" to "libexpat_1.so",
@@ -111,7 +114,28 @@ object FFmpegEnvironment {
                 }
             }
         }
+        repairSymlinks(File(dir, "usr"))
         marker.writeText(stamp)
+    }
+
+    /**
+     * The bundle zip stores the lib alias symlinks (lib*.so, lib*.so.N →
+     * lib*.so.N.M.P) as entries java.util.zip extracts as tiny files holding
+     * the target name — the dynamic linker then fails with "too small to be
+     * an ELF executable". Recreate them as real symlinks: any tiny .so file
+     * whose content names an existing sibling is an alias.
+     */
+    private fun repairSymlinks(root: File) {
+        val files = root.walkTopDown().filter {
+            it.isFile && it.name.contains(".so") && it.length() in 1..MAX_SYMLINK_BYTES
+        }
+        for (file in files) {
+            val target = file.readText()
+            if (!target.matches(Regex("[A-Za-z0-9._+-]+"))) continue
+            if (!File(file.parentFile, target).isFile) continue
+            file.delete()
+            Os.symlink(target, file.absolutePath)
+        }
     }
 
     @Synchronized
