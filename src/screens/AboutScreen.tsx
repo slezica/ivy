@@ -3,7 +3,8 @@ import { useRouter } from 'expo-router'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import { Color } from '../theme'
-import { GPL3_TEXT } from './licenses/gpl3'
+import { getVersionName, getBuildDate } from '../services/system/build'
+import { GPL3_TEXT } from './about/gpl3'
 
 const NOTICES = [
   { name: 'React Native & Expo', license: 'MIT' },
@@ -16,15 +17,20 @@ const NOTICES = [
   { name: 'expat', license: 'MIT' },
 ]
 
-export default function LicensesScreen() {
+export default function AboutScreen() {
   const router = useRouter()
+  const version = getVersionName()
+  const buildDate = getBuildDate()
 
   return (
     <ScreenArea>
-      <Header title="Licenses" icon="chevron-back" onIconPress={() => router.back()} />
+      <Header title="About Ivy" icon="chevron-back" onIconPress={() => router.back()} />
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.heading}>Ivy</Text>
+        {version !== '' && <Text style={styles.infoText}>Version {version}</Text>}
+        {buildDate !== '' && <Text style={styles.infoSecondary}>Built on {buildDate}</Text>}
+
+        <Text style={styles.sectionTitle}>Licenses</Text>
         <Text style={styles.body}>
           Ivy is open source under the MIT license.
         </Text>
@@ -58,8 +64,23 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 32,
   },
-  heading: {
+  infoText: {
+    fontSize: 16,
+    color: Color.TEXT,
+  },
+  infoSecondary: {
+    fontSize: 14,
+    color: Color.TEXT_3,
+    marginTop: 4,
+  },
+  sectionTitle: {
     fontSize: 18,
+    color: Color.TEXT,
+    marginTop: 28,
+    marginBottom: 8,
+  },
+  heading: {
+    fontSize: 15,
     color: Color.TEXT,
     marginTop: 16,
     marginBottom: 8,

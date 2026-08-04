@@ -140,15 +140,15 @@ export default function SettingsScreen() {
         </View>
 
         <TouchableOpacity
-          testID="licenses-row"
+          testID="about-row"
           style={{ marginTop: 24 }}
-          onPress={() => router.push('/licenses')}
+          onPress={() => router.push('/about')}
         >
           <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Licenses</Text>
+            <Text style={styles.settingLabel}>About Ivy</Text>
           </View>
           <View style={styles.settingSecondary}>
-            <Text style={styles.secondaryText}>Open source licenses and notices</Text>
+            <Text style={styles.secondaryText}>Version and licenses</Text>
           </View>
         </TouchableOpacity>
 

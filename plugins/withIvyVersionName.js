@@ -8,6 +8,9 @@
 //
 // versionCode = major*10000 + minor*100 + patch (monotonic while minor/patch
 // stay < 100); Play requires it to strictly increase across uploads.
+//
+// Also stamps the build date as the `ivy_build_date` string resource
+// (surfaced by BuildInfoModule for the About screen).
 const { withAppBuildGradle } = require('expo/config-plugins')
 
 // Each step guards on its own output (not a blanket "already applied" check),
@@ -39,6 +42,13 @@ function apply(contents) {
       throw new Error('withIvyVersionName: versionCode anchor not found in app/build.gradle')
     }
     contents = contents.replace(versionCode, 'versionCode appVersionCode')
+  }
+  if (!contents.includes('ivy_build_date')) {
+    contents = contents.replace(
+      'versionCode appVersionCode',
+      'versionCode appVersionCode\n' +
+      '        resValue "string", "ivy_build_date", new java.text.SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date())'
+    )
   }
   return contents
 }

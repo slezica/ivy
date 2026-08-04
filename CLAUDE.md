@@ -171,8 +171,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── PlayerScreen.tsx        # Main player
   │   ├── ClipsListScreen.tsx     # Clip management
   │   ├── SessionsScreen.tsx      # Listening history
-  │   ├── SettingsScreen.tsx      # App settings (sync, transcription, licenses link)
-  │   └── LicensesScreen.tsx      # Open source licenses (MIT, notices, GPL text for bundled ffmpeg)
+  │   ├── SettingsScreen.tsx      # App settings (sync, transcription, about link)
+  │   └── AboutScreen.tsx         # About Ivy (version, build date, licenses incl. GPL text for bundled ffmpeg)
   ├── components/
   │   ├── MetadataEditor.tsx      # Book metadata editing (all fields; artwork read-only)
   │   ├── BookDetails.tsx         # Read-only book details (extras; Close/Edit; lazy extraction)
@@ -209,7 +209,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── _layout.tsx                 # Root (splash screen control, initialization gate)
   ├── +not-found.tsx              # Catch-all redirect (handles notification clicks)
   ├── settings.tsx                # Settings screen route
-  ├── licenses.tsx                # Licenses screen route
+  ├── about.tsx                   # About screen route
   ├── sessions.tsx                # Listening history route
   └── (tabs)/
       ├── _layout.tsx             # Tab nav (disables tabs when no file)

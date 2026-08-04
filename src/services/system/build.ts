@@ -16,3 +16,13 @@ export function getBuildVariant(): BuildVariant {
 export function isTestBuild(): boolean {
   return getBuildVariant() !== 'production'
 }
+
+/** versionName from the installed package (semver, e.g. "1.5.0"). */
+export function getVersionName(): string {
+  return NativeModules.BuildInfo?.versionName ?? ''
+}
+
+/** Build date stamped at gradle time (yyyy-MM-dd). */
+export function getBuildDate(): string {
+  return NativeModules.BuildInfo?.buildDate ?? ''
+}
