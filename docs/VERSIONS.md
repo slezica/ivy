@@ -5,6 +5,16 @@ versionCode (derived from semver: major\*10000 + minor\*100 + patch, see
 `plugins/withIvyVersionName.js`) and the user-facing changeset. Update as part of release preparation
 (see CLAUDE.md "Preparing a Release").
 
+## 1.4.1 (versionCode 10401) — 2026-08-04
+
+Fixes:
+
+- Google sign-in failed (DEVELOPER_ERROR) in release/Play builds: dropped the
+  stale `webClientId` from sign-in config (unused; access tokens come from the
+  Android OAuth clients)
+
+Supersedes 1.4.0, which was uploaded to Play but never released.
+
 ## 1.4.0 (versionCode 10400) — 2026-08-04
 
 Features:
