@@ -5,6 +5,14 @@ versionCode (derived from semver: major\*10000 + minor\*100 + patch, see
 `plugins/withIvyVersionName.js`) and the user-facing changeset. Update as part of release preparation
 (see CLAUDE.md "Preparing a Release").
 
+## 1.4.2 (versionCode 10402) — 2026-08-04
+
+Fixes:
+
+- Enabling sync now always triggers a first sync (sign-in + remote pull);
+  previously nothing fired with an empty outbox, so a fresh device never synced
+- Sync status no longer claims "Up to date" before any sync ("Not synced yet")
+
 ## 1.4.1 (versionCode 10401) — 2026-08-04
 
 Fixes:
