@@ -5,6 +5,23 @@ versionCode (derived from semver: major\*10000 + minor\*100 + patch, see
 `plugins/withIvyVersionName.js`) and the user-facing changeset. Update as part of release preparation
 (see CLAUDE.md "Preparing a Release").
 
+## 1.5.0 (versionCode 10500) — 2026-08-04
+
+Features:
+
+- Ivy is now MIT-licensed open source
+- Settings → Licenses screen (MIT, dependency notices, GPLv3 text for the
+  bundled FFmpeg runtime)
+
+Infra:
+
+- FFmpeg runtime vendored in-repo (termux-packages build, arm64-v8a);
+  youtubedl-android dependency and all yt-dlp traces removed from shipped
+  artifacts (GPL compliance + Play-flagging risk, see
+  docs/2026-08-04-vendor-ffmpeg.md)
+- Builds default to arm64-v8a only — release APK ~85MB (was 237MB)
+- Toolkit doctor: per-artifact version name/code, yt-dlp trace scan
+
 ## 1.4.2 (versionCode 10402) — 2026-08-04
 
 Fixes:
