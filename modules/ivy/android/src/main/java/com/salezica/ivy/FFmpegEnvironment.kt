@@ -79,8 +79,10 @@ object FFmpegEnvironment {
     /**
      * Extract libffmpeg.zip.so (usr/... tree) into no_backup/ivy-native/ffmpeg.
      * A marker file records the zip's size; a mismatch (app update changed the
-     * bundle) wipes and re-extracts. Also removes the legacy extraction dir
-     * used before the runtime was vendored (no_backup/youtubedl-android).
+     * bundle) wipes and re-extracts. Installs upgraded from <= 1.4.x keep an
+     * orphaned legacy extraction dir in no_backup (~35MB); deliberately not
+     * cleaned up — naming it in code would leave the trace this vendoring
+     * removes (see docs/2026-08-04-vendor-ffmpeg.md).
      */
     private fun ensureExtracted(context: Context) {
         val zip = File(context.applicationInfo.nativeLibraryDir, "libffmpeg.zip.so")
@@ -110,8 +112,6 @@ object FFmpegEnvironment {
             }
         }
         marker.writeText(stamp)
-
-        File(context.noBackupFilesDir, "youtubedl-android").deleteRecursively()
     }
 
     @Synchronized
