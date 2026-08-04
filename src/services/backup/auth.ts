@@ -16,9 +16,9 @@ import { createLogger } from '../../utils'
 
 const log = createLogger('GoogleAuth')
 
-// Web client ID (also need Android client ID configured in Google Cloud Console)
-const WEB_CLIENT_ID = '883355617581-9rn0rpcbn6oa0034fe4vg650g2vui622.apps.googleusercontent.com'
-
+// No webClientId: we only use access tokens (getTokens), issued against the
+// Android OAuth clients (package + signing cert) in Google Cloud Console.
+// Only needed for idToken/serverAuthCode — and must be a web-type client then.
 const SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
 ]
@@ -34,7 +34,6 @@ class GoogleAuthService {
     if (this.configured) return
 
     GoogleSignin.configure({
-      webClientId: WEB_CLIENT_ID,
       scopes: SCOPES,
       offlineAccess: false,
     })
