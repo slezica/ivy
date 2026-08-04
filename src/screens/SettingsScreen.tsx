@@ -141,15 +141,16 @@ export default function SettingsScreen() {
 
         <TouchableOpacity
           testID="licenses-row"
-          style={[styles.settingRow, { marginTop: 24 }]}
+          style={{ marginTop: 24 }}
           onPress={() => router.push('/licenses')}
         >
-          <Text style={styles.settingLabel}>Licenses</Text>
+          <View style={styles.settingRow}>
+            <Text style={styles.settingLabel}>Licenses</Text>
+          </View>
+          <View style={styles.settingSecondary}>
+            <Text style={styles.secondaryText}>Open source licenses and notices</Text>
+          </View>
         </TouchableOpacity>
-
-        <View style={styles.settingSecondary}>
-          <Text style={styles.secondaryText}>Open source licenses and notices</Text>
-        </View>
 
       </View>
     </ScreenArea>
