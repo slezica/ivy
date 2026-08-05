@@ -1,0 +1,89 @@
+appId: com.salezica.ivy
+---
+# Playback ownership release: dismissing a clip dialog returns ownership to
+# the main player — paused, same book, same position — even when the clip
+# came from a different book. Guards against orphan playback (a dismissed
+# clip left loaded under a dead owner) and against clip playback moving the
+# book's position.
+
+- runFlow: subflows/import-book.yaml
+
+# Import the second fixture too ("Ivy Test Book Two")
+- tapOn:
+    id: "library-menu-button"
+- tapOn: "Import audio file"
+- tapOn:
+    id: ".*:id/option_menu_search"
+- inputText: "test-audio-2"
+- extendedWaitUntil:
+    visible: "test-audio-2.m4a"
+    timeout: 10000
+- tapOn: "test-audio-2.m4a"
+- extendedWaitUntil:
+    visible: "Ivy Test Book Two"
+    timeout: 30000
+
+# Create a clip from Book Two (draft editor on the player; Save slices it).
+# Opening a book navigates to the player and auto-plays — wait for it.
+- tapOn: "Ivy Test Book Two"
+- extendedWaitUntil:
+    visible: "Pause"
+    timeout: 15000
+- tapOn:
+    id: "add-clip-button"
+- assertVisible: "Save"
+- tapOn: "Save"
+
+# Load Book One and park it at Chapter Two (0:15), paused. The seek happens
+# while paused on purpose: the persisted resume position stays behind, so
+# only the ownership snapshot can restore this position correctly.
+- tapOn: "Library"
+- tapOn: "Ivy Test Book"
+# Opening auto-plays; wait for real playback before pausing (a tap during
+# the loading state would be swallowed by the loading guard)
+- extendedWaitUntil:
+    visible: "Pause"
+    timeout: 15000
+- tapOn:
+    id: "play-pause-button"
+- extendedWaitUntil:
+    visible: "Play"
+    timeout: 5000
+- tapOn:
+    id: "player-menu-button"
+- tapOn: "Show chapters"
+- tapOn: "Chapter Two"
+- assertVisible: "0:15"
+
+# Play Book Two's clip in the viewer, then dismiss it mid-playback
+- tapOn: "Clips"
+- extendedWaitUntil:
+    visible:
+      id: "clip-card"
+    timeout: 10000
+- tapOn:
+    id: "clip-card"
+- tapOn:
+    id: "clip-viewer-play-button"
+- extendedWaitUntil:
+    visible:
+      id: "clip-viewer-pause-button"
+    timeout: 10000
+- tapOn: "Close"
+
+# The main player got playback back: same book, same position, paused
+- tapOn: "Player"
+- assertVisible: "Ivy Test Book"
+- assertVisible: "Play"
+- extendedWaitUntil:
+    visible: "0:15"
+    timeout: 10000
+- takeScreenshot: screenshots/release-01-restored
+
+# ...and owns it for real: play resumes Book One from 0:15
+- tapOn:
+    id: "play-pause-button"
+- extendedWaitUntil:
+    visible: "0:1[6-9]"
+    timeout: 10000
+- takeScreenshot: screenshots/release-02-resumed

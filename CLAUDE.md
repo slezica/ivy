@@ -260,6 +260,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── load-and-play.yaml          # File loading and playback
   ├── add-clip.yaml               # Clip creation
   ├── clip-crud.yaml              # Clip edit/delete lifecycle
+  ├── clip-dismiss-release.yaml   # Clip dialog dismissal returns playback to main player
   ├── book-details.yaml           # Book details viewer/editor round trip
   ├── chapter-extraction.yaml     # Chaptered import
   ├── delete-original.yaml        # Delete original after import
