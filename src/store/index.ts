@@ -25,6 +25,7 @@ import { createDeleteBook } from '../actions/delete_book'
 import { createLoadBook } from '../actions/load_book'
 import { createPlay } from '../actions/play'
 import { createPause } from '../actions/pause'
+import { createReleasePlayback } from '../actions/release_playback'
 import { createSetSleepTimer } from '../actions/set_sleep_timer'
 import { createSeek } from '../actions/seek'
 import { createSeekClip } from '../actions/seek_clip'
@@ -91,6 +92,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const loadBook = createLoadBook(deps)
   const play = createPlay({ ...deps, loadBook })
   const pause = createPause(deps)
+  const releasePlayback = createReleasePlayback({ get, pause, loadBook })
   const setSleepTimer = createSetSleepTimer({ ...deps, pause })
   const seek = createSeek(deps)
   const seekClip = createSeekClip({ ...deps, play })
@@ -147,6 +149,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
       position: 0,
       duration: 0,
       sleepTimer: null,
+      mainContext: null,
     },
 
     transcription: {
@@ -178,6 +181,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     loadBook,
     play,
     pause,
+    releasePlayback,
     setSleepTimer,
     seek,
     seekClip,

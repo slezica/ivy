@@ -24,7 +24,7 @@ interface ClipViewerProps {
 }
 
 export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
-  const { playback, play, pause, seek } = useStore()
+  const { playback, play, pause, seek, releasePlayback } = useStore()
 
   // Determine playback source: use the source book when it's fully known
   // (uri and duration both present), otherwise the clip's own audio file
@@ -52,12 +52,11 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
   const isPlaying = isOwner && playback.status === 'playing'
   const isLoading = isOwner && playback.status === 'loading'
 
-  // Stop playback when dismissed (only if we still own it)
+  // Release playback when dismissed: pause and return ownership to the main
+  // player (the action no-ops if we no longer own playback)
   useEffect(() => {
-    return () => {
-      if (useStore.getState().playback.ownerId === ownerId) pause()
-    }
-  }, [pause, ownerId])
+    return () => { releasePlayback(ownerId) }
+  }, [releasePlayback, ownerId])
 
   // Sync position from playback when we own playback
   useEffect(() => {

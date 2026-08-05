@@ -61,6 +61,7 @@ export function createMockPlayback(overrides: Partial<AppState['playback']> = {}
     duration: 0,
     ownerId: null,
     sleepTimer: null,
+    mainContext: null,
     ...overrides,
   }
 }

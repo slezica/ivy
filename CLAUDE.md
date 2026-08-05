@@ -407,6 +407,7 @@ playback: {
   duration: number              // Duration of loaded audio (hardware state)
   ownerId: string | null        // ID of component controlling playback
   sleepTimer: { endsAt: number, duration: number } | null  // wall-clock; null = off
+  mainContext: { uri: string, position: number } | null  // Main player's book + position, snapshotted when ownership leaves it
 }
 clips: Record<string, ClipWithFile>
 transcription: {

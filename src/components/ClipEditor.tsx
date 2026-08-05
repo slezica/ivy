@@ -47,7 +47,7 @@ export default function ClipEditor({
   initialStart, initialEnd, initialPositionAt, initialNote,
   onCancel, onSave,
 }: ClipEditorProps) {
-  const { playback, settings, play, pause, seek, updateSettings } = useStore()
+  const { playback, settings, play, pause, seek, updateSettings, releasePlayback } = useStore()
 
   const [note, setNote] = useState(initialNote)
   const [selectionStart, setSelectionStart] = useState(initialStart)
@@ -75,12 +75,12 @@ export default function ClipEditor({
   const isPlaying = isOwner && playback.status === 'playing'
   const isLoading = isOwner && playback.status === 'loading'
 
-  // Stop playback when dismissed (only if we still own it)
+  // Release playback when dismissed: pause and return ownership to the main
+  // player (the action no-ops if we no longer own playback — e.g. the draft
+  // editor, whose ownership PlayerScreen reclaims before unmounting it)
   useEffect(() => {
-    return () => {
-      if (useStore.getState().playback.ownerId === ownerId) pause()
-    }
-  }, [pause, ownerId])
+    return () => { releasePlayback(ownerId) }
+  }, [releasePlayback, ownerId])
 
   // Sync position from playback when we own playback. After an extrapolated
   // handoff the mount-time store position is the stale value we extrapolated

@@ -12,6 +12,7 @@ import type { DeleteBook } from '../actions/delete_book'
 import type { LoadBook } from '../actions/load_book'
 import type { Play } from '../actions/play'
 import type { Pause } from '../actions/pause'
+import type { ReleasePlayback } from '../actions/release_playback'
 import type { SetSleepTimer } from '../actions/set_sleep_timer'
 import type { Seek } from '../actions/seek'
 import type { SeekClip } from '../actions/seek_clip'
@@ -58,6 +59,7 @@ export interface AppState {
     duration: number         // Duration of loaded audio
     ownerId: string | null   // ID of component that last took control
     sleepTimer: { endsAt: number, duration: number } | null  // wall-clock; null = off
+    mainContext: { uri: string, position: number } | null  // Main player's book + position, snapshotted when ownership leaves it
   }
 
   transcription: {
@@ -89,6 +91,7 @@ export interface AppState {
   loadBook: LoadBook
   play: Play
   pause: Pause
+  releasePlayback: ReleasePlayback
   setSleepTimer: SetSleepTimer
   seek: Seek
   seekClip: SeekClip

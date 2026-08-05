@@ -24,6 +24,7 @@ playback: {
   duration: number       // ms — length of loaded file
   ownerId: string | null // who's controlling playback
   sleepTimer: { endsAt: number, duration: number } | null  // wall-clock; null = off
+  mainContext: { uri: string, position: number } | null  // main player's book + position, snapshotted when ownership leaves it
 }
 ```
 
@@ -143,16 +144,20 @@ if (playback.ownerId !== MAIN_PLAYER_OWNER_ID) return
 
 This means clip playback (ClipViewer, ClipEditor) never overwrites the book's saved position.
 
-### Pause on unmount
+### Release on unmount
 
-ClipViewer and ClipEditor pause playback when they unmount — but only if they still own it (`playback.ownerId === myOwnerId` at unmount time). If another component has since taken over, unmounting a clip modal leaves that playback untouched.
+ClipViewer and ClipEditor call `releasePlayback(myOwnerId)` when they unmount. The action no-ops unless the caller still owns playback (`playback.ownerId === myOwnerId`) — if another component has since taken over, unmounting a clip modal leaves that playback untouched.
+
+When the caller does still own playback, release pauses and returns ownership to the main player by restoring `playback.mainContext` — a `{ uri, position }` snapshot that `loadBook` captures whenever ownership passes from the main player to a non-main owner. The main player gets back exactly what it had — same book, same position, paused — even if the clip came from a different book or the same book at another position. This prevents orphan playback: a dismissed clip dialog can't leave its audio loaded under a dead ownerId, where the system notification could resume it with no visible component tracking it. With no snapshot (nothing was ever loaded by the main player), release just pauses.
+
+The snapshot lives in the store rather than the dismissing component because only `loadBook` sees the exact takeover moment — the store's `playback.position` is current there (1 Hz status events plus seeks), while the database position is written only by main-player playback and can be stale after a paused scrub.
 
 ### Ownership handoff (player ↔ draft clip editor)
 
 The player's clip button opens the draft ClipEditor with a seamless playback transition, in both directions:
 
 - **Open:** before mounting the editor, PlayerScreen claims ownership for it — `play()` if playing, `loadBook()` if paused — with the same file and position. Audio never stops; the rate drops to 1x (clip owners always play at 1x).
-- **Close (save or cancel):** PlayerScreen reads the editor's final position/state from global playback, reclaims with `MAIN_PLAYER_OWNER_ID` **before** unmounting the editor (so the editor's pause-on-unmount sees it no longer owns), then closes. The book's speed is re-applied by the main-owner claim.
+- **Close (save or cancel):** PlayerScreen reads the editor's final position/state from global playback, reclaims with `MAIN_PLAYER_OWNER_ID` **before** unmounting the editor (so the editor's release-on-unmount sees it no longer owns and no-ops), then closes. The book's speed is re-applied by the main-owner claim.
 
 Consequences: the hand-back position is the editor's playhead — scrubbing in the editor moves the book position. Sessions finalize when the editor takes over and resume on return (merged by the 5-minute resume window).
 
@@ -256,6 +261,7 @@ src/actions/
   load_book.ts        → Load file / seek / claim ownership / apply rate
   play.ts             → Thin wrapper: loadBook + play (no-op while loading)
   pause.ts            → Pause playback
+  release_playback.ts → Pause + return ownership to main player (clip dialog dismissal)
   set_sleep_timer.ts  → Arm/clear the sleep timer (wall-clock, fade via audio service)
   set_speed.ts        → Persist per-book speed, apply if playing in main player
   seek.ts             → Seek to position (guarded by fileUri match)

@@ -199,6 +199,65 @@ describe('createLoadBook', () => {
     })
   })
 
+  // -- Main-player context snapshot ---------------------------------------------
+
+  describe('main context snapshot', () => {
+    it('captures uri and position when a clip owner takes over a fresh load', async () => {
+      const { state, deps } = createStatefulDeps({
+        uri: 'file:///audio/book-a.mp3', position: 12345, duration: 60000, ownerId: 'main',
+      })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook({ ...CONTEXT, ownerId: 'clip-viewer-1' })
+
+      expect(state.playback.mainContext).toEqual({ uri: 'file:///audio/book-a.mp3', position: 12345 })
+    })
+
+    it('captures on same-file takeover (clip played from the loaded book)', async () => {
+      const { state, deps } = createStatefulDeps({
+        uri: CONTEXT.fileUri, position: 12345, duration: 60000, ownerId: 'main',
+      })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook({ ...CONTEXT, ownerId: 'clip-viewer-1' })
+
+      expect(state.playback.mainContext).toEqual({ uri: CONTEXT.fileUri, position: 12345 })
+    })
+
+    it('does not capture when the main player claims ownership', async () => {
+      const { state, deps } = createStatefulDeps({
+        uri: 'file:///audio/book-a.mp3', position: 12345, duration: 60000, ownerId: 'main',
+      })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook(CONTEXT)
+
+      expect(state.playback.mainContext).toBeNull()
+    })
+
+    it('does not capture when nothing is loaded', async () => {
+      const { state, deps } = createStatefulDeps({ uri: null, ownerId: 'main' })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook({ ...CONTEXT, ownerId: 'clip-viewer-1' })
+
+      expect(state.playback.mainContext).toBeNull()
+    })
+
+    it('preserves the snapshot across clip-to-clip transfers', async () => {
+      const snapshot = { uri: 'file:///audio/book-a.mp3', position: 12345 }
+      const { state, deps } = createStatefulDeps({
+        uri: CONTEXT.fileUri, position: 0, duration: 60000,
+        ownerId: 'clip-viewer-1', mainContext: snapshot,
+      })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook({ ...CONTEXT, ownerId: 'clip-editor-1' })
+
+      expect(state.playback.mainContext).toEqual(snapshot)
+    })
+  })
+
   // -- Playback rate ------------------------------------------------------------
 
   describe('playback rate', () => {

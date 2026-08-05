@@ -26,6 +26,19 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
 
     if (playback.status === 'loading') return
 
+    // Ownership leaving the main player: snapshot what it had loaded so
+    // releasePlayback can restore it exactly (same book, live position)
+    if (
+      playback.ownerId === MAIN_PLAYER_OWNER_ID &&
+      context.ownerId !== MAIN_PLAYER_OWNER_ID &&
+      playback.uri !== null
+    ) {
+      const { uri, position } = playback
+      set(state => {
+        state.playback.mainContext = { uri, position }
+      })
+    }
+
     const isSameFile = (playback.uri === context.fileUri)
 
     // Apply per-book speed for main player, 1× for clips
