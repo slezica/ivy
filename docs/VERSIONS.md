@@ -5,6 +5,20 @@ versionCode (derived from semver: major\*10000 + minor\*100 + patch, see
 `plugins/withIvyVersionName.js`) and the user-facing changeset. Update as part of release preparation
 (see CLAUDE.md "Preparing a Release").
 
+## 1.6.0 (versionCode 10600) — 2026-08-05
+
+Features:
+
+- Settings → About Ivy screen (version, build date, licenses — generalizes
+  the former Licenses screen)
+
+Fixes:
+
+- Dismissing a clip viewer/editor now returns playback to the main player —
+  paused, same book, same position. Previously the dismissed clip stayed
+  loaded under a dead owner and the media notification could resume it with
+  nothing on screen tracking it
+
 ## 1.5.0 (versionCode 10500) — 2026-08-04
 
 Features:
