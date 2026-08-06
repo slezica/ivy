@@ -3,7 +3,7 @@
 Reproducible screenshots with curated demo data. One command regenerates everything:
 
 ```bash
-script/toolkit.ts prepare --screenshots        # → playstore/shots/*.png
+bin/ivy.ts prepare --screenshots        # → playstore/shots/*.png
 ```
 
 ## Core Idea
@@ -29,7 +29,7 @@ Everything is data-driven from `playstore/data.json` — books, positions, clips
 | `playstore/gen-audio.js` | Generates silent MP3s into `playstore/cache/` (gitignored, cached) |
 | `src/actions/seed_demo_data.ts` | Seeds DB + files from the bundle, then deletes it |
 | `maestro/playstore/screenshots.yaml` | Navigates and shoots (excluded from the e2e suite) |
-| `script/toolkit.ts prepare --screenshots` | The one command: gen → clear → push → maestro → collect |
+| `bin/ivy.ts prepare --screenshots` | The one command: gen → clear → push → maestro → collect |
 
 ## Seeding Semantics
 

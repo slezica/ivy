@@ -15,7 +15,7 @@ timer preset). Preview and release deliberately carry zero test surface, so
 and dev-mode overhead.
 
 ```bash
-script/toolkit.ts build maestro --install    # env-aware; add --arch arm64-v8a for the emulator
+bin/ivy.ts build maestro --install    # env-aware; add --arch arm64-v8a for the emulator
 ```
 
 ## Running
@@ -23,9 +23,9 @@ script/toolkit.ts build maestro --install    # env-aware; add --arch arm64-v8a f
 With one device/emulator attached:
 
 ```bash
-script/toolkit.ts test --e2e                        # full suite
-script/toolkit.ts drive --file maestro/add-clip.yaml # a single flow
-script/toolkit.ts test --e2e --device <serial>      # target a specific device
+bin/ivy.ts test --e2e                        # full suite
+bin/ivy.ts drive --file maestro/add-clip.yaml # a single flow
+bin/ivy.ts test --e2e --device <serial>      # target a specific device
 ```
 
 The toolkit pushes and **media-scans** the test fixtures first (the picker's

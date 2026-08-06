@@ -11,7 +11,7 @@ This project was created with assistance from Claude.
 
 ## Development
 
-Ivy is built, tested and driven by its own command-line tool (for humans and agents) at `script/toolkit.ts`.
+Ivy is built, tested and driven by its own command-line tool (for humans and agents) at `bin/ivy.ts`.
 
 ### Prerequisites
 
@@ -33,13 +33,13 @@ npm install
 npm start                                
 
 # Full toolkit reference (recommended reading, it's a powerful tool)
-script/toolkit.ts help                   
+bin/ivy.ts help                   
 
 # Frequent commands:
-script/toolkit.ts build debug --install  # build APK + install on device
-script/toolkit.ts build release          # release APK + AAB (prompts for password, or $KEYSTORE_PASSWORD)
-script/toolkit.ts test                   # unit (jest) + e2e (maestro); --unit / --e2e to pick
-script/toolkit.ts doctor                 # environment + built-APK report
+bin/ivy.ts build debug --install  # build APK + install on device
+bin/ivy.ts build release          # release APK + AAB (prompts for password, or $KEYSTORE_PASSWORD)
+bin/ivy.ts test                   # unit (jest) + e2e (maestro); --unit / --e2e to pick
+bin/ivy.ts doctor                 # environment + built-APK report
 ```
 
 

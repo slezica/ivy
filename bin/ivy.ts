@@ -2,7 +2,7 @@
 // Ivy project toolkit — the single CLI for building, testing, preparing and
 // driving/inspecting the app. Replaces the loose scripts that used to live in
 // script/ and the non-standard npm scripts. Design + rationale:
-// docs/2026-07-30-toolkit-cli.md. Full usage: `script/toolkit.ts help`
+// docs/2026-07-30-toolkit-cli.md. Full usage: `bin/ivy.ts help`
 // (also embedded in CLAUDE.md so agents see it from session init).
 //
 // Single file on purpose: whole tool in one read, no import graph. Split only
@@ -22,7 +22,7 @@ const CAPTURES_DIR = path.join(ROOT, 'captures')
 
 const HELP = `Ivy toolkit — project CLI (build, test, prepare, drive, inspect)
 
-Usage: script/toolkit.ts <command> [args] [--device <serial>]
+Usage: bin/ivy.ts <command> [args] [--device <serial>]
 
 Commands:
 
@@ -161,7 +161,7 @@ function serial(): string {
   if (deviceFlag) return (resolvedSerial = deviceFlag)
   if (process.env.ANDROID_SERIAL) return (resolvedSerial = process.env.ANDROID_SERIAL)
   const devices = listDevices()
-  if (devices.length === 0) fail('no device attached (container: `script/toolkit.ts device connect`)')
+  if (devices.length === 0) fail('no device attached (container: `bin/ivy.ts device connect`)')
   if (devices.length > 1) fail(`multiple devices attached (${devices.join(', ')}) — pass --device <serial>`)
   return (resolvedSerial = devices[0])
 }
@@ -539,7 +539,7 @@ function cmdDoctor() {
   const devices = listDevices()
   if (devices.length === 0) {
     report(false, 'attached', isContainer
-      ? 'none — try `script/toolkit.ts device connect`' : 'none')
+      ? 'none — try `bin/ivy.ts device connect`' : 'none')
   } else {
     for (const d of devices) {
       const model = capture(findAdb(), ['-s', d, 'shell', 'getprop', 'ro.product.model'], { allowFail: true }).trim()
@@ -562,7 +562,7 @@ function cmdDoctor() {
     const sdkDir = fs.readFileSync(lpFile, 'utf8').match(/^sdk\.dir=(.*)$/m)?.[1]
     const polluted = sdkDir !== undefined && !fs.existsSync(sdkDir)
     report(!polluted, 'local.properties',
-      polluted ? `sdk.dir=${sdkDir} does not exist — /workspace is polluted, run \`script/toolkit.ts clean\`` : `sdk.dir ok`)
+      polluted ? `sdk.dir=${sdkDir} does not exist — /workspace is polluted, run \`bin/ivy.ts clean\`` : `sdk.dir ok`)
   } else {
     report(null, 'local.properties', 'absent')
   }
@@ -1016,13 +1016,13 @@ function main() {
     return
   }
   const handler = COMMANDS[cmd]
-  if (!handler) fail(`unknown command: ${cmd} (see \`script/toolkit.ts help\`)`)
+  if (!handler) fail(`unknown command: ${cmd} (see \`bin/ivy.ts help\`)`)
   const args = parseArgs(rest)
   if (args.flags.device) deviceFlag = String(args.flags.device)
   handler(args)
 }
 
-if (path.basename(process.argv[1] ?? '').startsWith('toolkit')) {
+if (path.basename(process.argv[1] ?? '').startsWith('ivy')) {
   try {
     main()
   } catch (e) {

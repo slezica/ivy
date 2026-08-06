@@ -244,8 +244,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── withIvyPackaging.js         # skip llvm-strip on libffmpeg.zip.so (zip, not ELF)
   └── withIvyArchitectures.js     # default reactNativeArchitectures=arm64-v8a (vendored ffmpeg is arm64-only)
 
-/script
-  └── toolkit.ts                  # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below
+/bin
+  └── ivy.ts                      # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below
 
 /credentials                      # Keystores (untracked, NEVER commit release.keystore)
   ├── debug.keystore              # Standard RN debug key
@@ -533,14 +533,14 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 
 ## Quick Reference
 
-Everything project-specific goes through the toolkit CLI — `script/toolkit.ts` (full reference at the end of this file).
+Everything project-specific goes through the toolkit CLI — `bin/ivy.ts` (full reference at the end of this file).
 
 **Start dev server:** `npm start`
 **Run unit tests:** `npm test` (with console logs: `npm run test:verbose`)
-**Run e2e tests:** `script/toolkit.ts test --e2e`
-**Build (env-aware, Mac or container):** `script/toolkit.ts build <variant> [--install]`
-**Recreate Play Store screenshots:** `script/toolkit.ts prepare --screenshots` (see docs/2026-07-21-playstore-screenshots.md)
-**Environment + built-APK report (incl. ffmpeg linking):** `script/toolkit.ts doctor`
+**Run e2e tests:** `bin/ivy.ts test --e2e`
+**Build (env-aware, Mac or container):** `bin/ivy.ts build <variant> [--install]`
+**Recreate Play Store screenshots:** `bin/ivy.ts prepare --screenshots` (see docs/2026-07-21-playstore-screenshots.md)
+**Environment + built-APK report (incl. ffmpeg linking):** `bin/ivy.ts doctor`
 
 
 ## Preparing a Release
@@ -550,8 +550,8 @@ Everything project-specific goes through the toolkit CLI — `script/toolkit.ts`
 1. **Bump version:** `version` in package.json — the single version of record. `withIvyVersionName` derives both versionName and versionCode (major\*10000 + minor\*100 + patch; Play requires strictly increasing, so minor/patch must stay < 100). app.json carries no version fields.
 2. **Log:** add the new version's section (derived versionCode + changeset since last tag) to `docs/VERSIONS.md`.
 3. **Commit:** `docs: log X.Y.Z in VERSIONS.md`, then `release: bump version to X.Y.Z`
-4. **Build the AAB — done by the user, not the agent:** `script/toolkit.ts build release` needs `$KEYSTORE_PASSWORD` (prompts on a TTY; never stored), so the user runs it on the host Mac. Agent: do steps 1–3, then ask the user to build and wait; continue with step 5 once they confirm.
-5. **Check:** `script/toolkit.ts doctor` — the ffmpeg closure check on the fresh release APK is part of its report.
+4. **Build the AAB — done by the user, not the agent:** `bin/ivy.ts build release` needs `$KEYSTORE_PASSWORD` (prompts on a TTY; never stored), so the user runs it on the host Mac. Agent: do steps 1–3, then ask the user to build and wait; continue with step 5 once they confirm.
+5. **Check:** `bin/ivy.ts doctor` — the ffmpeg closure check on the fresh release APK is part of its report.
 6. **Tag:** `vX.Y.Z` — only after the build succeeds.
 7. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload.
 8. **Screenshots (only if UI changed):** after refreshing `web/assets/` screenshots, regenerate the README composite: `convert web/assets/{02-player,01-library,03-clips,05-history}.png -resize x1200 -background none -splice 12x0 +append -chop 12x0 docs/screenshots.png`
@@ -561,7 +561,7 @@ Everything project-specific goes through the toolkit CLI — `script/toolkit.ts`
 
 Any change touching native packaging — `modules/ivy` jniLibs (including the vendored ffmpeg runtime), `FFmpegEnvironment.kt`, `expo.useLegacyPackaging` — needs two checks JS tests can't provide:
 
-1. **Closure check:** `script/toolkit.ts doctor` walks the `NEEDED` graph from `libffmpeg.so` in every built APK it finds, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it after any packaging change. (This used to be a build-time gate — `withIvyFfmpegClosureCheck`, dropped 2026-07-30 once the packaging refactor had settled; revive from git history if packaging churn returns.)
+1. **Closure check:** `bin/ivy.ts doctor` walks the `NEEDED` graph from `libffmpeg.so` in every built APK it finds, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it after any packaging change. (This used to be a build-time gate — `withIvyFfmpegClosureCheck`, dropped 2026-07-30 once the packaging refactor had settled; revive from git history if packaging churn returns.)
 2. **Fresh-install smoke test (manual):** create a clip / import a chaptered file on a **freshly installed** app, not an upgrade — `no_backup/` survives updates, and stale extracted libs there can mask linking failures that break fresh installs (this happened: see git history of `FFmpegEnvironment.kt`). **Uninstalling requires explicit user approval** — the user knows the device's installation state and whether the upgrade path (e.g. pending DB migrations) must be tested before wiping it.
 
 **Build-variant note:** four buildTypes — `debug` (Metro dev loop), `maestro` (e2e: preview clone + test affordances), `preview` (release twin for on-device testing, zero test surface), `release`. Test affordances gate on the `ivy_build_variant` resource (`debug`/`maestro`/`production`, see `plugins/withIvyBuildTypes.js` + `BuildInfoModule.kt`) — never on `__DEV__`. Release builds do **not** minify (`android.enableMinifyInReleaseBuilds` is unset → R8 off), so the `preview`/`maestro` lineage and `release` behave identically for native loading. Even if R8 were enabled it couldn't affect the exec'd-binary link path (native/filesystem, not JVM), and the module classes stay reachable via `IvyPackage`. `doctor` checks the closure on every variant's APK it finds, release included.
@@ -578,21 +578,21 @@ Rules for Android builds in the container:
 - **NEVER run Gradle in `/workspace` directly.** Use the toolkit, which in the container mirrors the repo to a container-local clone (`/home/claude/ivy-build`) and builds there — incremental across sessions, zero pollution of the mount:
 
   ```bash
-  script/toolkit.ts build debug --arch arm64-v8a
+  bin/ivy.ts build debug --arch arm64-v8a
   ```
 
   It rsyncs the full working tree (including uncommitted and untracked files, excluding node_modules and build outputs).
 - The whole `android/` tree is untracked (generated by `expo prebuild --clean`), so nothing under it can be committed. Never edit it by hand either — change `modules/ivy` or the `plugins/` config plugins instead, then regenerate.
-- **Recovery only** — if `/workspace` was polluted anyway (a Gradle run in the mount, from either side; symptom above), fix it with `script/toolkit.ts clean` (sweeps `modules/ivy/android/build` and `node_modules/*/android/{build,.cxx}`, then regenerates `android/` from scratch via `expo prebuild --clean`). The next build on the affected machine is a slow full rebuild — that's why the isolated build is the rule, not cleaning.
+- **Recovery only** — if `/workspace` was polluted anyway (a Gradle run in the mount, from either side; symptom above), fix it with `bin/ivy.ts clean` (sweeps `modules/ivy/android/build` and `node_modules/*/android/{build,.cxx}`, then regenerates `android/` from scratch via `expo prebuild --clean`). The next build on the affected machine is a slow full rebuild — that's why the isolated build is the rule, not cleaning.
 
 ## Toolkit CLI Reference
 
-Full `script/toolkit.ts help` output (keep in sync when the toolkit changes):
+Full `bin/ivy.ts help` output (keep in sync when the toolkit changes):
 
 ```
 Ivy toolkit — project CLI (build, test, prepare, drive, inspect)
 
-Usage: script/toolkit.ts <command> [args] [--device <serial>]
+Usage: bin/ivy.ts <command> [args] [--device <serial>]
 
 Commands:
 

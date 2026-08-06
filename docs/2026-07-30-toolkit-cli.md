@@ -4,7 +4,7 @@
 
 ## Idea
 
-One project CLI — `script/toolkit.ts` — replacing the loose scripts in `script/`
+One project CLI — `bin/ivy.ts` — replacing the loose scripts in `script/`
 and the non-standard npm scripts. Two goals:
 
 1. **Unification:** every "now I build / test / prepare" reflex has exactly one
@@ -37,7 +37,8 @@ toolkit query "<sql>"                    # app DB (pulled copy, read-only)
 
 - **Single TS file, tsx hashbang.** Whole tool in one read (good for agents),
   no import graph to design, matches codebase language. Split only when it
-  hurts. (tsx can't infer TS from extensionless files, hence `toolkit.ts`.)
+  hurts. (tsx can't infer TS from extensionless files, hence the `.ts`
+  extension; moved to `bin/ivy.ts` 2026-08-06 for the shorter name.)
 - **Verbs at top level, merged aggressively.** `drive` unifies all app-driving
   (maestro flows, inline steps, fast taps, deep links) behind flags; `doctor`
   absorbs env checks + the ffmpeg closure check; install is a flag on build.
@@ -76,7 +77,7 @@ toolkit query "<sql>"                    # app DB (pulled copy, read-only)
 
 - **Bash dispatcher:** no types, poor arg parsing, worse testability.
 - **commander/yargs:** `node:util` parseArgs + a small router is enough.
-- **`ivy` top-level command / bin install:** repo-local `script/toolkit.ts`
+- **`ivy` top-level command / bin install:** repo-local `bin/ivy.ts`
   needs no installation step and no PATH management.
 - **Generic "is emulator" prop check alone:** a physical daily-driver device
   now exists; triple check costs nothing.
