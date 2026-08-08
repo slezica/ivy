@@ -710,15 +710,20 @@ describe('TimelinePhysicsEngine', () => {
       const startX = handlePinScreenX(engine, 10_000, 'start')
       engine.touchDown(startX, HANDLE_PIN_Y, 0)
 
-      // Stuck handle drag blocks playback follow and external sync
+      // Stuck handle drag freezes the scroll (detached follow keeps ticking)
+      // and blocks external sync
       expect(engine.isActive).toBe(true)
-      expect(engine.tick(16)).toBe(false)
+      const frozenOffset = engine.scrollOffset
+      expect(engine.tick(16)).toBe(true)
+      expect(engine.scrollOffset).toBe(frozenOffset)
 
       engine.touchUp()
 
-      // Cleared: engine idle again, playback follow ticks resume
+      // Cleared: engine idle again, scroll follows playback again
       expect(engine.isActive).toBe(false)
       expect(engine.tick(616)).toBe(true)
+      engine.tick(716)
+      expect(engine.scrollOffset).toBeGreaterThan(frozenOffset)
     })
 
     it('grabs a handle anywhere along its full height', () => {
@@ -920,6 +925,127 @@ describe('TimelinePhysicsEngine', () => {
       engine.setPlaybackRate(0, 32)
       engine.updateSelection(10_000, 20_000)
       expect(engine.selection).toEqual({ start: 10_000, end: 20_000 })
+    })
+  })
+
+  // --------------------------------------------------------------------------
+  // 9c. Detached playhead (handle drag while audio plays)
+  // --------------------------------------------------------------------------
+
+  describe('detached playhead', () => {
+    const SELECTION = { start: 10_000, end: 16_000 }
+
+    /** Grab a handle by its pin (engine playing at 1x since t=0) */
+    function grabHandle(
+      engine: TimelinePhysicsEngine,
+      time: number,
+      which: 'start' | 'end',
+      now: number
+    ) {
+      const outward = HANDLE_SHIFT + HANDLE_PIN_OFFSET
+      const pinTimelineX = tx(time) + (which === 'start' ? -outward : outward)
+      engine.panStart(pinTimelineX - engine.scrollOffset + 200, HANDLE_PIN_Y, now)
+    }
+
+    it('advances the playhead while a handle drag freezes the scroll', () => {
+      const { engine } = createEngine({ position: 15_000, selection: { ...SELECTION } })
+      engine.setPlaybackRate(1, 0)
+
+      grabHandle(engine, SELECTION.start, 'start', 0)
+      const frozenOffset = engine.scrollOffset
+
+      for (let t = 16; t <= 1000; t += 16) {
+        expect(engine.tick(t)).toBe(true)
+      }
+
+      expect(engine.scrollOffset).toBe(frozenOffset)
+      expect(engine.playheadTime).toBeCloseTo(15_992, 0)
+      expect(engine.displayPosition).toBeGreaterThan(15_900) // indicator follows the playhead
+    })
+
+    it('re-centers the scroll smoothly after release, without seeking', () => {
+      const { engine, callbacks } = createEngine({ position: 15_000, selection: { ...SELECTION } })
+      engine.setPlaybackRate(1, 0)
+
+      grabHandle(engine, SELECTION.start, 'start', 0)
+      for (let t = 16; t <= 1000; t += 16) engine.tick(t)
+      engine.panEnd(0, 1000)
+
+      // First tick after release: scroll starts closing the gap, not snapping
+      engine.tick(1016)
+      const gapAfterOneTick = tx(engine.playheadTime) - engine.scrollOffset
+      expect(gapAfterOneTick).toBeGreaterThan(0)
+      expect(gapAfterOneTick).toBeLessThan(tx(992))
+
+      // Within the fold window the playhead is back at center
+      for (let t = 1032; t <= 3000; t += 16) engine.tick(t)
+      expect(engine.scrollOffset).toBeCloseTo(tx(engine.playheadTime), 1)
+
+      // Audio was never touched
+      expect(callbacks.onSeek).not.toHaveBeenCalled()
+    })
+
+    it('keeps the playhead at center through attached motions', () => {
+      const { engine } = createEngine({ position: 30_000 })
+
+      engine.panStart(200, 45, 0)
+      engine.panUpdate(-60, 16)
+      engine.panEnd(0, 32)
+
+      expect(tx(engine.playheadTime)).toBeCloseTo(engine.scrollOffset, 5)
+    })
+
+    it('pushes the un-dragged anchor when linked', () => {
+      const { engine } = createEngine({
+        position: 15_000,
+        selection: { ...SELECTION },
+        linked: true,
+      })
+      engine.setPlaybackRate(1, 0)
+
+      // Hold the START handle while the playhead sweeps over the end anchor
+      grabHandle(engine, SELECTION.start, 'start', 0)
+      for (let t = 16; t <= 2000; t += 16) engine.tick(t)
+
+      expect(engine.selection!.start).toBe(SELECTION.start)
+      expect(engine.selection!.end).toBeCloseTo(engine.playheadTime, 0)
+    })
+
+    it('never pushes the anchor being dragged', () => {
+      const { engine } = createEngine({
+        position: 15_000,
+        selection: { ...SELECTION },
+        linked: true,
+      })
+      engine.setPlaybackRate(1, 0)
+
+      // Drag the END handle back behind the playhead and hold it there
+      grabHandle(engine, SELECTION.end, 'end', 0)
+      engine.panUpdate(-(tx(SELECTION.end) - tx(15_500)), 16)
+      for (let t = 32; t <= 2000; t += 16) engine.tick(t)
+
+      // Playhead swept far past 15.5s — the held anchor stayed put
+      expect(engine.playheadTime).toBeGreaterThan(16_500)
+      expect(engine.selection!.end).toBeCloseTo(15_500, 0)
+    })
+
+    it('does not re-push during the catch-up after release', () => {
+      const { engine } = createEngine({
+        position: 15_000,
+        selection: { ...SELECTION },
+        linked: true,
+      })
+      engine.setPlaybackRate(1, 0)
+
+      grabHandle(engine, SELECTION.end, 'end', 0)
+      engine.panUpdate(-(tx(SELECTION.end) - tx(15_500)), 16)
+      for (let t = 32; t <= 2000; t += 16) engine.tick(t)
+      engine.panEnd(0, 2000)
+
+      // Catch-up sweeps the scroll across 15.5s, but the playhead is already
+      // ahead — the anchor it left behind must not move again
+      for (let t = 2016; t <= 4000; t += 16) engine.tick(t)
+      expect(engine.selection!.end).toBeCloseTo(15_500, 0)
     })
   })
 

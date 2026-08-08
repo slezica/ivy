@@ -116,6 +116,16 @@ export class TimelinePhysicsEngine {
   private _isDragging = false
   private _dragStartOffset = 0    // scroll offset when pan began
 
+  // --- Playhead time ---
+  //
+  // The playhead's position in time. Attached motion (drag, momentum, tap
+  // animation, playback follow, external snap) keeps it equal to the scroll
+  // center. It detaches during a handle drag while audio plays: the scroll
+  // freezes but the playhead keeps advancing across the frozen bars. After
+  // release, playback follow decays the gap so the playhead glides back to
+  // center. Linked pushes are driven by this value, not by the scroll.
+  private _playheadTime: number
+
   // --- Selection handle dragging ---
   private _draggingHandle: 'start' | 'end' | null = null
   private _handleDragStartValue = 0
@@ -205,6 +215,7 @@ export class TimelinePhysicsEngine {
 
     // Initialize scroll to the provided position
     this._scrollOffset = this._tx(config.position)
+    this._playheadTime = config.position
     this._displayPosition = config.position
   }
 
@@ -217,6 +228,12 @@ export class TimelinePhysicsEngine {
   get segmentGap(): number { return this._segmentGap }
   get displayPosition(): number { return this._displayPosition }
   get zoomFactor(): number { return this._zoomFactor }
+
+  /**
+   * The playhead's time position. Equal to the scroll center except while
+   * detached (handle drag with audio playing) or catching up after one.
+   */
+  get playheadTime(): number { return this._playheadTime }
 
   /**
    * Authoritative selection. During handle drags and linked pushing the
@@ -260,7 +277,7 @@ export class TimelinePhysicsEngine {
     if (this.isActive) return
 
     if (this._isPlaybackFollowing()) {
-      const drift = position - this._xt(this._scrollOffset)
+      const drift = position - this._playheadTime
       if (Math.abs(drift) <= DRIFT_SNAP_THRESHOLD) {
         this._pendingDrift = drift
         return
@@ -269,8 +286,8 @@ export class TimelinePhysicsEngine {
       // Fall through: drift too large, snap to the reported position
     }
 
-    const prevTime = this._xt(this._scrollOffset)
-    this._scrollOffset = this._tx(position)
+    const prevTime = this._playheadTime
+    this._scrollTo(this._tx(position))
     this._pushSelection(prevTime, position, now)
     this._emitSelection(now, true) // snap is a motion endpoint
     this._updateDisplayPosition(position, now, true)
@@ -486,9 +503,9 @@ export class TimelinePhysicsEngine {
     }
 
     this._lastDragSample = { time: now, offset: newOffset }
-    const prevTime = this._xt(this._scrollOffset)
-    this._scrollOffset = newOffset
-    this._pushSelection(prevTime, this._xt(newOffset), now)
+    const prevTime = this._playheadTime
+    this._scrollTo(newOffset)
+    this._pushSelection(prevTime, this._playheadTime, now)
 
     this._updateDisplayPosition(this._xt(this._scrollOffset), now)
     this._callbacks.onFrame()
@@ -577,7 +594,7 @@ export class TimelinePhysicsEngine {
       return this._tickAnimation(now) || this._isPlaybackFollowing()
     }
 
-    if (this._isPlaybackFollowing()) {
+    if (this._isPlaybackFollowing() || this._isDetachedFollowing()) {
       return this._tickPlayback(now)
     }
 
@@ -612,13 +629,13 @@ export class TimelinePhysicsEngine {
       // Advance position by the exact displacement of the decay curve over
       // this time slice: ∫ v0 * D^t dt = v0 * (D^dt - 1) / ln(D)
       const decay = Math.pow(DECELERATION, dt)
-      const prevTime = this._xt(this._scrollOffset)
-      this._scrollOffset = clamp(
+      const prevTime = this._playheadTime
+      this._scrollTo(clamp(
         this._scrollOffset + this._velocity * (decay - 1) / Math.log(DECELERATION),
         0,
         this._maxOffset()
-      )
-      this._pushSelection(prevTime, this._xt(this._scrollOffset), now)
+      ))
+      this._pushSelection(prevTime, this._playheadTime, now)
 
       // Decay velocity: v *= DECELERATION^dt
       this._velocity *= decay
@@ -652,21 +669,40 @@ export class TimelinePhysicsEngine {
       && !this._isPinching
   }
 
+  /**
+   * Detached follow: a handle drag froze the scroll, but audio keeps playing —
+   * the playhead alone advances across the frozen bars.
+   */
+  private _isDetachedFollowing(): boolean {
+    return this._playbackRate > 0 && this._draggingHandle !== null
+  }
+
   private _tickPlayback(now: number): boolean {
     const dt = Math.min((now - this._lastTickTime) / 1000, 0.1) // seconds, capped at 100ms
     this._lastTickTime = now
 
     // Exponential fold: each slice absorbs a share of the remaining drift,
     // with time constant WINDOW/3 so ~95% is corrected within the window
-    const fold = this._pendingDrift * Math.min(1, (dt * 3000) / DRIFT_FOLD_WINDOW)
+    const foldShare = Math.min(1, (dt * 3000) / DRIFT_FOLD_WINDOW)
+    const fold = this._pendingDrift * foldShare
     this._pendingDrift -= fold
 
-    const prevTime = this._xt(this._scrollOffset)
-    const position = prevTime + dt * 1000 * this._playbackRate + fold
-    this._scrollOffset = clamp(this._tx(position), 0, this._maxOffset())
-    this._pushSelection(prevTime, this._xt(this._scrollOffset), now)
+    const prevTime = this._playheadTime
+    this._playheadTime = clamp(prevTime + dt * 1000 * this._playbackRate + fold, 0, this._duration)
+    this._pushSelection(prevTime, this._playheadTime, now)
 
-    this._updateDisplayPosition(this._xt(this._scrollOffset), now)
+    // Scroll follows the playhead — except during a handle drag, which freezes
+    // it (the playhead detaches). Any playhead↔center gap left behind by a
+    // drag decays with the drift fold's time constant, so the playhead glides
+    // back to center after release. The gap is measured before this tick's
+    // advance, so an attached playhead stays exactly centered.
+    if (this._draggingHandle === null) {
+      const gap = prevTime - this._xt(this._scrollOffset)
+      const newGap = Math.abs(gap) < 1 ? 0 : gap * (1 - foldShare)
+      this._scrollOffset = clamp(this._tx(this._playheadTime - newGap), 0, this._maxOffset())
+    }
+
+    this._updateDisplayPosition(this._playheadTime, now)
     this._callbacks.onFrame()
     return true
   }
@@ -694,9 +730,9 @@ export class TimelinePhysicsEngine {
     const easedProgress = easeOutCubic(progress)
 
     const { startOffset, targetOffset } = this._animation
-    const prevTime = this._xt(this._scrollOffset)
-    this._scrollOffset = startOffset + (targetOffset - startOffset) * easedProgress
-    this._pushSelection(prevTime, this._xt(this._scrollOffset), now)
+    const prevTime = this._playheadTime
+    this._scrollTo(startOffset + (targetOffset - startOffset) * easedProgress)
+    this._pushSelection(prevTime, this._playheadTime, now)
 
     this._updateDisplayPosition(this._xt(this._scrollOffset), now)
     this._callbacks.onFrame()
@@ -730,6 +766,12 @@ export class TimelinePhysicsEngine {
 
   private _maxOffset(): number {
     return this._tx(this._duration)
+  }
+
+  /** Attached motion: move the scroll with the playhead riding the center. */
+  private _scrollTo(offset: number): void {
+    this._scrollOffset = offset
+    this._playheadTime = this._xt(offset)
   }
 
   // =========================================================================
@@ -774,25 +816,28 @@ export class TimelinePhysicsEngine {
   // never be let go.)
   //
   // The same rule applies to every motion source — drag, momentum, tap
-  // animation, playback follow, external snap. Pushes only expand the
-  // selection, so MIN_SELECTION_DURATION (a handle-drag constraint) can
-  // never be violated here; scroll clamping bounds the pushes to
-  // [0, duration].
+  // animation, playback follow (attached or detached), external snap. Pushes
+  // only expand the selection, so MIN_SELECTION_DURATION (a handle-drag
+  // constraint) can never be violated here; playhead clamping bounds the
+  // pushes to [0, duration].
+  //
+  // Sweeps are playhead movements. During a handle drag the detached playhead
+  // still pushes, but never the anchor under the user's finger — the finger
+  // wins.
   // =========================================================================
 
   private _pushSelection(prevTime: number, newTime: number, now: number): void {
     if (!this._linked || !this._selection) return
-    if (this._draggingHandle !== null) return // handle drag owns the selection
     if (newTime === prevTime) return
 
     let { start, end } = this._selection
 
     if (newTime > prevTime) {
       // Forward sweep: carry the end anchor in [prevTime, newTime) forward
-      if (end >= prevTime && end < newTime) end = newTime
+      if (this._draggingHandle !== 'end' && end >= prevTime && end < newTime) end = newTime
     } else {
       // Backward sweep: carry the start anchor in (newTime, prevTime] backward
-      if (start > newTime && start <= prevTime) start = newTime
+      if (this._draggingHandle !== 'start' && start > newTime && start <= prevTime) start = newTime
     }
 
     if (start === this._selection.start && end === this._selection.end) return

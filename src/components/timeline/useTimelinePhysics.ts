@@ -55,6 +55,12 @@ export interface TimelinePhysicsResult {
    * emissions to React state are throttled.
    */
   selectionRef: React.MutableRefObject<{ start: number; end: number } | null>
+  /**
+   * The engine's playhead time, updated every frame. Normally equals the
+   * scroll center; detaches during a handle drag while audio plays (and
+   * glides back afterwards) — drawing code must use this, not the scroll.
+   */
+  playheadTimeRef: React.MutableRefObject<number>
   /** Current zoom-scaled segment width */
   segmentWidth: number
   /** Current zoom-scaled segment gap */
@@ -85,6 +91,7 @@ export function useTimelinePhysics({
   // Refs that Timeline.tsx reads during Skia picture creation
   const scrollOffsetRef = useRef(0)
   const selectionRef = useRef<{ start: number; end: number } | null>(null)
+  const playheadTimeRef = useRef(externalPosition)
 
   // The rAF loop handle
   const rafIdRef = useRef<number | null>(null)
@@ -133,6 +140,7 @@ export function useTimelinePhysics({
         onFrame: () => {
           scrollOffsetRef.current = engineRef.current!.scrollOffset
           selectionRef.current = engineRef.current!.selection
+          playheadTimeRef.current = engineRef.current!.playheadTime
           onFrameRef.current?.()
         },
         onDisplayPosition: (position) => {
@@ -142,6 +150,7 @@ export function useTimelinePhysics({
     )
     scrollOffsetRef.current = engineRef.current.scrollOffset
     selectionRef.current = engineRef.current.selection
+    playheadTimeRef.current = engineRef.current.playheadTime
   }
 
   const engine = engineRef.current
@@ -179,8 +188,9 @@ export function useTimelinePhysics({
 
   useEffect(() => {
     engine.setExternalPosition(externalPosition, performance.now())
-    // Sync the ref in case the engine updated the scroll offset
+    // Sync the refs in case the engine updated the scroll offset
     scrollOffsetRef.current = engine.scrollOffset
+    playheadTimeRef.current = engine.playheadTime
   }, [engine, externalPosition])
 
   useEffect(() => {
@@ -271,6 +281,7 @@ export function useTimelinePhysics({
   return {
     scrollOffsetRef,
     selectionRef,
+    playheadTimeRef,
     segmentWidth: engine.segmentWidth,
     segmentGap: engine.segmentGap,
     displayPosition,

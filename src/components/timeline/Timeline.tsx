@@ -7,9 +7,11 @@
  *
  * ## Visual Design
  *
- * A horizontal row of vertical bars (decorative waveform) with a center-fixed
- * playhead. Bars scroll behind the playhead as the user drags or as playback
- * progresses.
+ * A horizontal row of vertical bars (decorative waveform) with a playhead
+ * that normally rides the center. Bars scroll behind the playhead as the user
+ * drags or as playback progresses. During a selection-handle drag while audio
+ * plays, the scroll freezes and the playhead detaches, moving across the
+ * frozen bars; it glides back to center after release.
  *
  *
  * ## Rendering Approach: Stencil + Paint Layers
@@ -356,7 +358,10 @@ export function Timeline({
 
     const scrollOffset = scrollOffsetRef.current
     const halfWidth = containerWidth / 2
-    const playheadX = scrollOffset
+    // Playhead draws at its own time coordinate. Normally that's the scroll
+    // center; during a handle drag while playing it detaches and keeps moving
+    // across the frozen bars (see engine.ts, playhead time).
+    const playheadX = timeToX(playheadTimeRef.current, SEGMENT_DURATION, segmentWidth, segmentGap)
 
     // Editable selections draw from the engine's authoritative value (fresh
     // every frame in selectionRef) — during handle drags and linked pushing
@@ -421,7 +426,7 @@ export function Timeline({
     }
   }
 
-  const { scrollOffsetRef, selectionRef, segmentWidth, segmentGap, displayPosition, gesture } = useTimelinePhysics({
+  const { scrollOffsetRef, selectionRef, playheadTimeRef, segmentWidth, segmentGap, displayPosition, gesture } = useTimelinePhysics({
     containerWidth,
     duration,
     externalPosition: position,
