@@ -44,6 +44,12 @@ export const HANDLE_TOUCH_RADIUS = 24                                // px — h
 export const DECELERATION = 0.95 ** 60 // ≈ 0.046 — velocity multiplier per second
 export const MIN_VELOCITY = 30          // px/s — stop momentum below this
 
+// EMA velocity estimation: smooths noisy drag velocity so the transition to
+// momentum is clean. Sets the fling launch velocity — higher alpha tracks the
+// finger's final flick more aggressively (faster launches, farther travel),
+// lower is smoother.
+export const EMA_ALPHA = 0.35
+
 // Animation
 export const SCROLL_TO_DURATION = 200 // ms for tap-to-seek animation
 

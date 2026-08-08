@@ -30,6 +30,7 @@ import {
   MAX_ZOOM,
   DRIFT_SNAP_THRESHOLD,
   DRIFT_FOLD_WINDOW,
+  EMA_ALPHA,
   HANDLE_SHIFT,
   HANDLE_PIN_OFFSET,
   HANDLE_TOUCH_RADIUS,
@@ -41,13 +42,6 @@ import { timeToX, xToTime, clamp } from './utils'
 // ============================================================================
 
 const DISPLAY_UPDATE_INTERVAL = 50 // ms between display position updates
-
-// ============================================================================
-// EMA velocity estimation: smooths noisy drag velocity so the transition
-// to momentum is clean. Alpha controls responsiveness vs smoothness.
-// ============================================================================
-
-const EMA_ALPHA = 0.35              // lower = smoother, higher = more responsive
 
 // ============================================================================
 // Pinch cooldown: after a pinch ends, ignore pan/tap for this window
