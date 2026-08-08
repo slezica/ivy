@@ -133,6 +133,8 @@ Editing requires the source book's audio file — if the source is archived, edi
 
 **Linked bounds ("bounds follow playhead").** The editor has a link toggle (lower right; its state is a remembered preference — `settings.clip_editor_linked`, default on). While linked, the playhead is solid and pushes are outward-only: any playhead movement — scrub, fling, tap-to-seek, or playback itself — pushes the start anchor backward or the end anchor forward when it collides with them; reverse movements release the anchor, and shrinking the selection is handle work. The core workflow: scrub to the start point, hit play, pause where the clip should end. Toggle the link off for free playhead movement. Design and rationale in [2026-07-24-linked-clip-bounds.md](2026-07-24-linked-clip-bounds.md); the push mechanic lives in the timeline physics engine (`timeline/engine.ts`, `linked` mode).
 
+**Detached playhead.** Grabbing a selection handle while audio plays freezes the timeline scroll but not the playhead: it detaches from the center and keeps moving across the frozen bars (off-screen if playback outruns the viewport). Pushes are driven by playhead motion, so a detached playhead still pushes the *other* anchor when linked — never the one under the finger. On release, the scroll glides the playhead back to center (drift-fold decay, ~1s); the catch-up moves only the scroll, so it never re-pushes anchors. Handles are grabbable along their full height (line + pin column), not just the pin circle. See [2026-08-08-detached-playhead.md](2026-08-08-detached-playhead.md).
+
 ---
 
 ## Sharing a Clip
