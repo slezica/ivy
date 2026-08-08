@@ -34,7 +34,7 @@ export const HANDLE_PIN_STUB = 9                                     // px — h
 export const HANDLE_PIN_RADIUS = 7                                   // px — pin circle radius
 export const HANDLE_PIN_OFFSET = HANDLE_PIN_STUB + HANDLE_PIN_RADIUS // handle line → pin center
 export const HANDLE_PIN_Y = TIMELINE_HEIGHT / 2                      // pin center, vertically centered
-export const HANDLE_TOUCH_RADIUS = 24                                // px — hit-test radius around pin center
+export const HANDLE_TOUCH_RADIUS = 24                                // px — hit column half-width around pin center (full height)
 
 // Physics (frame-rate independent — all units are per-second)
 //

@@ -32,7 +32,6 @@ import {
   DRIFT_FOLD_WINDOW,
   HANDLE_SHIFT,
   HANDLE_PIN_OFFSET,
-  HANDLE_PIN_Y,
   HANDLE_TOUCH_RADIUS,
 } from './constants'
 import { timeToX, xToTime, clamp } from './utils'
@@ -323,10 +322,10 @@ export class TimelinePhysicsEngine {
    * 2. If momentum/animation is running, stop it (the touch was meant to
    *    brake, not to seek — we track this via _stoppedMomentum)
    */
-  touchDown(x: number, y: number, now: number): void {
+  touchDown(x: number, _y: number, now: number): void {
     // Check if touching a selection handle (skip during pinch cooldown)
     if (this._selection && !this._isPinchCooldown(now)) {
-      const handle = this._getHandleAtPosition(x, y)
+      const handle = this._getHandleAtPosition(x)
       if (handle) {
         this._draggingHandle = handle
         this._handleDragStartValue = handle === 'start'
@@ -409,12 +408,12 @@ export class TimelinePhysicsEngine {
   /**
    * Pan gesture begins. Either starts a handle drag or a scroll drag.
    */
-  panStart(x: number, y: number, now: number): void {
+  panStart(x: number, _y: number, now: number): void {
     if (this._isPinchCooldown(now)) return
 
     // Check if starting on a selection handle
     if (this._selection) {
-      const handle = this._getHandleAtPosition(x, y)
+      const handle = this._getHandleAtPosition(x)
       if (handle) {
         this._draggingHandle = handle
         this._handleDragStartValue = handle === 'start'
@@ -861,13 +860,15 @@ export class TimelinePhysicsEngine {
   // =========================================================================
   // Private: selection handle hit testing
   //
-  // Checks if a touch point (in screen coordinates) is close enough to a
-  // handle's pin circle to start dragging it. Pins sit on the external side
-  // of each handle line (start: left, end: right), vertically centered —
-  // same geometry Timeline.tsx draws (HANDLE_PIN_* constants).
+  // Checks if a touch point (in screen coordinates) lands in a handle's hit
+  // column: full timeline height, HANDLE_TOUCH_RADIUS to each side of the pin
+  // center. The whole visual handle is grabbable — the line sits within the
+  // column (HANDLE_PIN_OFFSET < HANDLE_TOUCH_RADIUS). Pins sit on the
+  // external side of each handle line (start: left, end: right) — same
+  // geometry Timeline.tsx draws (HANDLE_PIN_* constants).
   // =========================================================================
 
-  private _getHandleAtPosition(touchX: number, touchY: number): 'start' | 'end' | null {
+  private _getHandleAtPosition(touchX: number): 'start' | 'end' | null {
     if (!this._selection) return null
 
     const halfWidth = this._containerWidth / 2
@@ -878,13 +879,8 @@ export class TimelinePhysicsEngine {
     const startPinX = this._tx(this._selection.start) - HANDLE_SHIFT - HANDLE_PIN_OFFSET
     const endPinX = this._tx(this._selection.end) + HANDLE_SHIFT + HANDLE_PIN_OFFSET
 
-    // Euclidean distance from touch to each pin center
-    const distToStart = Math.sqrt(
-      (timelineX - startPinX) ** 2 + (touchY - HANDLE_PIN_Y) ** 2
-    )
-    const distToEnd = Math.sqrt(
-      (timelineX - endPinX) ** 2 + (touchY - HANDLE_PIN_Y) ** 2
-    )
+    const distToStart = Math.abs(timelineX - startPinX)
+    const distToEnd = Math.abs(timelineX - endPinX)
 
     // Prefer the closer handle if both are within touch radius
     if (distToStart <= HANDLE_TOUCH_RADIUS && distToStart <= distToEnd) {

@@ -720,6 +720,39 @@ describe('TimelinePhysicsEngine', () => {
       expect(engine.isActive).toBe(false)
       expect(engine.tick(616)).toBe(true)
     })
+
+    it('grabs a handle anywhere along its full height', () => {
+      const { engine, callbacks } = createEngine({
+        position: 15_000,
+        selection: { start: 10_000, end: 20_000 },
+      })
+
+      // Touch the start handle's LINE (not the pin) near the top of the
+      // timeline — far outside the old pin-circle radius
+      const lineScreenX = tx(10_000) - HANDLE_SHIFT - engine.scrollOffset + 200
+      engine.panStart(lineScreenX, 2, 0)
+      engine.panUpdate(-30, 16)
+
+      const [newStart, newEnd] = (callbacks.onSelectionChange as jest.Mock).mock.calls[0]
+      expect(newStart).toBeLessThan(10_000)
+      expect(newEnd).toBe(20_000)
+    })
+
+    it('still scrubs when the drag starts outside the hit columns', () => {
+      const { engine, callbacks } = createEngine({
+        position: 15_000,
+        selection: { start: 10_000, end: 20_000 },
+      })
+
+      // x=200 → timeline-space 90: 46px from both pins (44 and 136),
+      // at the pins' own height
+      const offsetBefore = engine.scrollOffset
+      engine.panStart(200, HANDLE_PIN_Y, 0)
+      engine.panUpdate(-30, 16)
+
+      expect(callbacks.onSelectionChange).not.toHaveBeenCalled()
+      expect(engine.scrollOffset).toBeGreaterThan(offsetBefore)
+    })
   })
 
   // --------------------------------------------------------------------------
@@ -738,10 +771,14 @@ describe('TimelinePhysicsEngine', () => {
       })
     }
 
-    /** Drag the timeline (not a handle) so the playhead lands on targetTime */
-    function scrubTo(engine: TimelinePhysicsEngine, fromTime: number, targetTime: number) {
+    /**
+     * Drag the timeline (not a handle) so the playhead lands on targetTime.
+     * Handle hit columns are full-height, so touchX must be passed whenever
+     * the default (center) falls within 24px of a pin.
+     */
+    function scrubTo(engine: TimelinePhysicsEngine, fromTime: number, targetTime: number, touchX = 200) {
       const translationX = -(tx(targetTime) - tx(fromTime))
-      engine.panStart(200, 5, 0) // y=5: top of the bars, outside the pin hit radius
+      engine.panStart(touchX, 5, 0)
       engine.panUpdate(translationX, 16)
       engine.panEnd(0, 32)
     }
@@ -784,7 +821,7 @@ describe('TimelinePhysicsEngine', () => {
       const { engine } = createLinked({ position: 65_000 })
 
       scrubTo(engine, 65_000, 55_000) // push start back to 55s: contact
-      scrubTo(engine, 55_000, 70_000) // scrub forward again: start must stay
+      scrubTo(engine, 55_000, 70_000, 300) // scrub forward again (off the handle): start must stay
 
       expect(engine.selection).toEqual({ start: 55_000, end: 80_000 })
     })
@@ -795,10 +832,10 @@ describe('TimelinePhysicsEngine', () => {
         selection: { start: 4_000, end: 10_000 },
       })
 
-      scrubTo(engine, 12_000, 1_000)   // backward past both anchors...
+      scrubTo(engine, 12_000, 1_000, 350)   // backward past both anchors...
       expect(engine.selection).toEqual({ start: 1_000, end: 10_000 })
 
-      scrubTo(engine, 1_000, -5_000)   // ...and against the left edge
+      scrubTo(engine, 1_000, -5_000, 350)   // ...and against the left edge
       expect(engine.selection).toEqual({ start: 0, end: 10_000 })
     })
 
