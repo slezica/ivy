@@ -5,6 +5,36 @@ versionCode (derived from semver: major\*10000 + minor\*100 + patch, see
 `plugins/withIvyVersionName.js`) and the user-facing changeset. Update as part of release preparation
 (see CLAUDE.md "Preparing a Release").
 
+## 1.6.1 (versionCode 10601) — 2026-08-09
+
+Improvements:
+
+- Timeline playhead detaches during handle drags while playing: it keeps
+  moving across the frozen bars and glides back to center on release
+  (previously the timeline jumped after release)
+- Selection handles are grabbable along their full height
+
+Fixes:
+
+- Handle drags could leak interaction state (grab registered at touch, pan
+  activating outside the hit column), freezing the timeline and making the
+  next scrub teleport playback seconds into the past — interaction state
+  rebuilt as a single mode union, whole bug class now unrepresentable
+- Grabbing a handle mid-fling now commits the fling position; previously the
+  timeline showed the fling position over never-moved audio until a position
+  event snapped it back
+- Selection edits are no longer lost when a gesture is cancelled or a pinch
+  interrupts a drag
+
+Infra:
+
+- Timeline scenario test suite: full interaction flows against a
+  ground-truth audio model, plus seeded gesture fuzzing
+- Granular timeline interaction tracing in test builds (TLTRACE logcat
+  stream; see src/components/timeline/trace.ts)
+- Toolkit CLI moved to bin/ivy.ts
+- Website links the Play Store listing
+
 ## 1.6.0 (versionCode 10600) — 2026-08-05
 
 Features:
