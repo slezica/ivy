@@ -6,7 +6,8 @@ from the frozen timeline during handle drags is worth building.
 ## Current Behavior (verified)
 
 Handle drag and playback follow are mutually exclusive by design
-(`engine.ts`, `_isPlaybackFollowing()` requires `_draggingHandle === null`):
+(`engine.ts`, `_isPlaybackFollowing()` requires an idle interaction mode —
+no handle drag; see docs/2026-08-09-timeline-interaction-mode.md):
 
 - Grabbing a handle while audio plays works; the timeline freezes for the
   drag's duration. Audio keeps playing.
