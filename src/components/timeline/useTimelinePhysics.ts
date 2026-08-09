@@ -241,7 +241,7 @@ export function useTimelinePhysics({
     // handle-drag state is cleared and playback follow can resume even when
     // neither tap.onEnd nor pan.onEnd fired (e.g. a held-then-released touch).
     .onFinalize(() => {
-      engine.touchUp()
+      engine.touchUp(performance.now())
       scheduleTick() // resume playback follow if the touch had blocked it
     })
 

@@ -143,14 +143,14 @@ class Scenario {
   /** Finger up: pan end (velocity per EMA) then the guaranteed finalizer. */
   release(): void {
     this.engine.panEnd(0, this.t)
-    this.engine.touchUp()
+    this.engine.touchUp(this.t)
   }
 
   /** Full tap gesture at screen x. */
   tap(x: number): void {
     this.engine.touchDown(x, HANDLE_PIN_Y, this.t)
     this.engine.tap(x, this.t)
-    this.engine.touchUp()
+    this.engine.touchUp(this.t)
   }
 
   scrollCenterTime(): number {
@@ -251,7 +251,7 @@ describe('scenarios: clean interaction flows', () => {
 
     s.touchDown(s.pinX('start'))
     s.run(700) // held past the tap timeout, no movement
-    s.engine.touchUp() // only the finalizer fires
+    s.engine.touchUp(s.t) // only the finalizer fires
 
     s.expectSettled()
   })
@@ -400,7 +400,7 @@ describe('scenarios: fuzzed interleavings', () => {
         if (kind < 0.25) {
           // Tap or abandoned touch
           if (rand() < 0.5) s.engine.tap(x, s.t)
-          s.engine.touchUp()
+          s.engine.touchUp(s.t)
         } else {
           // Pan with random activation travel and drag
           s.panActivate(rand() * 40 - 20)

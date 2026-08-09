@@ -717,13 +717,48 @@ describe('TimelinePhysicsEngine', () => {
       expect(engine.tick(16)).toBe(true)
       expect(engine.scrollOffset).toBe(frozenOffset)
 
-      engine.touchUp()
+      engine.touchUp(516)
 
       // Cleared: engine idle again, scroll follows playback again
       expect(engine.isActive).toBe(false)
       expect(engine.tick(616)).toBe(true)
       engine.tick(716)
       expect(engine.scrollOffset).toBeGreaterThan(frozenOffset)
+    })
+
+    it('recovers from an activated pan that is cancelled without panEnd', () => {
+      const { engine } = createEngine({ position: 15_000 })
+      engine.setPlaybackRate(1, 0)
+
+      // Pan activates and moves, then the gesture is cancelled:
+      // onFinalize (touchUp) fires without onEnd (panEnd)
+      engine.panStart(200, 45, 0)
+      engine.panUpdate(-40, 16)
+      expect(engine.isActive).toBe(true)
+      engine.touchUp(32)
+
+      // Cleared: engine idle again, playback follow works
+      expect(engine.isActive).toBe(false)
+      expect(engine.tick(132)).toBe(true)
+    })
+
+    it('flushes a throttled selection edit when the gesture is cancelled', () => {
+      const { engine, callbacks } = createEngine({
+        position: 15_000,
+        selection: { start: 10_000, end: 20_000 },
+      })
+
+      // Drag the start handle with two quick updates: the first emits, the
+      // second lands inside the emission throttle window and stays pending
+      const startX = handlePinScreenX(engine, 10_000, 'start')
+      engine.panStart(startX, HANDLE_PIN_Y, 0)
+      engine.panUpdate(-30, 10)
+      engine.panUpdate(-60, 20)
+      const pending = engine.selection!.start
+
+      // Gesture cancelled: the finalizer must flush the pending value
+      engine.touchUp(30)
+      expect(callbacks.onSelectionChange).toHaveBeenLastCalledWith(pending, 20_000)
     })
 
     it('grabs a handle anywhere along its full height', () => {

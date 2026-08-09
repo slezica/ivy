@@ -393,21 +393,27 @@ export class TimelinePhysicsEngine {
    * Called when the touch sequence is fully finalized (gesture onFinalize,
    * which fires whether the gesture succeeded, failed, or was cancelled).
    *
-   * A handle touch whose gesture neither completes as a tap nor activates as
-   * a pan (e.g. held past the tap timeout and released without moving) would
-   * leave the handleDrag mode armed forever — making `isActive` permanently
-   * true, which blocks both playback follow and external position sync: audio
-   * keeps playing but the timeline freezes. This guarantees the mode is
-   * cleared. Ballistic modes (momentum, animation) are deliberately left
-   * running: panEnd/tap set them right before this fires on a normal release.
+   * A finger-held mode that never reaches panEnd would stay armed forever —
+   * making `isActive` permanently true, which blocks both playback follow and
+   * external position sync: audio keeps playing but the timeline freezes.
+   * Two ways there: a handle touch that neither completes as a tap nor
+   * activates as a pan (held past the tap timeout, released without moving),
+   * and an activated pan that gets cancelled (onFinalize fires without
+   * onEnd). This clears both, and flushes any throttled selection edit the
+   * dropped gesture left pending — React would otherwise hold a stale
+   * selection until some unrelated motion endpoint.
+   *
+   * Ballistic modes (momentum, animation) are deliberately left running:
+   * panEnd/tap set them right before this fires on a normal release.
    *
    * `_suppressTap` is intentionally left alone: touchDown set it, and a
    * tap() may still run after this (gesture callback order isn't guaranteed),
    * relying on it for suppression.
    */
-  touchUp(): void {
-    if (this._mode.kind === 'handleDrag') {
+  touchUp(now: number): void {
+    if (this._mode.kind === 'handleDrag' || this._mode.kind === 'scrollDrag') {
       this._mode = { kind: 'idle' }
+      this._emitSelection(now, true)
     }
   }
 
