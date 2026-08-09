@@ -80,14 +80,21 @@ tests first (red), then fixed (green) — use that convention for future bugs.
   flag pairs representable — the cancelled-pan variant of the same leak
   (onFinalize without onEnd) needed the same structural change.
 
+## Follow-up: fling-grab teleport (fixed)
+
+Field-reproduced via the trace stream right after the refactor landed:
+fling → grab a handle before momentum finishes → the interrupted fling never
+committed (`onSeek` was deferred to the momentum finalize that never ran) →
+timeline showed the fling position over never-moved audio for the whole drag
+→ first post-release position event snapped it back (drift −16.5s in the
+capture). Fixed by committing the braked position in touchDown's handle-grab
+branch, same as the plain brake branch — stopping ballistic motion always
+commits now.
+
 ## Deferred findings (triage later)
 
 Real issues found during design review, out of scope here:
 
-- **Fling-grab abandons the fling position**: touchDown's handle branch stops
-  momentum/animation without `onSeek`, unlike the brake branch — audio stays
-  at the pre-fling position until an external event reconciles (snap if >2s).
-  Two paths disagree about whether stopping ballistic motion commits.
 - **Zoom mid-handle-drag jumps the anchor**: pinchUpdate rescales segment
   width while panUpdate's `_xt(translationX)` converts the whole accumulated
   translation at the new scale. Clip editor only (needs canZoom + selection).
