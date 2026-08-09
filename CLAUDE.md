@@ -190,6 +190,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   │   ├── useTimelinePhysics.ts # React adapter hook (gestures, rAF loop)
   │   │   ├── constants.ts        # Dimensions, physics, animation, zoom constants
   │   │   ├── utils.ts            # timeToX, xToTime, bar heights
+  │   │   ├── trace.ts            # Interaction tracing (test builds; see file header for capture workflow)
   │   │   └── index.ts            # Barrel exports
   │   └── shared/
   │       ├── ScreenArea.tsx      # Safe area wrapper (react-native-safe-area-context)
