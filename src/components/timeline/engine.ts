@@ -89,6 +89,58 @@ export interface EngineCallbacks {
 }
 
 // ============================================================================
+// Interaction mode
+//
+// The one gesture-driven thing the engine is doing right now. A single
+// discriminated union — not parallel booleans — so contradictory states
+// (the old `_isDragging && _draggingHandle` leak) are unrepresentable, and
+// per-mode data dies with its mode instead of lingering as stale globals.
+//
+// Two categories, with different lifetimes:
+//
+//   - Finger-held (scrollDrag, handleDrag): exist only while a finger is
+//     down. Cleared by panEnd on a normal release, and unconditionally by
+//     touchUp — the guaranteed finalizer — when a gesture is cancelled.
+//   - Ballistic (momentum, animation): outlive the finger. panEnd/tap set
+//     them right before touchUp fires (pan.onEnd precedes pan.onFinalize),
+//     so touchUp must not clear them; they end in their tick's finalize or
+//     when the next touchDown brakes them.
+//
+// Playback follow is NOT a mode: it's orthogonal continuous state
+// (_playbackRate, _pendingDrift, _playheadTime) that composes with modes —
+// detached follow runs during handleDrag, attached follow while idle.
+// Pinch also stays outside: it runs Simultaneous with pan in the hook, so
+// pinching during a scrollDrag is a legal combination, and its cooldown is
+// a time-window predicate rather than an event-cleared state.
+// ============================================================================
+
+type InteractionMode =
+  | { kind: 'idle' }
+  | {
+      kind: 'scrollDrag'
+      startOffset: number     // scroll offset when the pan began
+      // EMA-smoothed velocity estimate (px/s): raw gesture velocityX is
+      // noisy near finger lift, so momentum launches from this instead
+      emaVelocity: number
+      lastSample: { time: number; offset: number } | null
+    }
+  | {
+      kind: 'handleDrag'
+      handle: 'start' | 'end'
+      startValue: number      // anchor time at grab; translations add to it
+    }
+  | {
+      kind: 'momentum'
+      velocity: number        // px/s, decays exponentially per tick
+    }
+  | {
+      kind: 'animation'       // tap-to-seek ease-out scroll
+      startOffset: number
+      targetOffset: number
+      startTime: number
+    }
+
+// ============================================================================
 // Engine
 // ============================================================================
 
@@ -106,9 +158,9 @@ export class TimelinePhysicsEngine {
 
   // --- Scroll position ---
   private _scrollOffset: number
-  private _velocity = 0           // px/s, used during momentum (frame-rate independent)
-  private _isDragging = false
-  private _dragStartOffset = 0    // scroll offset when pan began
+
+  // --- Interaction mode (see the union above) ---
+  private _mode: InteractionMode = { kind: 'idle' }
 
   // --- Playhead time ---
   //
@@ -120,9 +172,10 @@ export class TimelinePhysicsEngine {
   // center. Linked pushes are driven by this value, not by the scroll.
   private _playheadTime: number
 
-  // --- Selection handle dragging ---
-  private _draggingHandle: 'start' | 'end' | null = null
-  private _handleDragStartValue = 0
+  /** Minimal-diff view of the mode for handle-aware code paths. */
+  private get _draggingHandle(): 'start' | 'end' | null {
+    return this._mode.kind === 'handleDrag' ? this._mode.handle : null
+  }
 
   // --- Pinch-to-zoom ---
   private _isPinching = false
@@ -132,23 +185,7 @@ export class TimelinePhysicsEngine {
   private _segmentWidth = SEGMENT_WIDTH
   private _segmentGap = SEGMENT_GAP
 
-  // --- Tap-to-seek animation ---
-  //
-  // When the user taps a point on the timeline, we animate the scroll offset
-  // from its current position to the tapped position using an ease-out curve.
-  // The `tick()` method advances this animation each frame.
-  private _animation: {
-    startOffset: number
-    targetOffset: number
-    startTime: number
-  } | null = null
-
-  // --- Momentum ---
-  //
-  // After a fast pan release (flick), velocity decays exponentially each tick.
-  // `_hasMomentum` tracks whether the momentum loop is active so that `tick()`
-  // knows which sub-tick to run.
-  private _hasMomentum = false
+  // --- Tick clock ---
   private _lastTickTime = 0  // timestamp of previous tick, for computing dt
 
   // --- Playback follow ---
@@ -160,21 +197,15 @@ export class TimelinePhysicsEngine {
   private _playbackRate = 0
   private _pendingDrift = 0  // ms of correction left to fold in
 
-  // --- Touch state ---
+  // --- Tap suppression ---
   //
-  // When the user touches down while momentum/animation is active, we stop
-  // the animation and set this flag. The subsequent tap gesture checks this
-  // flag and suppresses the tap-to-seek (the touch was meant to stop scrolling,
-  // not to seek).
-  private _stoppedMomentum = false
-
-  // --- EMA velocity estimation ---
-  //
-  // Smooths drag velocity using an exponential moving average so the
-  // transition from drag to momentum is clean. Raw gesture velocityX is
-  // noisy near finger lift — EMA filters that out naturally.
-  private _emaVelocity = 0
-  private _lastDragSample: { time: number; offset: number } | null = null
+  // A memo about the intent of the current touch: it was a brake (stopping
+  // momentum/animation) or a handle grab, so a tap() completing from the
+  // same touch must not seek. Not part of the mode: it coexists with idle
+  // (post-brake) and must survive touchUp (gesture callback order between
+  // tap.onEnd and pan.onFinalize isn't guaranteed). Self-healing: every
+  // touchDown rewrites it, so it can never outlive the next touch.
+  private _suppressTap = false
 
   // --- Display position throttling ---
   //
@@ -241,10 +272,7 @@ export class TimelinePhysicsEngine {
    * External position updates should be ignored while active.
    */
   get isActive(): boolean {
-    return this._isDragging
-      || this._hasMomentum
-      || this._animation !== null
-      || this._draggingHandle !== null
+    return this._mode.kind !== 'idle'
   }
 
   // =========================================================================
@@ -334,28 +362,30 @@ export class TimelinePhysicsEngine {
    *    brake, not to seek — we track this via _stoppedMomentum)
    */
   touchDown(x: number, _y: number, now: number): void {
-    // Check if touching a selection handle (skip during pinch cooldown)
+    // Check if touching a selection handle (skip during pinch cooldown).
+    // Arming the drag here — not at pan activation — is what makes the grab
+    // decision single: panStart honors this mode instead of re-hit-testing.
     if (this._selection && !this._isPinchCooldown(now)) {
       const handle = this._getHandleAtPosition(x)
       if (handle) {
-        this._draggingHandle = handle
-        this._handleDragStartValue = handle === 'start'
-          ? this._selection.start
-          : this._selection.end
-        this._stopAnimation()
-        this._stoppedMomentum = true
+        this._mode = {
+          kind: 'handleDrag',
+          handle,
+          startValue: handle === 'start' ? this._selection.start : this._selection.end,
+        }
+        this._suppressTap = true // a handle touch is never a seek-tap
         return
       }
     }
 
     // If momentum or animation is running, stop it
-    if (this._hasMomentum || this._animation !== null) {
-      this._stopAnimation()
-      this._stoppedMomentum = true
+    if (this._mode.kind === 'momentum' || this._mode.kind === 'animation') {
+      this._mode = { kind: 'idle' }
+      this._suppressTap = true
       this._emitSelection(now, true) // motion stopped mid-flight
       this._callbacks.onSeek(this._xt(this._scrollOffset))
     } else {
-      this._stoppedMomentum = false
+      this._suppressTap = false
     }
   }
 
@@ -365,16 +395,20 @@ export class TimelinePhysicsEngine {
    *
    * A handle touch whose gesture neither completes as a tap nor activates as
    * a pan (e.g. held past the tap timeout and released without moving) would
-   * leave `_draggingHandle` set forever — making `isActive` permanently true,
-   * which blocks both playback follow and external position sync: audio keeps
-   * playing but the timeline freezes. This guarantees the state is cleared.
+   * leave the handleDrag mode armed forever — making `isActive` permanently
+   * true, which blocks both playback follow and external position sync: audio
+   * keeps playing but the timeline freezes. This guarantees the mode is
+   * cleared. Ballistic modes (momentum, animation) are deliberately left
+   * running: panEnd/tap set them right before this fires on a normal release.
    *
-   * `_stoppedMomentum` is intentionally left alone: touchDown set it, and a
+   * `_suppressTap` is intentionally left alone: touchDown set it, and a
    * tap() may still run after this (gesture callback order isn't guaranteed),
    * relying on it for suppression.
    */
   touchUp(): void {
-    this._draggingHandle = null
+    if (this._mode.kind === 'handleDrag') {
+      this._mode = { kind: 'idle' }
+    }
   }
 
   /**
@@ -386,9 +420,9 @@ export class TimelinePhysicsEngine {
    */
   tap(x: number, now: number): void {
     // Suppress tap if it was used to stop momentum, end a handle drag, or during pinch cooldown
-    if (this._stoppedMomentum || this._draggingHandle || this._isPinchCooldown(now)) {
-      this._stoppedMomentum = false
-      this._draggingHandle = null
+    if (this._suppressTap || this._mode.kind === 'handleDrag' || this._isPinchCooldown(now)) {
+      this._suppressTap = false
+      if (this._mode.kind === 'handleDrag') this._mode = { kind: 'idle' } // the touch ended as a tap
       return
     }
 
@@ -417,31 +451,44 @@ export class TimelinePhysicsEngine {
   // =========================================================================
 
   /**
-   * Pan gesture begins. Either starts a handle drag or a scroll drag.
+   * Pan gesture begins. Either continues a handle drag armed at touchDown,
+   * or starts one, or starts a scroll drag.
    */
   panStart(x: number, _y: number, now: number): void {
     if (this._isPinchCooldown(now)) return
 
-    // Check if starting on a selection handle
+    // A handle drag armed at touchDown wins — never re-hit-test here. The
+    // pan activates ~10px of finger travel after the touch, so this x can
+    // sit outside the hit column even though the grab was legitimate; a
+    // re-hit-test would degrade the grab into a scroll drag mid-gesture.
+    // touchDown's startValue is still exact: the dragged anchor cannot move
+    // between touchDown and panStart (prop echoes are locked out and linked
+    // pushes exempt the dragged anchor), and RNGH translations are measured
+    // from the activation point, so they pair with any capture taken while
+    // the anchor was stationary.
+    if (this._mode.kind === 'handleDrag') return
+
+    // Check if starting on a selection handle (a pan can also begin one
+    // without touchDown — tests drive panStart directly)
     if (this._selection) {
       const handle = this._getHandleAtPosition(x)
       if (handle) {
-        this._draggingHandle = handle
-        this._handleDragStartValue = handle === 'start'
-          ? this._selection.start
-          : this._selection.end
-        this._stopAnimation()
+        this._mode = {
+          kind: 'handleDrag',
+          handle,
+          startValue: handle === 'start' ? this._selection.start : this._selection.end,
+        }
         return
       }
     }
 
     // Start a regular scroll drag
-    this._isDragging = true
-    this._velocity = 0
-    this._dragStartOffset = this._scrollOffset
-    this._lastDragSample = null
-    this._emaVelocity = 0
-    this._stopAnimation()
+    this._mode = {
+      kind: 'scrollDrag',
+      startOffset: this._scrollOffset,
+      emaVelocity: 0,
+      lastSample: null,
+    }
   }
 
   /**
@@ -453,12 +500,14 @@ export class TimelinePhysicsEngine {
   panUpdate(translationX: number, now: number): void {
     if (this._isPinchCooldown(now)) return
 
-    // --- Handle drag mode ---
-    if (this._draggingHandle && this._selection) {
-      const deltaTime = this._xt(translationX)
-      const newValue = this._handleDragStartValue + deltaTime
+    const mode = this._mode
 
-      if (this._draggingHandle === 'start') {
+    // --- Handle drag mode ---
+    if (mode.kind === 'handleDrag' && this._selection) {
+      const deltaTime = this._xt(translationX)
+      const newValue = mode.startValue + deltaTime
+
+      if (mode.handle === 'start') {
         const maxStart = this._selection.end - MIN_SELECTION_DURATION
         const clampedStart = clamp(newValue, 0, maxStart)
         this._selection = { start: clampedStart, end: this._selection.end }
@@ -477,26 +526,26 @@ export class TimelinePhysicsEngine {
     // --- Regular scroll mode ---
 
     // No drag in progress — panStart was blocked during pinch cooldown
-    if (!this._isDragging) return
+    if (mode.kind !== 'scrollDrag') return
 
     const newOffset = clamp(
-      this._dragStartOffset - translationX,
+      mode.startOffset - translationX,
       0,
       this._maxOffset()
     )
 
     // Update EMA velocity estimate from drag samples
-    const lastSample = this._lastDragSample
+    const lastSample = mode.lastSample
 
     if (lastSample) {
       const dt = (now - lastSample.time) / 1000 // seconds
       if (dt > 0) {
         const instantVelocity = (newOffset - lastSample.offset) / dt // px/s (signed)
-        this._emaVelocity = EMA_ALPHA * instantVelocity + (1 - EMA_ALPHA) * this._emaVelocity
+        mode.emaVelocity = EMA_ALPHA * instantVelocity + (1 - EMA_ALPHA) * mode.emaVelocity
       }
     }
 
-    this._lastDragSample = { time: now, offset: newOffset }
+    mode.lastSample = { time: now, offset: newOffset }
     const prevTime = this._playheadTime
     this._scrollTo(newOffset)
     this._pushSelection(prevTime, this._playheadTime, now)
@@ -510,27 +559,29 @@ export class TimelinePhysicsEngine {
    * using the EMA-smoothed velocity.
    */
   panEnd(_velocityX: number, now: number): void {
+    const mode = this._mode
+
     // Handle drag ends — clear state and flush the final selection
-    if (this._draggingHandle) {
-      this._draggingHandle = null
+    if (mode.kind === 'handleDrag') {
+      this._mode = { kind: 'idle' }
       this._emitSelection(now, true)
       return
     }
 
     // No drag in progress — panStart was blocked during pinch cooldown
-    if (!this._isDragging) return
+    if (mode.kind !== 'scrollDrag') return
 
-    this._isDragging = false
+    this._mode = { kind: 'idle' }
 
     // A pinch interrupted this drag — drop it without momentum or seek
     if (this._isPinchCooldown(now)) return
 
-    // Use EMA-smoothed velocity for momentum (ignoring raw gesture velocityX)
-    this._velocity = this._emaVelocity
     this._lastTickTime = now // dt baseline for momentum or playback follow
 
-    if (Math.abs(this._velocity) > MIN_VELOCITY) {
-      this._hasMomentum = true // momentum finalize will flush the selection
+    // Use EMA-smoothed velocity for momentum (ignoring raw gesture velocityX)
+    if (Math.abs(mode.emaVelocity) > MIN_VELOCITY) {
+      // Momentum finalize will flush the selection
+      this._mode = { kind: 'momentum', velocity: mode.emaVelocity }
     } else {
       this._emitSelection(now, true)
       this._callbacks.onSeek(this._xt(this._scrollOffset))
@@ -544,7 +595,11 @@ export class TimelinePhysicsEngine {
   pinchStart(now: number): void {
     this._isPinching = true
     this._pinchBaseZoom = this._zoomFactor
-    this._stopAnimation()
+    // Stop ballistic motion; a live drag stays (pinch runs Simultaneous
+    // with pan, so pinching mid-drag is a legal combination)
+    if (this._mode.kind === 'momentum' || this._mode.kind === 'animation') {
+      this._mode = { kind: 'idle' }
+    }
   }
 
   pinchUpdate(scale: number, now: number): void {
@@ -578,21 +633,21 @@ export class TimelinePhysicsEngine {
   // =========================================================================
 
   tick(now: number): boolean {
-    // Momentum and tap-to-seek take priority; when one finishes with playback
-    // follow active, keep the loop alive so following resumes seamlessly.
-    if (this._hasMomentum) {
-      return this._tickMomentum(now) || this._isPlaybackFollowing()
+    // Ballistic modes drive their own motion; when one finishes with playback
+    // follow active, the `||` tail sees the finalized (idle) mode and keeps
+    // the loop alive so following resumes seamlessly.
+    switch (this._mode.kind) {
+      case 'momentum':
+        return this._tickMomentum(now, this._mode) || this._isPlaybackFollowing()
+      case 'animation':
+        return this._tickAnimation(now, this._mode) || this._isPlaybackFollowing()
+      case 'handleDrag':
+        return this._isDetachedFollowing() ? this._tickPlayback(now) : false
+      case 'scrollDrag':
+        return false // the gesture drives frames, not the loop
+      case 'idle':
+        return this._isPlaybackFollowing() ? this._tickPlayback(now) : false
     }
-
-    if (this._animation) {
-      return this._tickAnimation(now) || this._isPlaybackFollowing()
-    }
-
-    if (this._isPlaybackFollowing() || this._isDetachedFollowing()) {
-      return this._tickPlayback(now)
-    }
-
-    return false
   }
 
   // =========================================================================
@@ -608,31 +663,25 @@ export class TimelinePhysicsEngine {
   // 60Hz display produce the same motion curve — just sampled differently.
   // =========================================================================
 
-  private _tickMomentum(now: number): boolean {
-    // If the user started dragging during momentum, bail out
-    if (this._isDragging || this._draggingHandle) {
-      this._hasMomentum = false
-      return false
-    }
-
+  private _tickMomentum(now: number, mode: { velocity: number }): boolean {
     // Compute real elapsed time since last tick
     const dt = Math.min((now - this._lastTickTime) / 1000, 0.1) // seconds, capped at 100ms
     this._lastTickTime = now
 
-    if (Math.abs(this._velocity) > MIN_VELOCITY) {
+    if (Math.abs(mode.velocity) > MIN_VELOCITY) {
       // Advance position by the exact displacement of the decay curve over
       // this time slice: ∫ v0 * D^t dt = v0 * (D^dt - 1) / ln(D)
       const decay = Math.pow(DECELERATION, dt)
       const prevTime = this._playheadTime
       this._scrollTo(clamp(
-        this._scrollOffset + this._velocity * (decay - 1) / Math.log(DECELERATION),
+        this._scrollOffset + mode.velocity * (decay - 1) / Math.log(DECELERATION),
         0,
         this._maxOffset()
       ))
       this._pushSelection(prevTime, this._playheadTime, now)
 
       // Decay velocity: v *= DECELERATION^dt
-      this._velocity *= decay
+      mode.velocity *= decay
 
       this._updateDisplayPosition(this._xt(this._scrollOffset), now)
       this._callbacks.onFrame()
@@ -640,8 +689,7 @@ export class TimelinePhysicsEngine {
     }
 
     // Momentum exhausted — finalize
-    this._velocity = 0
-    this._hasMomentum = false
+    this._mode = { kind: 'idle' }
     this._emitSelection(now, true)
     this._updateDisplayPosition(this._xt(this._scrollOffset), now, true)
     this._callbacks.onSeek(this._xt(this._scrollOffset))
@@ -658,8 +706,7 @@ export class TimelinePhysicsEngine {
 
   private _isPlaybackFollowing(): boolean {
     return this._playbackRate > 0
-      && !this._isDragging
-      && this._draggingHandle === null
+      && this._mode.kind === 'idle'
       && !this._isPinching
   }
 
@@ -668,7 +715,7 @@ export class TimelinePhysicsEngine {
    * the playhead alone advances across the frozen bars.
    */
   private _isDetachedFollowing(): boolean {
-    return this._playbackRate > 0 && this._draggingHandle !== null
+    return this._playbackRate > 0 && this._mode.kind === 'handleDrag'
   }
 
   private _tickPlayback(now: number): boolean {
@@ -708,24 +755,18 @@ export class TimelinePhysicsEngine {
   // milliseconds using an ease-out cubic curve.
   // =========================================================================
 
-  private _tickAnimation(now: number): boolean {
-    if (!this._animation) return false
-
-    // Cancel if the user started interacting
-    if (this._isDragging || this._draggingHandle) {
-      this._animation = null
-      return false
-    }
-
+  private _tickAnimation(
+    now: number,
+    mode: { startOffset: number; targetOffset: number; startTime: number }
+  ): boolean {
     this._lastTickTime = now // keep the playback-follow dt baseline fresh
 
-    const elapsed = now - this._animation.startTime
+    const elapsed = now - mode.startTime
     const progress = Math.min(elapsed / SCROLL_TO_DURATION, 1)
     const easedProgress = easeOutCubic(progress)
 
-    const { startOffset, targetOffset } = this._animation
     const prevTime = this._playheadTime
-    this._scrollTo(startOffset + (targetOffset - startOffset) * easedProgress)
+    this._scrollTo(mode.startOffset + (mode.targetOffset - mode.startOffset) * easedProgress)
     this._pushSelection(prevTime, this._playheadTime, now)
 
     this._updateDisplayPosition(this._xt(this._scrollOffset), now)
@@ -736,7 +777,7 @@ export class TimelinePhysicsEngine {
     }
 
     // Animation complete — finalize
-    this._animation = null
+    this._mode = { kind: 'idle' }
     this._emitSelection(now, true)
     this._updateDisplayPosition(this._xt(this._scrollOffset), now, true)
     this._callbacks.onSeek(this._xt(this._scrollOffset))
@@ -782,16 +823,9 @@ export class TimelinePhysicsEngine {
   // Private: animation control
   // =========================================================================
 
-  private _stopAnimation(): void {
-    this._velocity = 0
-    this._hasMomentum = false
-    this._animation = null
-  }
-
   private _animateToPosition(targetOffset: number, now: number): void {
-    this._stopAnimation()
-
-    this._animation = {
+    this._mode = {
+      kind: 'animation',
       startOffset: this._scrollOffset,
       targetOffset: clamp(targetOffset, 0, this._maxOffset()),
       startTime: now,
@@ -860,13 +894,10 @@ export class TimelinePhysicsEngine {
    * drag, or linked pushing during any motion. See updateSelection().
    */
   private _selectionLocked(): boolean {
-    if (this._draggingHandle !== null) return true
+    if (this._mode.kind === 'handleDrag') return true
     if (!this._linked || !this._selection) return false
 
-    return this._isDragging
-      || this._hasMomentum
-      || this._animation !== null
-      || this._playbackRate > 0
+    return this._mode.kind !== 'idle' || this._playbackRate > 0
   }
 
   // =========================================================================

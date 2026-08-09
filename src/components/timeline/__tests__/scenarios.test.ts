@@ -301,7 +301,7 @@ describe('scenarios: handle grab where pan activation misses the hit column', ()
     s.release()
   }
 
-  it.failing('engine settles and follow resumes after the drag', () => {
+  it('engine settles and follow resumes after the drag', () => {
     const s = new Scenario({
       position: 105_000,
       selection: { start: 100_000, end: 110_000 },
@@ -313,7 +313,7 @@ describe('scenarios: handle grab where pan activation misses the hit column', ()
     s.expectSettled()
   })
 
-  it.failing('a later scrub does not teleport audio back in time', () => {
+  it('a later scrub does not teleport audio back in time', () => {
     const s = new Scenario({
       position: 105_000,
       selection: { start: 100_000, end: 110_000 },
@@ -335,7 +335,7 @@ describe('scenarios: handle grab where pan activation misses the hit column', ()
     expect(Math.abs(s.seeks[0].pos - s.seeks[0].audio)).toBeLessThan(1500)
   })
 
-  it.failing('re-grabbing a handle mid-glide settles cleanly', () => {
+  it('re-grabbing a handle mid-glide settles cleanly', () => {
     const s = new Scenario({
       position: 105_000,
       selection: { start: 100_000, end: 110_000 },
@@ -379,7 +379,7 @@ describe('scenarios: fuzzed interleavings', () => {
     }
   }
 
-  it.failing('every random gesture burst settles back to following', () => {
+  it('every random gesture burst settles back to following', () => {
     const rand = lcg(20260809)
 
     for (let round = 0; round < 30; round++) {
