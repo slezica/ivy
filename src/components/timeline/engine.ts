@@ -579,8 +579,12 @@ export class TimelinePhysicsEngine {
 
     this._mode = { kind: 'idle' }
 
-    // A pinch interrupted this drag — drop it without momentum or seek
-    if (this._isPinchCooldown(now)) return
+    // A pinch interrupted this drag — drop it without momentum or seek,
+    // but flush any linked push the drag left pending in the throttle
+    if (this._isPinchCooldown(now)) {
+      this._emitSelection(now, true)
+      return
+    }
 
     this._lastTickTime = now // dt baseline for momentum or playback follow
 

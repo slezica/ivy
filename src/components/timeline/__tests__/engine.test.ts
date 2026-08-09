@@ -558,6 +558,30 @@ describe('TimelinePhysicsEngine', () => {
       expect(engine.tick(316)).toBe(true)
     })
 
+    it('flushes a pending linked push when a pinch drops the drag', () => {
+      const { engine, callbacks } = createEngine({
+        position: 15_000,
+        selection: { start: 10_000, end: 20_000 },
+        linked: true,
+      })
+
+      // Scroll drag (away from the handles) sweeps the playhead over the
+      // end anchor twice: the first push emits, the second lands inside
+      // the emission throttle window and stays pending
+      engine.panStart(200, 45, 0)
+      engine.panUpdate(-40, 10)
+      engine.panUpdate(-45, 20)
+      const pending = engine.selection!.end
+      expect(pending).toBeGreaterThan(20_000)
+
+      // Pinch interrupts; panEnd lands inside the cooldown and drops the
+      // drag — the pending push must still reach React
+      engine.pinchStart(25)
+      engine.pinchEnd(30)
+      engine.panEnd(0, 40)
+      expect(callbacks.onSelectionChange).toHaveBeenLastCalledWith(10_000, pending)
+    })
+
     it('ignores pan updates when panStart was blocked during cooldown', () => {
       const { engine, callbacks } = createEngine({ position: 10_000 })
 
