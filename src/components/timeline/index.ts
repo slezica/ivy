@@ -4,6 +4,7 @@
 
 export * from './constants'
 export * from './utils'
+export * from './trace'
 
 export { Timeline } from './Timeline'
 export type { TimelineProps } from './Timeline'

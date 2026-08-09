@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Gesture } from 'react-native-gesture-handler'
 
 import { TimelinePhysicsEngine } from './engine'
+import { timelineTrace, traceEnabled, traceInstanceId } from './trace'
 // ============================================================================
 // Types (unchanged — preserves the contract with Timeline.tsx)
 // ============================================================================
@@ -122,8 +123,12 @@ export function useTimelinePhysics({
   // -----------------------------------------------------------------------
 
   const engineRef = useRef<TimelinePhysicsEngine | null>(null)
+  const traceIdRef = useRef('')
 
   if (!engineRef.current) {
+    traceIdRef.current = traceInstanceId()
+    timelineTrace(traceIdRef.current, 'create',
+      `duration=${duration} position=${externalPosition.toFixed(0)} selection=${selection ? `${selection.start.toFixed(0)}..${selection.end.toFixed(0)}` : 'none'} linked=${linkedSelection} canZoom=${canZoom}`)
     engineRef.current = new TimelinePhysicsEngine(
       {
         duration,
@@ -135,6 +140,9 @@ export function useTimelinePhysics({
         tapSkip,
       },
       {
+        onTrace: traceEnabled
+          ? (tag, detail) => timelineTrace(traceIdRef.current, tag, detail)
+          : undefined,
         onSeek: (pos) => onSeekRef.current(pos),
         onSelectionChange: (start, end) => onSelectionChangeRef.current?.(start, end),
         onFrame: () => {
@@ -162,12 +170,15 @@ export function useTimelinePhysics({
   const scheduleTick = useCallback(() => {
     if (rafIdRef.current !== null) return // already running
 
+    timelineTrace(traceIdRef.current, 'loop', 'start')
+
     const loop = () => {
       const needsMore = engine.tick(performance.now())
       if (needsMore) {
         rafIdRef.current = requestAnimationFrame(loop)
       } else {
         rafIdRef.current = null
+        timelineTrace(traceIdRef.current, 'loop', 'stop')
       }
     }
 
@@ -196,6 +207,9 @@ export function useTimelinePhysics({
   useEffect(() => {
     if (selection) {
       engine.updateSelection(selection.start, selection.end)
+      const accepted = engine.selection
+      timelineTrace(traceIdRef.current, 'prop:selection',
+        `${selection.start.toFixed(0)}..${selection.end.toFixed(0)} -> engine=${accepted ? `${accepted.start.toFixed(0)}..${accepted.end.toFixed(0)}` : 'none'}`)
       selectionRef.current = engine.selection
     }
   }, [engine, selection?.start, selection?.end])

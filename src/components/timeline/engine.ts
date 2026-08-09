@@ -86,6 +86,9 @@ export interface EngineCallbacks {
 
   /** Display position changed — update the time indicator text */
   onDisplayPosition: (position: number) => void
+
+  /** Diagnostic tracing (test builds only) — see trace.ts */
+  onTrace?: (tag: string, detail: string) => void
 }
 
 // ============================================================================
@@ -197,6 +200,10 @@ export class TimelinePhysicsEngine {
   private _playbackRate = 0
   private _pendingDrift = 0  // ms of correction left to fold in
 
+  // --- Trace throttling (tracing itself must not perturb timing) ---
+  private _lastPanTrace = -Infinity
+  private _lastStateTrace = -Infinity
+
   // --- Tap suppression ---
   //
   // A memo about the intent of the current touch: it was a brake (stopping
@@ -242,6 +249,31 @@ export class TimelinePhysicsEngine {
     this._scrollOffset = this._tx(config.position)
     this._playheadTime = config.position
     this._displayPosition = config.position
+  }
+
+  // =========================================================================
+  // Tracing (no-ops unless the hook wired onTrace — test builds only)
+  // =========================================================================
+
+  private _trace(tag: string, detail = ''): void {
+    this._callbacks.onTrace?.(tag, detail)
+  }
+
+  /**
+   * The single funnel for interaction-mode transitions: every assignment
+   * goes through here so the trace stream shows each transition and why.
+   */
+  private _setMode(next: InteractionMode, cause: string): void {
+    if (this._callbacks.onTrace && this._mode.kind !== next.kind) {
+      this._trace('mode', `${this._mode.kind}->${next.kind} (${cause}) center=${this._xt(this._scrollOffset).toFixed(0)} playhead=${this._playheadTime.toFixed(0)}`)
+    }
+    this._mode = next
+  }
+
+  /** The single funnel for onSeek, so every audio seek is traced with cause. */
+  private _seek(position: number, cause: string): void {
+    this._trace('onSeek', `${position.toFixed(0)} (${cause})`)
+    this._callbacks.onSeek(position)
   }
 
   // =========================================================================
@@ -296,16 +328,23 @@ export class TimelinePhysicsEngine {
    * notification buttons) snap.
    */
   setExternalPosition(position: number, now: number): void {
-    if (this.isActive) return
+    if (this.isActive) {
+      this._trace('extPos', `${position.toFixed(0)} ignored (mode=${this._mode.kind})`)
+      return
+    }
 
     if (this._isPlaybackFollowing()) {
       const drift = position - this._playheadTime
       if (Math.abs(drift) <= DRIFT_SNAP_THRESHOLD) {
+        this._trace('extPos', `${position.toFixed(0)} fold drift=${drift.toFixed(0)}`)
         this._pendingDrift = drift
         return
       }
+      this._trace('extPos', `${position.toFixed(0)} SNAP drift=${drift.toFixed(0)}`)
       this._pendingDrift = 0
       // Fall through: drift too large, snap to the reported position
+    } else {
+      this._trace('extPos', `${position.toFixed(0)} snap (idle, playhead=${this._playheadTime.toFixed(0)})`)
     }
 
     const prevTime = this._playheadTime
@@ -321,6 +360,9 @@ export class TimelinePhysicsEngine {
    * The hook calls this when the playbackRate prop changes.
    */
   setPlaybackRate(rate: number, now: number): void {
+    if (rate !== this._playbackRate) {
+      this._trace('playbackRate', `${this._playbackRate}->${rate} mode=${this._mode.kind}`)
+    }
     if (rate > 0 && this._playbackRate === 0) {
       this._lastTickTime = now // fresh dt baseline for the first playback tick
     }
@@ -362,17 +404,19 @@ export class TimelinePhysicsEngine {
    *    brake, not to seek — we track this via _stoppedMomentum)
    */
   touchDown(x: number, _y: number, now: number): void {
+    this._trace('touchDown', `x=${x.toFixed(1)} mode=${this._mode.kind}`)
+
     // Check if touching a selection handle (skip during pinch cooldown).
     // Arming the drag here — not at pan activation — is what makes the grab
     // decision single: panStart honors this mode instead of re-hit-testing.
     if (this._selection && !this._isPinchCooldown(now)) {
       const handle = this._getHandleAtPosition(x)
       if (handle) {
-        this._mode = {
+        this._setMode({
           kind: 'handleDrag',
           handle,
           startValue: handle === 'start' ? this._selection.start : this._selection.end,
-        }
+        }, `touchDown grab ${handle}`)
         this._suppressTap = true // a handle touch is never a seek-tap
         return
       }
@@ -380,10 +424,10 @@ export class TimelinePhysicsEngine {
 
     // If momentum or animation is running, stop it
     if (this._mode.kind === 'momentum' || this._mode.kind === 'animation') {
-      this._mode = { kind: 'idle' }
+      this._setMode({ kind: 'idle' }, 'touchDown brake')
       this._suppressTap = true
       this._emitSelection(now, true) // motion stopped mid-flight
-      this._callbacks.onSeek(this._xt(this._scrollOffset))
+      this._seek(this._xt(this._scrollOffset), 'brake')
     } else {
       this._suppressTap = false
     }
@@ -411,8 +455,9 @@ export class TimelinePhysicsEngine {
    * relying on it for suppression.
    */
   touchUp(now: number): void {
+    this._trace('touchUp', `mode=${this._mode.kind}`)
     if (this._mode.kind === 'handleDrag' || this._mode.kind === 'scrollDrag') {
-      this._mode = { kind: 'idle' }
+      this._setMode({ kind: 'idle' }, 'touchUp finalizer')
       this._emitSelection(now, true)
     }
   }
@@ -425,10 +470,12 @@ export class TimelinePhysicsEngine {
    * the current position ± the skip amount (tapSkip mode, split by half).
    */
   tap(x: number, now: number): void {
+    this._trace('tap', `x=${x.toFixed(1)} mode=${this._mode.kind} suppress=${this._suppressTap}`)
+
     // Suppress tap if it was used to stop momentum, end a handle drag, or during pinch cooldown
     if (this._suppressTap || this._mode.kind === 'handleDrag' || this._isPinchCooldown(now)) {
       this._suppressTap = false
-      if (this._mode.kind === 'handleDrag') this._mode = { kind: 'idle' } // the touch ended as a tap
+      if (this._mode.kind === 'handleDrag') this._setMode({ kind: 'idle' }, 'tap ended handle touch')
       return
     }
 
@@ -461,6 +508,7 @@ export class TimelinePhysicsEngine {
    * or starts one, or starts a scroll drag.
    */
   panStart(x: number, _y: number, now: number): void {
+    this._trace('panStart', `x=${x.toFixed(1)} mode=${this._mode.kind}${this._isPinchCooldown(now) ? ' (cooldown)' : ''}`)
     if (this._isPinchCooldown(now)) return
 
     // A handle drag armed at touchDown wins — never re-hit-test here. The
@@ -479,22 +527,22 @@ export class TimelinePhysicsEngine {
     if (this._selection) {
       const handle = this._getHandleAtPosition(x)
       if (handle) {
-        this._mode = {
+        this._setMode({
           kind: 'handleDrag',
           handle,
           startValue: handle === 'start' ? this._selection.start : this._selection.end,
-        }
+        }, `panStart grab ${handle}`)
         return
       }
     }
 
     // Start a regular scroll drag
-    this._mode = {
+    this._setMode({
       kind: 'scrollDrag',
       startOffset: this._scrollOffset,
       emaVelocity: 0,
       lastSample: null,
-    }
+    }, 'panStart scroll')
   }
 
   /**
@@ -504,6 +552,10 @@ export class TimelinePhysicsEngine {
    * For scroll drags: update scroll offset and EMA velocity estimate.
    */
   panUpdate(translationX: number, now: number): void {
+    if (now - this._lastPanTrace >= 50) { // throttled: full rate would perturb timing
+      this._lastPanTrace = now
+      this._trace('panUpdate', `tx=${translationX.toFixed(1)} mode=${this._mode.kind}`)
+    }
     if (this._isPinchCooldown(now)) return
 
     const mode = this._mode
@@ -566,10 +618,11 @@ export class TimelinePhysicsEngine {
    */
   panEnd(_velocityX: number, now: number): void {
     const mode = this._mode
+    this._trace('panEnd', `mode=${mode.kind}${mode.kind === 'scrollDrag' ? ` ema=${mode.emaVelocity.toFixed(0)}` : ''}`)
 
     // Handle drag ends — clear state and flush the final selection
     if (mode.kind === 'handleDrag') {
-      this._mode = { kind: 'idle' }
+      this._setMode({ kind: 'idle' }, 'panEnd handle release')
       this._emitSelection(now, true)
       return
     }
@@ -577,7 +630,7 @@ export class TimelinePhysicsEngine {
     // No drag in progress — panStart was blocked during pinch cooldown
     if (mode.kind !== 'scrollDrag') return
 
-    this._mode = { kind: 'idle' }
+    this._setMode({ kind: 'idle' }, 'panEnd scroll release')
 
     // A pinch interrupted this drag — drop it without momentum or seek,
     // but flush any linked push the drag left pending in the throttle
@@ -591,10 +644,10 @@ export class TimelinePhysicsEngine {
     // Use EMA-smoothed velocity for momentum (ignoring raw gesture velocityX)
     if (Math.abs(mode.emaVelocity) > MIN_VELOCITY) {
       // Momentum finalize will flush the selection
-      this._mode = { kind: 'momentum', velocity: mode.emaVelocity }
+      this._setMode({ kind: 'momentum', velocity: mode.emaVelocity }, 'panEnd fling')
     } else {
       this._emitSelection(now, true)
-      this._callbacks.onSeek(this._xt(this._scrollOffset))
+      this._seek(this._xt(this._scrollOffset), 'scrub release')
     }
   }
 
@@ -603,12 +656,13 @@ export class TimelinePhysicsEngine {
   // =========================================================================
 
   pinchStart(now: number): void {
+    this._trace('pinchStart', `mode=${this._mode.kind}`)
     this._isPinching = true
     this._pinchBaseZoom = this._zoomFactor
     // Stop ballistic motion; a live drag stays (pinch runs Simultaneous
     // with pan, so pinching mid-drag is a legal combination)
     if (this._mode.kind === 'momentum' || this._mode.kind === 'animation') {
-      this._mode = { kind: 'idle' }
+      this._setMode({ kind: 'idle' }, 'pinchStart')
     }
   }
 
@@ -629,6 +683,7 @@ export class TimelinePhysicsEngine {
   }
 
   pinchEnd(now: number): void {
+    this._trace('pinchEnd', `zoom=${this._zoomFactor}`)
     this._isPinching = false
     this._pinchEndTime = now
   }
@@ -643,6 +698,12 @@ export class TimelinePhysicsEngine {
   // =========================================================================
 
   tick(now: number): boolean {
+    // Low-rate state sample: the continuous side of the trace stream
+    if (this._callbacks.onTrace && now - this._lastStateTrace >= 500) {
+      this._lastStateTrace = now
+      this._trace('state', `mode=${this._mode.kind} center=${this._xt(this._scrollOffset).toFixed(0)} playhead=${this._playheadTime.toFixed(0)} rate=${this._playbackRate} drift=${this._pendingDrift.toFixed(0)}`)
+    }
+
     // Ballistic modes drive their own motion; when one finishes with playback
     // follow active, the `||` tail sees the finalized (idle) mode and keeps
     // the loop alive so following resumes seamlessly.
@@ -699,10 +760,10 @@ export class TimelinePhysicsEngine {
     }
 
     // Momentum exhausted — finalize
-    this._mode = { kind: 'idle' }
+    this._setMode({ kind: 'idle' }, 'momentum exhausted')
     this._emitSelection(now, true)
     this._updateDisplayPosition(this._xt(this._scrollOffset), now, true)
-    this._callbacks.onSeek(this._xt(this._scrollOffset))
+    this._seek(this._xt(this._scrollOffset), 'momentum finalize')
     return false
   }
 
@@ -787,10 +848,10 @@ export class TimelinePhysicsEngine {
     }
 
     // Animation complete — finalize
-    this._mode = { kind: 'idle' }
+    this._setMode({ kind: 'idle' }, 'animation complete')
     this._emitSelection(now, true)
     this._updateDisplayPosition(this._xt(this._scrollOffset), now, true)
-    this._callbacks.onSeek(this._xt(this._scrollOffset))
+    this._seek(this._xt(this._scrollOffset), 'tap-seek finalize')
     return false
   }
 
@@ -834,12 +895,12 @@ export class TimelinePhysicsEngine {
   // =========================================================================
 
   private _animateToPosition(targetOffset: number, now: number): void {
-    this._mode = {
+    this._setMode({
       kind: 'animation',
       startOffset: this._scrollOffset,
       targetOffset: clamp(targetOffset, 0, this._maxOffset()),
       startTime: now,
-    }
+    }, `tap-seek to ${this._xt(targetOffset).toFixed(0)}`)
   }
 
   // =========================================================================
@@ -896,6 +957,7 @@ export class TimelinePhysicsEngine {
 
     this._lastSelectionEmit = now
     this._selectionDirty = false
+    this._trace('emitSelection', `${this._selection.start.toFixed(0)}..${this._selection.end.toFixed(0)}${force ? ' (forced)' : ''}`)
     this._callbacks.onSelectionChange?.(this._selection.start, this._selection.end)
   }
 

@@ -16,7 +16,7 @@ import { useStore } from '../store'
 import { Color, Space } from '../theme'
 import { formatTime } from '../utils'
 import IconButton from './shared/IconButton'
-import { Timeline } from './timeline'
+import { Timeline, timelineTrace } from './timeline'
 
 
 export interface ClipEditorResult {
@@ -89,10 +89,14 @@ export default function ClipEditor({
   useEffect(() => {
     if (skipFirstSync.current) {
       skipFirstSync.current = false
+      timelineTrace('ED', 'playbackPos', `${playback.position.toFixed(0)} skipped (extrapolated handoff)`)
       return
     }
     if (isOwner && isFileLoaded) {
+      timelineTrace('ED', 'playbackPos', `${playback.position.toFixed(0)} status=${playback.status}`)
       setOwnPosition(playback.position)
+    } else {
+      timelineTrace('ED', 'playbackPos', `${playback.position.toFixed(0)} not applied (owner=${isOwner} loaded=${isFileLoaded})`)
     }
   }, [isOwner, isFileLoaded, playback.position])
 
@@ -102,6 +106,8 @@ export default function ClipEditor({
   }
 
   const handleSeek = async (pos: number) => {
+    timelineTrace('ED', 'seek', `${pos.toFixed(0)} owner=${isOwner} loaded=${isFileLoaded}`)
+
     // Always update local position
     setOwnPosition(pos)
 
@@ -112,6 +118,7 @@ export default function ClipEditor({
   }
 
   const handlePlayPause = async () => {
+    timelineTrace('ED', 'playPause', `playing=${isPlaying} ownPosition=${ownPosition.toFixed(0)}`)
     try {
       if (isPlaying) {
         await pause()
