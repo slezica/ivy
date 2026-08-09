@@ -552,7 +552,7 @@ export class TimelinePhysicsEngine {
    * For scroll drags: update scroll offset and EMA velocity estimate.
    */
   panUpdate(translationX: number, now: number): void {
-    if (now - this._lastPanTrace >= 50) { // throttled: full rate would perturb timing
+    if (this._callbacks.onTrace && now - this._lastPanTrace >= 50) { // throttled: full rate would perturb timing
       this._lastPanTrace = now
       this._trace('panUpdate', `tx=${translationX.toFixed(1)} mode=${this._mode.kind}`)
     }
@@ -957,7 +957,9 @@ export class TimelinePhysicsEngine {
 
     this._lastSelectionEmit = now
     this._selectionDirty = false
-    this._trace('emitSelection', `${this._selection.start.toFixed(0)}..${this._selection.end.toFixed(0)}${force ? ' (forced)' : ''}`)
+    if (this._callbacks.onTrace) {
+      this._trace('emitSelection', `${this._selection.start.toFixed(0)}..${this._selection.end.toFixed(0)}${force ? ' (forced)' : ''}`)
+    }
     this._callbacks.onSelectionChange?.(this._selection.start, this._selection.end)
   }
 
