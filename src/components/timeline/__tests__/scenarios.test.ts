@@ -256,6 +256,44 @@ describe('scenarios: clean interaction flows', () => {
     s.expectSettled()
   })
 
+  it('grabbing a handle mid-fling commits the fling position (no snap-back later)', () => {
+    // Field-reproduced teleport: fling forward (momentum, seek deferred to
+    // its finalize), then grab a handle before the fling finishes — the
+    // interrupted fling must commit, or the timeline shows the fling
+    // position over never-moved audio until an external event snaps it back
+    const s = new Scenario({
+      position: 105_000,
+      selection: { start: 100_000, end: 103_000 },
+    })
+    s.run(2000)
+
+    // Scrub-fling forward, touching clear of the handle columns (the end
+    // handle sits just behind the playhead, near the screen center)
+    s.touchDown(WIDTH / 2 + 100)
+    s.panActivate(10)
+    s.drag(-60, 200)
+    s.release()
+    s.run(300) // momentum carries the timeline ahead of the audio
+
+    // Grab the end handle mid-momentum: the brake must commit
+    s.touchDown(s.pinX('end'))
+    expect(s.seeks.length).toBeGreaterThan(0)
+    expect(Math.abs(s.seeks[s.seeks.length - 1].pos - s.scrollCenterTime())).toBeLessThan(500)
+
+    // Drag the handle a bit and release
+    s.panActivate(5)
+    s.drag(30, 500, 5)
+    s.release()
+
+    // From release on, timeline and audio stay together — no window where a
+    // position event would snap the timeline seconds backward
+    for (let i = 0; i < 30; i++) {
+      s.run(100)
+      expect(Math.abs(s.scrollCenterTime() - s.audio)).toBeLessThan(2500)
+    }
+    s.expectSettled()
+  })
+
   it('paused scrub: drag seeks and nothing moves afterwards', () => {
     const s = new Scenario({ position: 100_000, playing: false })
 

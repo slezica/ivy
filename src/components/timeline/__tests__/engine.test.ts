@@ -785,6 +785,33 @@ describe('TimelinePhysicsEngine', () => {
       expect(callbacks.onSelectionChange).toHaveBeenLastCalledWith(pending, 20_000)
     })
 
+    it('commits the braked position when a handle grab stops a fling', () => {
+      const { engine, callbacks } = createEngine({
+        position: 15_000,
+        selection: { start: 30_000, end: 33_000 },
+      })
+
+      // Fling forward from empty timeline area (clear of both handle
+      // columns): the timeline races ahead of the (unseeked) audio
+      engine.panStart(200, 45, 0)
+      engine.panUpdate(-40, 16)
+      engine.panUpdate(-80, 32)
+      engine.panUpdate(-120, 48)
+      engine.panEnd(0, 48)
+      expect(engine.tick(64)).toBe(true)
+      expect(engine.tick(80)).toBe(true)
+      callbacks.onSeek.mockClear()
+
+      // Grab the end handle mid-momentum: the fling must commit, exactly
+      // like a plain brake touch — otherwise the timeline keeps showing the
+      // fling position while audio never moved, until an external position
+      // event snaps it back (a backward teleport)
+      const grabX = handlePinScreenX(engine, 33_000, 'end')
+      engine.touchDown(grabX, HANDLE_PIN_Y, 96)
+      expect(callbacks.onSeek).toHaveBeenCalledWith(engine.playheadTime)
+      expect(engine.isActive).toBe(true) // and the handle drag is armed
+    })
+
     it('grabs a handle anywhere along its full height', () => {
       const { engine, callbacks } = createEngine({
         position: 15_000,

@@ -412,12 +412,22 @@ export class TimelinePhysicsEngine {
     if (this._selection && !this._isPinchCooldown(now)) {
       const handle = this._getHandleAtPosition(x)
       if (handle) {
+        // Stopping ballistic motion commits, same as the brake branch below:
+        // an uncommitted fling leaves the timeline ahead of the audio for the
+        // whole drag, and the first post-release position event snaps it back
+        const interrupted = this._mode.kind === 'momentum' || this._mode.kind === 'animation'
+
         this._setMode({
           kind: 'handleDrag',
           handle,
           startValue: handle === 'start' ? this._selection.start : this._selection.end,
         }, `touchDown grab ${handle}`)
         this._suppressTap = true // a handle touch is never a seek-tap
+
+        if (interrupted) {
+          this._emitSelection(now, true)
+          this._seek(this._xt(this._scrollOffset), 'brake (handle grab)')
+        }
         return
       }
     }
