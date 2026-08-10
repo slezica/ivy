@@ -26,8 +26,25 @@ Net: the entire mounted tree (tab navigator, Library list with base64 artwork,
 player + Skia timeline, clips list) re-rendered once per second, for hours,
 with the screen off.
 
+## Second cause (found during verification)
+
+With selectors + Freeze in place, screen-off playback still burned ~47% of a
+core on the JS thread. Thread-level measurement isolated it: the timeline's
+playback-follow rAF loop. While `playbackRate > 0`, `engine.tick` always
+requests another frame, and Android keeps delivering frame callbacks to a
+foreground-service app after screen-off — so the loop kept rebuilding
+invisible Skia pictures at 60 fps. Freeze cannot stop it: once started, the
+loop lives outside React. Reproduction was path-dependent, which is why the
+first measurements disagreed: screen-off *while playing* leaves the loop
+running; pausing first (loop idle) and resuming playback with the screen
+already off never starts it.
+
 ## Fix
 
+0. **Timeline rAF pause** — `useTimelinePhysics` listens to AppState: on
+   background it zeroes the engine's playback rate (stopping its clock, so
+   resume can't jump) and cancels the pending frame; on active it restores
+   the rate and reschedules. Verified on-device: JS thread 47% → 0-2%.
 1. **Narrow selectors** — every `useStore()` call site selects specific fields
    (`useStore(s => s.books)`). Position ticks now re-render only position
    consumers. Components that don't show position (Library, tab bar) select
