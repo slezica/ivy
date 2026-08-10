@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AppState } from 'react-native'
 import { Gesture } from 'react-native-gesture-handler'
 
 import { TimelinePhysicsEngine } from './engine'
@@ -224,6 +225,30 @@ export function useTimelinePhysics({
       scheduleTick() // start the playback-follow loop (no-op if already running)
     }
   }, [engine, playbackRate, scheduleTick])
+
+  // Pause the loop while the app is backgrounded: Android keeps delivering
+  // frame callbacks with the screen off, so playback follow would spin at
+  // 60 fps rebuilding invisible Skia pictures. Zeroing the engine's rate
+  // also stops its clock, so resume can't produce a giant scroll jump.
+  const playbackRateRef = useRef(playbackRate)
+  playbackRateRef.current = playbackRate
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        engine.setPlaybackRate(playbackRateRef.current, performance.now())
+        scheduleTick()
+      } else {
+        engine.setPlaybackRate(0, performance.now())
+        if (rafIdRef.current !== null) {
+          cancelAnimationFrame(rafIdRef.current)
+          rafIdRef.current = null
+          timelineTrace(traceIdRef.current, 'loop', 'stop (backgrounded)')
+        }
+      }
+    })
+    return () => subscription.remove()
+  }, [engine, scheduleTick])
 
   // Cleanup rAF on unmount
   useEffect(() => {
