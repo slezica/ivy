@@ -8,7 +8,14 @@ import { useStore } from '../store'
 
 export default function SettingsScreen() {
   const router = useRouter()
-  const { settings, updateSettings, sync, syncNow, fetchSyncState, transcription, startTranscription, stopTranscription } = useStore()
+  const settings = useStore(s => s.settings)
+  const sync = useStore(s => s.sync)
+  const transcription = useStore(s => s.transcription)
+  const updateSettings = useStore(s => s.updateSettings)
+  const syncNow = useStore(s => s.syncNow)
+  const fetchSyncState = useStore(s => s.fetchSyncState)
+  const startTranscription = useStore(s => s.startTranscription)
+  const stopTranscription = useStore(s => s.stopTranscription)
 
   useFocusEffect(
     useCallback(() => {

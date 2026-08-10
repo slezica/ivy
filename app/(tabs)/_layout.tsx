@@ -9,8 +9,7 @@ const DEFAULT_TAB_BAR_HEIGHT = 49 // taken from Router source
 const TAB_BAR_EXTRA_HEIGHT = 12
 
 export default function TabsLayout() {
-  const { playback } = useStore()
-  const hasFile = !!playback.uri
+  const hasFile = useStore(s => !!s.playback.uri)
   const insets = useSafeAreaInsets()
 
   return (

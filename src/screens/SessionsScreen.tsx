@@ -13,7 +13,8 @@ import { Color, Space } from '../theme'
 
 export default function SessionsScreen() {
   const router = useRouter()
-  const { sessions, fetchSessions } = useStore()
+  const sessions = useStore(s => s.sessions)
+  const fetchSessions = useStore(s => s.fetchSessions)
 
   const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')

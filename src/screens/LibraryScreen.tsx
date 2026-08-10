@@ -25,7 +25,18 @@ const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function LibraryScreen() {
   const router = useRouter()
-  const { loadFileWithPicker, fetchBooks, play, books, archiveBook, deleteBook, sync, autoSync, playback } = useStore()
+  const books = useStore(s => s.books)
+  const syncPendingCount = useStore(s => s.sync.pendingCount)
+  const syncLastSyncTime = useStore(s => s.sync.lastSyncTime)
+  const playbackStatus = useStore(s => s.playback.status)
+  const playbackOwnerId = useStore(s => s.playback.ownerId)
+  const playbackUri = useStore(s => s.playback.uri)
+  const loadFileWithPicker = useStore(s => s.loadFileWithPicker)
+  const fetchBooks = useStore(s => s.fetchBooks)
+  const play = useStore(s => s.play)
+  const archiveBook = useStore(s => s.archiveBook)
+  const deleteBook = useStore(s => s.deleteBook)
+  const autoSync = useStore(s => s.autoSync)
   const [menuBookId, setMenuBookId] = useState<string | null>(null)
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false)
   const [detailsBookId, setDetailsBookId] = useState<string | null>(null)
@@ -49,7 +60,7 @@ export default function LibraryScreen() {
         // Throttle: at least 5 minutes since last sync attempt
         const shouldAttempt =
           timeSinceLastSync > AUTO_SYNC_MIN_INTERVAL_MS &&
-          (sync.pendingCount > 0 || !sync.lastSyncTime || now - sync.lastSyncTime > AUTO_SYNC_MIN_INTERVAL_MS)
+          (syncPendingCount > 0 || !syncLastSyncTime || now - syncLastSyncTime > AUTO_SYNC_MIN_INTERVAL_MS)
 
         if (shouldAttempt) {
           lastSyncRef.current = now
@@ -60,7 +71,7 @@ export default function LibraryScreen() {
 
     const subscription = AppState.addEventListener('change', handleAppStateChange)
     return () => subscription.remove()
-  }, [autoSync, sync.pendingCount, sync.lastSyncTime])
+  }, [autoSync, syncPendingCount, syncLastSyncTime])
 
   const handleLoadFile = async () => {
     try {
@@ -238,9 +249,9 @@ export default function LibraryScreen() {
             <BookItem
               book={item}
               isPlaying={
-                playback.status === 'playing' &&
-                playback.ownerId === MAIN_PLAYER_OWNER_ID &&
-                playback.uri === item.uri
+                playbackStatus === 'playing' &&
+                playbackOwnerId === MAIN_PLAYER_OWNER_ID &&
+                playbackUri === item.uri
               }
               onPress={handleBookPress}
               onOpenMenu={handleOpenMenu}

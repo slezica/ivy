@@ -4,7 +4,8 @@ import { Color, Space } from '../theme'
 import TextButton from './shared/TextButton'
 
 export default function LibraryLoadingDialog() {
-  const { library, cancelLoadFile } = useStore()
+  const library = useStore(s => s.library)
+  const cancelLoadFile = useStore(s => s.cancelLoadFile)
 
   const isAdding = library.status === 'adding'
   const isDuplicate = library.status === 'duplicate'

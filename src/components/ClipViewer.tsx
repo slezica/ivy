@@ -24,7 +24,11 @@ interface ClipViewerProps {
 }
 
 export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
-  const { playback, play, pause, seek, releasePlayback } = useStore()
+  const playback = useStore(s => s.playback)
+  const play = useStore(s => s.play)
+  const pause = useStore(s => s.pause)
+  const seek = useStore(s => s.seek)
+  const releasePlayback = useStore(s => s.releasePlayback)
 
   // Determine playback source: use the source book when it's fully known
   // (uri and duration both present), otherwise the clip's own audio file

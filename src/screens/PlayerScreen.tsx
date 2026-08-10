@@ -26,7 +26,15 @@ type SleepTimer = { endsAt: number, duration: number } | null
 const CLIP_DRAFT_OWNER_ID = 'clip-editor-draft'
 
 export default function PlayerScreen() {
-  const { playback, addClip, loadBook, play, pause, seek, setSpeed, setSleepTimer, fetchPlaybackState } = useStore()
+  const playback = useStore(s => s.playback)
+  const addClip = useStore(s => s.addClip)
+  const loadBook = useStore(s => s.loadBook)
+  const play = useStore(s => s.play)
+  const pause = useStore(s => s.pause)
+  const seek = useStore(s => s.seek)
+  const setSpeed = useStore(s => s.setSpeed)
+  const setSleepTimer = useStore(s => s.setSleepTimer)
+  const fetchPlaybackState = useStore(s => s.fetchPlaybackState)
 
   // Remember which book we're showing (survives ownership changes)
   const [ownBookId, setOwnBookId] = useState<string | null>(null)

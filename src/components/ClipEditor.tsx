@@ -47,7 +47,13 @@ export default function ClipEditor({
   initialStart, initialEnd, initialPositionAt, initialNote,
   onCancel, onSave,
 }: ClipEditorProps) {
-  const { playback, settings, play, pause, seek, updateSettings, releasePlayback } = useStore()
+  const playback = useStore(s => s.playback)
+  const settings = useStore(s => s.settings)
+  const play = useStore(s => s.play)
+  const pause = useStore(s => s.pause)
+  const seek = useStore(s => s.seek)
+  const updateSettings = useStore(s => s.updateSettings)
+  const releasePlayback = useStore(s => s.releasePlayback)
 
   const [note, setNote] = useState(initialNote)
   const [selectionStart, setSelectionStart] = useState(initialStart)

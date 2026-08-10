@@ -30,7 +30,13 @@ import ClipItem from '../components/ClipItem'
 
 export default function ClipsListScreen() {
   const router = useRouter()
-  const { clips, transcription, seekClip, deleteClip, updateClip, shareClip, fetchClips } = useStore()
+  const clips = useStore(s => s.clips)
+  const transcription = useStore(s => s.transcription)
+  const seekClip = useStore(s => s.seekClip)
+  const deleteClip = useStore(s => s.deleteClip)
+  const updateClip = useStore(s => s.updateClip)
+  const shareClip = useStore(s => s.shareClip)
+  const fetchClips = useStore(s => s.fetchClips)
   const [viewingClipId, setViewingClipId] = useState<string | null>(null)
   const [editingClipId, setEditingClipId] = useState<string | null>(null)
   const [menuClipId, setMenuClipId] = useState<string | null>(null)

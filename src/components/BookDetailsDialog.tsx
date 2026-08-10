@@ -20,7 +20,9 @@ interface BookDetailsDialogProps {
 }
 
 export default function BookDetailsDialog({ bookId, onClose }: BookDetailsDialogProps) {
-  const { books, updateBook, extractBookExtras } = useStore()
+  const books = useStore(s => s.books)
+  const updateBook = useStore(s => s.updateBook)
+  const extractBookExtras = useStore(s => s.extractBookExtras)
   const [editing, setEditing] = useState(false)
 
   useEffect(() => {
