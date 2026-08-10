@@ -505,6 +505,16 @@ set((state) => ({
 }))
 ```
 
+**Store subscriptions:** Components must subscribe with narrow selectors
+(`useStore(s => s.books)`), never selector-less `useStore()` — playback ticks
+the store at 1 Hz, and whole-store subscriptions re-render every subscriber
+every second, even with the screen off (background playback keeps JS alive).
+Components that don't display position select scalar playback fields
+(`status`/`uri`/`ownerId`), not the `playback` object. The root layout also
+wraps the app in react-freeze's `<Freeze>` while backgrounded, deferring all
+renders until the app returns to foreground (see
+docs/2026-08-10-background-battery-fix.md).
+
 ## Unit Testing (Jest)
 
 Run with `npm test` (or `npm test:watch` for watch mode).
