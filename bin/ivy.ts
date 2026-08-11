@@ -32,8 +32,10 @@ Commands:
       tree to ${'$'}IVY_BUILD_DIR (default /home/claude/ivy-build) and builds
       there (never Gradle in /workspace). release = assemble + bundle (AAB),
       runs prebuild --clean first and needs ${'$'}KEYSTORE_PASSWORD (prompts on
-      a TTY). --install installs the built APK on the device. --arch limits
-      native ABIs (e.g. arm64-v8a for emulator).
+      a TTY). preview/release artifacts are checked after building (version
+      stamp, ffmpeg closure, yt-dlp scan); release is also copied to
+      dist/ivy-<version>.{aab,apk}. --install installs the built APK on the
+      device. --arch limits native ABIs (e.g. arm64-v8a for emulator).
 
   clean
       Recover a Gradle-polluted /workspace: sweep native build outputs and
@@ -232,6 +234,15 @@ function cmdBuild(args: Args) {
     run('./gradlew', gradleArgs.map(t => t.replace(':app:', '')), { cwd: path.join(ROOT, 'android'), env })
   }
 
+  // Shippable variants get their artifacts checked on the spot; release is
+  // additionally delivered to dist/. Tagging is NOT done here — that's
+  // `prepare`, which gates it on tests.
+  if (variant === 'preview' || variant === 'release') checkBuiltArtifact(apkPath(variant))
+  if (variant === 'release') {
+    checkBuiltArtifact(aabPath())
+    deliverRelease()
+  }
+
   if (args.flags.install) {
     if (variant === 'release') fail('--install: install release builds by hand')
     const apk = apkPath(variant)
@@ -244,6 +255,58 @@ function cmdBuild(args: Args) {
 function apkPath(variant: string): string {
   const base = isContainer ? path.join(MIRROR, 'android') : path.join(ROOT, 'android')
   return path.join(base, 'app/build/outputs/apk', variant, `app-${variant}.apk`)
+}
+
+function aabPath(): string {
+  const base = isContainer ? path.join(MIRROR, 'android') : path.join(ROOT, 'android')
+  return path.join(base, 'app/build/outputs/bundle/release/app-release.aab')
+}
+
+// --- versioning (mirrors plugins/withIvyVersionName.js) ---
+
+interface Semver { major: number, minor: number, patch: number }
+
+export function parseSemver(version: string): Semver | null {
+  const m = version.match(/^(\d+)\.(\d+)\.(\d+)$/)
+  return m ? { major: +m[1], minor: +m[2], patch: +m[3] } : null
+}
+
+// Play requires versionCode to strictly increase; monotonic while minor/patch < 100
+export function versionCode(v: Semver): number {
+  return v.major * 10000 + v.minor * 100 + v.patch
+}
+
+function pkgVersion(): string {
+  return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version
+}
+
+// Post-build gate for shippable variants — the doctor checks that matter for
+// the artifact just built, and nothing else (full doctor also reports stale
+// artifacts from earlier builds, which must not fail a fresh one).
+function checkBuiltArtifact(file: string) {
+  if (!fs.existsSync(file)) fail(`built artifact not found at ${file}`)
+  console.log(`Artifact checks for ${path.basename(file)}:`)
+  const sv = parseSemver(pkgVersion())
+  const want = sv ? `${pkgVersion()} (${versionCode(sv)})` : pkgVersion()
+  const got = artifactVersion(file) ?? 'unreadable'
+  report(got === want, 'version stamp', got === want ? got : `${got} — expected ${want}`)
+  if (file.endsWith('.apk')) checkFfmpegClosure(file)
+  checkYtdlpTraces(file)
+  if (doctorFailed) fail(`artifact checks failed for ${file}`)
+}
+
+// Copy the checked release artifacts to dist/ under their versioned names
+// (in the container this moves them out of the build mirror onto the mount)
+function deliverRelease(): { aab: string, apk: string } {
+  const version = pkgVersion()
+  fs.mkdirSync(DIST, { recursive: true })
+  const aab = path.join(DIST, `ivy-${version}.aab`)
+  const apk = path.join(DIST, `ivy-${version}.apk`)
+  fs.copyFileSync(aabPath(), aab)
+  fs.copyFileSync(apkPath('release'), apk)
+  log(`delivered ${path.relative(ROOT, aab)}`)
+  log(`delivered ${path.relative(ROOT, apk)}`)
+  return { aab, apk }
 }
 
 // expo prebuild on the container's bind mount can write files with mode 200
