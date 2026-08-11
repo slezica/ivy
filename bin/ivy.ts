@@ -679,7 +679,13 @@ function generateScreenshots() {
   }
 
   fs.mkdirSync(shots, { recursive: true })
-  run('bash', ['-c', `find ${out} -name '*.png' -path '*takeScreenshot*' -exec cp {} ${shots}/ \\;`])
+  // Flow succeeded, so every PNG in the output dir is a takeScreenshot product
+  // (failure screenshots only exist on failed flows, which never reach here)
+  run('bash', ['-c', `find ${out} -name '*.png' -exec cp {} ${shots}/ \\;`])
+  if (fs.readdirSync(shots).length === 0) {
+    fail(`no screenshots found under ${out} (dir kept for inspection) — ` +
+      'maestro output layout change? Toolkit is tested against maestro >= 2.8')
+  }
   fs.rmSync(out, { recursive: true, force: true })
   log(`collected ${fs.readdirSync(shots).length} screenshots in dist/screenshots/`)
 
