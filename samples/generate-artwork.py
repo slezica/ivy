@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate demo book covers for Play Store screenshots.
 
-Reads playstore/data.json and writes one PNG per book to playstore/artwork/,
+Reads samples/data.json and writes one PNG per book to dist/artwork/ (gitignored),
 using each book's `cover` palette (bg1 -> bg2 vertical gradient, fg text).
-The PNGs are committed, so running this is only needed after editing data.json.
+Run after editing data.json (or via `bin/ivy.ts generate --artwork`).
 
 Requires Pillow (pip install pillow / apt install python3-pil).
 """
@@ -102,7 +102,7 @@ def main():
     with open(os.path.join(root, 'data.json')) as handle:
         data = json.load(handle)
 
-    out_dir = os.path.join(root, 'artwork')
+    out_dir = os.path.join(root, '..', 'dist', 'artwork')
     os.makedirs(out_dir, exist_ok=True)
 
     for book in data['books']:

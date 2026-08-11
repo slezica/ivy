@@ -54,7 +54,7 @@ Commands:
 
   prepare [--screenshots]
       Play Store preparations; no flag = all. --screenshots recreates
-      playstore/shots/ (seed demo data, status-bar demo mode, maestro flow).
+      dist/screenshots/ (seed demo data, status-bar demo mode, maestro flow).
       Emulator-only.
 
   doctor
@@ -441,15 +441,15 @@ function cmdPrepare(args: Args) {
 
 // Pipeline: generate demo audio (cached) → clear app data → push the seed
 // bundle → status-bar demo mode → maestro flow (the app seeds itself on
-// launch) → collect shots into playstore/shots/.
-// Customize playstore/data.json; after editing titles/covers also re-run
-// playstore/generate-artwork.py (needs Pillow) and commit the PNGs.
+// launch) → collect shots into dist/screenshots/.
+// Customize samples/data.json; after editing titles/covers also re-run
+// samples/generate-artwork.py (needs Pillow) to refresh dist/artwork/.
 function prepareScreenshots() {
   requireEmulator('prepare --screenshots')
   requireMaestro()
 
   log('generating demo audio')
-  run('node', ['playstore/gen-audio.js'])
+  run('node', ['samples/gen-audio.js'])
 
   pushSamples()
 
@@ -465,8 +465,8 @@ function prepareScreenshots() {
   demo('-e', 'command', 'network', '-e', 'wifi', 'show', '-e', 'level', '4', '-e', 'fully', 'true', '-e', 'mobile', 'hide')
   demo('-e', 'command', 'notifications', '-e', 'visible', 'false')
 
-  const out = path.join(ROOT, 'playstore/.maestro-out')
-  const shots = path.join(ROOT, 'playstore/shots')
+  const out = path.join(ROOT, 'dist/.maestro-out')
+  const shots = path.join(ROOT, 'dist/screenshots')
   try {
     fs.rmSync(out, { recursive: true, force: true })
     fs.rmSync(shots, { recursive: true, force: true })
@@ -479,7 +479,7 @@ function prepareScreenshots() {
   fs.mkdirSync(shots, { recursive: true })
   run('bash', ['-c', `find ${out} -name '*.png' -path '*takeScreenshot*' -exec cp {} ${shots}/ \\;`])
   fs.rmSync(out, { recursive: true, force: true })
-  log(`done: ${fs.readdirSync(shots).length} screenshots in playstore/shots/`)
+  log(`done: ${fs.readdirSync(shots).length} screenshots in dist/screenshots/`)
 }
 
 // Push the demo seed bundle; the app wipes its DB and self-seeds on next
@@ -491,10 +491,10 @@ function pushSamples() {
   adbShell('pm', 'clear', APP)
   log('pushing seed bundle')
   adbShell('mkdir', '-p', demoDir)
-  adb('push', path.join(ROOT, 'playstore/artwork') + '/.', demoDir + '/')
-  adb('push', path.join(ROOT, 'playstore/cache') + '/.', demoDir + '/')
+  adb('push', path.join(ROOT, 'dist/artwork') + '/.', demoDir + '/')
+  adb('push', path.join(ROOT, 'dist/audio') + '/.', demoDir + '/')
   // seed.json last: its presence triggers seeding, so the rest must already be there
-  adb('push', path.join(ROOT, 'playstore/data.json'), `${demoDir}/seed.json`)
+  adb('push', path.join(ROOT, 'samples/data.json'), `${demoDir}/seed.json`)
 }
 
 // ---------------------------------------------------------------------------

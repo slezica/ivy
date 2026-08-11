@@ -11,7 +11,7 @@
  * book's full stated duration. Other books never load, so they share a short
  * file; clips share one clip-length file.
  *
- * Output goes to playstore/cache/ (gitignored). Existing files with the
+ * Output goes to dist/audio/ (gitignored). Existing files with the
  * expected size are kept, so re-runs are instant.
  */
 
@@ -52,7 +52,7 @@ function writeSilence(outPath, durationMs) {
 
 const root = __dirname
 const data = JSON.parse(fs.readFileSync(path.join(root, 'data.json'), 'utf8'))
-const cacheDir = path.join(root, 'cache')
+const cacheDir = path.join(root, '..', 'dist', 'audio')
 fs.mkdirSync(cacheDir, { recursive: true })
 
 const [hero, ...rest] = data.books
