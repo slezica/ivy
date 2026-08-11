@@ -64,6 +64,15 @@ Commands:
                        web/assets/ and the README composite. Emulator-only.
         --icon         dist/icon-512.png from the app icon (ImageMagick)
 
+  prepare --version <X.Y.Z> --changes <markdown> [--screenshots]
+      The release pipeline, start to finish. Interactive (keystore password
+      prompted up front, held in memory only) — run it on the Mac from a
+      terminal. Steps: preflight -> password -> maestro build + full test
+      suite -> [screenshots ->] version bump + VERSIONS.md -> commit ->
+      release build -> artifact checks -> dist/ delivery -> tag. Nothing is
+      pushed or uploaded; it ends with a checklist of the manual Play
+      Console / GitHub steps.
+
   doctor
       Full environment report: tools, devices, project state, the
       local.properties pollution check, all built APKs/AABs found (with
@@ -219,20 +228,13 @@ function cmdBuild(args: Args) {
   const env = { ...process.env }
   if (variant === 'release') {
     env.KEYSTORE_PASSWORD = env.KEYSTORE_PASSWORD || promptSecret('Keystore password: ')
-    log('verifying keystore password')
-    const check = spawnSync('keytool', ['-list', '-keystore', 'credentials/release.keystore',
-      '-alias', 'ivy', '-storepass', env.KEYSTORE_PASSWORD], { cwd: ROOT, stdio: 'ignore' })
-    if (check.status !== 0) fail('keystore password check failed')
+    verifyKeystorePassword(env.KEYSTORE_PASSWORD)
     log('expo prebuild --clean')
     run('npx', ['expo', 'prebuild', '--clean', '--platform', 'android'], { env })
     fixAndroidPerms(ROOT)
   }
 
-  if (isContainer) containerGradle(gradleArgs, env)
-  else {
-    ensureGradlewExec(ROOT)
-    run('./gradlew', gradleArgs.map(t => t.replace(':app:', '')), { cwd: path.join(ROOT, 'android'), env })
-  }
+  runGradle(gradleArgs, env)
 
   // Shippable variants get their artifacts checked on the spot; release is
   // additionally delivered to dist/. Tagging is NOT done here — that's
@@ -307,6 +309,21 @@ function deliverRelease(): { aab: string, apk: string } {
   log(`delivered ${path.relative(ROOT, aab)}`)
   log(`delivered ${path.relative(ROOT, apk)}`)
   return { aab, apk }
+}
+
+function runGradle(gradleArgs: string[], env: NodeJS.ProcessEnv) {
+  if (isContainer) containerGradle(gradleArgs, env)
+  else {
+    ensureGradlewExec(ROOT)
+    run('./gradlew', gradleArgs.map(t => t.replace(':app:', '')), { cwd: path.join(ROOT, 'android'), env })
+  }
+}
+
+function verifyKeystorePassword(password: string) {
+  log('verifying keystore password')
+  const check = spawnSync('keytool', ['-list', '-keystore', 'credentials/release.keystore',
+    '-alias', 'ivy', '-storepass', password], { cwd: ROOT, stdio: 'ignore' })
+  if (check.status !== 0) fail('keystore password check failed')
 }
 
 // expo prebuild on the container's bind mount can write files with mode 200
@@ -705,6 +722,194 @@ function pushSamples() {
   adb('push', path.join(ROOT, 'dist/audio') + '/.', demoDir + '/')
   // seed.json last: its presence triggers seeding, so the rest must already be there
   adb('push', path.join(ROOT, 'samples/data.json'), `${demoDir}/seed.json`)
+}
+
+// ---------------------------------------------------------------------------
+// prepare — the release pipeline, start to finish. Interactive (keystore
+// password) and long: run it on the Mac from a terminal and walk away after
+// the password prompt. Design: docs/2026-08-11-release-command.md.
+
+const PREPARE_USAGE = 'usage: prepare --version <X.Y.Z> --changes <markdown> [--screenshots]'
+
+// --- pure helpers (unit-tested) ---
+
+// Error message, or null when `next` is a valid successor of `current`
+export function validateNextVersion(next: string, current: string): string | null {
+  const n = parseSemver(next)
+  if (!n) return `invalid version "${next}" (expected X.Y.Z)`
+  if (n.minor >= 100 || n.patch >= 100) {
+    return `minor and patch must stay < 100 or versionCode ordering breaks (got ${next})`
+  }
+  const c = parseSemver(current)
+  if (!c) return `current package.json version "${current}" is not X.Y.Z`
+  if (versionCode(n) <= versionCode(c)) return `version ${next} is not above the current ${current}`
+  return null
+}
+
+export function hasVersionSection(md: string, version: string): boolean {
+  return new RegExp(`^## ${version.replace(/\./g, '\\.')}\\b`, 'm').test(md)
+}
+
+// Insert the new version's section above the previous newest one (the log is
+// newest-first: a prose header, then `## x.y.z ...` sections)
+export function insertVersionSection(
+  md: string, version: string, code: number, date: string, changes: string,
+): string {
+  const section = `## ${version} (versionCode ${code}) — ${date}\n\n${changes.trim()}\n`
+  const first = md.search(/^## /m)
+  if (first < 0) return `${md.trimEnd()}\n\n${section}`
+  return `${md.slice(0, first)}${section}\n${md.slice(first)}`
+}
+
+export function renderChecklist(version: string, code: number, aab: string): string {
+  return [
+    `Release v${version} is built, checked, committed and tagged. Nothing was`,
+    'pushed or uploaded — the remaining steps are manual:',
+    '',
+    `  1. Push:         git push origin master v${version}`,
+    `  2. Play Console: upload ${aab} (versionCode ${code})`,
+    `                   release notes: docs/VERSIONS.md, section ${version}`,
+    `  3. GitHub:       create a release for tag v${version}, attach the AAB`,
+  ].join('\n')
+}
+
+// --- pipeline ---
+
+const git = (...args: string[]) => capture('git', args).trim()
+
+// Everything that could interrupt the pipeline midway, checked before any
+// side effect. Failing here leaves the repo untouched.
+function preflight(version: string, screenshots: boolean) {
+  if (!process.stdin.isTTY) fail('prepare is interactive (keystore password prompt) — run it from a terminal')
+
+  console.log('Tools:')
+  const tool = (name: string, hint = '') =>
+    report(has(name), name, has(name) ? 'present' : `not found${hint ? ` — ${hint}` : ''}`)
+  tool('java')
+  tool('keytool')
+  tool('adb')
+  tool('maestro', 'install from https://maestro.mobile.dev')
+  tool('unzip')
+  report(!!findAapt2(), 'aapt2', findAapt2() ?? 'not found in SDK build-tools')
+  report(!!findReadelf(), 'llvm-readelf', findReadelf() ?? 'not found in any NDK')
+  if (screenshots) {
+    const magick = has('magick') || has('convert')
+    report(magick, 'imagemagick', magick ? 'present' : 'not found — brew/apt install imagemagick')
+    const pillow = spawnSync('python3', ['-c', 'import PIL'], { stdio: 'ignore' }).status === 0
+    report(pillow, 'python3 + Pillow', pillow ? 'present' : 'not found — pip install pillow')
+  }
+
+  console.log('Environment:')
+  report(fs.existsSync(sdkHome()), 'android sdk', sdkHome())
+  report(fs.existsSync(path.join(ROOT, 'node_modules')), 'node_modules',
+    fs.existsSync(path.join(ROOT, 'node_modules')) ? 'present' : 'missing (npm install)')
+  report(fs.existsSync(path.join(ROOT, 'credentials/release.keystore')), 'release keystore',
+    fs.existsSync(path.join(ROOT, 'credentials/release.keystore')) ? 'present' : 'missing')
+  report(fs.existsSync(path.join(SAMPLES, 'data.json')), 'samples/data.json',
+    fs.existsSync(path.join(SAMPLES, 'data.json')) ? 'present' : 'missing')
+  try {
+    requireEmulator('prepare')
+    report(true, 'emulator', serial())
+  } catch (e) {
+    report(false, 'emulator', e instanceof Fail ? e.message : String(e))
+  }
+  const lpFile = path.join(ROOT, 'android/local.properties')
+  if (fs.existsSync(lpFile)) {
+    const sdkDir = fs.readFileSync(lpFile, 'utf8').match(/^sdk\.dir=(.*)$/m)?.[1]
+    const polluted = sdkDir !== undefined && !fs.existsSync(sdkDir)
+    report(!polluted, 'local.properties', polluted ? `sdk.dir=${sdkDir} does not exist — run \`bin/ivy.ts clean\`` : 'sdk.dir ok')
+  }
+
+  console.log('Git and version:')
+  const branch = git('rev-parse', '--abbrev-ref', 'HEAD')
+  report(branch === 'master', 'branch', branch)
+  const dirty = git('status', '--porcelain', '-uno')
+  report(dirty === '', 'working tree', dirty === '' ? 'clean' : `dirty:\n${dirty.replace(/^/gm, '      ')}`)
+  const current = pkgVersion()
+  const versionError = validateNextVersion(version, current)
+  report(versionError === null, 'version', versionError ?? `${current} → ${version} (versionCode ${versionCode(parseSemver(version)!)})`)
+  const versionsMd = fs.readFileSync(path.join(ROOT, 'docs/VERSIONS.md'), 'utf8')
+  report(!hasVersionSection(versionsMd, version), 'VERSIONS.md',
+    hasVersionSection(versionsMd, version) ? `already has a section for ${version}` : `no section for ${version} yet`)
+  const tag = git('tag', '-l', `v${version}`)
+  report(tag === '', `tag v${version}`, tag === '' ? 'available' : 'already exists')
+
+  if (doctorFailed) fail('preflight failed — nothing was changed')
+}
+
+function cmdPrepare(args: Args) {
+  const version = args.flags.version
+  const changes = args.flags.changes
+  if (typeof version !== 'string' || typeof changes !== 'string' || changes.trim() === '') fail(PREPARE_USAGE)
+  const screenshots = !!args.flags.screenshots
+
+  let stepNo = 0
+  const totalSteps = screenshots ? 10 : 9
+  const step = (title: string) => console.log(`\n━━━ prepare v${version} · step ${++stepNo}/${totalSteps} — ${title}\n`)
+
+  step('preflight: tools, environment, git state')
+  preflight(version, screenshots)
+
+  step('keystore password (from your password manager; held in memory only)')
+  const password = promptSecret('Keystore password: ')
+  verifyKeystorePassword(password)
+  log('password verified — the rest runs unattended, walk away')
+
+  step('build maestro variant (test affordances) + install on emulator')
+  runGradle(GRADLE_TASKS.maestro, { ...process.env })
+  adb('install', '-r', apkPath('maestro'))
+
+  step('unit tests (jest)')
+  run('npx', ['jest', '--silent'])
+
+  step('e2e tests (full maestro suite)')
+  pushFixtures()
+  maestroRun(['maestro/'])
+  checkDeleteMe()
+
+  if (screenshots) {
+    step('screenshots: Play Store set + web/README refresh')
+    generateScreenshots()
+    git('add', 'web/assets', 'docs/screenshots.png')
+    if (git('status', '--porcelain', '-uno') !== '') {
+      git('commit', '-m', 'web: refresh screenshots')
+      log('committed: web: refresh screenshots')
+    } else {
+      log('screenshots unchanged — nothing to commit')
+    }
+  }
+
+  step(`bump version to ${version} + log changes in VERSIONS.md`)
+  run('npm', ['version', '--no-git-tag-version', version])
+  log(`package.json + package-lock.json set to ${version}`)
+  const versionsFile = path.join(ROOT, 'docs/VERSIONS.md')
+  const code = versionCode(parseSemver(version)!)
+  const date = new Date().toISOString().slice(0, 10)
+  fs.writeFileSync(versionsFile,
+    insertVersionSection(fs.readFileSync(versionsFile, 'utf8'), version, code, date, changes))
+  log(`VERSIONS.md: added section ${version} (versionCode ${code})`)
+
+  step('commit release')
+  git('add', 'package.json', 'package-lock.json', 'docs/VERSIONS.md')
+  git('commit', '-m', `release: v${version}`)
+  log(`committed: release: v${version}`)
+
+  step('release build (prebuild --clean + assemble + bundle)')
+  const env = { ...process.env, KEYSTORE_PASSWORD: password }
+  log('expo prebuild --clean')
+  run('npx', ['expo', 'prebuild', '--clean', '--platform', 'android'], { env })
+  fixAndroidPerms(ROOT)
+  runGradle(GRADLE_TASKS.release, env)
+
+  step('artifact checks + delivery to dist/')
+  checkBuiltArtifact(apkPath('release'))
+  checkBuiltArtifact(aabPath())
+  const { aab } = deliverRelease()
+
+  git('tag', `v${version}`)
+  log(`tagged v${version}`)
+
+  console.log(`\n${renderChecklist(version, code, path.relative(ROOT, aab))}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -1183,7 +1388,7 @@ interface Args { positionals: string[], flags: Record<string, string | boolean> 
 
 // Tiny parser: `--flag` is boolean unless listed in valued (then takes the
 // next token); everything else is positional.
-const VALUED_FLAGS = new Set(['device', 'arch', 'file', 'inline', 'tap', 'nav', 'tag'])
+const VALUED_FLAGS = new Set(['device', 'arch', 'file', 'inline', 'tap', 'nav', 'tag', 'version', 'changes'])
 
 function parseArgs(argv: string[]): Args {
   const args: Args = { positionals: [], flags: {} }
@@ -1211,6 +1416,7 @@ const COMMANDS: Record<string, (args: Args) => void> = {
   test: cmdTest,
   drive: cmdDrive,
   generate: cmdGenerate,
+  prepare: cmdPrepare,
   doctor: cmdDoctor,
   device: cmdDevice,
   capture: cmdCapture,
