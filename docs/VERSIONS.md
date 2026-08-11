@@ -7,6 +7,24 @@ written by `bin/ivy.ts prepare` from its `--changes` argument (see CLAUDE.md
 "Preparing a Release") — the agent drafts that markdown in this file's style
 (Features/Fixes/Infra headings as applicable).
 
+## 1.6.2 (versionCode 10602) — 2026-08-11
+
+Fixes:
+
+- Background battery drain eliminated: the UI no longer re-renders while the
+  app is backgrounded — store subscriptions narrowed to what each component
+  displays, the whole UI tree frozen while in background, and the timeline's
+  render loop paused when playback follow has nothing to draw
+
+Infra:
+
+- Release process fully scripted: `bin/ivy.ts prepare` runs preflight, tests,
+  version bump, changelog, release build, artifact checks, delivery and tag
+- Store asset generation consolidated under `bin/ivy.ts generate` (demo
+  audio/artwork, feature graphic, icon, screenshots + website refresh)
+- playstore/ split into samples/ (committed sources) and dist/ (generated
+  outputs, gitignored)
+
 ## 1.6.1 (versionCode 10601) — 2026-08-09
 
 Improvements:
