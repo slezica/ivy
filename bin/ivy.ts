@@ -52,10 +52,15 @@ Commands:
                   hierarchy and tap it via adb (fast path, no maestro startup)
         --nav     deep-link via ivy:// scheme (e.g. --nav player)
 
-  prepare [--screenshots]
-      Play Store preparations; no flag = all. --screenshots recreates
-      dist/screenshots/ (seed demo data, status-bar demo mode, maestro flow).
-      Emulator-only.
+  generate [--audio] [--artwork] [--feature] [--screenshots] [--icon]
+      Generate store/web assets from samples/ into dist/ (one or more flags).
+        --audio        silent demo MP3s from samples/data.json (cached)
+        --artwork      demo covers from samples/data.json (python3 + Pillow)
+        --feature      render samples/feature.html -> dist/feature.png (chromium)
+        --screenshots  Play Store screenshots (seed demo data, status-bar demo
+                       mode, maestro flow) -> dist/screenshots/; also refreshes
+                       web/assets/ and the README composite. Emulator-only.
+        --icon         dist/icon-512.png from the app icon (ImageMagick)
 
   doctor
       Full environment report: tools, devices, project state, the
@@ -101,8 +106,8 @@ Global:
   --device <serial>   target device; defaults to the sole attached device,
                       honors ${'$'}ANDROID_SERIAL (same as adb)
 
-Destructive commands (wipe, put --samples, prepare) refuse to run on anything
-that is not verifiably an emulator. There is no override flag.`
+Destructive commands (wipe, put --samples, generate --screenshots) refuse to
+run on anything that is not verifiably an emulator. There is no override flag.`
 
 // ---------------------------------------------------------------------------
 // Small infra
@@ -432,24 +437,141 @@ function cmdDrive(args: Args) {
 }
 
 // ---------------------------------------------------------------------------
-// prepare
+// generate — store/web assets. Sources live in samples/ (committed), outputs
+// in dist/ (gitignored).
 
-function cmdPrepare(args: Args) {
-  const all = !args.flags.screenshots
-  if (args.flags.screenshots || all) prepareScreenshots()
+const SAMPLES = path.join(ROOT, 'samples')
+const DIST = path.join(ROOT, 'dist')
+
+const GENERATORS: Record<string, () => void> = {
+  audio: generateAudio,
+  artwork: generateArtwork,
+  feature: generateFeature,
+  screenshots: generateScreenshots,
+  icon: generateIcon,
 }
 
-// Pipeline: generate demo audio (cached) → clear app data → push the seed
-// bundle → status-bar demo mode → maestro flow (the app seeds itself on
-// launch) → collect shots into dist/screenshots/.
-// Customize samples/data.json; after editing titles/covers also re-run
-// samples/generate-artwork.py (needs Pillow) to refresh dist/artwork/.
-function prepareScreenshots() {
-  requireEmulator('prepare --screenshots')
-  requireMaestro()
+function cmdGenerate(args: Args) {
+  const kinds = Object.keys(GENERATORS).filter(k => args.flags[k])
+  if (kinds.length === 0) {
+    fail(`usage: generate ${Object.keys(GENERATORS).map(k => `[--${k}]`).join(' ')} (one or more)`)
+  }
+  for (const kind of kinds) GENERATORS[kind]()
+}
 
-  log('generating demo audio')
-  run('node', ['samples/gen-audio.js'])
+function readSamplesData(): any {
+  const file = path.join(SAMPLES, 'data.json')
+  if (!fs.existsSync(file)) fail('samples/data.json not found')
+  return JSON.parse(fs.readFileSync(file, 'utf8'))
+}
+
+function findImageMagick(): string {
+  if (has('magick')) return 'magick'
+  if (has('convert')) return 'convert'
+  return fail('ImageMagick not found (magick/convert) — brew/apt install imagemagick')
+}
+
+// --- audio: silent MP3s for the demo library (absorbed from gen-audio.js) ---
+//
+// Valid audio of arbitrary duration built by repeating a single pre-encoded
+// silent frame (MPEG-2.5 Layer III, 8kHz mono, 8kbps, 576 samples = 72ms per
+// 72-byte frame) — no ffmpeg needed, ~1KB per second. The hero book (books[0]
+// in data.json) auto-loads into the player, whose position display syncs with
+// the real file, so its audio is generated at the book's full stated duration.
+// Other books never load, so they share a short file; clips share one
+// clip-length file. Existing files with the expected size are kept.
+
+const SILENT_FRAME = Buffer.from(
+  '/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV',
+  'base64'
+)
+const FRAME_MS = 72
+const SHORT_MS = 60_000 // non-hero books: never loaded into the player
+const CLIP_MS = 45_000  // shared clip audio: longest clip in data.json
+
+function generateAudio() {
+  const data = readSamplesData()
+  const audioDir = path.join(DIST, 'audio')
+  fs.mkdirSync(audioDir, { recursive: true })
+
+  const write = (name: string, durationMs: number) => {
+    const out = path.join(audioDir, name)
+    const frames = Math.ceil(durationMs / FRAME_MS)
+    const size = frames * SILENT_FRAME.length
+    if (fs.existsSync(out) && fs.statSync(out).size === size) {
+      log(`audio: kept ${name} (${(size / 1e6).toFixed(1)}MB)`)
+      return
+    }
+    fs.writeFileSync(out, Buffer.concat(Array(frames).fill(SILENT_FRAME)))
+    log(`audio: wrote ${name} (${(size / 1e6).toFixed(1)}MB)`)
+  }
+
+  const [hero, ...rest] = data.books
+  if (hero.audio) write(hero.audio, hero.duration)
+  for (const file of new Set<string>(rest.map((b: any) => b.audio).filter(Boolean))) write(file, SHORT_MS)
+  for (const file of new Set<string>(data.clips.map((c: any) => c.audio))) write(file, CLIP_MS)
+}
+
+// --- artwork: demo book covers from data.json palettes ---
+
+function generateArtwork() {
+  if (!has('python3')) fail('python3 not found — needed for artwork generation')
+  if (spawnSync('python3', ['-c', 'import PIL'], { stdio: 'ignore' }).status !== 0) {
+    fail('Pillow not found — pip install pillow / apt install python3-pil')
+  }
+  log('generating demo artwork (samples/generate-artwork.py)')
+  fs.mkdirSync(path.join(DIST, 'artwork'), { recursive: true })
+  run('python3', ['samples/generate-artwork.py'])
+}
+
+// --- feature: Play Store feature graphic rendered from samples/feature.html ---
+
+function findChromium(): string | null {
+  for (const cmd of ['chromium', 'chromium-browser', 'google-chrome']) if (has(cmd)) return cmd
+  for (const app of ['/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']) {
+    if (fs.existsSync(app)) return app
+  }
+  return null
+}
+
+function generateFeature() {
+  const chromium = findChromium()
+  if (!chromium) fail('chromium/chrome not found — needed to render samples/feature.html')
+  fs.mkdirSync(DIST, { recursive: true })
+  log('rendering samples/feature.html → dist/feature.png (1024×500)')
+  run(chromium, ['--headless', '--window-size=1024,500', '--force-device-scale-factor=1',
+    '--no-sandbox', '--disable-gpu', `--screenshot=${path.join(DIST, 'feature.png')}`,
+    path.join(SAMPLES, 'feature.html')])
+}
+
+// --- icon: Play Store listing icon (512×512, no alpha) from the app icon ---
+
+function generateIcon() {
+  const magick = findImageMagick()
+  fs.mkdirSync(DIST, { recursive: true })
+  log('generating dist/icon-512.png from assets/images/icon.png')
+  // Flattened over the icon's own dark background color (Play rejects alpha)
+  run(magick, ['assets/images/icon.png', '-resize', '512x512',
+    '-background', '#2a2a2a', '-alpha', 'remove', '-alpha', 'off',
+    path.join(DIST, 'icon-512.png')])
+}
+
+// --- screenshots: Play Store screenshots + web/README refresh ---
+
+// Screens shared with the website; the README composite is stitched from them
+const WEB_SCREENS = ['01-library.png', '02-player.png', '03-clips.png', '05-history.png']
+const README_COMPOSITE_ORDER = ['02-player', '01-library', '03-clips', '05-history']
+
+// Pipeline: ensure demo audio/artwork → clear app data → push the seed
+// bundle → status-bar demo mode → maestro flow (the app seeds itself on
+// launch) → collect shots into dist/screenshots/ → refresh web/assets/ copies
+// and restitch the README composite (docs/screenshots.png).
+// Customize samples/data.json, then re-run.
+function generateScreenshots() {
+  requireEmulator('generate --screenshots')
+  requireMaestro()
+  findImageMagick() // fail before shooting, not after
 
   pushSamples()
 
@@ -479,13 +601,38 @@ function prepareScreenshots() {
   fs.mkdirSync(shots, { recursive: true })
   run('bash', ['-c', `find ${out} -name '*.png' -path '*takeScreenshot*' -exec cp {} ${shots}/ \\;`])
   fs.rmSync(out, { recursive: true, force: true })
-  log(`done: ${fs.readdirSync(shots).length} screenshots in dist/screenshots/`)
+  log(`collected ${fs.readdirSync(shots).length} screenshots in dist/screenshots/`)
+
+  refreshWebScreens(shots)
+}
+
+// Copy the website's screenshots from the fresh set and restitch the README
+// composite. Touches committed files (web/assets/, docs/screenshots.png) —
+// callers are responsible for committing the refresh.
+function refreshWebScreens(shots: string) {
+  log('refreshing web/assets/ screenshots')
+  for (const name of WEB_SCREENS) {
+    const src = path.join(shots, name)
+    if (!fs.existsSync(src)) fail(`expected screenshot missing: ${name} (flow drift?)`)
+    fs.copyFileSync(src, path.join(ROOT, 'web/assets', name))
+  }
+  log('restitching README composite (docs/screenshots.png)')
+  run(findImageMagick(), [
+    ...README_COMPOSITE_ORDER.map(n => `web/assets/${n}.png`),
+    '-resize', 'x1200', '-background', 'none', '-splice', '12x0', '+append', '-chop', '12x0',
+    'docs/screenshots.png',
+  ])
 }
 
 // Push the demo seed bundle; the app wipes its DB and self-seeds on next
 // launch (src/actions/seed_demo_data.ts)
 function pushSamples() {
   requireEmulator('device put --samples')
+  generateAudio() // cached, dependency-free
+  const artworkDir = path.join(DIST, 'artwork')
+  if (!fs.existsSync(artworkDir) || fs.readdirSync(artworkDir).length === 0) {
+    generateArtwork() // needs Pillow; fails with an install hint
+  }
   const demoDir = `/sdcard/Android/data/${APP}/files/demo`
   log('clearing app data')
   adbShell('pm', 'clear', APP)
@@ -1000,7 +1147,7 @@ const COMMANDS: Record<string, (args: Args) => void> = {
   clean: cmdClean,
   test: cmdTest,
   drive: cmdDrive,
-  prepare: cmdPrepare,
+  generate: cmdGenerate,
   doctor: cmdDoctor,
   device: cmdDevice,
   capture: cmdCapture,
