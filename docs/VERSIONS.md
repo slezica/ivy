@@ -2,8 +2,10 @@
 
 Release log: one section per shipped version, newest first. Record versionName,
 versionCode (derived from semver: major\*10000 + minor\*100 + patch, see
-`plugins/withIvyVersionName.js`) and the user-facing changeset. Update as part of release preparation
-(see CLAUDE.md "Preparing a Release").
+`plugins/withIvyVersionName.js`) and the user-facing changeset. Sections are
+written by `bin/ivy.ts prepare` from its `--changes` argument (see CLAUDE.md
+"Preparing a Release") — the agent drafts that markdown in this file's style
+(Features/Fixes/Infra headings as applicable).
 
 ## 1.6.1 (versionCode 10601) — 2026-08-09
 

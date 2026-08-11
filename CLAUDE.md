@@ -274,6 +274,15 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
 /assets/test
   ├── test-audio.m4a              # Bundled test file (chapters + standard extras tags: narrator, summary, date)
   └── test-audio-2.m4a            # Second fixture: all extras filled (Libation-style freeform atoms)
+
+/samples                          # Committed sources for generated store/web assets
+  ├── data.json                   # Demo library fixture (screenshot seeding; see docs/2026-07-21-playstore-screenshots.md)
+  ├── feature.html                # Feature graphic source (rendered by `generate --feature`)
+  └── generate-artwork.py         # Demo cover generator (Pillow; run via `generate --artwork`)
+
+/dist                             # GENERATED (gitignored): store assets + release artifacts
+                                  # audio/, artwork/, screenshots/, feature.png, icon-512.png (bin/ivy.ts generate)
+                                  # ivy-X.Y.Z.aab/.apk (delivered by release builds)
 ```
 
 ## Database Schema
@@ -550,22 +559,26 @@ Everything project-specific goes through the toolkit CLI — `bin/ivy.ts` (full 
 **Run unit tests:** `npm test` (with console logs: `npm run test:verbose`)
 **Run e2e tests:** `bin/ivy.ts test --e2e`
 **Build (env-aware, Mac or container):** `bin/ivy.ts build <variant> [--install]`
-**Recreate Play Store screenshots:** `bin/ivy.ts prepare --screenshots` (see docs/2026-07-21-playstore-screenshots.md)
+**Recreate Play Store screenshots (+ web/README refresh):** `bin/ivy.ts generate --screenshots` (see docs/2026-07-21-playstore-screenshots.md)
+**Prepare a release (user-run, interactive):** `bin/ivy.ts prepare --version X.Y.Z --changes <markdown>`
 **Environment + built-APK report (incl. ffmpeg linking):** `bin/ivy.ts doctor`
 
 
 ## Preparing a Release
 
-"Prepare the release" means exactly this sequence:
+The whole release is one toolkit command, **run by the user on the Mac** (it prompts for the keystore password — interactive-only, never stored, never in agent logs). Design: docs/2026-08-11-release-command.md.
 
-1. **Bump version:** `version` in package.json — the single version of record. `withIvyVersionName` derives both versionName and versionCode (major\*10000 + minor\*100 + patch; Play requires strictly increasing, so minor/patch must stay < 100). app.json carries no version fields.
-2. **Log:** add the new version's section (derived versionCode + changeset since last tag) to `docs/VERSIONS.md`.
-3. **Commit:** `docs: log X.Y.Z in VERSIONS.md`, then `release: bump version to X.Y.Z`
-4. **Build the AAB — done by the user, not the agent:** `bin/ivy.ts build release` needs `$KEYSTORE_PASSWORD` (prompts on a TTY; never stored), so the user runs it on the host Mac. Agent: do steps 1–3, then ask the user to build and wait; continue with step 5 once they confirm.
-5. **Check:** `bin/ivy.ts doctor` — the ffmpeg closure check on the fresh release APK is part of its report.
-6. **Tag:** `vX.Y.Z` — only after the build succeeds.
-7. **Deliver:** copy the AAB to `playstore/ivy-X.Y.Z.aab` (gitignored; in the container this moves it from the build mirror to the shared mount) and print that path for Play Console upload.
-8. **Screenshots (only if UI changed):** after refreshing `web/assets/` screenshots, regenerate the README composite: `convert web/assets/{02-player,01-library,03-clips,05-history}.png -resize x1200 -background none -splice 12x0 +append -chop 12x0 docs/screenshots.png`
+```bash
+bin/ivy.ts prepare --version X.Y.Z --changes '<markdown>' [--screenshots]
+```
+
+Pipeline: preflight (tools, emulator, clean tree on master, version valid, tag free) → password prompt + verify → maestro build + full test suite → [screenshots + web/README refresh, committed as `web: refresh screenshots`] → version bump (package.json + lockfile via `npm version`) + VERSIONS.md section → commit `release: vX.Y.Z` → release build → artifact checks (version stamp, ffmpeg closure, yt-dlp scan) → deliver `dist/ivy-X.Y.Z.{aab,apk}` → tag `vX.Y.Z` → checklist of the remaining manual steps (push, Play Console upload, GitHub release — never automated).
+
+**Agent's role:** write the `--changes` markdown (changeset since last tag, VERSIONS.md style: Features/Fixes/Infra), print the exact `prepare` command for the user to paste, and stop — the command itself needs a TTY the agent doesn't have. Pass `--screenshots` only if UI changed since the last release.
+
+Versioning: package.json is the single version of record; `withIvyVersionName` derives versionName and versionCode (major\*10000 + minor\*100 + patch; Play requires strictly increasing, so minor/patch stay < 100 — `prepare` preflight enforces this). app.json carries no version fields.
+
+`bin/ivy.ts build release` alone still builds, checks, and delivers to `dist/` (for rebuilds), but never tags — tagging is `prepare`'s job, gated on the test suite.
 
 
 ## Native Packaging Changes
@@ -613,8 +626,10 @@ Commands:
       tree to $IVY_BUILD_DIR (default /home/claude/ivy-build) and builds
       there (never Gradle in /workspace). release = assemble + bundle (AAB),
       runs prebuild --clean first and needs $KEYSTORE_PASSWORD (prompts on
-      a TTY). --install installs the built APK on the device. --arch limits
-      native ABIs (e.g. arm64-v8a for emulator).
+      a TTY). preview/release artifacts are checked after building (version
+      stamp, ffmpeg closure, yt-dlp scan); release is also copied to
+      dist/ivy-<version>.{aab,apk}. --install installs the built APK on the
+      device. --arch limits native ABIs (e.g. arm64-v8a for emulator).
 
   clean
       Recover a Gradle-polluted /workspace: sweep native build outputs and
@@ -633,10 +648,24 @@ Commands:
                   hierarchy and tap it via adb (fast path, no maestro startup)
         --nav     deep-link via ivy:// scheme (e.g. --nav player)
 
-  prepare [--screenshots]
-      Play Store preparations; no flag = all. --screenshots recreates
-      playstore/shots/ (seed demo data, status-bar demo mode, maestro flow).
-      Emulator-only.
+  generate [--audio] [--artwork] [--feature] [--screenshots] [--icon]
+      Generate store/web assets from samples/ into dist/ (one or more flags).
+        --audio        silent demo MP3s from samples/data.json (cached)
+        --artwork      demo covers from samples/data.json (python3 + Pillow)
+        --feature      render samples/feature.html -> dist/feature.png (chromium)
+        --screenshots  Play Store screenshots (seed demo data, status-bar demo
+                       mode, maestro flow) -> dist/screenshots/; also refreshes
+                       web/assets/ and the README composite. Emulator-only.
+        --icon         dist/icon-512.png from the app icon (ImageMagick)
+
+  prepare --version <X.Y.Z> --changes <markdown> [--screenshots]
+      The release pipeline, start to finish. Interactive (keystore password
+      prompted up front, held in memory only) — run it on the Mac from a
+      terminal. Steps: preflight -> password -> maestro build + full test
+      suite -> [screenshots ->] version bump + VERSIONS.md -> commit ->
+      release build -> artifact checks -> dist/ delivery -> tag. Nothing is
+      pushed or uploaded; it ends with a checklist of the manual Play
+      Console / GitHub steps.
 
   doctor
       Full environment report: tools, devices, project state, the
@@ -682,8 +711,8 @@ Global:
   --device <serial>   target device; defaults to the sole attached device,
                       honors $ANDROID_SERIAL (same as adb)
 
-Destructive commands (wipe, put --samples, prepare) refuse to run on anything
-that is not verifiably an emulator. There is no override flag.
+Destructive commands (wipe, put --samples, generate --screenshots) refuse to
+run on anything that is not verifiably an emulator. There is no override flag.
 ```
 
 

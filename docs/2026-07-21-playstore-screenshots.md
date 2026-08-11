@@ -3,14 +3,14 @@
 Reproducible screenshots with curated demo data. One command regenerates everything:
 
 ```bash
-bin/ivy.ts prepare --screenshots        # → playstore/shots/*.png
+bin/ivy.ts generate --screenshots       # → dist/screenshots/*.png + web/README refresh
 ```
 
 ## Core Idea
 
 The app seeds itself with demo data when a **seed bundle** is present in its external files directory (`/sdcard/Android/data/com.salezica.ivy/files/demo/`). The toolkit clears app data, pushes the bundle via adb, and runs a Maestro flow that navigates the seeded app and takes screenshots.
 
-Everything is data-driven from `playstore/data.json` — books, positions, clips, transcriptions, sessions, cover palettes. Edit it, re-run the command, get new screenshots.
+Everything is data-driven from `samples/data.json` — books, positions, clips, transcriptions, sessions, cover palettes. Edit it, re-run the command, get new screenshots.
 
 ## Rationale
 
@@ -23,13 +23,13 @@ Everything is data-driven from `playstore/data.json` — books, positions, clips
 
 | Piece | Role |
 |---|---|
-| `playstore/data.json` | The fixture: books, clips, sessions, cover palettes |
-| `playstore/artwork/*.png` | Generated covers (committed) |
-| `playstore/generate-artwork.py` | Regenerates covers from `data.json` (Pillow; run after editing titles/palettes) |
-| `playstore/gen-audio.js` | Generates silent MP3s into `playstore/cache/` (gitignored, cached) |
+| `samples/data.json` | The fixture: books, clips, sessions, cover palettes |
+| `dist/artwork/*.png` | Generated covers (gitignored; `generate --artwork`, Pillow) |
+| `samples/generate-artwork.py` | Cover generator, invoked by `generate --artwork` |
+| `generate --audio` (in `bin/ivy.ts`) | Generates silent MP3s into `dist/audio/` (gitignored, cached) |
 | `src/actions/seed_demo_data.ts` | Seeds DB + files from the bundle, then deletes it |
 | `maestro/playstore/screenshots.yaml` | Navigates and shoots (excluded from the e2e suite) |
-| `bin/ivy.ts prepare --screenshots` | The one command: gen → clear → push → maestro → collect |
+| `bin/ivy.ts generate --screenshots` | The one command: gen → clear → push → maestro → collect → web/README refresh |
 
 ## Seeding Semantics
 
@@ -49,4 +49,6 @@ Everything is data-driven from `playstore/data.json` — books, positions, clips
 
 ## Requirements
 
-App installed on the target (preview build recommended), adb + maestro on PATH, and an emulator (the toolkit refuses physical devices — the pipeline clears app data). Screenshot resolution = device resolution; pick the emulator accordingly.
+App installed on the target (preview build recommended; the maestro build works too, which is what `prepare` uses), adb + maestro + ImageMagick on PATH, and an emulator (the toolkit refuses physical devices — the pipeline clears app data). Screenshot resolution = device resolution; pick the emulator accordingly.
+
+The command also refreshes the website copies (`web/assets/`) and restitches the README composite (`docs/screenshots.png`) — commit those together as `web: refresh screenshots` (the `prepare` release pipeline does this automatically).
