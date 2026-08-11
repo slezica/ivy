@@ -294,7 +294,7 @@ function checkBuiltArtifact(file: string) {
   report(got === want, 'version stamp', got === want ? got : `${got} — expected ${want}`)
   if (file.endsWith('.apk')) checkFfmpegClosure(file)
   checkYtdlpTraces(file)
-  if (doctorFailed) fail(`artifact checks failed for ${file}`)
+  if (doctorFailed) fail(`artifact checks failed for ${file} (${failedChecks.join(', ')})`)
 }
 
 // Copy the checked release artifacts to dist/ under their versioned names
@@ -840,7 +840,9 @@ function preflight(version: string, screenshots: boolean) {
   const tag = git('tag', '-l', `v${version}`)
   report(tag === '', `tag v${version}`, tag === '' ? 'available' : 'already exists')
 
-  if (doctorFailed) fail('preflight failed — nothing was changed')
+  if (doctorFailed) {
+    fail(`preflight: ${failedChecks.length} check(s) failed (${failedChecks.join(', ')}) — nothing was changed`)
+  }
 }
 
 function cmdPrepare(args: Args) {
@@ -931,9 +933,13 @@ const SYSTEM_LIBS = new Set([
 ])
 
 let doctorFailed = false
+const failedChecks: string[] = []
 function report(ok: boolean | null, label: string, detail: string) {
   const mark = ok === null ? '·' : ok ? '✓' : '✗'
-  if (ok === false) doctorFailed = true
+  if (ok === false) {
+    doctorFailed = true
+    failedChecks.push(label)
+  }
   console.log(`  ${mark} ${label}: ${detail}`)
 }
 
@@ -1000,7 +1006,7 @@ function cmdDoctor() {
     checkYtdlpTraces(f)
   }
 
-  if (doctorFailed) fail('doctor found problems')
+  if (doctorFailed) fail(`doctor: ${failedChecks.length} check(s) failed (${failedChecks.join(', ')})`)
   log('all good')
 }
 
