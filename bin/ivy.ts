@@ -767,15 +767,14 @@ export function insertVersionSection(
   return `${md.slice(0, first)}${section}\n${md.slice(first)}`
 }
 
-export function renderChecklist(version: string, code: number, aab: string): string {
+export function renderChecklist(version: string, code: number): string {
   return [
     `Release v${version} is built, checked, committed and tagged. Nothing was`,
     'pushed or uploaded — the remaining steps are manual:',
     '',
     `  1. Push:         git push origin master v${version}`,
-    `  2. Play Console: upload ${aab} (versionCode ${code})`,
-    `                   release notes: docs/VERSIONS.md, section ${version}`,
-    `  3. GitHub:       create a release for tag v${version}, attach the AAB`,
+    `  2. Play Console: upload dist/ivy-${version}.aab (versionCode ${code})`,
+    `  3. GitHub:       upload dist/ivy-${version}.apk (tag v${version})`,
   ].join('\n')
 }
 
@@ -912,12 +911,12 @@ function cmdPrepare(args: Args) {
   step('artifact checks + delivery to dist/')
   checkBuiltArtifact(apkPath('release'))
   checkBuiltArtifact(aabPath())
-  const { aab } = deliverRelease()
+  deliverRelease()
 
   git('tag', `v${version}`)
   log(`tagged v${version}`)
 
-  console.log(`\n${renderChecklist(version, code, path.relative(ROOT, aab))}`)
+  console.log(`\n${renderChecklist(version, code)}`)
 }
 
 // ---------------------------------------------------------------------------

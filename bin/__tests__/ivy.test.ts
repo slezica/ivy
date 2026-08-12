@@ -143,10 +143,9 @@ describe('VERSIONS.md sections', () => {
 
 describe('renderChecklist', () => {
   it('lists the manual follow-ups with concrete values', () => {
-    const out = renderChecklist('1.7.0', 10700, 'dist/ivy-1.7.0.aab')
+    const out = renderChecklist('1.7.0', 10700)
     expect(out).toContain('git push origin master v1.7.0')
-    expect(out).toContain('dist/ivy-1.7.0.aab')
-    expect(out).toContain('versionCode 10700')
-    expect(out).toContain('section 1.7.0')
+    expect(out).toContain('upload dist/ivy-1.7.0.aab (versionCode 10700)')
+    expect(out).toContain('upload dist/ivy-1.7.0.apk (tag v1.7.0)')
   })
 })
