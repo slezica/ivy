@@ -237,7 +237,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
               └── BuildInfoModule.kt      # Exposes ivy_build_variant to JS (test-affordance gate)
 
 /plugins                          # Expo config plugins (applied in app.json) — recreate all gradle customization on prebuild
-  ├── withIvySigning.js           # signingConfigs from credentials/ (release uses $KEYSTORE_PASSWORD)
+  ├── withIvySigning.js           # signingConfigs from secrets/ (release uses $KEYSTORE_PASSWORD)
   ├── withIvyBuildTypes.js        # `preview` + `maestro` buildTypes and the ivy_build_variant signal
   ├── withIvyHermesFix.js         # arch-aware hermesc path (arm64 Linux container)
   ├── withIvyVersionName.js       # versionName from package.json at build time
@@ -248,7 +248,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
 /bin
   └── ivy.ts                      # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below
 
-/credentials                      # Keystores (untracked, NEVER commit release.keystore)
+/secrets                          # Keystores (untracked, NEVER commit release.keystore)
   ├── debug.keystore              # Standard RN debug key
   └── release.keystore            # Release key (alias 'ivy', password via $KEYSTORE_PASSWORD)
 

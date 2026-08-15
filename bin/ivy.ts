@@ -321,7 +321,7 @@ function runGradle(gradleArgs: string[], env: NodeJS.ProcessEnv) {
 
 function verifyKeystorePassword(password: string) {
   log('verifying keystore password')
-  const check = spawnSync('keytool', ['-list', '-keystore', 'credentials/release.keystore',
+  const check = spawnSync('keytool', ['-list', '-keystore', 'secrets/release.keystore',
     '-alias', 'ivy', '-storepass', password], { cwd: ROOT, stdio: 'ignore' })
   if (check.status !== 0) fail('keystore password check failed')
 }
@@ -808,8 +808,8 @@ function preflight(version: string, screenshots: boolean) {
   report(fs.existsSync(sdkHome()), 'android sdk', sdkHome())
   report(fs.existsSync(path.join(ROOT, 'node_modules')), 'node_modules',
     fs.existsSync(path.join(ROOT, 'node_modules')) ? 'present' : 'missing (npm install)')
-  report(fs.existsSync(path.join(ROOT, 'credentials/release.keystore')), 'release keystore',
-    fs.existsSync(path.join(ROOT, 'credentials/release.keystore')) ? 'present' : 'missing')
+  report(fs.existsSync(path.join(ROOT, 'secrets/release.keystore')), 'release keystore',
+    fs.existsSync(path.join(ROOT, 'secrets/release.keystore')) ? 'present' : 'missing')
   report(fs.existsSync(path.join(SAMPLES, 'data.json')), 'samples/data.json',
     fs.existsSync(path.join(SAMPLES, 'data.json')) ? 'present' : 'missing')
   try {
@@ -978,8 +978,8 @@ function cmdDoctor() {
   report(nm, 'node_modules', nm ? 'present' : 'missing (npm install)')
   report(fs.existsSync(path.join(ROOT, 'android')) ? true : null, 'android/',
     fs.existsSync(path.join(ROOT, 'android')) ? 'generated' : 'not generated (expo prebuild)')
-  report(fs.existsSync(path.join(ROOT, 'credentials/release.keystore')) ? true : null,
-    'release keystore', fs.existsSync(path.join(ROOT, 'credentials/release.keystore')) ? 'present' : 'absent')
+  report(fs.existsSync(path.join(ROOT, 'secrets/release.keystore')) ? true : null,
+    'release keystore', fs.existsSync(path.join(ROOT, 'secrets/release.keystore')) ? 'present' : 'absent')
 
   // Pollution check: a Gradle run from the "other machine" leaves its sdk.dir
   // behind and breaks the next build here (CLAUDE.md > Environment)

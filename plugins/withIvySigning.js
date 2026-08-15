@@ -1,9 +1,9 @@
 // Config plugin: wire Ivy's signing configs into the generated android/app/build.gradle.
 //
-// Keystores live in credentials/ at the repo root (never committed), so they
+// Keystores live in secrets/ at the repo root (never committed), so they
 // survive `expo prebuild --clean`:
-//   - debug:   credentials/debug.keystore (standard android/android debug key)
-//   - release: credentials/release.keystore, alias 'ivy', password from $KEYSTORE_PASSWORD
+//   - debug:   secrets/debug.keystore (standard android/android debug key)
+//   - release: secrets/release.keystore, alias 'ivy', password from $KEYSTORE_PASSWORD
 //
 // The template ships a debug-only signingConfigs block and signs the release
 // buildType with the debug key; this plugin repoints the debug store, adds the
@@ -12,7 +12,7 @@ const { withAppBuildGradle } = require('expo/config-plugins')
 
 const RELEASE_SIGNING = [
   '        release {',
-  "            storeFile file('../../credentials/release.keystore')",
+  "            storeFile file('../../secrets/release.keystore')",
   "            keyAlias 'ivy'",
   "            storePassword System.getenv('KEYSTORE_PASSWORD')",
   "            keyPassword System.getenv('KEYSTORE_PASSWORD')",
@@ -20,16 +20,16 @@ const RELEASE_SIGNING = [
 ].join('\n')
 
 function apply(contents) {
-  if (contents.includes('credentials/release.keystore')) {
+  if (contents.includes('secrets/release.keystore')) {
     return contents // already applied
   }
 
-  // 1. Repoint the debug keystore at credentials/.
+  // 1. Repoint the debug keystore at secrets/.
   const debugStore = "storeFile file('debug.keystore')"
   if (!contents.includes(debugStore)) {
     throw new Error('withIvySigning: debug storeFile anchor not found in app/build.gradle')
   }
-  contents = contents.replace(debugStore, "storeFile file('../../credentials/debug.keystore')")
+  contents = contents.replace(debugStore, "storeFile file('../../secrets/debug.keystore')")
 
   // 2. Add the release signing config after the debug one.
   const debugBlockEnd = /(signingConfigs\s*\{[\s\S]*?keyPassword 'android'\n(\s*)\})/

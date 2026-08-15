@@ -45,7 +45,7 @@ app-example
 /modules/ivy/android/build
 
 # keystores (never commit release.keystore)
-/credentials/
+/secrets/
 
 # Maestro test artifacts
 maestro/screenshots/
