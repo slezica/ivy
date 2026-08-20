@@ -74,7 +74,10 @@ export interface SyncQueueService {
 export type {
   TranscriptionQueueDeps,
   TranscriptionQueueEvents,
+  WhisperServiceEvents,
 } from './transcription'
+
+export { ModelDownloadError, ModelInitError } from './transcription'
 
 
 export type {

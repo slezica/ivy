@@ -35,7 +35,25 @@ const WHISPER_BITS_PER_SAMPLE = 16
 export type WhisperServiceStatus = 'idle' | 'downloading' | 'processing'
 
 export type WhisperServiceEvents = {
-  status: { status: WhisperServiceStatus }
+  // progress is 0-100, present only for 'downloading'
+  status: { status: WhisperServiceStatus, progress?: number }
+}
+
+// Initialization failures, typed by phase so callers can tell the user
+// what went wrong (download = retryable/network, init = model load failed)
+
+export class ModelDownloadError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause))
+    this.name = 'ModelDownloadError'
+  }
+}
+
+export class ModelInitError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause))
+    this.name = 'ModelInitError'
+  }
 }
 
 // =============================================================================
@@ -110,15 +128,22 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
   // ---------------------------------------------------------------------------
 
   private async doInitialize(): Promise<void> {
-    try {
-      const modelPath = await this.ensureModelDownloaded()
+    let modelPath: string
 
+    try {
+      modelPath = await this.ensureModelDownloaded()
+    } catch (error) {
+      log(' Model download failed:', error)
+      throw new ModelDownloadError(error)
+    }
+
+    try {
       log(' Initializing context...')
       this.context = await initWhisper({ filePath: modelPath })
       log(' Context initialized')
     } catch (error) {
-      log(' Failed to initialize:', error)
-      throw error
+      log(' Failed to initialize context:', error)
+      throw new ModelInitError(error)
     }
   }
 
@@ -252,6 +277,13 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
         toFile: downloadPath,
         background: false,
         discretionary: false,
+        progressDivider: 1,
+        progress: ({ bytesWritten, contentLength }) => {
+          if (contentLength > 0) {
+            const progress = Math.round((bytesWritten / contentLength) * 100)
+            this.emit('status', { status: 'downloading', progress })
+          }
+        },
       }).promise
 
       if (result.statusCode !== 200) {
