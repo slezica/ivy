@@ -67,8 +67,11 @@ export default function SettingsScreen() {
           <Text style={transcription.status === 'error' ? styles.errorText : styles.secondaryText}>
             {transcription.status === 'off' && (settings.transcription_enabled ? 'Enabled' : 'Disabled')}
             {transcription.status === 'starting' && 'Starting...'}
+            {transcription.status === 'downloading' && `Downloading model... ${transcription.downloadProgress ?? 0}%`}
             {transcription.status === 'on' && 'Enabled'}
-            {transcription.status === 'error' && 'Failed to start'}
+            {transcription.status === 'error' && (
+              transcription.error?.cause === 'download-failed' ? 'Model download failed' : 'Failed to start'
+            )}
           </Text>
 
           {transcription.status === 'error' && (
@@ -80,6 +83,14 @@ export default function SettingsScreen() {
             </>
           )}
         </View>
+
+        {transcription.status === 'error' && transcription.error && (
+          <View style={styles.settingSecondary}>
+            <Text style={styles.secondaryText} numberOfLines={2}>
+              {transcription.error.message}
+            </Text>
+          </View>
+        )}
 
         <View style={[styles.settingRow, { marginTop: 24 }]}>
           <Text style={styles.settingLabel}>Sync metadata to Drive</Text>
