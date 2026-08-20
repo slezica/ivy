@@ -422,7 +422,9 @@ playback: {
 }
 clips: Record<string, ClipWithFile>
 transcription: {
-  status: 'off' | 'starting' | 'on' | 'error'
+  status: 'off' | 'starting' | 'downloading' | 'on' | 'error'
+  downloadProgress: number | null // 0-100, only while downloading model
+  error: { cause: 'download-failed' | 'init-failed' | 'unknown', message: string } | null
   pending: Record<string, true>   // Clips currently queued/processing
 }
 sync: {

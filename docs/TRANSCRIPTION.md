@@ -167,12 +167,16 @@ This is a practical tradeoff: transcription is CPU-intensive, and the cap only e
 
 ```typescript
 transcription: {
-  status: 'off' | 'starting' | 'on' | 'error'
+  status: 'off' | 'starting' | 'downloading' | 'on' | 'error'
+  downloadProgress: number | null  // 0-100, only while downloading
+  error: { cause: 'download-failed' | 'init-failed' | 'unknown', message: string } | null
   pending: Record<string, true>   // clip IDs currently queued
 }
 ```
 
-- `status` reflects the service lifecycle: `'off'` (disabled or uninitialized), `'starting'` (initializing, possibly downloading model), `'on'` (ready and processing clips), `'error'` (failed to start). The user's desired state lives in `settings.transcription_enabled`, not here.
+- `status` reflects the service lifecycle: `'off'` (disabled or uninitialized), `'starting'` (initializing), `'downloading'` (model download in progress, with `downloadProgress` percent), `'on'` (ready and processing clips), `'error'` (failed to start). The user's desired state lives in `settings.transcription_enabled`, not here.
+- `'downloading'` is driven by the WhisperService's `status` events (the store subscribes directly): entered only from `'starting'`, and returned to `'starting'` when the download ends — `startTranscription` alone decides the final `'on'`/`'error'`.
+- `error` records why the last start failed. WhisperService throws phase-typed errors (`ModelDownloadError` / `ModelInitError`, in `transcription/errors.ts` — a leaf module free of native imports); `startTranscription` classifies them into `cause` and keeps the raw `message` for diagnostics. Cleared on every start and on stop.
 - `pending` tracks individual clips (used by UI to show loading indicators)
 
 ### Automatic queueing
@@ -218,6 +222,7 @@ If all start attempts fail (Whisper never becomes ready), `doStart()` sets `star
 src/services/transcription/
   queue.ts          → TranscriptionQueueService (job queue, sequential processing)
   whisper.ts        → WhisperService (model management, audio conversion, inference)
+  errors.ts         → Phase-typed init errors (ModelDownloadError, ModelInitError)
   __tests__/
     queue.test.ts   → Error recovery, concurrency, and start/stop lifecycle tests
 

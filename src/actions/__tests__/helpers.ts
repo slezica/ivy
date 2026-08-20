@@ -96,6 +96,7 @@ export function createMockState(overrides: {
   sessions?: Record<string, SessionWithBook>,
   clips?: Record<string, ClipWithFile>,
   settings?: Partial<AppState['settings']>,
+  transcription?: Partial<AppState['transcription']>,
 } = {}) {
   return {
     playback: createMockPlayback(overrides.playback),
@@ -104,6 +105,13 @@ export function createMockState(overrides: {
     sessions: overrides.sessions ?? {} as Record<string, SessionWithBook>,
     clips: overrides.clips ?? {} as Record<string, ClipWithFile>,
     settings: { sync_enabled: false, transcription_enabled: true, delete_original_after_import: false, clip_editor_linked: true, ...overrides.settings },
+    transcription: {
+      status: 'off' as AppState['transcription']['status'],
+      downloadProgress: null as number | null,
+      error: null as AppState['transcription']['error'],
+      pending: {} as Record<string, true>,
+      ...overrides.transcription,
+    },
   }
 }
 

@@ -12,6 +12,7 @@ import { initWhisper, WhisperContext } from 'whisper.rn'
 import { decodeAudioData } from 'react-native-audio-api'
 import RNFS from 'react-native-fs'
 import { BaseService } from '../base'
+import { ModelDownloadError, ModelInitError } from './errors'
 import { createLogger } from '../../utils'
 
 const log = createLogger('Whisper')
@@ -37,23 +38,6 @@ export type WhisperServiceStatus = 'idle' | 'downloading' | 'processing'
 export type WhisperServiceEvents = {
   // progress is 0-100, present only for 'downloading'
   status: { status: WhisperServiceStatus, progress?: number }
-}
-
-// Initialization failures, typed by phase so callers can tell the user
-// what went wrong (download = retryable/network, init = model load failed)
-
-export class ModelDownloadError extends Error {
-  constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : String(cause))
-    this.name = 'ModelDownloadError'
-  }
-}
-
-export class ModelInitError extends Error {
-  constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : String(cause))
-    this.name = 'ModelInitError'
-  }
 }
 
 // =============================================================================

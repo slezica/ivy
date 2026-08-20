@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 
-import type { PlaybackStatus, SyncStatus, SyncNotification } from '../services'
+import type { PlaybackStatus, SyncStatus, SyncNotification, WhisperServiceEvents } from '../services'
 import * as services from '../services'
 import type { TranscriptionQueueEvents } from '../services/transcription/queue'
 import { MAIN_PLAYER_OWNER_ID, createLogger, throttleSameArgs } from '../utils'
@@ -55,7 +55,7 @@ import { createSeedDemoData } from '../actions/seed_demo_data'
 
 export const useStore = create<AppState>()(immer((set, get) => {
   const deps = { set, get, ...services, syncQueue }
-  const { db, audio, files, transcription, sync } = services
+  const { db, audio, files, transcription, whisper, sync } = services
 
   // Throttled helpers — keyed by args so a book switch queues immediately
   const queuePositionSync = throttleSameArgs((bookId: string) => {
@@ -124,6 +124,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   sync.on('data', onSyncData)
   transcription.on('queued', onTranscriptionQueued)
   transcription.on('finish', onTranscriptionFinish)
+  whisper.on('status', onWhisperStatus)
 
   // Initial state ---------------------------------------------------------------------------------
 
@@ -154,6 +155,8 @@ export const useStore = create<AppState>()(immer((set, get) => {
 
     transcription: {
       status: 'off',
+      downloadProgress: null,
+      error: null,
       pending: {},
     },
 
@@ -267,6 +270,25 @@ export const useStore = create<AppState>()(immer((set, get) => {
     if (notification.sessionsChanged.length > 0) {
       fetchSessions()
     }
+  }
+
+  function onWhisperStatus({ status, progress }: WhisperServiceEvents['status']) {
+    set(state => {
+      const t = state.transcription
+
+      if (status === 'downloading') {
+        // Only meaningful during startup — ignore if stopped meanwhile
+        if (t.status === 'starting' || t.status === 'downloading') {
+          t.status = 'downloading'
+          t.downloadProgress = progress ?? t.downloadProgress ?? 0
+        }
+      } else if (t.status === 'downloading') {
+        // Download over (model ready, or failed) — back to plain 'starting';
+        // startTranscription sets the final 'on'/'error' state
+        t.status = 'starting'
+        t.downloadProgress = null
+      }
+    })
   }
 
   function onTranscriptionQueued({ clipId }: TranscriptionQueueEvents['queued']) {
