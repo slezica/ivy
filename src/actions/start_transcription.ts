@@ -1,4 +1,4 @@
-import type { TranscriptionQueueService } from '../services'
+import type { TranscriptionQueueService, WhisperService, NetworkService } from '../services'
 import { classifyTranscriptionError, transcriptionErrorMessage } from '../services/transcription/errors'
 import type { Action, ActionFactory, SetState } from '../store/types'
 import { createLogger } from '../utils'
@@ -6,14 +6,20 @@ import { createLogger } from '../utils'
 
 export interface StartTranscriptionDeps {
   transcription: TranscriptionQueueService
+  whisper: WhisperService
+  network: NetworkService
   set: SetState
 }
 
-export type StartTranscription = Action<[]>
+export interface StartTranscriptionOptions {
+  ignoreMetered?: boolean  // Download the model even on a metered connection
+}
+
+export type StartTranscription = Action<[options?: StartTranscriptionOptions]>
 
 export const createStartTranscription: ActionFactory<StartTranscriptionDeps, StartTranscription> = (deps) => (
-  async () => {
-    const { transcription, set } = deps
+  async (options) => {
+    const { transcription, whisper, network, set } = deps
     const log = createLogger('StartTranscription')
 
     log('Starting')
@@ -24,6 +30,26 @@ export const createStartTranscription: ActionFactory<StartTranscriptionDeps, Sta
       state.transcription.error = null
       state.transcription.retryAt = null
     })
+
+    // Metered gate: never auto-download the 465MB model on a metered
+    // connection — wait for Wi-Fi (a network 'change' listener re-runs this
+    // action when an unmetered connection appears). A model already on disk
+    // starts regardless of network.
+    if (!options?.ignoreMetered && !(await whisper.isModelDownloaded())) {
+      const net = await network.fetch()
+
+      if (net.metered) {
+        log('Model missing and connection is metered — waiting for Wi-Fi')
+
+        set(state => {
+          if (state.transcription.status === 'starting') {
+            state.transcription.status = 'waiting-wifi'
+          }
+        })
+
+        return
+      }
+    }
 
     // The whisper 'status' listener may move status to 'downloading' while
     // start() is in flight — both count as "still starting" below

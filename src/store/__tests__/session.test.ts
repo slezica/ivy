@@ -38,6 +38,7 @@ jest.mock('../../services', () => {
     sync: listener(),
     transcription: listener(),
     whisper: listener(),
+    network: listener(),
   }
 })
 

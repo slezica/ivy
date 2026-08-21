@@ -13,6 +13,7 @@ function createDeps(overrides: Partial<InitializeApplicationDeps> = {}) {
       getSettings: jest.fn(() => ({ sync_enabled: false, transcription_enabled: false })),
     }),
     slicer: { warmUp: jest.fn(async () => {}) } as any,
+    network: { start: jest.fn() } as any,
     set: createImmerSet(state),
     fetchBooks: jest.fn(async () => {}),
     fetchClips: jest.fn(async () => {}),

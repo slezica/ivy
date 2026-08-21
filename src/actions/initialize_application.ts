@@ -1,4 +1,4 @@
-import type { DatabaseService, AudioSlicerService } from '../services'
+import type { DatabaseService, AudioSlicerService, NetworkService } from '../services'
 import type { SetState, Action, ActionFactory } from '../store/types'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
@@ -12,6 +12,7 @@ import { MAIN_PLAYER_OWNER_ID } from '../utils'
 export interface InitializeApplicationDeps {
   db: DatabaseService
   slicer: AudioSlicerService
+  network: NetworkService
   set: SetState
   fetchBooks: FetchBooks
   fetchClips: FetchClips
@@ -25,9 +26,12 @@ export type InitializeApplication = Action<[]>
 
 export const createInitializeApplication: ActionFactory<InitializeApplicationDeps, InitializeApplication> = (deps) => (
   async () => {
-    const { db, slicer, set, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription, seedDemoData } = deps
+    const { db, slicer, network, set, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription, seedDemoData } = deps
 
     try {
+      // Begin watching connectivity (feeds the store's network listener)
+      network.start()
+
       // Warm the FFmpeg runtime in the background (unpack + cold-link) so the
       // first clip slice / chapter read isn't slow. Fire-and-forget.
       slicer.warmUp().catch(() => {})

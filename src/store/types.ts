@@ -72,7 +72,7 @@ export interface AppState {
   }
 
   transcription: {
-    status: 'off' | 'starting' | 'downloading' | 'on' | 'error'
+    status: 'off' | 'starting' | 'downloading' | 'waiting-wifi' | 'on' | 'error'
     downloadProgress: number | null  // 0-100, only while downloading
     error: TranscriptionError | null // Why the last (or latest) start attempt failed
     retryAt: number | null           // Wall-clock time of the next automatic start attempt

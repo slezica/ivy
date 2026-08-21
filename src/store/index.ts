@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 
-import type { PlaybackStatus, SyncStatus, SyncNotification, WhisperServiceEvents } from '../services'
+import type { PlaybackStatus, SyncStatus, SyncNotification, WhisperServiceEvents, NetworkState } from '../services'
 import * as services from '../services'
 import type { TranscriptionQueueEvents } from '../services/transcription/queue'
 import { classifyTranscriptionError, transcriptionErrorMessage } from '../services/transcription/errors'
@@ -56,7 +56,7 @@ import { createSeedDemoData } from '../actions/seed_demo_data'
 
 export const useStore = create<AppState>()(immer((set, get) => {
   const deps = { set, get, ...services, syncQueue }
-  const { db, audio, files, transcription, whisper, sync } = services
+  const { db, audio, files, transcription, whisper, network, sync } = services
 
   // Throttled helpers — keyed by args so a book switch queues immediately
   const queuePositionSync = throttleSameArgs((bookId: string) => {
@@ -127,6 +127,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   transcription.on('finish', onTranscriptionFinish)
   transcription.on('retry', onTranscriptionRetry)
   whisper.on('status', onWhisperStatus)
+  network.on('change', onNetworkChange)
 
   // Initial state ---------------------------------------------------------------------------------
 
@@ -272,6 +273,23 @@ export const useStore = create<AppState>()(immer((set, get) => {
     }
     if (notification.sessionsChanged.length > 0) {
       fetchSessions()
+    }
+  }
+
+  function onNetworkChange({ connected, metered }: NetworkState) {
+    const { transcription: t, settings } = get()
+
+    if (!settings.transcription_enabled) return
+
+    // Wi-Fi appeared while waiting for it: start (the metered gate re-checks)
+    if (t.status === 'waiting-wifi' && connected && !metered) {
+      startTranscription()
+    }
+
+    // Connectivity returned after a failed download: retry automatically.
+    // If the new connection is metered, the gate lands on 'waiting-wifi'.
+    if (t.status === 'error' && t.error?.cause === 'download-failed' && connected) {
+      startTranscription()
     }
   }
 

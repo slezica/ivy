@@ -71,6 +71,11 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
     return this.context !== null
   }
 
+  /** Whether the model file is already on disk (no download needed to start). */
+  async isModelDownloaded(): Promise<boolean> {
+    return RNFS.exists(this.modelPath())
+  }
+
   async transcribe(audioPath: string): Promise<string> {
     if (!this.context) {
       throw new Error('Whisper not initialized')
@@ -228,9 +233,13 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
     return btoa(binary)
   }
 
+  private modelPath(): string {
+    return `${RNFS.DocumentDirectoryPath}/whisper/${MODEL_FILENAME}`
+  }
+
   private async ensureModelDownloaded(): Promise<string> {
+    const modelPath = this.modelPath()
     const modelDir = `${RNFS.DocumentDirectoryPath}/whisper`
-    const modelPath = `${modelDir}/${MODEL_FILENAME}`
     const downloadPath = `${modelPath}.download`
 
     // Check if model already exists (only the final file, not .download)
