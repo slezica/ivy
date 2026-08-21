@@ -56,6 +56,13 @@ describe('bannerContent', () => {
     expect(result?.message).toBe('Failed to download transcription model. Retrying...')
   })
 
+  it('offers tap-to-download while waiting for wifi', () => {
+    expect(bannerContent(input({ status: 'waiting-wifi' }), NOW)).toEqual({
+      message: 'Waiting for Wi-Fi to download transcription model. Tap to download now',
+      action: 'download',
+    })
+  })
+
   it('offers tap-to-retry when attempts are exhausted', () => {
     const result = bannerContent(input({
       status: 'error',

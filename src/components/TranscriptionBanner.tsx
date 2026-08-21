@@ -64,7 +64,7 @@ export default function TranscriptionBanner() {
       testID="transcription-banner"
       style={styles.banner}
       disabled={content.action === null}
-      onPress={() => startTranscription()}
+      onPress={() => startTranscription(content.action === 'download' ? { ignoreMetered: true } : undefined)}
     >
       <Text style={styles.text}>{content.message}</Text>
     </TouchableOpacity>

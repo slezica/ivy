@@ -18,7 +18,7 @@ export interface BannerInput {
 
 export interface BannerContent {
   message: string
-  action: 'retry' | null
+  action: 'retry' | 'download' | null
 }
 
 export function failureLabel(error: BannerInput['error']): string {
@@ -46,6 +46,13 @@ export function bannerContent(input: BannerInput, now: number): BannerContent | 
     return {
       message: downloadingMessage(input.downloadProgress),
       action: null,
+    }
+  }
+
+  if (input.status === 'waiting-wifi') {
+    return {
+      message: 'Waiting for Wi-Fi to download transcription model. Tap to download now',
+      action: 'download',
     }
   }
 

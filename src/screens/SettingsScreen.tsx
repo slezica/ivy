@@ -87,6 +87,7 @@ export default function SettingsScreen() {
                 : 'Starting...'
             )}
             {transcriptionStatus === 'downloading' && downloadingMessage(transcriptionProgress)}
+            {transcriptionStatus === 'waiting-wifi' && 'Waiting for Wi-Fi to download model'}
             {transcriptionStatus === 'on' && 'Enabled'}
             {transcriptionStatus === 'error' && failureLabel(transcriptionError)}
           </Text>
@@ -96,6 +97,15 @@ export default function SettingsScreen() {
               <Text style={styles.secondaryText}> · </Text>
               <TouchableOpacity onPress={() => startTranscription()}>
                 <Text style={styles.linkText}>Retry</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {transcriptionStatus === 'waiting-wifi' && (
+            <>
+              <Text style={styles.secondaryText}> · </Text>
+              <TouchableOpacity onPress={() => startTranscription({ ignoreMetered: true })}>
+                <Text style={styles.linkText}>Download now</Text>
               </TouchableOpacity>
             </>
           )}
