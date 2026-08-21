@@ -1,16 +1,20 @@
 import { View, Text, StyleSheet, Switch, TouchableOpacity } from 'react-native'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useFocusEffect, useRouter } from 'expo-router'
 import ScreenArea from '../components/shared/ScreenArea'
 import Header from '../components/shared/Header'
 import { Color, Space } from '../theme'
 import { useStore } from '../store'
+import { downloadingMessage, failureLabel, retryingMessage } from '../components/transcription_banner_content'
 
 export default function SettingsScreen() {
   const router = useRouter()
   const settings = useStore(s => s.settings)
   const sync = useStore(s => s.sync)
-  const transcription = useStore(s => s.transcription)
+  const transcriptionStatus = useStore(s => s.transcription.status)
+  const transcriptionProgress = useStore(s => s.transcription.downloadProgress)
+  const transcriptionError = useStore(s => s.transcription.error)
+  const transcriptionRetryAt = useStore(s => s.transcription.retryAt)
   const updateSettings = useStore(s => s.updateSettings)
   const syncNow = useStore(s => s.syncNow)
   const fetchSyncState = useStore(s => s.fetchSyncState)
@@ -22,6 +26,17 @@ export default function SettingsScreen() {
       fetchSyncState()
     }, [fetchSyncState])
   )
+
+  // Tick once per second while counting down to an automatic retry
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (transcriptionRetryAt == null) return
+
+    setNow(Date.now())
+    const interval = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(interval)
+  }, [transcriptionRetryAt])
 
   const pendingLabel = sync.pendingCount === 1 ? '1 item pending' : `${sync.pendingCount} items pending`
   const failingLabel = `${sync.failingCount === 1 ? '1 change' : `${sync.failingCount} changes`} failing — will keep retrying`
@@ -64,17 +79,19 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.settingSecondary}>
-          <Text style={transcription.status === 'error' ? styles.errorText : styles.secondaryText}>
-            {transcription.status === 'off' && (settings.transcription_enabled ? 'Enabled' : 'Disabled')}
-            {transcription.status === 'starting' && 'Starting...'}
-            {transcription.status === 'downloading' && `Downloading model... ${transcription.downloadProgress ?? 0}%`}
-            {transcription.status === 'on' && 'Enabled'}
-            {transcription.status === 'error' && (
-              transcription.error?.cause === 'download-failed' ? 'Model download failed' : 'Failed to start'
+          <Text style={transcriptionStatus === 'error' ? styles.errorText : styles.secondaryText}>
+            {transcriptionStatus === 'off' && (settings.transcription_enabled ? 'Enabled' : 'Disabled')}
+            {transcriptionStatus === 'starting' && (
+              transcriptionRetryAt != null
+                ? retryingMessage(transcriptionError, transcriptionRetryAt, now)
+                : 'Starting...'
             )}
+            {transcriptionStatus === 'downloading' && downloadingMessage(transcriptionProgress)}
+            {transcriptionStatus === 'on' && 'Enabled'}
+            {transcriptionStatus === 'error' && failureLabel(transcriptionError)}
           </Text>
 
-          {transcription.status === 'error' && (
+          {transcriptionStatus === 'error' && (
             <>
               <Text style={styles.secondaryText}> · </Text>
               <TouchableOpacity onPress={() => startTranscription()}>
@@ -84,10 +101,10 @@ export default function SettingsScreen() {
           )}
         </View>
 
-        {transcription.status === 'error' && transcription.error && (
+        {transcriptionStatus === 'error' && transcriptionError && (
           <View style={styles.settingSecondary}>
             <Text style={styles.secondaryText} numberOfLines={2}>
-              {transcription.error.message}
+              {transcriptionError.message}
             </Text>
           </View>
         )}

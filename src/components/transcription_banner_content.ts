@@ -21,10 +21,20 @@ export interface BannerContent {
   action: 'retry' | null
 }
 
-function failureLabel(error: BannerInput['error']): string {
+export function failureLabel(error: BannerInput['error']): string {
   return error?.cause === 'download-failed'
     ? 'Failed to download transcription model'
     : 'Failed to start transcription process'
+}
+
+export function downloadingMessage(downloadProgress: number | null): string {
+  return `Downloading transcription model... (${downloadProgress ?? 0}%)`
+}
+
+export function retryingMessage(error: BannerInput['error'], retryAt: number, now: number): string {
+  const seconds = Math.ceil((retryAt - now) / 1000)
+  const suffix = seconds > 0 ? `Retrying in ${seconds}s...` : 'Retrying...'
+  return `${failureLabel(error)}. ${suffix}`
 }
 
 export function bannerContent(input: BannerInput, now: number): BannerContent | null {
@@ -34,17 +44,15 @@ export function bannerContent(input: BannerInput, now: number): BannerContent | 
 
   if (input.status === 'downloading') {
     return {
-      message: `Downloading transcription model... (${input.downloadProgress ?? 0}%)`,
+      message: downloadingMessage(input.downloadProgress),
       action: null,
     }
   }
 
   // Between automatic start attempts (status is back to 'starting')
   if (input.retryAt != null && input.status === 'starting') {
-    const seconds = Math.ceil((input.retryAt - now) / 1000)
-    const suffix = seconds > 0 ? `Retrying in ${seconds}s...` : 'Retrying...'
     return {
-      message: `${failureLabel(input.error)}. ${suffix}`,
+      message: retryingMessage(input.error, input.retryAt, now),
       action: null,
     }
   }
