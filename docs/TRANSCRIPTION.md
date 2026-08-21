@@ -167,7 +167,7 @@ This is a practical tradeoff: transcription is CPU-intensive, and the cap only e
 
 ```typescript
 transcription: {
-  status: 'off' | 'starting' | 'downloading' | 'on' | 'error'
+  status: 'off' | 'starting' | 'downloading' | 'waiting-wifi' | 'on' | 'error'
   downloadProgress: number | null  // 0-100, only while downloading
   error: { cause: 'download-failed' | 'init-failed' | 'unknown', message: string } | null
   retryAt: number | null           // Wall-clock time of the next automatic start attempt
@@ -179,11 +179,23 @@ transcription: {
 - `'downloading'` is driven by the WhisperService's `status` events (the store subscribes directly): entered only from `'starting'`, and returned to `'starting'` when the download ends — `startTranscription` alone decides the final `'on'`/`'error'`.
 - `error` records why the last start (or the latest failed attempt) failed. WhisperService throws phase-typed errors (`ModelDownloadError` / `ModelInitError`, in `transcription/errors.ts` — a leaf module free of native imports, which also houses the `classifyTranscriptionError` helper); the store classifies them into `cause` and keeps the raw `message` for diagnostics. Cleared on every start and on stop.
 - `retryAt` is set from the queue's `retry` events (emitted between failed start attempts) and cleared when a retry attempt starts downloading, when the start resolves, and on stop. `error` is populated alongside it, so UI can show "failed, retrying in Xs" during the backoff window while `status` is still `'starting'`.
+- `'waiting-wifi'` comes from the metered gate (below).
 - `pending` tracks individual clips (used by UI to show loading indicators)
+
+### Network awareness (metered gate + auto-retry)
+
+`startTranscription` never auto-downloads the 465MB model on a **metered** connection: when the model is missing (`whisper.isModelDownloaded()`) and `NetworkService` reports metered (NetInfo's `isConnectionExpensive`), it sets `status = 'waiting-wifi'` and stops. A model already on disk starts regardless of network. `startTranscription({ ignoreMetered: true })` — the banner's "Tap to download now" and the Settings "Download now" link — forces the download; the choice is one-shot, not persisted.
+
+The store listens to `NetworkService` `change` events (listener started in `initializeApplication`) and, when transcription is enabled:
+
+- `'waiting-wifi'` + unmetered connection appears → auto-start (the gate re-checks)
+- `'error'` with cause `'download-failed'` + connectivity returns → auto-retry (a metered connection lands back on `'waiting-wifi'` via the gate)
+
+Re-entrancy is safe: `startTranscription` sets `'starting'` synchronously, so repeated network events no-op through the status checks.
 
 ### The clips-screen banner
 
-`TranscriptionBanner` (rendered by ClipsListScreen) shows a discrete one-line message for every transcription state the user wouldn't expect — downloading (with percent), retrying after a failure (with countdown), or given up (tap to retry, which just runs `startTranscription`). Content selection is a pure function in `transcription_banner_content.ts` (unit-tested); the component adds a 1s appearance debounce (transient states never flash) and a local 1 Hz tick for the countdown — the store itself never ticks.
+`TranscriptionBanner` (rendered by ClipsListScreen) shows a discrete one-line message for every transcription state the user wouldn't expect — downloading (with percent), waiting for Wi-Fi (tap to download now), retrying after a failure (with countdown), or given up (tap to retry, which just runs `startTranscription`). Content selection is a pure function in `transcription_banner_content.ts` (unit-tested); the component adds a 1s appearance debounce (transient states never flash) and a local 1 Hz tick for the countdown — the store itself never ticks. SettingsScreen shares the same copy helpers (`failureLabel`, `downloadingMessage`, `retryingMessage`), so the two surfaces never drift.
 
 ### Automatic queueing
 
@@ -234,6 +246,9 @@ src/services/transcription/
 
 src/services/audio/
   slicer.ts         → AudioSlicerService (native module wrapper, extracts audio segments)
+
+src/services/system/
+  network.ts        → NetworkService (NetInfo wrapper: connectivity + metered events)
 
 src/actions/
   start_transcription.ts  → Starts the service, transitions status (starting → on/error)

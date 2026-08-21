@@ -165,6 +165,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   │   └── __tests__/          # Sync engine unit tests + FakeDrive scenario harness
   │   └── system/
   │       ├── sharing.ts          # Share clips via native share sheet
+  │       ├── network.ts          # NetworkService (NetInfo wrapper: connectivity + metered events)
   │       └── toast.ts            # Fire-and-forget Android toast helper
   ├── screens/
   │   ├── LibraryScreen.tsx       # Book list (active + archived sections) with archive action
@@ -214,7 +215,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── about.tsx                   # About screen route
   ├── sessions.tsx                # Listening history route
   └── (tabs)/
-      ├── _layout.tsx             # Tab nav (disables tabs when no file)
+      ├── _layout.tsx             # Tab nav (disables the Player tab when no file is loaded)
       ├── index.tsx               # Library
       ├── player.tsx              # Player
       └── clips.tsx               # Clips
@@ -423,7 +424,7 @@ playback: {
 }
 clips: Record<string, ClipWithFile>
 transcription: {
-  status: 'off' | 'starting' | 'downloading' | 'on' | 'error'
+  status: 'off' | 'starting' | 'downloading' | 'waiting-wifi' | 'on' | 'error'
   downloadProgress: number | null // 0-100, only while downloading model
   error: { cause: 'download-failed' | 'init-failed' | 'unknown', message: string } | null
   retryAt: number | null          // Wall-clock time of next automatic start attempt
