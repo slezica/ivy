@@ -1,4 +1,6 @@
 export { SharingService } from './sharing'
+export { NetworkService } from './network'
+export type { NetworkState, NetworkServiceEvents } from './network'
 export { toast } from './toast'
 export { copyText } from './clipboard'
 export { getBuildVariant, isTestBuild } from './build'

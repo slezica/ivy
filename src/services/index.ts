@@ -2,8 +2,9 @@ import { BaseService } from './base'
 import { AudioSlicerService, AudioPlayerService, AudioMetadataService, FFmetadataService, playbackService } from './audio'
 import { DatabaseService, FileStorageService, FileCopierService, FilePickerService } from './storage'
 import { WhisperService, TranscriptionQueueService } from './transcription'
-import { SharingService } from './system'
+import { SharingService, NetworkService } from './system'
 export { toast, copyText, getBuildVariant, isTestBuild } from './system'
+export type { NetworkState, NetworkServiceEvents } from './system'
 import { GoogleAuthService, GoogleDriveService, BackupSyncService } from './backup'
 
 export type {
@@ -19,6 +20,7 @@ export type {
   FilePickerService,
   TranscriptionQueueService,
   SharingService,
+  NetworkService,
   playbackService,
   GoogleAuthService,
   GoogleDriveService,
@@ -101,6 +103,7 @@ export const ffmetadata = new FFmetadataService()
 export const slicer = new AudioSlicerService()
 export const whisper = new WhisperService()
 export const sharing = new SharingService()
+export const network = new NetworkService()
 export const audio = new AudioPlayerService()
 export const auth = new GoogleAuthService()
 export const drive = new GoogleDriveService(auth)
