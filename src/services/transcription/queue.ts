@@ -27,6 +27,8 @@ export interface TranscriptionQueueDeps {
 export type TranscriptionQueueEvents = {
   queued: { clipId: string }
   started: { clipId: string }
+  // A start attempt failed and another will run after delayMs
+  retry: { attempt: number, maxAttempts: number, delayMs: number, error: Error }
   // Successful finishes carry the bounds the clip had when processing began,
   // so listeners can discard results made stale by a concurrent bounds edit
   finish: { clipId: string; error?: Error, transcription?: string, start?: number, duration?: number }
@@ -129,7 +131,9 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
         log(`Start attempt ${attempt + 1}/${MAX_START_ATTEMPTS} failed:`, error)
 
         if (attempt < MAX_START_ATTEMPTS - 1) {
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]))
+          const delayMs = RETRY_DELAYS[attempt]
+          this.emit('retry', { attempt: attempt + 1, maxAttempts: MAX_START_ATTEMPTS, delayMs, error: error as Error })
+          await new Promise(resolve => setTimeout(resolve, delayMs))
         }
       }
     }
