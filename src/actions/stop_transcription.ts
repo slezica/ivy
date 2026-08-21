@@ -22,6 +22,7 @@ export const createStopTranscription: ActionFactory<StopTranscriptionDeps, StopT
       state.transcription.status = 'off'
       state.transcription.downloadProgress = null
       state.transcription.error = null
+      state.transcription.retryAt = null
       state.transcription.pending = {}
     })
   }

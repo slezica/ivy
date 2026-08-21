@@ -18,3 +18,15 @@ export class ModelInitError extends Error {
     this.name = 'ModelInitError'
   }
 }
+
+export type TranscriptionErrorCause = 'download-failed' | 'init-failed' | 'unknown'
+
+export function classifyTranscriptionError(error: unknown): TranscriptionErrorCause {
+  if (error instanceof ModelDownloadError) return 'download-failed'
+  if (error instanceof ModelInitError) return 'init-failed'
+  return 'unknown'
+}
+
+export function transcriptionErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}

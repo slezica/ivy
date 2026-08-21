@@ -1,6 +1,6 @@
 import type { TranscriptionQueueService } from '../services'
-import { ModelDownloadError, ModelInitError } from '../services/transcription/errors'
-import type { Action, ActionFactory, SetState, TranscriptionErrorCause } from '../store/types'
+import { classifyTranscriptionError, transcriptionErrorMessage } from '../services/transcription/errors'
+import type { Action, ActionFactory, SetState } from '../store/types'
 import { createLogger } from '../utils'
 
 
@@ -10,12 +10,6 @@ export interface StartTranscriptionDeps {
 }
 
 export type StartTranscription = Action<[]>
-
-function classifyError(error: unknown): TranscriptionErrorCause {
-  if (error instanceof ModelDownloadError) return 'download-failed'
-  if (error instanceof ModelInitError) return 'init-failed'
-  return 'unknown'
-}
 
 export const createStartTranscription: ActionFactory<StartTranscriptionDeps, StartTranscription> = (deps) => (
   async () => {
@@ -28,6 +22,7 @@ export const createStartTranscription: ActionFactory<StartTranscriptionDeps, Sta
       state.transcription.status = 'starting'
       state.transcription.downloadProgress = null
       state.transcription.error = null
+      state.transcription.retryAt = null
     })
 
     // The whisper 'status' listener may move status to 'downloading' while
@@ -44,9 +39,10 @@ export const createStartTranscription: ActionFactory<StartTranscriptionDeps, Sta
         if (starting(state.transcription.status)) {
           state.transcription.status = 'error'
           state.transcription.downloadProgress = null
+          state.transcription.retryAt = null
           state.transcription.error = {
-            cause: classifyError(error),
-            message: error instanceof Error ? error.message : String(error),
+            cause: classifyTranscriptionError(error),
+            message: transcriptionErrorMessage(error),
           }
         }
       })
@@ -59,6 +55,8 @@ export const createStartTranscription: ActionFactory<StartTranscriptionDeps, Sta
       if (starting(state.transcription.status)) {
         state.transcription.status = 'on'
         state.transcription.downloadProgress = null
+        state.transcription.error = null
+        state.transcription.retryAt = null
       }
     })
 

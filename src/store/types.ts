@@ -37,7 +37,9 @@ import type { SetSpeed } from '../actions/set_speed'
 import type { InitializeApplication } from '../actions/initialize_application'
 
 
-export type TranscriptionErrorCause = 'download-failed' | 'init-failed' | 'unknown'
+import type { TranscriptionErrorCause } from '../services/transcription/errors'
+
+export type { TranscriptionErrorCause }
 
 export interface TranscriptionError {
   cause: TranscriptionErrorCause
@@ -72,7 +74,8 @@ export interface AppState {
   transcription: {
     status: 'off' | 'starting' | 'downloading' | 'on' | 'error'
     downloadProgress: number | null  // 0-100, only while downloading
-    error: TranscriptionError | null // Why the last start failed
+    error: TranscriptionError | null // Why the last (or latest) start attempt failed
+    retryAt: number | null           // Wall-clock time of the next automatic start attempt
     pending: Record<string, true>
   }
 

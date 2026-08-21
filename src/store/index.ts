@@ -4,6 +4,7 @@ import { immer } from 'zustand/middleware/immer'
 import type { PlaybackStatus, SyncStatus, SyncNotification, WhisperServiceEvents } from '../services'
 import * as services from '../services'
 import type { TranscriptionQueueEvents } from '../services/transcription/queue'
+import { classifyTranscriptionError, transcriptionErrorMessage } from '../services/transcription/errors'
 import { MAIN_PLAYER_OWNER_ID, createLogger, throttleSameArgs } from '../utils'
 import type { AppState } from './types'
 
@@ -124,6 +125,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
   sync.on('data', onSyncData)
   transcription.on('queued', onTranscriptionQueued)
   transcription.on('finish', onTranscriptionFinish)
+  transcription.on('retry', onTranscriptionRetry)
   whisper.on('status', onWhisperStatus)
 
   // Initial state ---------------------------------------------------------------------------------
@@ -157,6 +159,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
       status: 'off',
       downloadProgress: null,
       error: null,
+      retryAt: null,
       pending: {},
     },
 
@@ -281,12 +284,30 @@ export const useStore = create<AppState>()(immer((set, get) => {
         if (t.status === 'starting' || t.status === 'downloading') {
           t.status = 'downloading'
           t.downloadProgress = progress ?? t.downloadProgress ?? 0
+          t.retryAt = null  // A retry attempt is now actively downloading
         }
       } else if (t.status === 'downloading') {
         // Download over (model ready, or failed) — back to plain 'starting';
         // startTranscription sets the final 'on'/'error' state
         t.status = 'starting'
         t.downloadProgress = null
+      }
+    })
+  }
+
+  function onTranscriptionRetry({ delayMs, error }: TranscriptionQueueEvents['retry']) {
+    set(state => {
+      const t = state.transcription
+
+      // Only meaningful during startup — ignore if stopped meanwhile
+      if (t.status === 'starting' || t.status === 'downloading') {
+        t.status = 'starting'
+        t.downloadProgress = null
+        t.retryAt = Date.now() + delayMs
+        t.error = {
+          cause: classifyTranscriptionError(error),
+          message: transcriptionErrorMessage(error),
+        }
       }
     })
   }

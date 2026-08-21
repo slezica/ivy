@@ -109,6 +109,7 @@ export function createMockState(overrides: {
       status: 'off' as AppState['transcription']['status'],
       downloadProgress: null as number | null,
       error: null as AppState['transcription']['error'],
+      retryAt: null as number | null,
       pending: {} as Record<string, true>,
       ...overrides.transcription,
     },
