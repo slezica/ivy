@@ -182,6 +182,7 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   │   ├── BookItem.tsx            # Library list row
   │   ├── ClipItem.tsx            # Clip list row
   │   ├── SessionItem.tsx         # Session list row
+  │   ├── TranscriptionBanner.tsx # Clips-screen transcription status banner (+ transcription_banner_content.ts, pure logic)
   │   ├── SessionHistogram.tsx    # Listening time by day/week/month/year
   │   ├── LibraryLoadingDialog.tsx # "Adding..." / "Loading..." dialog
   │   ├── timeline/               # GPU-accelerated timeline component
@@ -425,6 +426,7 @@ transcription: {
   status: 'off' | 'starting' | 'downloading' | 'on' | 'error'
   downloadProgress: number | null // 0-100, only while downloading model
   error: { cause: 'download-failed' | 'init-failed' | 'unknown', message: string } | null
+  retryAt: number | null          // Wall-clock time of next automatic start attempt
   pending: Record<string, true>   // Clips currently queued/processing
 }
 sync: {

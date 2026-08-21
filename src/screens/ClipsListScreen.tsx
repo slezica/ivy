@@ -26,12 +26,13 @@ import Dialog from '../components/shared/Dialog'
 import ClipViewer from '../components/ClipViewer'
 import ClipEditor from '../components/ClipEditor'
 import ClipItem from '../components/ClipItem'
+import TranscriptionBanner from '../components/TranscriptionBanner'
 
 
 export default function ClipsListScreen() {
   const router = useRouter()
   const clips = useStore(s => s.clips)
-  const transcription = useStore(s => s.transcription)
+  const pendingTranscriptions = useStore(s => s.transcription.pending)
   const seekClip = useStore(s => s.seekClip)
   const deleteClip = useStore(s => s.deleteClip)
   const updateClip = useStore(s => s.updateClip)
@@ -205,10 +206,12 @@ export default function ClipsListScreen() {
           </Header>
       }
 
+      <TranscriptionBanner />
+
       {sortedClips.length > 0
         ? <ClipList
             clips={sortedClips}
-            pending={transcription.pending}
+            pending={pendingTranscriptions}
             onViewClip={handleViewClip}
             onOpenMenu={handleOpenMenu}
           /> :

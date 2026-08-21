@@ -170,14 +170,20 @@ transcription: {
   status: 'off' | 'starting' | 'downloading' | 'on' | 'error'
   downloadProgress: number | null  // 0-100, only while downloading
   error: { cause: 'download-failed' | 'init-failed' | 'unknown', message: string } | null
+  retryAt: number | null           // Wall-clock time of the next automatic start attempt
   pending: Record<string, true>   // clip IDs currently queued
 }
 ```
 
 - `status` reflects the service lifecycle: `'off'` (disabled or uninitialized), `'starting'` (initializing), `'downloading'` (model download in progress, with `downloadProgress` percent), `'on'` (ready and processing clips), `'error'` (failed to start). The user's desired state lives in `settings.transcription_enabled`, not here.
 - `'downloading'` is driven by the WhisperService's `status` events (the store subscribes directly): entered only from `'starting'`, and returned to `'starting'` when the download ends — `startTranscription` alone decides the final `'on'`/`'error'`.
-- `error` records why the last start failed. WhisperService throws phase-typed errors (`ModelDownloadError` / `ModelInitError`, in `transcription/errors.ts` — a leaf module free of native imports); `startTranscription` classifies them into `cause` and keeps the raw `message` for diagnostics. Cleared on every start and on stop.
+- `error` records why the last start (or the latest failed attempt) failed. WhisperService throws phase-typed errors (`ModelDownloadError` / `ModelInitError`, in `transcription/errors.ts` — a leaf module free of native imports, which also houses the `classifyTranscriptionError` helper); the store classifies them into `cause` and keeps the raw `message` for diagnostics. Cleared on every start and on stop.
+- `retryAt` is set from the queue's `retry` events (emitted between failed start attempts) and cleared when a retry attempt starts downloading, when the start resolves, and on stop. `error` is populated alongside it, so UI can show "failed, retrying in Xs" during the backoff window while `status` is still `'starting'`.
 - `pending` tracks individual clips (used by UI to show loading indicators)
+
+### The clips-screen banner
+
+`TranscriptionBanner` (rendered by ClipsListScreen) shows a discrete one-line message for every transcription state the user wouldn't expect — downloading (with percent), retrying after a failure (with countdown), or given up (tap to retry, which just runs `startTranscription`). Content selection is a pure function in `transcription_banner_content.ts` (unit-tested); the component adds a 1s appearance debounce (transient states never flash) and a local 1 Hz tick for the countdown — the store itself never ticks.
 
 ### Automatic queueing
 
@@ -242,4 +248,6 @@ src/screens/
 
 src/components/
   ClipViewer.tsx           → Displays transcription text
+  TranscriptionBanner.tsx  → Clips-screen status banner (unexpected states only)
+  transcription_banner_content.ts → Pure banner content logic (unit-tested)
 ```
