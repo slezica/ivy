@@ -8,6 +8,13 @@ and again 2026-07-23.
 
 1. **Handle dragging in Editor during live playback** — the editor timeline freezes while a handle is dragged (playback follow deliberately excludes handle drags in `engine.ts`), then jerks to catch up on release. Live-drag needs: per-tick handle recompute from absolute finger x (drag is delta-based today), per-anchor push skip (`_pushSelection` currently disables both anchors), and a product decision for the linked playhead advancing into the held handle. Middle option: keep the freeze, ease the release catch-up.
 
+
+## QoL
+
+1. **Animations** - add some niceties.
+2. **Transcription models** - investigate if there's something more accurate/faster/lighter than whisper these days.
+
+
 ## Refactors / Architecture
 
 10. **Split database service** — `database.ts` is a single ~1200-line file: inline migrations array plus one monolithic class holding CRUD, sync persistence, settings, lifecycle.
