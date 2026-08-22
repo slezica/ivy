@@ -42,6 +42,12 @@ Commands:
       Recover a Gradle-polluted /workspace: sweep native build outputs and
       regenerate android/ via expo prebuild --clean.
 
+  dev [--clear]
+      Start the Metro dev server (Fast Refresh) for the installed debug
+      build. Mac-only (the emulator cannot reach a container-local Metro);
+      never builds native — install first with \`build debug --install\`.
+      --clear resets the Metro cache. Ctrl-C to stop.
+
   test [name] [--unit | --e2e] [--server-only [--port <n>]]
       No flag = both suites. --unit = jest. --e2e = maestro suite; pushes and
       media-scans the fixtures first, verifies delete-original afterwards.
@@ -603,6 +609,19 @@ function cmdTest(args: Args) {
       checkDeleteMe() // whole suite includes delete-original.yaml
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// dev
+
+function cmdDev(args: Args) {
+  // Metro dev server with Fast Refresh, serving the installed debug build
+  // (expo-dev-client). Foreground; Ctrl-C to stop. Needs a debug build on the
+  // device (`bin/ivy.ts build debug --install`) — this never builds native.
+  if (isContainer) {
+    fail('dev server must run on the Mac — the emulator cannot reach a container-local Metro')
+  }
+  run('npx', ['expo', 'start', ...(args.flags.clear ? ['--clear'] : [])])
 }
 
 // ---------------------------------------------------------------------------
@@ -1558,6 +1577,7 @@ function parseArgs(argv: string[]): Args {
 const COMMANDS: Record<string, (args: Args) => void> = {
   build: cmdBuild,
   clean: cmdClean,
+  dev: cmdDev,
   test: cmdTest,
   drive: cmdDrive,
   generate: cmdGenerate,

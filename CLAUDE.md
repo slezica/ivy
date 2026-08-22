@@ -562,7 +562,7 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 
 Everything project-specific goes through the toolkit CLI — `bin/ivy.ts` (full reference at the end of this file).
 
-**Start dev server:** `npm start`
+**Start dev server (Metro/Fast Refresh, Mac-only):** `bin/ivy.ts dev` (`npm start` redirects here)
 **Run unit tests:** `npm test` (with console logs: `npm run test:verbose`)
 **Run e2e tests:** `bin/ivy.ts test --e2e`
 **Build (env-aware, Mac or container):** `bin/ivy.ts build <variant> [--install]`
@@ -641,6 +641,12 @@ Commands:
   clean
       Recover a Gradle-polluted /workspace: sweep native build outputs and
       regenerate android/ via expo prebuild --clean.
+
+  dev [--clear]
+      Start the Metro dev server (Fast Refresh) for the installed debug
+      build. Mac-only (the emulator cannot reach a container-local Metro);
+      never builds native — install first with `build debug --install`.
+      --clear resets the Metro cache. Ctrl-C to stop.
 
   test [name] [--unit | --e2e] [--server-only [--port <n>]]
       No flag = both suites. --unit = jest. --e2e = maestro suite; pushes and
