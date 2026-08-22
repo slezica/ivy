@@ -10,7 +10,8 @@ fails the slice on device).
 
 Run the suite against the **maestro** build variant — a preview clone whose
 `ivy_build_variant` resource unlocks test affordances (currently: the 5s sleep
-timer preset). Preview and release deliberately carry zero test surface, so
+timer preset and the short 1/3/5s transcription-start retry backoff).
+Preview and release deliberately carry zero test surface, so
 `sleep-timer.yaml` fails against them; debug works but adds Metro dependency
 and dev-mode overhead.
 
@@ -39,8 +40,31 @@ the run, the toolkit asserts the disposable copy is actually gone — the deleti
 is filesystem state the flow itself can't see. With multiple devices attached,
 pass `--device <serial>` (the toolkit forwards it to adb and maestro).
 
+A single flow also runs by name through the wrapper: `bin/ivy.ts test --e2e
+transcription-states`.
+
 To bypass the wrapper (e.g. debugging one flow), the raw command is
 `maestro --device <serial> test maestro/<flow>.yaml`, after pushing the fixture.
+Flows that call the bridge (below) additionally need `bin/ivy.ts test
+--server-only` running and `-e BRIDGE_URL=http://127.0.0.1:7799` passed to
+maestro.
+
+## The toolkit bridge
+
+Maestro's JS sandbox can't run adb, so device control during a flow goes
+through a small HTTP server the toolkit starts automatically for every e2e
+run (`test --e2e`, `drive --file/--inline`), injecting its address as the
+`BRIDGE_URL` env var. Flows call it with the shared helper:
+
+```yaml
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/off" } }
+```
+
+Endpoints are a curated semantic vocabulary (`net/wifi/on|off`,
+`net/data/on|off` — see `BRIDGE_ENDPOINTS` in `bin/ivy.ts`); adb knowledge
+stays in the toolkit, never in yaml. Network endpoints refuse non-emulator
+devices, server errors fail the calling flow, and the toolkit restores
+wifi+data after every bridged run (emulator only).
 
 Flows that use `launchApp.clearState` wipe app data — **only run against test
 devices/emulators**, never a device with real library data.
@@ -76,6 +100,7 @@ $ANDROID_HOME/emulator/emulator -avd <name> -no-audio -no-boot-anim &
 | `book-details.yaml` | Extras extracted on import → details viewer → edit narrator → verify persistence |
 | `timeline-gestures.yaml` | Tap-seek / scrub / flick on the Skia timeline; app stays responsive |
 | `sleep-timer.yaml` | Arm 5s preset → countdown on button → expiry pauses playback, clears timer (maestro/debug builds only) |
+| `transcription-states.yaml` | Model-download lifecycle via bridge network control: metered gate (waiting-wifi) → auto-download on Wi-Fi → failure backoff countdown → give-up (tap-to-retry, Settings match) → auto-retry on reconnect (maestro/debug builds only: fast backoff) |
 
 Every flow is **independently runnable** — each pulls in `subflows/import-book.yaml`
 via `runFlow` to set up its own book, so `maestro test maestro/` (which runs

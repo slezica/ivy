@@ -269,6 +269,8 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
   ├── delete-original.yaml        # Delete original after import
   ├── timeline-gestures.yaml      # Timeline drag/fling/tap
   ├── sleep-timer.yaml            # Sleep timer arm/expiry (needs maestro build variant)
+  ├── transcription-states.yaml   # Model-download lifecycle via bridge network control (needs maestro build variant)
+  ├── scripts/bridge.js           # Shared helper calling the toolkit bridge (device control mid-flow)
   ├── subflows/                   # Shared steps (import-book)
   ├── playstore/ + screenshots/   # Play Store screenshot flows
   └── README.md
@@ -640,9 +642,16 @@ Commands:
       Recover a Gradle-polluted /workspace: sweep native build outputs and
       regenerate android/ via expo prebuild --clean.
 
-  test [--unit] [--e2e]
-      No flag = both. --unit = jest. --e2e = full maestro suite; pushes and
+  test [name] [--unit | --e2e] [--server-only [--port <n>]]
+      No flag = both suites. --unit = jest. --e2e = maestro suite; pushes and
       media-scans the fixtures first, verifies delete-original afterwards.
+      [name] runs a single case (jest pattern or maestro flow name) and needs
+      exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
+      a localhost HTTP interface flows use for device control (network
+      toggles) via maestro/scripts/bridge.js; BRIDGE_URL is injected into
+      every run and network state is restored afterwards (emulator only).
+      --server-only starts just the bridge (foreground, Ctrl-C to stop) for
+      hand-run maestro sessions.
 
   drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>
       Make the running app do something (one mode per call).

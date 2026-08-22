@@ -226,7 +226,7 @@ If all start attempts fail (Whisper never becomes ready), `doStart()` sets `star
 
 ### Start/stop lifecycle
 
-`start()` is idempotent — concurrent calls share the same initialization promise. Each call re-asserts `started = true`, so a `stop()` followed by `start()` during initialization cancels the stop intent. Retry logic (3 attempts with backoff) lives inside the service. After initialization, `doStart()` checks `started` before processing the queue — if `stop()` was called and not re-asserted, it bails.
+`start()` is idempotent — concurrent calls share the same initialization promise. Each call re-asserts `started = true`, so a `stop()` followed by `start()` during initialization cancels the stop intent. Retry logic (3 attempts with backoff) lives inside the service; the delays are injected via deps — 5/15/30s in production, 1/3/5s on test builds (`isTestBuild()`, wired in `services/index.ts`) so e2e can traverse the retry/error states quickly. After initialization, `doStart()` checks `started` before processing the queue — if `stop()` was called and not re-asserted, it bails.
 
 ### Stop while processing
 
