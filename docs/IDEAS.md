@@ -13,6 +13,8 @@ and again 2026-07-23.
 
 1. **Animations** - add some niceties.
 2. **Transcription models** - investigate if there's something more accurate/faster/lighter than whisper these days.
+3. **Android auto support** - that!
+4. **Tablet UI** - also that!
 
 
 ## Refactors / Architecture
