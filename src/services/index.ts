@@ -2,7 +2,7 @@ import { BaseService } from './base'
 import { AudioSlicerService, AudioPlayerService, AudioMetadataService, FFmetadataService, playbackService } from './audio'
 import { DatabaseService, FileStorageService, FileCopierService, FilePickerService } from './storage'
 import { WhisperService, TranscriptionQueueService } from './transcription'
-import { SharingService, NetworkService } from './system'
+import { SharingService, NetworkService, isTestBuild } from './system'
 export { toast, copyText, getBuildVariant, isTestBuild } from './system'
 export type { NetworkState, NetworkServiceEvents } from './system'
 import { GoogleAuthService, GoogleDriveService, BackupSyncService } from './backup'
@@ -108,5 +108,11 @@ export const audio = new AudioPlayerService()
 export const auth = new GoogleAuthService()
 export const drive = new GoogleDriveService(auth)
 export const sync = new BackupSyncService(db, drive, auth)
-export const transcription = new TranscriptionQueueService({ database: db, whisper, slicer })
+export const transcription = new TranscriptionQueueService({
+  database: db,
+  whisper,
+  slicer,
+  // Short backoff on debug/maestro so e2e can traverse the retry/error states
+  retryDelays: isTestBuild() ? [1_000, 3_000, 5_000] : undefined,
+})
 

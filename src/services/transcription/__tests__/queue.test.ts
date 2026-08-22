@@ -459,6 +459,32 @@ describe('TranscriptionQueueService', () => {
       jest.useRealTimers()
     })
 
+    it('uses injected retry delays', async () => {
+      jest.useFakeTimers()
+
+      const deps = createMockDeps()
+      deps.retryDelays = [1_000, 3_000, 5_000]
+      deps.whisper.initialize = jest.fn(() => Promise.reject(new Error('init failed')))
+      deps.whisper.isReady = jest.fn(() => false)
+
+      const service = new TranscriptionQueueService(deps)
+
+      const delays: number[] = []
+      service.on('retry', (event) => delays.push(event.delayMs))
+
+      const startPromise = service.start()
+
+      for (let i = 0; i < 3; i++) {
+        await Promise.resolve()
+        jest.runAllTimers()
+      }
+
+      await expect(startPromise).rejects.toThrow('init failed')
+      expect(delays).toEqual([1_000, 3_000])
+
+      jest.useRealTimers()
+    })
+
     it('retries initialization on a fresh start() after failure', async () => {
       jest.useFakeTimers()
 

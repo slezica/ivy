@@ -22,6 +22,7 @@ export interface TranscriptionQueueDeps {
   database: DatabaseService
   whisper: WhisperService
   slicer: AudioSlicerService
+  retryDelays?: number[]  // Between start attempts; injected short on test builds
 }
 
 export type TranscriptionQueueEvents = {
@@ -40,7 +41,7 @@ export type TranscriptionQueueEvents = {
 
 const MAX_TRANSCRIPTION_DURATION_MS = 180000  // First 3 minutes of clip
 const MAX_START_ATTEMPTS = 3
-const RETRY_DELAYS = [5_000, 15_000, 30_000]
+const DEFAULT_RETRY_DELAYS = [5_000, 15_000, 30_000]
 
 // =============================================================================
 // Service
@@ -50,6 +51,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
   private database: DatabaseService
   private whisper: WhisperService
   private slicer: AudioSlicerService
+  private retryDelays: number[]
 
   private queue: string[] = []
   private processing = false
@@ -61,6 +63,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
     this.database = deps.database
     this.whisper = deps.whisper
     this.slicer = deps.slicer
+    this.retryDelays = deps.retryDelays ?? DEFAULT_RETRY_DELAYS
   }
 
   async start(): Promise<void> {
@@ -131,7 +134,7 @@ export class TranscriptionQueueService extends BaseService<TranscriptionQueueEve
         log(`Start attempt ${attempt + 1}/${MAX_START_ATTEMPTS} failed:`, error)
 
         if (attempt < MAX_START_ATTEMPTS - 1) {
-          const delayMs = RETRY_DELAYS[attempt]
+          const delayMs = this.retryDelays[attempt]
           this.emit('retry', { attempt: attempt + 1, maxAttempts: MAX_START_ATTEMPTS, delayMs, error: error as Error })
           await new Promise(resolve => setTimeout(resolve, delayMs))
         }
