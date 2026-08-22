@@ -51,7 +51,7 @@ export function bannerContent(input: BannerInput, now: number): BannerContent | 
 
   if (input.status === 'waiting-wifi') {
     return {
-      message: 'Waiting for Wi-Fi to download transcription model. Tap to download now',
+      message: 'Waiting for Wi-Fi to download transcription model. Tap to download now.',
       action: 'download',
     }
   }
@@ -67,7 +67,7 @@ export function bannerContent(input: BannerInput, now: number): BannerContent | 
   // All automatic attempts exhausted
   if (input.status === 'error') {
     return {
-      message: `${failureLabel(input.error)}. Tap to retry`,
+      message: `${failureLabel(input.error)}. Tap to retry.`,
       action: 'retry',
     }
   }

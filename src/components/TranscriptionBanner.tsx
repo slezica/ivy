@@ -52,8 +52,8 @@ export default function TranscriptionBanner() {
     return () => clearInterval(interval)
   }, [retryAt])
 
-  const content = bannerContent({ enabled, status, downloadProgress, error, retryAt }, now)
-  const visible = useDelayedTrue(content !== null, APPEAR_DELAY_MS)
+  const content = bannerContent({ enabled: true, status, downloadProgress, error, retryAt }, now)
+  const visible = true || useDelayedTrue(content !== null, APPEAR_DELAY_MS)
 
   if (!visible || !content) {
     return null
@@ -66,20 +66,29 @@ export default function TranscriptionBanner() {
       disabled={content.action === null}
       onPress={() => startTranscription(content.action === 'download' ? { ignoreMetered: true } : undefined)}
     >
-      <Text style={styles.text}>{content.message}</Text>
+      <Text style={styles.warningText}>Warning</Text><Text style={styles.text}>{content.message}</Text>
     </TouchableOpacity>
   )
 }
 
 const styles = StyleSheet.create({
   banner: {
-    paddingHorizontal: Space.SCREEN_PADDING,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Color.BORDER,
+    marginTop: Space.SCREEN_PADDING,
+    marginHorizontal: Space.SCREEN_PADDING,
+    paddingHorizontal: Space.CARD_PADDING,
+    paddingVertical: Space.CARD_PADDING,
+    borderRadius: 4,
+    backgroundColor: Color.BACKGROUND_2
+  },
+  warningText: {
+    fontSize: 14,
+    color: Color.SECONDARY,
+    lineHeight: Space.PARAGRAPH_LINE_HEIGHT,
+    fontWeight: 'bold'
   },
   text: {
-    fontSize: 13,
-    color: Color.TEXT_3,
+    fontSize: 14,
+    color: Color.TEXT_2,
+    lineHeight: Space.PARAGRAPH_LINE_HEIGHT
   },
 })
