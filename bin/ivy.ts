@@ -10,6 +10,7 @@
 
 import { execFileSync, spawnSync, spawn } from 'node:child_process'
 import * as fs from 'node:fs'
+import * as http from 'node:http'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import * as readline from 'node:readline'
@@ -41,9 +42,16 @@ Commands:
       Recover a Gradle-polluted /workspace: sweep native build outputs and
       regenerate android/ via expo prebuild --clean.
 
-  test [--unit] [--e2e]
-      No flag = both. --unit = jest. --e2e = full maestro suite; pushes and
+  test [name] [--unit | --e2e] [--server-only [--port <n>]]
+      No flag = both suites. --unit = jest. --e2e = maestro suite; pushes and
       media-scans the fixtures first, verifies delete-original afterwards.
+      [name] runs a single case (jest pattern or maestro flow name) and needs
+      exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
+      a localhost HTTP interface flows use for device control (network
+      toggles) via maestro/scripts/bridge.js; BRIDGE_URL is injected into
+      every run and network state is restored afterwards (emulator only).
+      --server-only starts just the bridge (foreground, Ctrl-C to stop) for
+      hand-run maestro sessions.
 
   drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>
       Make the running app do something (one mode per call).
@@ -189,15 +197,18 @@ const adbShell = (...args: string[]) => adbOut('shell', ...args)
 // Destructive commands must never touch a physical device (the developer's
 // daily-life phone runs a preview build with real data). All three checks
 // must pass; there is deliberately no override flag.
-function requireEmulator(action: string) {
+function isEmulator(): boolean {
   const s = serial()
   const prop = (name: string) => adbShell('getprop', name).trim()
   const qemu = prop('ro.kernel.qemu') === '1' || prop('ro.boot.qemu') === '1'
   const hardware = ['goldfish', 'ranchu'].includes(prop('ro.hardware'))
   const serialOk = /^emulator-\d+$/.test(s) || /^host\.docker\.internal:\d+$/.test(s)
-  if (!qemu || !hardware || !serialOk) {
-    fail(`${action} refused: ${s} is not verifiably an emulator ` +
-      `(qemu=${qemu} hardware=${hardware} serial=${serialOk}). No override exists.`)
+  return qemu && hardware && serialOk
+}
+
+function requireEmulator(action: string) {
+  if (!isEmulator()) {
+    fail(`${action} refused: ${serial()} is not verifiably an emulator. No override exists.`)
   }
 }
 
@@ -447,10 +458,99 @@ function requireMaestro() {
   if (!has('maestro')) fail('maestro not found — install from https://maestro.mobile.dev')
 }
 
-function maestroRun(args: string[]) {
+function maestroRun(args: string[], bridgeUrl?: string) {
   requireMaestro()
-  run('maestro', ['--device', serial(), 'test', ...args],
+  const env = bridgeUrl ? ['-e', `BRIDGE_URL=${bridgeUrl}`] : []
+  run('maestro', ['--device', serial(), 'test', ...env, ...args],
     { env: { ...process.env, ANDROID_SERIAL: serial() } })
+}
+
+// ---------------------------------------------------------------------------
+// Bridge server — device control for maestro flows
+//
+// Flows can't run adb (maestro's JS sandbox only has http.*), so the toolkit
+// serves a small HTTP vocabulary of device operations and injects BRIDGE_URL
+// into every maestro run. Flows call it mid-flow via scripts/bridge.js:
+//   - runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/off" } }
+// Endpoints are semantic and curated — adb knowledge stays here, never in
+// yaml. Silent in normal operation; errors travel back in the HTTP response
+// (500 + message), which bridge.js turns into a flow failure.
+
+const BRIDGE_DEFAULT_PORT = 7799
+
+// Semantic endpoint vocabulary. Network toggles are emulator-only: flipping
+// radios on a physical device (the developer's phone) is never acceptable.
+const BRIDGE_ENDPOINTS: Record<string, () => void> = {
+  'net/wifi/on': () => { requireEmulator('bridge net control'); adbShell('svc', 'wifi', 'enable') },
+  'net/wifi/off': () => { requireEmulator('bridge net control'); adbShell('svc', 'wifi', 'disable') },
+  'net/data/on': () => { requireEmulator('bridge net control'); adbShell('svc', 'data', 'enable') },
+  'net/data/off': () => { requireEmulator('bridge net control'); adbShell('svc', 'data', 'disable') },
+}
+
+function startBridgeServer(port: number): http.Server {
+  const server = http.createServer((req, res) => {
+    const cmd = (req.url ?? '').replace(/^\/+/, '').replace(/\/+$/, '')
+
+    if (cmd === 'health') {
+      res.writeHead(200).end('ok')
+      return
+    }
+
+    const handler = BRIDGE_ENDPOINTS[cmd]
+    if (!handler) {
+      res.writeHead(404).end(`unknown bridge command: ${cmd}`)
+      return
+    }
+
+    try {
+      handler()
+      res.writeHead(200).end('ok')
+    } catch (e) {
+      res.writeHead(500).end(e instanceof Error ? e.message : String(e))
+    }
+  })
+
+  server.listen(port, '127.0.0.1')
+  return server
+}
+
+// Spawn the bridge as a child process (this process blocks on spawnSync while
+// maestro runs, so an in-process server could never answer), wait until it is
+// healthy, run `fn`, then tear it down and restore network state.
+function withBridge(fn: (url: string) => void) {
+  const port = Number(process.env.IVY_BRIDGE_PORT || BRIDGE_DEFAULT_PORT)
+  const url = `http://127.0.0.1:${port}`
+  const logPath = path.join(os.tmpdir(), 'ivy-bridge.log')
+  const logFd = fs.openSync(logPath, 'a')
+
+  const child = spawn('npx', ['tsx', path.join(ROOT, 'bin/ivy.ts'),
+    'test', '--server-only', '--port', String(port), '--device', serial()],
+    { cwd: ROOT, stdio: ['ignore', logFd, logFd] })
+
+  const healthy = () => spawnSync(process.execPath, ['-e',
+    `fetch(process.argv[1]).then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))`,
+    `${url}/health`]).status === 0
+
+  try {
+    const deadline = Date.now() + 10_000
+    while (!healthy()) {
+      if (Date.now() > deadline) fail(`bridge server did not come up on ${url} (log: ${logPath})`)
+      spawnSync('sleep', ['0.2'])
+    }
+
+    fn(url)
+  } finally {
+    child.kill()
+    fs.closeSync(logFd)
+
+    // Flows may leave radios off; restore the default state (emulator only)
+    if (isEmulator()) {
+      try {
+        adbShell('svc', 'wifi', 'enable')
+        adbShell('svc', 'data', 'enable')
+      } catch { /* device gone — nothing to restore */ }
+    }
+  }
 }
 
 function checkDeleteMe() {
@@ -459,19 +559,49 @@ function checkDeleteMe() {
   log(`delete-original verified: ${DELETE_ME} is gone`)
 }
 
+function resolveFlow(name: string): string {
+  const file = name.endsWith('.yaml') ? name : `${name}.yaml`
+  const candidates = [file, path.join('maestro', file)]
+  for (const c of candidates) {
+    if (fs.existsSync(path.resolve(ROOT, c))) return c
+  }
+  fail(`flow not found: ${name} (tried ${candidates.join(', ')})`)
+}
+
 function cmdTest(args: Args) {
   const unit = !!args.flags.unit
   const e2e = !!args.flags.e2e
+  const name = args.positionals[0]
+
+  // Foreground bridge for hand-run maestro sessions
+  if (args.flags['server-only']) {
+    const port = Number(args.flags.port || process.env.IVY_BRIDGE_PORT || BRIDGE_DEFAULT_PORT)
+    serial() // resolve the device now so endpoint calls target the right one
+    startBridgeServer(port)
+    log(`bridge server on http://127.0.0.1:${port}`)
+    log(`run flows with: maestro test -e BRIDGE_URL=http://127.0.0.1:${port} <flow.yaml>`)
+    return // server keeps the process alive; Ctrl-C to stop
+  }
+
+  if (name && unit === e2e) fail('test <name> needs exactly one of --unit or --e2e')
+
   const both = !unit && !e2e
   if (unit || both) {
     log('jest')
-    run('npx', ['jest', '--silent'])
+    run('npx', ['jest', '--silent', ...(name ? [name] : [])])
   }
   if (e2e || both) {
     pushFixtures()
-    log('maestro suite')
-    maestroRun(['maestro/'])
-    checkDeleteMe() // whole suite includes delete-original.yaml
+    if (name) {
+      const flow = resolveFlow(name)
+      log(`maestro flow: ${flow}`)
+      withBridge(url => maestroRun([flow], url))
+      if (flow.includes('delete-original')) checkDeleteMe()
+    } else {
+      log('maestro suite')
+      withBridge(url => maestroRun(['maestro/'], url))
+      checkDeleteMe() // whole suite includes delete-original.yaml
+    }
   }
 }
 
@@ -488,7 +618,7 @@ function cmdDrive(args: Args) {
     case 'file': {
       if (!fs.existsSync(path.resolve(ROOT, value))) fail(`flow not found: ${value}`)
       pushFixtures()
-      maestroRun([value])
+      withBridge(url => maestroRun([value], url))
       if (value.includes('delete-original')) checkDeleteMe()
       break
     }
@@ -496,7 +626,11 @@ function cmdDrive(args: Args) {
       const flow = `appId: ${APP}\n---\n${value}\n`
       const tmp = path.join(os.tmpdir(), `toolkit-inline-${process.pid}.yaml`)
       fs.writeFileSync(tmp, flow)
-      try { maestroRun([tmp]) } finally { fs.rmSync(tmp, { force: true }) }
+      try {
+        withBridge(url => maestroRun([tmp], url))
+      } finally {
+        fs.rmSync(tmp, { force: true })
+      }
       break
     }
     case 'tap': {
@@ -1399,7 +1533,7 @@ interface Args { positionals: string[], flags: Record<string, string | boolean> 
 
 // Tiny parser: `--flag` is boolean unless listed in valued (then takes the
 // next token); everything else is positional.
-const VALUED_FLAGS = new Set(['device', 'arch', 'file', 'inline', 'tap', 'nav', 'tag', 'version', 'changes'])
+const VALUED_FLAGS = new Set(['device', 'arch', 'file', 'inline', 'tap', 'nav', 'tag', 'version', 'changes', 'port'])
 
 function parseArgs(argv: string[]): Args {
   const args: Args = { positionals: [], flags: {} }
