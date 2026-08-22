@@ -1,0 +1,49 @@
+appId: com.salezica.ivy
+---
+# Transcription status lifecycle: metered gate, auto-download on Wi-Fi,
+# failure backoff with countdown, give-up, and automatic recovery.
+#
+# Uses the toolkit bridge for network control (scripts/bridge.js) and the
+# short test-build retry backoff (1/3/5s) — run via `bin/ivy.ts test --e2e
+# [transcription-states]`, not bare `maestro test`.
+
+# Metered-only network (LTE, no Wi-Fi): the 465MB model download must wait
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/off" } }
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/data/on" } }
+
+# clearState also deletes any previously downloaded model
+- launchApp:
+    clearState: true
+
+- tapOn: "Clips"
+- extendedWaitUntil:
+    visible: "Waiting for Wi-Fi to download transcription model.*"
+    timeout: 10000
+
+# Wi-Fi appears → download starts on its own (no tap)
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/on" } }
+- extendedWaitUntil:
+    visible: "Downloading transcription model.*"
+    timeout: 20000
+
+# Connectivity lost mid-download → visible backoff countdown, then give-up
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/off" } }
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/data/off" } }
+- extendedWaitUntil:
+    visible: "Failed to download transcription model. Retrying in .*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Failed to download transcription model. Tap to retry"
+    timeout: 30000
+
+# Settings shows the matching status with its own retry affordance
+- openLink: ivy://settings
+- assertVisible: "Failed to download transcription model"
+- assertVisible: "Retry"
+- back
+
+# Connectivity returns → automatic retry, no tap needed
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/on" } }
+- extendedWaitUntil:
+    visible: "Downloading transcription model.*"
+    timeout: 20000
