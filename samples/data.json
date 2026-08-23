@@ -29,7 +29,7 @@
       "title": "Frankenstein",
       "artist": "Mary Shelley",
       "duration": 30914000,
-      "position": 13911000,
+      "position": 30914000,
       "audio": "short.mp3",
       "artwork": "demo-frankenstein.png",
       "cover": { "bg1": "#33383b", "bg2": "#1c2023", "fg": "#c9d6c1" }
