@@ -3,12 +3,14 @@
  *
  * Discrete one-line status message shown on the clips screen whenever the
  * transcription service is in a state the user wouldn't expect (downloading,
- * retrying after a failure, or given up). Tappable when a manual retry is
- * the way forward. Appearance is debounced so transient states never flash.
+ * waiting for Wi-Fi, retrying after a failure, or given up). Tappable when a
+ * manual action is the way forward. Appearance is debounced so transient
+ * states never flash.
  */
 
 import { useEffect, useState } from 'react'
 import { StyleSheet, Text, TouchableOpacity } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useStore } from '../store'
 import { Color, Space } from '../theme'
 import { bannerContent } from './transcription_banner_content'
@@ -52,8 +54,8 @@ export default function TranscriptionBanner() {
     return () => clearInterval(interval)
   }, [retryAt])
 
-  const content = bannerContent({ enabled: true, status, downloadProgress, error, retryAt }, now)
-  const visible = true || useDelayedTrue(content !== null, APPEAR_DELAY_MS)
+  const content = bannerContent({ enabled, status, downloadProgress, error, retryAt }, now)
+  const visible = useDelayedTrue(content !== null, APPEAR_DELAY_MS)
 
   if (!visible || !content) {
     return null
@@ -66,29 +68,31 @@ export default function TranscriptionBanner() {
       disabled={content.action === null}
       onPress={() => startTranscription(content.action === 'download' ? { ignoreMetered: true } : undefined)}
     >
-      <Text style={styles.warningText}>Warning</Text><Text style={styles.text}>{content.message}</Text>
+      <Ionicons name="warning" size={18} color={Color.SECONDARY} style={styles.icon} />
+      <Text style={styles.text}>{content.message}</Text>
     </TouchableOpacity>
   )
 }
 
 const styles = StyleSheet.create({
   banner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     marginTop: Space.SCREEN_PADDING,
     marginHorizontal: Space.SCREEN_PADDING,
     paddingHorizontal: Space.CARD_PADDING,
     paddingVertical: Space.CARD_PADDING,
     borderRadius: 4,
-    backgroundColor: Color.BACKGROUND_2
+    backgroundColor: 'rgba(255, 209, 102, 0.08)',  // Color.SECONDARY wash
   },
-  warningText: {
-    fontSize: 14,
-    color: Color.SECONDARY,
-    lineHeight: Space.PARAGRAPH_LINE_HEIGHT,
-    fontWeight: 'bold'
+  icon: {
+    marginRight: 8,
+    marginTop: 2,
   },
   text: {
+    flex: 1,
     fontSize: 14,
     color: Color.TEXT_2,
-    lineHeight: Space.PARAGRAPH_LINE_HEIGHT
+    lineHeight: Space.PARAGRAPH_LINE_HEIGHT,
   },
 })

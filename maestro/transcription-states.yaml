@@ -30,15 +30,15 @@ appId: com.salezica.ivy
 - runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/off" } }
 - runScript: { file: scripts/bridge.js, env: { CMD: "net/data/off" } }
 - extendedWaitUntil:
-    visible: "Failed to download transcription model. Retrying in .*"
+    visible: "Could not download transcription model. Retrying in .*"
     timeout: 30000
 - extendedWaitUntil:
-    visible: "Failed to download transcription model. Tap to retry"
+    visible: "Could not download transcription model. Tap to retry"
     timeout: 30000
 
 # Settings shows the matching status with its own retry affordance
 - openLink: ivy://settings
-- assertVisible: "Failed to download transcription model"
+- assertVisible: "Could not download transcription model"
 - assertVisible: "Retry"
 - back
 

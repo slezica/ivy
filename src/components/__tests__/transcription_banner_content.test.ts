@@ -41,7 +41,7 @@ describe('bannerContent', () => {
     }), NOW)
 
     expect(result).toEqual({
-      message: 'Failed to download transcription model. Retrying in 15s...',
+      message: 'Could not download transcription model. Retrying in 15s...',
       action: null,
     })
   })
@@ -53,12 +53,12 @@ describe('bannerContent', () => {
       error: { cause: 'download-failed', message: 'network down' },
     }), NOW)
 
-    expect(result?.message).toBe('Failed to download transcription model. Retrying...')
+    expect(result?.message).toBe('Could not download transcription model. Retrying...')
   })
 
   it('offers tap-to-download while waiting for wifi', () => {
     expect(bannerContent(input({ status: 'waiting-wifi' }), NOW)).toEqual({
-      message: 'Waiting for Wi-Fi to download transcription model. Tap to download now',
+      message: 'Waiting for Wi-Fi to download transcription model. Tap to download now.',
       action: 'download',
     })
   })
@@ -70,7 +70,7 @@ describe('bannerContent', () => {
     }), NOW)
 
     expect(result).toEqual({
-      message: 'Failed to download transcription model. Tap to retry',
+      message: 'Could not download transcription model. Tap to retry.',
       action: 'retry',
     })
   })
@@ -86,8 +86,8 @@ describe('bannerContent', () => {
       error: { cause: 'unknown', message: 'what even' },
     }), NOW)
 
-    expect(retrying?.message).toBe('Failed to start transcription process. Retrying in 5s...')
-    expect(gaveUp?.message).toBe('Failed to start transcription process. Tap to retry')
+    expect(retrying?.message).toBe('Could not start transcriptions. Retrying in 5s...')
+    expect(gaveUp?.message).toBe('Could not start transcriptions. Tap to retry.')
   })
 
   it('prefers download progress over a stale retry countdown', () => {
