@@ -23,8 +23,8 @@ export interface BannerContent {
 
 export function failureLabel(error: BannerInput['error']): string {
   return error?.cause === 'download-failed'
-    ? 'Failed to download transcription model'
-    : 'Failed to start transcription process'
+    ? 'Could not download transcription model'
+    : 'Could not start transcriptions'
 }
 
 export function downloadingMessage(downloadProgress: number | null): string {
