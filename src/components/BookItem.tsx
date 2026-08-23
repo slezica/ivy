@@ -77,9 +77,8 @@ function BookProgress({ book, isArchived, isPlaying }: { book: Book; isArchived:
   const percent = Math.round((book.position / book.duration) * 100)
 
   return (
-    <Text style={[styles.bookDuration, isArchived && styles.textArchived]}>
-      <Text style={[styles.bookProgress, isArchived && styles.textArchived]}>{percent}%</Text>
-      {' • '}{formatDuration(remaining)} left{playingSuffix}
+    <Text style={[styles.bookDuration, styles.bookInProgress, isArchived && styles.textArchived]}>
+      {percent}%{' • '}{formatDuration(remaining)} left{playingSuffix}
     </Text>
   )
 }
@@ -131,9 +130,9 @@ const styles = StyleSheet.create({
   },
   bookDuration: {
     fontSize: 14,
-    color: Color.PRIMARY,
+    color: Color.TEXT_2,
   },
-  bookProgress: {
+  bookInProgress: {
     color: Color.PRIMARY,
   },
   bookPlaying: {
