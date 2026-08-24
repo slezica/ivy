@@ -34,6 +34,7 @@ export default function LibraryScreen() {
   const loadFileWithPicker = useStore(s => s.loadFileWithPicker)
   const fetchBooks = useStore(s => s.fetchBooks)
   const play = useStore(s => s.play)
+  const loadBook = useStore(s => s.loadBook)
   const archiveBook = useStore(s => s.archiveBook)
   const deleteBook = useStore(s => s.deleteBook)
   const autoSync = useStore(s => s.autoSync)
@@ -89,9 +90,14 @@ export default function LibraryScreen() {
       return
     }
 
+    const context = { fileUri: book.uri, position: book.position, ownerId: MAIN_PLAYER_OWNER_ID }
+
     try {
-      await play({ fileUri: book.uri, position: book.position, ownerId: MAIN_PLAYER_OWNER_ID })
+      // Load before navigating (player shows the book on arrival), start
+      // playback after (the library never renders a "Playing" item)
+      await loadBook(context)
       router.push('/player')
+      play(context).catch((error) => console.error('Error starting playback:', error))
     } catch (error) {
       console.error('Error loading book:', error)
       Alert.alert('Error', 'Failed to load book')
