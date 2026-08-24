@@ -89,10 +89,10 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
             this.currentDuration = progress.duration * 1000  // Convert to ms
             resolve(this.currentDuration)
           } else {
-            setTimeout(checkDuration, 100)
+            setTimeout(checkDuration, 25)
           }
         } catch {
-          setTimeout(checkDuration, 100)
+          setTimeout(checkDuration, 25)
         }
       }
       checkDuration()

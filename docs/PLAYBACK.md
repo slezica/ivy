@@ -92,7 +92,7 @@ This prevents the timeline from jumping when another component takes over playba
 
 1. Reset the player (unload previous track)
 2. Add the new track with metadata (title, artist, artwork — used for system notification)
-3. **Poll for duration** — TrackPlayer doesn't return duration immediately after adding a track. The service polls `getProgress()` every 100ms until `duration > 0`, with a 10-second timeout
+3. **Poll for duration** — TrackPlayer doesn't return duration immediately after adding a track. The service polls `getProgress()` every 25ms until `duration > 0`, with a 10-second timeout
 4. Convert the duration from seconds to milliseconds and return it
 
 The polling is necessary because TrackPlayer needs time to probe the audio file's headers.
