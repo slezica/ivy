@@ -33,7 +33,7 @@ appId: com.salezica.ivy
     visible: "Could not download transcription model. Retrying in .*"
     timeout: 30000
 - extendedWaitUntil:
-    visible: "Could not download transcription model. Tap to retry"
+    visible: "Could not download transcription model. Tap to retry."
     timeout: 30000
 
 # Settings shows the matching status with its own retry affordance
