@@ -592,6 +592,7 @@ function cmdTest(args: Args) {
   if (name && unit === e2e) fail('test <name> needs exactly one of --unit or --e2e')
 
   const both = !unit && !e2e
+  if (e2e || both) requireMaestro() // fail fast, before jest runs
   if (unit || both) {
     log('jest')
     run('npx', ['jest', '--silent', ...(name ? [name] : [])])
