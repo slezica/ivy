@@ -12,10 +12,28 @@ appId: com.salezica.ivy
 #
 # clearState wipes app data — only run against test devices/emulators.
 
+# Launch offline and switch transcription off before restoring connectivity:
+# on fresh state the app immediately starts the 465MB whisper-model download,
+# which saturates the emulator and flakes timing-sensitive flows. The toggle
+# must beat connectivity because stopping transcription does not abort an
+# in-flight download.
+- runScript: { file: ../scripts/bridge.js, env: { CMD: "net/wifi/off" } }
+- runScript: { file: ../scripts/bridge.js, env: { CMD: "net/data/off" } }
+
 - launchApp:
     clearState: true
 
 - assertVisible: "No books yet"
+
+- tapOn:
+    id: "library-menu-button"
+- tapOn: "Settings"
+- tapOn:
+    id: "transcription-switch"
+- back
+
+- runScript: { file: ../scripts/bridge.js, env: { CMD: "net/wifi/on" } }
+- runScript: { file: ../scripts/bridge.js, env: { CMD: "net/data/on" } }
 
 # Import via the header menu → system document picker
 - tapOn:
@@ -35,9 +53,9 @@ appId: com.salezica.ivy
 # Import copies the file and reads metadata + chapters. Chapter extraction is
 # the first FFmpeg call after clearState, so it pays a one-time cold cost:
 # FFmpeg.init() unpacking the ~35MB library bundle + cold-linking it (~88s on
-# this emulator, amplified by concurrent Whisper-model download retries). The
-# timeout is sized well above that; the real fix is a warm-up step (see
-# maestro/README.md "Known hotspot").
+# this emulator; used to be worse when the whisper-model download ran
+# concurrently — now suppressed above). The timeout is sized well above that;
+# the real fix is a warm-up step (see maestro/README.md "Known hotspot").
 - extendedWaitUntil:
     visible: "Ivy Test Book"
     timeout: 150000

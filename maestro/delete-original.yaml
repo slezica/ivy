@@ -9,18 +9,28 @@ appId: com.salezica.ivy
 #
 # clearState wipes app data — only run against test devices/emulators.
 
+# Offline launch + transcription off before restoring connectivity — same
+# whisper-download suppression as subflows/import-book.yaml.
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/off" } }
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/data/off" } }
+
 - launchApp:
     clearState: true
 
 - assertVisible: "No books yet"
 
-# Enable the setting
+# Enable the setting (and disable transcription while here)
 - tapOn:
     id: "library-menu-button"
 - tapOn: "Settings"
 - tapOn:
     id: "delete-original-switch"
+- tapOn:
+    id: "transcription-switch"
 - back
+
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/on" } }
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/data/on" } }
 
 # Import the disposable file via the document picker (same search approach as
 # subflows/import-book.yaml, different fixture)
