@@ -95,16 +95,29 @@ export function uriToPath(uri: string): string {
 }
 
 // Drop quotes wrapping an entire text (Whisper sometimes quotes its output).
-// Only when the edge quotes are the sole quotes in the text — inner quotes
-// (dialogue like `"Hello", he said. "Bye"`) mean the edges aren't enclosing.
-const QUOTE_CHARS = ['"', '“', '”']
-
+// Strips only when the leading quote is actually closed by the trailing one:
+// dialogue like `"Hello", he said. "Bye"` closes its first quote early and
+// stays untouched.
 export function stripEnclosingQuotes(text: string): string {
   if (text.length < 2) return text
-  if (!QUOTE_CHARS.includes(text[0]) || !QUOTE_CHARS.includes(text[text.length - 1])) return text
 
-  const quoteCount = [...text].filter((c) => QUOTE_CHARS.includes(c)).length
-  if (quoteCount !== 2) return text
+  const last = text.length - 1
 
-  return text.slice(1, -1).trim()
+  // Straight quotes can't nest: the first one is closed by the next one
+  if (text[0] === '"') {
+    return text.indexOf('"', 1) === last ? text.slice(1, -1).trim() : text
+  }
+
+  // Curly quotes nest: the first one is closed where depth returns to zero
+  if (text[0] === '“') {
+    let depth = 1
+    for (let i = 1; i < text.length; i++) {
+      if (text[i] === '“') depth++
+      else if (text[i] === '”' && --depth === 0) {
+        return i === last ? text.slice(1, -1).trim() : text
+      }
+    }
+  }
+
+  return text
 }

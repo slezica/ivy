@@ -18,8 +18,21 @@ describe('stripEnclosingQuotes', () => {
     expect(stripEnclosingQuotes(dialogue)).toBe(dialogue)
   })
 
-  it('keeps edge quotes when more quotes appear inside', () => {
-    const text = '“He said "hi" to me”'
+  it('strips curly quotes enclosing inner straight quotes', () => {
+    expect(stripEnclosingQuotes('“He said "hi" to me”')).toBe('He said "hi" to me')
+  })
+
+  it('strips curly quotes enclosing nested curly quotes', () => {
+    expect(stripEnclosingQuotes('“Nested “quote” here”')).toBe('Nested “quote” here')
+  })
+
+  it('keeps curly dialogue that closes its first quote early', () => {
+    const text = '“Hello”, he said. “Bye”'
+    expect(stripEnclosingQuotes(text)).toBe(text)
+  })
+
+  it('keeps straight edge quotes with more straight quotes inside', () => {
+    const text = '"He said "hi" to me"'
     expect(stripEnclosingQuotes(text)).toBe(text)
   })
 
