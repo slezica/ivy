@@ -148,7 +148,7 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
           onLongPress={() => copyText(clip.transcription!)}
         >
           <Text style={styles.infoLabel}>Transcription</Text>
-          <Text style={styles.infoText} numberOfLines={transcriptionExpanded ? undefined : 4}>&ldquo;{clip.transcription}&rdquo;</Text>
+          <Text style={styles.infoText} numberOfLines={transcriptionExpanded ? undefined : 4}>{clip.transcription}</Text>
         </Pressable>
       )}
 

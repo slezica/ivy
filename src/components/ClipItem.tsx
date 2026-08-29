@@ -39,7 +39,7 @@ export default function ClipItem({ clip, isPending, onView, onOpenMenu }: ClipIt
         ) : null}
         {clip.transcription ? (
           <Text style={styles.clipTranscription} numberOfLines={2}>
-            &ldquo;{clip.transcription} ...&rdquo;
+            {clip.transcription} ...
           </Text>
         ) : null}
       </View>
