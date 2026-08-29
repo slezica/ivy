@@ -38,7 +38,7 @@ appId: com.salezica.ivy
 
 # Settings shows the matching status with its own retry affordance
 - openLink: ivy://settings
-- assertVisible: "Could not download transcription model"
+- assertVisible: "Error. Could not download transcription model"
 - assertVisible: "Retry"
 - back
 

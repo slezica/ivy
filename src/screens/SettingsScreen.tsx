@@ -39,7 +39,7 @@ export default function SettingsScreen() {
   }, [transcriptionRetryAt])
 
   const pendingLabel = sync.pendingCount === 1 ? '1 item pending' : `${sync.pendingCount} items pending`
-  const failingLabel = `${sync.failingCount === 1 ? '1 change' : `${sync.failingCount} changes`} failing — will keep retrying`
+  const failingLabel = `${sync.failingCount === 1 ? '1 item' : `${sync.failingCount} items`} failing — will keep retrying`
 
   function handleSyncToggle(enabled: boolean) {
     updateSettings({ ...settings, sync_enabled: enabled })
@@ -79,17 +79,24 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.settingSecondary}>
-          <Text style={transcriptionStatus === 'error' ? styles.errorText : styles.secondaryText}>
-            {transcriptionStatus === 'off' && (settings.transcription_enabled ? 'Enabled' : 'Disabled')}
-            {transcriptionStatus === 'starting' && (
-              transcriptionRetryAt != null
-                ? retryingMessage(transcriptionError, transcriptionRetryAt, now)
-                : 'Starting...'
+          <Text style={styles.secondaryText}>
+            {!settings.transcription_enabled && (
+              transcriptionStatus === 'off'
+                ? <><Text style={styles.primaryText}>Disabled.</Text> Clips will not be transcribed.</>
+                : 'Disabling...'
             )}
-            {transcriptionStatus === 'downloading' && downloadingMessage(transcriptionProgress)}
-            {transcriptionStatus === 'waiting-wifi' && 'Waiting for Wi-Fi to download model'}
-            {transcriptionStatus === 'on' && 'Enabled'}
-            {transcriptionStatus === 'error' && failureLabel(transcriptionError)}
+            {settings.transcription_enabled && <>
+              {transcriptionStatus === 'off' && 'Enabling...'}
+              {transcriptionStatus === 'starting' && (
+                transcriptionRetryAt != null
+                  ? retryingMessage(transcriptionError, transcriptionRetryAt, now)
+                  : 'Starting...'
+              )}
+              {transcriptionStatus === 'downloading' && downloadingMessage(transcriptionProgress)}
+              {transcriptionStatus === 'waiting-wifi' && 'Waiting for Wi-Fi to download transcription model'}
+              {transcriptionStatus === 'on' && <><Text style={styles.primaryText}>Enabled.</Text> Clips will be transcribed when you save them.</>}
+              {transcriptionStatus === 'error' && <><Text style={styles.errorText}>Error.</Text> {failureLabel(transcriptionError)}</>}
+            </>}
           </Text>
 
           {transcriptionStatus === 'error' && (
@@ -133,13 +140,16 @@ export default function SettingsScreen() {
 
         {!settings.sync_enabled && (
           <View style={styles.settingSecondary}>
-            <Text style={styles.secondaryText}>Disabled</Text>
+            <Text style={styles.secondaryText}>
+              <Text style={styles.primaryText}>Disabled.</Text> Book information, clips and sessions will be lost if you uninstall.
+            </Text>
           </View>
         )}
 
         {settings.sync_enabled && (
           <View style={styles.settingSecondary}>
             <Text style={styles.secondaryText}>
+              <Text style={styles.primaryText}>Enabled.</Text>{' '}
               {sync.pendingCount > 0 ? pendingLabel : sync.lastSyncTime ? 'Up to date' : 'Not synced yet'}
             </Text>
 
@@ -180,7 +190,9 @@ export default function SettingsScreen() {
 
         <View style={styles.settingSecondary}>
           <Text style={styles.secondaryText}>
-            {settings.delete_original_after_import ? 'Enabled' : 'Disabled'}
+            {settings.delete_original_after_import
+              ? <><Text style={styles.primaryText}>Enabled.</Text> Files will be removed from their original location when imported.</>
+              : <><Text style={styles.primaryText}>Disabled.</Text> Files will be left at their original location when imported.</>}
           </Text>
         </View>
 
@@ -193,7 +205,7 @@ export default function SettingsScreen() {
             <Text style={styles.settingLabel}>About Ivy</Text>
           </View>
           <View style={styles.settingSecondary}>
-            <Text style={styles.secondaryText}>Version and licenses</Text>
+            <Text style={styles.secondaryText}>Version, technical information and licenses</Text>
           </View>
         </TouchableOpacity>
 
@@ -224,12 +236,17 @@ const styles = StyleSheet.create({
   secondaryText: {
     fontSize: 14,
     color: Color.TEXT_3,
+    flexShrink: 1,  // long state descriptions wrap instead of overflowing the row
   },
   errorText: {
     fontSize: 14,
     color: Color.DESTRUCTIVE,
   },
   linkText: {
+    fontSize: 14,
+    color: Color.PRIMARY,
+  },
+  primaryText: {
     fontSize: 14,
     color: Color.PRIMARY,
   },
