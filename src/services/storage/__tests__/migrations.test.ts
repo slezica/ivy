@@ -74,6 +74,43 @@ describe('migration upgrade path', () => {
     })
   })
 
+  describe('migration 12: strip enclosing quotes from transcriptions', () => {
+    function seededV11() {
+      const db = dbAtVersion(11)
+      const clip = (id: string, transcription: string | null) =>
+        db.runSync(
+          "INSERT INTO clips (id, source_id, uri, start, duration, note, transcription, created_at, updated_at) VALUES (?, 'book-1', ?, 0, 1000, '', ?, 1, 42)",
+          [id, `file:///c/${id}.m4a`, transcription]
+        )
+      clip('clip-quoted', '"Fully quoted text."')
+      clip('clip-curly', '“Curly quoted text.”')
+      clip('clip-suffixed', '"Long clip text."...')
+      clip('clip-dialogue', '"Hello", he said. "How are you?"')
+      clip('clip-plain', 'No quotes at all.')
+      clip('clip-null', null)
+      return db
+    }
+
+    it('strips only enclosing quotes, preserving the long-clip suffix', () => {
+      const db = seededV11()
+
+      migrations[12](db)
+
+      const rows = getAll<{ id: string; transcription: string | null; updated_at: number }>(
+        db, 'SELECT id, transcription, updated_at FROM clips ORDER BY id'
+      )
+      const by = Object.fromEntries(rows.map(r => [r.id, r]))
+      expect(by['clip-quoted'].transcription).toBe('Fully quoted text.')
+      expect(by['clip-curly'].transcription).toBe('Curly quoted text.')
+      expect(by['clip-suffixed'].transcription).toBe('Long clip text....')
+      expect(by['clip-dialogue'].transcription).toBe('"Hello", he said. "How are you?"')
+      expect(by['clip-plain'].transcription).toBe('No quotes at all.')
+      expect(by['clip-null'].transcription).toBeNull()
+      // Per-device normalization: never bumps updated_at (would churn sync LWW)
+      expect(rows.every(r => r.updated_at === 42)).toBe(true)
+    })
+  })
+
   it('upgrades a populated v7 database to latest without loss or crash', async () => {
     const db = dbAtVersion(7)
     db.runSync("INSERT INTO files (id, uri, name, title, position) VALUES ('book-1', 'file:///a/book-1.mp3', 'Book.mp3', 'A Book', 5000)")

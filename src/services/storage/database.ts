@@ -7,7 +7,7 @@
 
 import * as SQLite from 'expo-sqlite'
 
-import { generateId, createLogger } from '../../utils'
+import { generateId, createLogger, stripEnclosingQuotes } from '../../utils'
 
 const log = createLogger('Database')
 
@@ -359,6 +359,25 @@ export const migrations: Migration[] = [
     db.execSync('ALTER TABLE files ADD COLUMN date TEXT')
     db.execSync('ALTER TABLE files ADD COLUMN language TEXT')
     db.execSync('ALTER TABLE files ADD COLUMN metadata_version INTEGER')
+  },
+
+  // Migration 12: Strip enclosing quotes from existing transcriptions (Whisper
+  // sometimes quotes its whole output; new results are stripped at the source).
+  // Deterministic per-device normalization: no updated_at bump, no sync queue.
+  (db) => {
+    const rows = db.getAllSync<{ id: string, transcription: string }>(
+      'SELECT id, transcription FROM clips WHERE transcription IS NOT NULL'
+    )
+    for (const { id, transcription } of rows) {
+      // The queue appends '...' to long-clip transcriptions after the quoted
+      // Whisper output — set it aside so the edge quote is still detected
+      const suffix = transcription.endsWith('...') ? '...' : ''
+      const body = suffix ? transcription.slice(0, -3) : transcription
+      const stripped = stripEnclosingQuotes(body) + suffix
+      if (stripped !== transcription) {
+        db.runSync('UPDATE clips SET transcription = ? WHERE id = ?', [stripped, id])
+      }
+    }
   },
 ]
 

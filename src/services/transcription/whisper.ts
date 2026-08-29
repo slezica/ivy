@@ -13,7 +13,7 @@ import { decodeAudioData } from 'react-native-audio-api'
 import RNFS from 'react-native-fs'
 import { BaseService } from '../base'
 import { ModelDownloadError, ModelInitError } from './errors'
-import { createLogger } from '../../utils'
+import { createLogger, stripEnclosingQuotes } from '../../utils'
 
 const log = createLogger('Whisper')
 
@@ -28,16 +28,6 @@ const MODEL_FILENAME = 'ggml-small.bin'
 const WHISPER_SAMPLE_RATE = 16000
 const WHISPER_CHANNELS = 1
 const WHISPER_BITS_PER_SAMPLE = 16
-
-// Whisper sometimes wraps the whole result in quotes — drop them
-const QUOTE_CHARS = ['"', '“', '”']
-
-export function stripSurroundingQuotes(text: string): string {
-  if (text.length >= 2 && QUOTE_CHARS.includes(text[0]) && QUOTE_CHARS.includes(text[text.length - 1])) {
-    return text.slice(1, -1).trim()
-  }
-  return text
-}
 
 // =============================================================================
 // Events
@@ -103,7 +93,7 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
       })
 
       const result = await promise
-      const text = stripSurroundingQuotes(result.result.trim())
+      const text = stripEnclosingQuotes(result.result.trim())
 
       log(' Transcription result:', text)
 

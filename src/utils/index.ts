@@ -93,3 +93,18 @@ export function sanitizeFilename(filename: string): string {
 export function uriToPath(uri: string): string {
   return uri.startsWith('file://') ? uri.replace('file://', '') : uri
 }
+
+// Drop quotes wrapping an entire text (Whisper sometimes quotes its output).
+// Only when the edge quotes are the sole quotes in the text — inner quotes
+// (dialogue like `"Hello", he said. "Bye"`) mean the edges aren't enclosing.
+const QUOTE_CHARS = ['"', '“', '”']
+
+export function stripEnclosingQuotes(text: string): string {
+  if (text.length < 2) return text
+  if (!QUOTE_CHARS.includes(text[0]) || !QUOTE_CHARS.includes(text[text.length - 1])) return text
+
+  const quoteCount = [...text].filter((c) => QUOTE_CHARS.includes(c)).length
+  if (quoteCount !== 2) return text
+
+  return text.slice(1, -1).trim()
+}
