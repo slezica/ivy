@@ -231,12 +231,14 @@ const styles = StyleSheet.create({
   settingSecondary: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 6,
   },
   secondaryText: {
     fontSize: 14,
     color: Color.TEXT_3,
     flexShrink: 1,  // long state descriptions wrap instead of overflowing the row
+    lineHeight: 20,
+    marginBottom: 4
   },
   errorText: {
     fontSize: 14,
