@@ -176,7 +176,7 @@ Beyond title/artist/artwork/duration, a book carries seven optional **extras** c
 
 **Two extraction sources, split by failure mode:**
 
-- **Basics** (title, artist, artwork, duration): `AudioMetadataService` / `MediaMetadataRetriever` — in-process platform API, survives ffmpeg breakage. Unchanged by extras.
+- **Basics** (title, artist, artwork, duration): `AudioMetadataService` / `MediaMetadataRetriever` — in-process platform API, survives ffmpeg breakage. Unchanged by extras. Artwork is stored as a base64 JPEG data URI, downscaled to at most 512px on the long side (`MAX_ARTWORK_DIMENSION` in `AudioMetadataModule.kt`) — uncapped covers OOM'd the Java heap once base64 copies piled up in DB + store + bridge (see [2026-09-02-artwork-oom-repair.md](2026-09-02-artwork-oom-repair.md)). A repair migration downscales oversized artwork stored by older versions.
 - **Extras + chapters**: `FFmetadataService`, which parses the raw ffmetadata text returned by the native `FFmetadataReaderModule` (exec'd `libffmpeg.so`). The retriever *cannot* read `comment` or custom MP4 tags, so ffmetadata is the only source for extras — and it's best-effort: on ffmpeg failure extras stay null.
 
 **Lazy extraction (backfill):** `extractBookExtras(bookId)` re-extracts on demand — called when the Book Details dialog opens. It no-ops unless `book.uri !== null` and `(metadata_version ?? 0) < EXTRACTED_METADATA_VERSION` (in `services/audio/ffmetadata.ts`). `metadata_version` distinguishes "never extracted" (null) from "extracted, file is sparse", and bumping the constant lazily re-extracts every book as it's next viewed. On import, extras are extracted inline and the version stamped; on ffmpeg failure the version stays null so a later view retries.

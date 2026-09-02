@@ -51,6 +51,15 @@ export class AudioMetadataService {
       }
     }
   }
+
+  /**
+   * Re-encode an oversized artwork data URI down to the native cap (512px long
+   * side, JPEG). Returns null when the input can't be decoded — callers should
+   * treat null as "skip", not "clear".
+   */
+  async downscaleArtwork(dataUri: string): Promise<string | null> {
+    return AudioMetadataModule.downscaleArtwork(dataUri)
+  }
 }
 
 
@@ -65,6 +74,7 @@ interface AudioMetadataModuleInterface {
     artwork?: string
     duration?: number
   }>
+  downscaleArtwork(dataUri: string): Promise<string | null>
 }
 
 const { AudioMetadataModule } = NativeModules as {
