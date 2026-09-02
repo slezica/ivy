@@ -13,9 +13,10 @@
  * migration(s) and assert.
  *
  * The high-value targets are the DATA-TRANSFORMING migrations. Pure ADD COLUMN
- * migrations are safe by construction; the one that transforms data today is
- * migration 8 (clip source_title/source_artist backfill). Add a case here
- * whenever a future migration moves or rewrites existing rows.
+ * migrations are safe by construction; the data-transforming ones today are
+ * migration 8 (clip source snapshot backfill), 12 (transcription quote strip),
+ * and 13 (artwork downscale repair). Add a case here whenever a future
+ * migration moves or rewrites existing rows.
  */
 
 import { DatabaseService, migrations } from '../database'
@@ -108,6 +109,86 @@ describe('migration upgrade path', () => {
       expect(by['clip-null'].transcription).toBeNull()
       // Per-device normalization: never bumps updated_at (would churn sync LWW)
       expect(rows.every(r => r.updated_at === 42)).toBe(true)
+    })
+  })
+
+  describe('migration 13: downscale oversized artwork', () => {
+    const FAT = 'data:image/jpeg;base64,' + 'x'.repeat(200_000)
+    const SMALL = 'data:image/jpeg;base64,' + 'y'.repeat(5_000)
+
+    async function seededV12() {
+      const db = await dbAtVersion(12)
+      const book = (id: string, artwork: string | null) =>
+        db.runSync(
+          "INSERT INTO files (id, uri, name, artwork, updated_at, updated_by) VALUES (?, ?, ?, ?, 42, 'other-device')",
+          [id, `file:///a/${id}.mp3`, `${id}.mp3`, artwork]
+        )
+      book('book-fat', FAT)
+      book('book-fat-2', FAT)
+      book('book-small', SMALL)
+      book('book-none', null)
+      return db
+    }
+
+    function artworkRows(db: SQLite.SQLiteDatabase) {
+      const rows = getAll<{ id: string; artwork: string | null; updated_at: number; updated_by: string | null }>(
+        db, 'SELECT id, artwork, updated_at, updated_by FROM files ORDER BY id'
+      )
+      return Object.fromEntries(rows.map(r => [r.id, r]))
+    }
+
+    it('downscales only oversized artwork, bumps updated_at, and queues for sync', async () => {
+      const db = await seededV12()
+      const downscaled = 'data:image/jpeg;base64,DOWNSCALED'
+
+      await migrations[13](db, { metadata: { downscaleArtwork: async () => downscaled } })
+
+      const by = artworkRows(db)
+      expect(by['book-fat'].artwork).toBe(downscaled)
+      expect(by['book-fat'].updated_at).toBeGreaterThan(42)     // LWW bump: repair propagates
+      expect(by['book-fat'].updated_by).not.toBe('other-device') // claimed by this device
+      expect(by['book-fat-2'].artwork).toBe(downscaled)
+      expect(by['book-small']).toMatchObject({ artwork: SMALL, updated_at: 42, updated_by: 'other-device' })
+      expect(by['book-none']).toMatchObject({ artwork: null, updated_at: 42 })
+
+      const queued = getAll<{ entity_type: string; entity_id: string; operation: string }>(
+        db, 'SELECT entity_type, entity_id, operation FROM sync_queue ORDER BY entity_id'
+      )
+      expect(queued).toEqual([
+        { entity_type: 'book', entity_id: 'book-fat', operation: 'upsert' },
+        { entity_type: 'book', entity_id: 'book-fat-2', operation: 'upsert' },
+      ])
+    })
+
+    it('skips books whose downscale fails or does not shrink, repairing the rest', async () => {
+      const db = await seededV12()
+      const downscaled = 'data:image/jpeg;base64,DOWNSCALED'
+      let first = true
+
+      await migrations[13](db, { metadata: { downscaleArtwork: async () => {
+        if (first) { first = false; throw new Error('decode failed') } // book-fat
+        return downscaled // book-fat-2
+      } } })
+
+      const by = artworkRows(db)
+      expect(by['book-fat']).toMatchObject({ artwork: FAT, updated_at: 42 }) // untouched, not queued
+      expect(by['book-fat-2'].artwork).toBe(downscaled)                      // still repaired
+
+      const queued = getAll<{ entity_id: string }>(db, 'SELECT entity_id FROM sync_queue')
+      expect(queued).toEqual([{ entity_id: 'book-fat-2' }])
+    })
+
+    it('leaves artwork alone when re-encoding returns null or does not shrink', async () => {
+      const db = await seededV12()
+
+      await migrations[13](db, { metadata: { downscaleArtwork: async () => null } })
+      let by = artworkRows(db)
+      expect(by['book-fat']).toMatchObject({ artwork: FAT, updated_at: 42 })
+
+      await migrations[13](db, { metadata: { downscaleArtwork: async (uri: string) => uri } })
+      by = artworkRows(db)
+      expect(by['book-fat']).toMatchObject({ artwork: FAT, updated_at: 42 })
+      expect(getAll(db, 'SELECT * FROM sync_queue')).toEqual([])
     })
   })
 

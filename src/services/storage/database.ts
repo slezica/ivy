@@ -399,6 +399,68 @@ export const migrations: Migration[] = [
       }
     }
   },
+
+  // Migration 13: Downscale oversized stored artwork. Early versions stored
+  // embedded covers at full resolution; multi-MB base64 data URIs (in DB rows,
+  // store, and bridge traffic) OOM'd the Java heap once enough accumulated —
+  // see docs/2026-09-02-artwork-oom-repair.md. New extractions are capped at
+  // 512px natively; this repairs books imported before the cap.
+  // Idempotent via the size gate. Bumps updated_at and queues for sync, so
+  // devices converge on the small artwork (accepted LWW risk in the doc).
+  async (db, deps) => {
+    const THRESHOLD = 100_000 // base64 chars ≈ bytes; well above any 512px JPEG
+
+    // Ids only — never all the oversized artwork in memory at once
+    const rows = db.getAllSync<{ id: string }>(
+      'SELECT id FROM files WHERE artwork IS NOT NULL AND length(artwork) > ?', [THRESHOLD]
+    )
+    if (rows.length === 0) return
+
+    // Mirrors the deviceId getter (the service isn't usable mid-migration)
+    let deviceId = db.getFirstSync<{ value: string }>(
+      "SELECT value FROM sync_metadata WHERE key = 'deviceId'"
+    )?.value
+    if (!deviceId) {
+      deviceId = generateId()
+      db.runSync("INSERT INTO sync_metadata (key, value) VALUES ('deviceId', ?)", [deviceId])
+    }
+
+    for (const [index, { id }] of rows.entries()) {
+      log(`Artwork repair ${index + 1}/${rows.length}`)
+
+      const row = db.getFirstSync<{ artwork: string | null }>(
+        'SELECT artwork FROM files WHERE id = ?', [id]
+      )
+      if (!row?.artwork) continue
+
+      let downscaled: string | null
+      try {
+        downscaled = await deps.metadata.downscaleArtwork(row.artwork)
+      } catch {
+        continue // skip this book; a rerun after failure is safe (size gate)
+      }
+      if (!downscaled || downscaled.length >= row.artwork.length) continue
+
+      const now = Date.now()
+      db.runSync(
+        'UPDATE files SET artwork = ?, updated_at = ?, updated_by = ? WHERE id = ?',
+        [downscaled, now, deviceId, id]
+      )
+      // Queue for sync (mirrors queueChange; the outbox drains after startup)
+      db.runSync(
+        `INSERT INTO sync_queue (id, entity_type, entity_id, operation, queued_at, updated_at_when_queued, attempts, last_error, next_attempt_at)
+         VALUES (?, 'book', ?, 'upsert', ?, ?, 0, NULL, 0)
+         ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+           operation = excluded.operation,
+           queued_at = excluded.queued_at,
+           updated_at_when_queued = excluded.updated_at_when_queued,
+           attempts = 0,
+           last_error = NULL,
+           next_attempt_at = 0`,
+        [generateId(), id, now, now]
+      )
+    }
+  },
 ]
 
 // =============================================================================
