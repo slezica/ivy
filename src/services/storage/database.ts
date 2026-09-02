@@ -7,6 +7,7 @@
 
 import * as SQLite from 'expo-sqlite'
 
+import type { AudioMetadataService } from '../audio/metadata'
 import { generateId, createLogger, stripEnclosingQuotes } from '../../utils'
 
 const log = createLogger('Database')
@@ -125,6 +126,14 @@ export interface Settings {
   clip_editor_linked: boolean  // Remembered state of the editor's link toggle
 }
 
+// Store default before hydration (must match the settings table's DB defaults)
+export const DEFAULT_SETTINGS: Settings = {
+  sync_enabled: false,
+  transcription_enabled: true,
+  delete_original_after_import: false,
+  clip_editor_linked: true,
+}
+
 // Sync-related interfaces
 export type SyncEntityType = 'book' | 'clip' | 'session'
 export type SyncOperation = 'upsert' | 'delete'
@@ -161,13 +170,24 @@ export interface SyncCheckpoint {
 // Migrations
 // =============================================================================
 
-type Migration = (db: SQLite.SQLiteDatabase) => void
+// Native services injected into migrations, so data-repair migrations can do
+// real work (image re-encoding, etc). Wired by the runMigrations action.
+export interface MigrationDeps {
+  metadata: Pick<AudioMetadataService, 'downscaleArtwork'>
+}
+
+// Migrations are async and awaited in order by migrate(). Rules for writing one
+// (a failed migration doesn't bump the index and RERUNS FULLY next launch):
+// - Idempotent: gate data work so a rerun after a mid-way failure is safe.
+// - Memory-lean: never SELECT bulky columns for all rows at once — fetch ids
+//   first, then process row-at-a-time.
+type Migration = (db: SQLite.SQLiteDatabase, deps: MigrationDeps) => Promise<void>
 
 // Exported for migration tests: the array IS the schema history, so a test can
 // reconstruct any past version by running a prefix of it (see migrations.test.ts).
 export const migrations: Migration[] = [
   // Migration 0: Initial schema
-  (db) => {
+  async (db) => {
     // Status table (for tracking migrations)
     db.execSync(`
       CREATE TABLE IF NOT EXISTS status (
@@ -273,23 +293,23 @@ export const migrations: Migration[] = [
   },
 
   // Migration 1: Add chapters column to files table
-  (db) => {
+  async (db) => {
     db.execSync('ALTER TABLE files ADD COLUMN chapters TEXT')
   },
 
   // Migration 2: Add speed column to files table (integer percentage, 100 = 1.0x)
-  (db) => {
+  async (db) => {
     db.execSync('ALTER TABLE files ADD COLUMN speed INTEGER NOT NULL DEFAULT 100')
   },
 
   // Migration 3: Add updated_at column to sessions table (for sync)
-  (db) => {
+  async (db) => {
     db.execSync('ALTER TABLE sessions ADD COLUMN updated_at INTEGER')
     db.execSync('UPDATE sessions SET updated_at = ended_at WHERE updated_at IS NULL')
   },
 
   // Migration 4: New sync protocol — add updated_by, sync_checkpoint, outbox fields
-  (db) => {
+  async (db) => {
     // Add updated_by to all synced entity tables
     db.execSync('ALTER TABLE files ADD COLUMN updated_by TEXT')
     db.execSync('ALTER TABLE clips ADD COLUMN updated_by TEXT')
@@ -312,24 +332,24 @@ export const migrations: Migration[] = [
   },
 
   // Migration 5: Add next_attempt_at to sync_queue for retry backoff
-  (db) => {
+  async (db) => {
     db.execSync('ALTER TABLE sync_queue ADD COLUMN next_attempt_at INTEGER DEFAULT 0')
   },
 
   // Migration 6: Add remote_audio_version to sync_manifest (clip audio versioning)
-  (db) => {
+  async (db) => {
     db.execSync('ALTER TABLE sync_manifest ADD COLUMN remote_audio_version TEXT')
   },
 
   // Migration 7: Add last_played_at to files (local-only, drives startup auto-load)
-  (db) => {
+  async (db) => {
     db.execSync('ALTER TABLE files ADD COLUMN last_played_at INTEGER')
   },
 
   // Migration 8: Snapshot book title/artist onto clips, so they survive the
   // book row disappearing (tombstoned archived books, cross-device gaps).
   // Backfill from the book where it still exists; long-orphaned clips stay null.
-  (db) => {
+  async (db) => {
     db.execSync('ALTER TABLE clips ADD COLUMN source_title TEXT')
     db.execSync('ALTER TABLE clips ADD COLUMN source_artist TEXT')
     db.execSync(`
@@ -340,17 +360,17 @@ export const migrations: Migration[] = [
   },
 
   // Migration 9: Add delete_original_after_import to settings
-  (db) => {
+  async (db) => {
     db.execSync('ALTER TABLE settings ADD COLUMN delete_original_after_import INTEGER NOT NULL DEFAULT 0')
   },
 
   // Migration 10: Add clip_editor_linked to settings (link toggle memory)
-  (db) => {
+  async (db) => {
     db.execSync('ALTER TABLE settings ADD COLUMN clip_editor_linked INTEGER NOT NULL DEFAULT 1')
   },
 
   // Migration 11: Book metadata extras extracted from ffmetadata tags
-  (db) => {
+  async (db) => {
     db.execSync('ALTER TABLE files ADD COLUMN summary TEXT')
     db.execSync('ALTER TABLE files ADD COLUMN narrator TEXT')
     db.execSync('ALTER TABLE files ADD COLUMN series TEXT')
@@ -364,7 +384,7 @@ export const migrations: Migration[] = [
   // Migration 12: Strip enclosing quotes from existing transcriptions (Whisper
   // sometimes quotes its whole output; new results are stripped at the source).
   // Deterministic per-device normalization: no updated_at bump, no sync queue.
-  (db) => {
+  async (db) => {
     const rows = db.getAllSync<{ id: string, transcription: string }>(
       'SELECT id, transcription FROM clips WHERE transcription IS NOT NULL'
     )
@@ -418,7 +438,8 @@ export class DatabaseService {
 
   constructor(db: SQLite.SQLiteDatabase = SQLite.openDatabaseSync('audioplayer.db')) {
     this.db = db
-    this.runMigrations() // TODO this shouldn't be in the constructor
+    // The database is unusable until migrate() has resolved — the runMigrations
+    // action runs it at the top of initializeApplication, before any hydration.
   }
 
   // ---------------------------------------------------------------------------
@@ -1091,10 +1112,10 @@ export class DatabaseService {
   }
 
   // ---------------------------------------------------------------------------
-  // Private
+  // Migration
   // ---------------------------------------------------------------------------
 
-  private runMigrations(): void {
+  async migrate(deps: MigrationDeps): Promise<void> {
     log('Running migrations')
 
     // Decide what the next migration to apply is (if any):
@@ -1103,7 +1124,7 @@ export class DatabaseService {
       const row = this.db.getFirstSync<Status>('SELECT migration FROM status WHERE id = 1')
 
       // Table exists (we know row too), start after the last recorded migration:
-      nextMigration = row!.migration + 1 
+      nextMigration = row!.migration + 1
 
     } catch {
       // Table does not exist, start from special migration 0:
@@ -1115,7 +1136,7 @@ export class DatabaseService {
       log(`Running migration ${i}`)
 
       // Apply! If this throws, we should just fail, nothing else makes sense:
-      migrations[i](this.db) 
+      await migrations[i](this.db, deps)
       this.db.runSync('UPDATE status SET migration = ? WHERE id = 1', [i])
     }
   }

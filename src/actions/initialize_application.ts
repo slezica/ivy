@@ -1,5 +1,6 @@
 import type { DatabaseService, AudioSlicerService, NetworkService } from '../services'
 import type { SetState, Action, ActionFactory } from '../store/types'
+import type { RunMigrations } from './run_migrations'
 import type { FetchBooks } from './fetch_books'
 import type { FetchClips } from './fetch_clips'
 import type { FetchSessions } from './fetch_sessions'
@@ -14,6 +15,7 @@ export interface InitializeApplicationDeps {
   slicer: AudioSlicerService
   network: NetworkService
   set: SetState
+  runMigrations: RunMigrations
   fetchBooks: FetchBooks
   fetchClips: FetchClips
   fetchSessions: FetchSessions
@@ -26,9 +28,17 @@ export type InitializeApplication = Action<[]>
 
 export const createInitializeApplication: ActionFactory<InitializeApplicationDeps, InitializeApplication> = (deps) => (
   async () => {
-    const { db, slicer, network, set, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription, seedDemoData } = deps
+    const { db, slicer, network, set, runMigrations, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription, seedDemoData } = deps
 
     try {
+      // Migrate the database before anything reads or writes it. The store is
+      // created with default state, so settings hydrate right after.
+      await runMigrations()
+      set((state) => {
+        state.settings = db.getSettings()
+        state.sync.lastSyncTime = db.getLastSyncTime()
+      })
+
       // Begin watching connectivity (feeds the store's network listener)
       network.start()
 

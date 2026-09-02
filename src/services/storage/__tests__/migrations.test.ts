@@ -19,16 +19,16 @@
  */
 
 import { DatabaseService, migrations } from '../database'
-import { createTestDatabase } from './sqlite_adapter'
+import { createTestDatabase, testMigrationDeps } from './sqlite_adapter'
 import type * as SQLite from 'expo-sqlite'
 
 // Build a raw DB at exactly migration `version` (runs migrations[0..version],
-// leaving status.migration = version so a later `new DatabaseService(db)`
-// resumes at version+1).
-function dbAtVersion(version: number): SQLite.SQLiteDatabase {
+// leaving status.migration = version so a later `service.migrate()` resumes
+// at version+1).
+async function dbAtVersion(version: number): Promise<SQLite.SQLiteDatabase> {
   const db = createTestDatabase()
   for (let i = 0; i <= version; i++) {
-    migrations[i](db)
+    await migrations[i](db, testMigrationDeps)
     db.runSync('UPDATE status SET migration = ? WHERE id = 1', [i])
   }
   return db
@@ -42,8 +42,8 @@ describe('migration upgrade path', () => {
   describe('migration 8: clip source snapshot backfill', () => {
     // Seed a v7 database (before source_title existed) with the cases the
     // backfill must handle, then run migration 8 in isolation.
-    function seededV7() {
-      const db = dbAtVersion(7)
+    async function seededV7() {
+      const db = await dbAtVersion(7)
       // Books: titled, title-less (name fallback), and archived (hidden, no uri)
       db.runSync("INSERT INTO files (id, name, title, artist) VALUES ('book-titled', 'file.mp3', 'Real Title', 'Real Artist')")
       db.runSync("INSERT INTO files (id, name, title, artist) VALUES ('book-untitled', 'fallback.mp3', NULL, NULL)")
@@ -58,10 +58,10 @@ describe('migration upgrade path', () => {
       return db
     }
 
-    it('backfills title/artist from the book, leaving orphans null', () => {
-      const db = seededV7()
+    it('backfills title/artist from the book, leaving orphans null', async () => {
+      const db = await seededV7()
 
-      migrations[8](db)
+      await migrations[8](db, testMigrationDeps)
 
       const rows = getAll<{ id: string; source_title: string | null; source_artist: string | null }>(
         db, 'SELECT id, source_title, source_artist FROM clips ORDER BY id'
@@ -75,8 +75,8 @@ describe('migration upgrade path', () => {
   })
 
   describe('migration 12: strip enclosing quotes from transcriptions', () => {
-    function seededV11() {
-      const db = dbAtVersion(11)
+    async function seededV11() {
+      const db = await dbAtVersion(11)
       const clip = (id: string, transcription: string | null) =>
         db.runSync(
           "INSERT INTO clips (id, source_id, uri, start, duration, note, transcription, created_at, updated_at) VALUES (?, 'book-1', ?, 0, 1000, '', ?, 1, 42)",
@@ -91,10 +91,10 @@ describe('migration upgrade path', () => {
       return db
     }
 
-    it('strips only enclosing quotes, preserving the long-clip suffix', () => {
-      const db = seededV11()
+    it('strips only enclosing quotes, preserving the long-clip suffix', async () => {
+      const db = await seededV11()
 
-      migrations[12](db)
+      await migrations[12](db, testMigrationDeps)
 
       const rows = getAll<{ id: string; transcription: string | null; updated_at: number }>(
         db, 'SELECT id, transcription, updated_at FROM clips ORDER BY id'
@@ -112,13 +112,14 @@ describe('migration upgrade path', () => {
   })
 
   it('upgrades a populated v7 database to latest without loss or crash', async () => {
-    const db = dbAtVersion(7)
+    const db = await dbAtVersion(7)
     db.runSync("INSERT INTO files (id, uri, name, title, position) VALUES ('book-1', 'file:///a/book-1.mp3', 'Book.mp3', 'A Book', 5000)")
     db.runSync("INSERT INTO clips (id, source_id, uri, start, duration, note, created_at, updated_at) VALUES ('clip-1', 'book-1', 'file:///c/clip-1.m4a', 100, 2000, 'a note', 1, 1)")
     db.runSync("INSERT INTO sessions (id, book_id, started_at, ended_at) VALUES ('sess-1', 'book-1', 10, 20)")
 
     // Running the real service applies every pending migration to the old data.
     const service = new DatabaseService(db)
+    await service.migrate(testMigrationDeps)
 
     const book = await service.getBookById('book-1')
     expect(book).not.toBeNull()

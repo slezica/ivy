@@ -96,6 +96,7 @@ export function createMockState(overrides: {
   sessions?: Record<string, SessionWithBook>,
   clips?: Record<string, ClipWithFile>,
   settings?: Partial<AppState['settings']>,
+  sync?: Partial<AppState['sync']>,
   transcription?: Partial<AppState['transcription']>,
 } = {}) {
   return {
@@ -105,6 +106,14 @@ export function createMockState(overrides: {
     sessions: overrides.sessions ?? {} as Record<string, SessionWithBook>,
     clips: overrides.clips ?? {} as Record<string, ClipWithFile>,
     settings: { sync_enabled: false, transcription_enabled: true, delete_original_after_import: false, clip_editor_linked: true, ...overrides.settings },
+    sync: {
+      isSyncing: false,
+      pendingCount: 0,
+      failingCount: 0,
+      lastSyncTime: null as number | null,
+      error: null as string | null,
+      ...overrides.sync,
+    },
     transcription: {
       status: 'off' as AppState['transcription']['status'],
       downloadProgress: null as number | null,
@@ -175,6 +184,7 @@ export function createMockDb(overrides: Record<string, jest.Mock | jest.Mock<any
     deleteSession: jest.fn(async () => {}),
     deleteClip: jest.fn(async () => {}),
     updateClip: jest.fn(async () => {}),
+    getLastSyncTime: jest.fn(() => null),
     ...overrides,
   } as any
 }

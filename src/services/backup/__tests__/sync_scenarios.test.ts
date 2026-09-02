@@ -90,8 +90,8 @@ describe('sync scenarios', () => {
 
   it('pushes a local book to Drive and bootstraps it on a second device', async () => {
     const drive = new FakeDrive()
-    const deviceA = createSyncHarness(drive)
-    const deviceB = createSyncHarness(drive)
+    const deviceA = await createSyncHarness(drive)
+    const deviceB = await createSyncHarness(drive)
 
     await addBook(deviceA)
     await deviceA.sync.syncNow() // full reconcile queues the local-only book, push uploads it
@@ -112,8 +112,8 @@ describe('sync scenarios', () => {
 
   it('propagates an edit through the incremental change feed', async () => {
     const drive = new FakeDrive()
-    const deviceA = createSyncHarness(drive)
-    const deviceB = createSyncHarness(drive)
+    const deviceA = await createSyncHarness(drive)
+    const deviceB = await createSyncHarness(drive)
 
     await addBook(deviceA)
     await deviceA.sync.syncNow()
@@ -133,8 +133,8 @@ describe('sync scenarios', () => {
 
   it('round-trips a clip with its audio file', async () => {
     const drive = new FakeDrive()
-    const deviceA = createSyncHarness(drive)
-    const deviceB = createSyncHarness(drive)
+    const deviceA = await createSyncHarness(drive)
+    const deviceB = await createSyncHarness(drive)
 
     await addBook(deviceA)
     const clip = await deviceA.db.createClip(
@@ -156,7 +156,7 @@ describe('sync scenarios', () => {
 
   it('records push failures in the real outbox and recovers on the next sync', async () => {
     const drive = new FakeDrive()
-    const device = createSyncHarness(drive)
+    const device = await createSyncHarness(drive)
 
     await addBook(device)
     drive.failNext('uploadFile', new Error('Network error'))
@@ -176,7 +176,7 @@ describe('sync scenarios', () => {
 
   it('respects the backoff schedule before retrying a failed push', async () => {
     const drive = new FakeDrive()
-    const device = createSyncHarness(drive)
+    const device = await createSyncHarness(drive)
 
     await addBook(device)
     drive.failNext('uploadFile', new Error('Network error'), 2)
@@ -206,7 +206,7 @@ describe('sync scenarios', () => {
 
   it('resets backoff when the entity is re-queued by a fresh edit', async () => {
     const drive = new FakeDrive()
-    const device = createSyncHarness(drive)
+    const device = await createSyncHarness(drive)
 
     await addBook(device)
     drive.failNext('uploadFile', new Error('Network error'))
@@ -226,7 +226,7 @@ describe('sync scenarios', () => {
   describe('books: local-only hidden', () => {
     it('omits hidden from the uploaded payload', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await device.db.hideBook(BOOK_ID)
@@ -239,7 +239,7 @@ describe('sync scenarios', () => {
 
     it('keeps a locally deleted book hidden when a remote update arrives', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await device.db.hideBook(BOOK_ID)
@@ -256,8 +256,8 @@ describe('sync scenarios', () => {
 
     it('does not sync a local deletion to other devices', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await deviceA.sync.syncNow()
@@ -279,7 +279,7 @@ describe('sync scenarios', () => {
 
     it('does not trigger a local-ahead re-queue when a book is archived', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await device.sync.syncNow() // uploads; the upload lands in the change feed
@@ -294,7 +294,7 @@ describe('sync scenarios', () => {
 
     it('ignores hidden in legacy remote payloads on bootstrap', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       // Old-code devices wrote hidden into the payload — readers must ignore it
       drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ hidden: true }))
@@ -309,7 +309,7 @@ describe('sync scenarios', () => {
   describe('clips and sessions: tombstoned deletion', () => {
     it('rewrites the remote clip as a full-payload tombstone on delete', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await addClip(deviceA)
@@ -337,8 +337,8 @@ describe('sync scenarios', () => {
 
     it('drops a stale tombstone when a remote edit is newer than the deletion', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await addClip(deviceA)
@@ -364,7 +364,7 @@ describe('sync scenarios', () => {
 
     it('silently drops a delete for a clip that never synced', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
       const errors = trackSyncErrors(device)
 
       await addBook(device)
@@ -379,7 +379,7 @@ describe('sync scenarios', () => {
 
     it('drops the queue item and manifest when the remote was purged', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
       const errors = trackSyncErrors(device)
 
       await addBook(device)
@@ -400,8 +400,8 @@ describe('sync scenarios', () => {
 
     it('propagates a clip deletion to another device', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await addClip(deviceA)
@@ -422,8 +422,8 @@ describe('sync scenarios', () => {
 
     it('propagates a session deletion to another device', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       const session = await deviceA.db.createSession(BOOK_ID)
@@ -444,8 +444,8 @@ describe('sync scenarios', () => {
 
     it('applies a newer tombstone over an unsynced local edit', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await addClip(deviceA)
@@ -469,8 +469,8 @@ describe('sync scenarios', () => {
 
     it('resurrects a clip when a local edit is newer than the tombstone', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await addClip(deviceA)
@@ -501,8 +501,8 @@ describe('sync scenarios', () => {
 
     it('treats deleting an already-tombstoned clip as a no-op', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await addClip(deviceA)
@@ -527,8 +527,8 @@ describe('sync scenarios', () => {
 
     it('applies tombstones during a full reconcile', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await addClip(deviceA)
@@ -556,7 +556,7 @@ describe('sync scenarios', () => {
 
     it('ignores tombstones for never-seen entities on bootstrap', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await addClip(deviceA)
@@ -566,7 +566,7 @@ describe('sync scenarios', () => {
       await deviceA.sync.syncNow()
 
       // A fresh device bootstraps after the tombstone exists
-      const deviceC = createSyncHarness(drive)
+      const deviceC = await createSyncHarness(drive)
       const errors = trackSyncErrors(deviceC)
       await deviceC.sync.syncNow()
 
@@ -577,7 +577,7 @@ describe('sync scenarios', () => {
 
     it('applies its own tombstone echo as a graceful no-op', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
       const errors = trackSyncErrors(device)
 
       await addBook(device)
@@ -604,8 +604,8 @@ describe('sync scenarios', () => {
 
     it('merges a double-imported book toward the smaller id on both devices', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA, SMALL_ID)
       await deviceA.sync.syncNow() // uploads book_{small}
@@ -632,8 +632,8 @@ describe('sync scenarios', () => {
 
     it('skips the remote twin and records nothing when holding the smaller id', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceB, LARGE_ID)
       await deviceB.sync.syncNow() // uploads book_{large}
@@ -649,8 +649,8 @@ describe('sync scenarios', () => {
 
     it('converges without flapping when both devices pull each other\'s twin', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       // Both twins land on Drive before either device sees the other's
       await addBook(deviceB, LARGE_ID)
@@ -680,8 +680,8 @@ describe('sync scenarios', () => {
 
     it('retires the superseded remote copy with a merged_into tombstone', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       // Twins on Drive: B uploaded its copy before ever seeing A's
       await addBook(deviceB, LARGE_ID)
@@ -712,7 +712,7 @@ describe('sync scenarios', () => {
 
     it('adopts the surviving id when the tombstone arrives before the merged book', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
       const errors = trackSyncErrors(device)
 
       await addBook(device, LARGE_ID) // this device holds the audio
@@ -746,7 +746,7 @@ describe('sync scenarios', () => {
 
     it('transfers audio to an audio-less survivor when both rows exist', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       // Bootstrapped survivor (no audio) — distinct fingerprint so the
       // bootstrap itself doesn't trigger the merge path
@@ -773,8 +773,8 @@ describe('sync scenarios', () => {
 
     it('applies a plain book tombstone only to audio-less rows', async () => {
       const drive = new FakeDrive()
-      const deviceWithAudio = createSyncHarness(drive)
-      const deviceWithoutAudio = createSyncHarness(drive)
+      const deviceWithAudio = await createSyncHarness(drive)
+      const deviceWithoutAudio = await createSyncHarness(drive)
 
       await addBook(deviceWithAudio, SMALL_ID)
       await deviceWithAudio.sync.syncNow()
@@ -794,8 +794,8 @@ describe('sync scenarios', () => {
 
     it('re-uploads children synced before the merge so all devices converge', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       // B's clip syncs under the losing id before the twin is ever seen
       await addBook(deviceB, LARGE_ID)
@@ -822,8 +822,8 @@ describe('sync scenarios', () => {
 
     it('converges a third device that bootstraps mid-merge', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceB, LARGE_ID)
       await addClip(deviceB, CLIP_B, LARGE_ID)
@@ -835,7 +835,7 @@ describe('sync scenarios', () => {
       await deviceA.sync.syncNow() // twins now live on Drive
 
       // C bootstraps mid-merge: it sees both twins and merges on its own
-      const deviceC = createSyncHarness(drive)
+      const deviceC = await createSyncHarness(drive)
       const errorsC = trackSyncErrors(deviceC)
       await deviceC.sync.syncNow()
       expect(errorsC).toEqual([null])
@@ -868,8 +868,8 @@ describe('sync scenarios', () => {
 
     it('reattaches clips that bootstrap under a retired id', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       // B's clip is on Drive under the losing id
       await addBook(deviceB, LARGE_ID)
@@ -881,14 +881,14 @@ describe('sync scenarios', () => {
       // so clip_{B}.json keeps naming the retired id
       await addBook(deviceA, SMALL_ID)
       await deviceA.sync.syncNow()
-      const deviceC = createSyncHarness(drive)
+      const deviceC = await createSyncHarness(drive)
       await deviceC.sync.syncNow() // merges + retires book_{large}
       expect(drive.readJson(`book_${LARGE_ID}.json`).merged_into).toBe(SMALL_ID)
       expect(drive.readJson(`clip_${CLIP_B}.json`).source_id).toBe(LARGE_ID)
 
       // A fresh device bootstraps: the clip arrives naming the retired id and
       // must still end up attached to the survivor
-      const deviceD = createSyncHarness(drive)
+      const deviceD = await createSyncHarness(drive)
       const errorsD = trackSyncErrors(deviceD)
       await deviceD.sync.syncNow()
 
@@ -901,8 +901,8 @@ describe('sync scenarios', () => {
 
     it('keeps clips made on both devices before the merge, under the surviving id', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA, SMALL_ID)
       await addClip(deviceA, CLIP_A, SMALL_ID)
@@ -933,7 +933,7 @@ describe('sync scenarios', () => {
       const winnerId = drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ title: 'Copy One', updated_at: 5000 }))
       const loserId = drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ title: 'Copy Two', updated_at: 6000 }))
 
-      const deviceA = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
       const errorsA = trackSyncErrors(deviceA)
       await deviceA.sync.syncNow() // bootstrap sees both twins
 
@@ -950,7 +950,7 @@ describe('sync scenarios', () => {
       expect(JSON.parse(drive.files.get(winnerId)!.content as string).deleted).toBeUndefined()
 
       // Another device converges on the same winner (tombstoned twin skipped)
-      const deviceB = createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
       await deviceB.sync.syncNow()
       expect((await deviceB.db.getBookById(BOOK_ID))!.title).toBe('Copy One')
       expect((await deviceB.db.getManifestEntry('book', BOOK_ID))!.remote_file_id).toBe(winnerId)
@@ -970,7 +970,7 @@ describe('sync scenarios', () => {
       const loserId = drive.putFile('books', `book_${BOOK_ID}.json`,
         remoteBookJson({ title: 'Copy Two', updated_at: 6000, version: 99, version_compat: 99 }))
 
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
       const errors = trackSyncErrors(device)
       await device.sync.syncNow()
 
@@ -984,7 +984,7 @@ describe('sync scenarios', () => {
 
     it('prefers the manifest-tracked file over a smaller-id twin', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await deviceA.sync.syncNow() // uploads — the manifest tracks this file
@@ -1009,8 +1009,8 @@ describe('sync scenarios', () => {
   describe('clip audio versioning (M5)', () => {
     it('re-downloads audio when only the audio content changed (same JSON version)', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await addClip(deviceA)
@@ -1046,8 +1046,8 @@ describe('sync scenarios', () => {
 
     it('re-downloads audio grouped with a same-version JSON echo', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await addClip(deviceA)
@@ -1075,7 +1075,7 @@ describe('sync scenarios', () => {
 
     it('skips the audio download when the version matches (own upload echo)', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await addClip(device)
@@ -1091,8 +1091,8 @@ describe('sync scenarios', () => {
 
     it('receives resurrection healing: fresh audio id and version after a re-create', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await addClip(deviceA)
@@ -1123,7 +1123,7 @@ describe('sync scenarios', () => {
   describe('404 fallback: create on dead remote id', () => {
     it('recreates the book JSON and heals the manifest when the remote was purged', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
       const errors = trackSyncErrors(device)
 
       await addBook(device)
@@ -1147,7 +1147,7 @@ describe('sync scenarios', () => {
 
     it('recreates the clip JSON while updating the audio in place', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
       const errors = trackSyncErrors(device)
 
       await addBook(device)
@@ -1175,7 +1175,7 @@ describe('sync scenarios', () => {
 
     it('recreates the clip audio while updating the JSON in place', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
       const errors = trackSyncErrors(device)
 
       await addBook(device)
@@ -1202,7 +1202,7 @@ describe('sync scenarios', () => {
 
     it('recreates the session JSON when the remote was purged', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
       const errors = trackSyncErrors(device)
 
       await addBook(device)
@@ -1226,7 +1226,7 @@ describe('sync scenarios', () => {
   describe('trashed remote files', () => {
     it('treats trashed feed changes as no-ops and recovers via full reconcile', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
       const errors = trackSyncErrors(device)
 
       await addBook(device)
@@ -1267,8 +1267,8 @@ describe('sync scenarios', () => {
   describe('bootstrap gating (M9)', () => {
     it('skips the push phase when the start token cannot be fetched', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       // The book already lives on Drive (uploaded by A)
       await addBook(deviceA)
@@ -1292,8 +1292,8 @@ describe('sync scenarios', () => {
 
     it('skips the push phase when the initial full reconcile fails', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await deviceA.sync.syncNow()
@@ -1315,7 +1315,7 @@ describe('sync scenarios', () => {
   describe('pull quarantine (poison pill)', () => {
     it('quarantines a repeatedly failing entity so the token advances, then keeps retrying it', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await device.sync.syncNow() // bootstrap: uploads the book, establishes a token
@@ -1344,7 +1344,7 @@ describe('sync scenarios', () => {
 
     it('surfaces failing counts from both the push outbox and pull quarantine', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await device.sync.syncNow() // uploads the book, establishes a token
@@ -1375,7 +1375,7 @@ describe('sync scenarios', () => {
 
     it('clears quarantine when the entity finally reconciles', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await device.sync.syncNow()
@@ -1409,8 +1409,8 @@ describe('sync scenarios', () => {
 
     it('syncs extras to a second device', async () => {
       const drive = new FakeDrive()
-      const deviceA = createSyncHarness(drive)
-      const deviceB = createSyncHarness(drive)
+      const deviceA = await createSyncHarness(drive)
+      const deviceB = await createSyncHarness(drive)
 
       await addBook(deviceA)
       await deviceA.db.setBookExtras(BOOK_ID, EXTRAS, 1)
@@ -1425,7 +1425,7 @@ describe('sync scenarios', () => {
 
     it('reads legacy payloads without extras as null', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson())
       await device.sync.syncNow()
@@ -1439,7 +1439,7 @@ describe('sync scenarios', () => {
   describe('payload format versioning', () => {
     it('stamps uploaded payloads with the writer and compat versions', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await addClip(device)
@@ -1460,7 +1460,7 @@ describe('sync scenarios', () => {
 
     it('reads a payload from a newer writer as long as version_compat is satisfied', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await device.sync.syncNow()
@@ -1481,7 +1481,7 @@ describe('sync scenarios', () => {
 
     it('rejects a newer-version payload without touching local state, then applies it once repaired', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await device.sync.syncNow() // uploads the book, establishes a token
@@ -1507,7 +1507,7 @@ describe('sync scenarios', () => {
 
     it('refuses to tombstone a newer-version payload (deletion push retries instead)', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await addClip(device)
@@ -1533,7 +1533,7 @@ describe('sync scenarios', () => {
   describe('periodic full reconcile', () => {
     it('picks up remote changes the feed never delivered once a week has passed', async () => {
       const drive = new FakeDrive()
-      const device = createSyncHarness(drive)
+      const device = await createSyncHarness(drive)
 
       await addBook(device)
       await device.sync.syncNow() // bootstrap full reconcile stamps the timestamp
@@ -1561,8 +1561,8 @@ describe('sync scenarios', () => {
 
   it('re-delivers a failed remote change by holding the page token', async () => {
     const drive = new FakeDrive()
-    const deviceA = createSyncHarness(drive)
-    const deviceB = createSyncHarness(drive)
+    const deviceA = await createSyncHarness(drive)
+    const deviceB = await createSyncHarness(drive)
 
     await addBook(deviceA)
     await deviceA.sync.syncNow()

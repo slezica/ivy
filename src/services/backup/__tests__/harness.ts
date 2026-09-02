@@ -7,7 +7,7 @@
  */
 
 import { DatabaseService } from '../../storage'
-import { createTestDatabase } from '../../storage/__tests__/sqlite_adapter'
+import { createTestDatabase, testMigrationDeps } from '../../storage/__tests__/sqlite_adapter'
 import { BackupSyncService } from '../sync'
 import type { GoogleDriveService, DriveFile, BackupFolder } from '../drive'
 import { DriveApiError } from '../drive'
@@ -223,8 +223,9 @@ export interface SyncHarness {
  * BackupSyncService against the given fake Drive. Pass the same FakeDrive to
  * multiple harnesses to simulate multi-device sync.
  */
-export function createSyncHarness(drive: FakeDrive = new FakeDrive()): SyncHarness {
+export async function createSyncHarness(drive: FakeDrive = new FakeDrive()): Promise<SyncHarness> {
   const db = new DatabaseService(createTestDatabase())
+  await db.migrate(testMigrationDeps)
   const sync = new BackupSyncService(db, drive.asDriveService(), createFakeAuth())
   return { db, drive, sync }
 }

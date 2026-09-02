@@ -1,8 +1,10 @@
 import { DatabaseService } from '../database'
-import { createTestDatabase } from './sqlite_adapter'
+import { createTestDatabase, testMigrationDeps } from './sqlite_adapter'
 
-function createDb(): DatabaseService {
-  return new DatabaseService(createTestDatabase())
+async function createDb(): Promise<DatabaseService> {
+  const db = new DatabaseService(createTestDatabase())
+  await db.migrate(testMigrationDeps)
+  return db
 }
 
 const FINGERPRINT = new Uint8Array([1, 2, 3, 4])
@@ -11,7 +13,7 @@ describe('DatabaseService (real SQLite)', () => {
 
   describe('migrations', () => {
     it('runs all migrations on a fresh database', async () => {
-      const db = createDb()
+      const db = await createDb()
 
       // Schema from every migration is present and usable
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
@@ -23,8 +25,8 @@ describe('DatabaseService (real SQLite)', () => {
       expect(db.getCheckpoint()).toEqual({ last_page_token: null, last_full_reconcile_at: null })
     })
 
-    it('generates and persists a stable device id', () => {
-      const db = createDb()
+    it('generates and persists a stable device id', async () => {
+      const db = await createDb()
       const id = db.deviceId
 
       expect(id).toBeTruthy()
@@ -35,7 +37,7 @@ describe('DatabaseService (real SQLite)', () => {
 
   describe('books', () => {
     it('roundtrips fingerprint blobs through real storage', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, null, null, null, 1024, FINGERPRINT)
 
       const book = await db.getBookByFingerprint(1024, FINGERPRINT)
@@ -45,7 +47,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('excludes hidden books from getAllBooks but keeps the row', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
       await db.hideBook('book-1')
 
@@ -56,7 +58,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('clears hidden and preserves position when restoring a deleted book', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/old.mp3', 'Book', 60000, 42000)
       await db.hideBook('book-1')
 
@@ -73,7 +75,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('does not bump updated_at on delete or archive (per-device changes)', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
       await db.upsertBook('book-2', 'file:///audio/book-2.mp3', 'Book', 60000, 0)
       const before1 = (await db.getBookById('book-1'))!
@@ -91,7 +93,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('persists metadata extras and stamps the extractor version', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
       const before = (await db.getBookById('book-1'))!
       expect(before.metadata_version).toBeNull() // never extracted
@@ -116,7 +118,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('updates only the fields passed to updateBookFields', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, 'Title', 'Artist')
       await db.setBookExtras('book-1', {
         summary: 'A story.', narrator: 'A Voice', series: null, part: null,
@@ -136,7 +138,7 @@ describe('DatabaseService (real SQLite)', () => {
 
   describe('getLastPlayedBook', () => {
     it('prefers a played book over a more recently edited one', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book 1', 60000, 0)
       await db.upsertBook('book-2', 'file:///audio/book-2.mp3', 'Book 2', 60000, 0)
 
@@ -148,7 +150,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('falls back to updated_at for rows that were never played', async () => {
-      const db = createDb()
+      const db = await createDb()
       const base = Date.now()
       const spy = jest.spyOn(Date, 'now')
 
@@ -163,7 +165,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('is not stolen by a remote sync upsert (last_played_at is local-only)', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book 1', 60000, 0)
       await db.upsertBook('book-2', 'file:///audio/book-2.mp3', 'Book 2', 60000, 0)
       db.updateBookPosition('book-1', 1000)
@@ -182,7 +184,7 @@ describe('DatabaseService (real SQLite)', () => {
 
   describe('clip and session joins', () => {
     it('lists clips whose book is missing, with null file fields', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
       await db.createClip('clip-1', 'book-1', 'file:///clips/clip-1.m4a', 0, 1000, 'attached')
       await db.createClip('clip-2', 'no-such-book', 'file:///clips/clip-2.m4a', 0, 1000, 'orphan')
@@ -201,7 +203,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('keeps the source title/artist snapshot when the book row is hard-deleted', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book.mp3', 60000, 0, 'Real Title', 'Real Artist')
       await db.createClip('clip-1', 'book-1', 'file:///clips/clip-1.m4a', 0, 1000, '', 'Real Title', 'Real Artist')
 
@@ -214,7 +216,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('does not null the snapshot when a legacy backup (no snapshot) wins LWW', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.createClip('clip-1', 'book-1', 'file:///clips/clip-1.m4a', 0, 1000, '', 'Snapshot Title', 'Snapshot Artist')
 
       // Remote payload from an old app version: newer updated_at, no snapshot fields
@@ -230,7 +232,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('lists sessions whose book is missing, with null book fields', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.createSession('no-such-book')
 
       const sessions = await db.getAllSessions()
@@ -248,7 +250,7 @@ describe('DatabaseService (real SQLite)', () => {
     }
 
     it('re-keys the book row and all its children, preserving fields', async () => {
-      const db = createDb()
+      const db = await createDb()
       await seedBookWithChildren(db, 'old-id')
       const before = (await db.getBookById('old-id'))!
 
@@ -268,7 +270,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('deletes the old manifest row instead of renaming it', async () => {
-      const db = createDb()
+      const db = await createDb()
       await seedBookWithChildren(db, 'old-id')
       await db.upsertManifestEntry({
         entity_type: 'book', entity_id: 'old-id',
@@ -283,7 +285,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('re-keys a pending queue row onto the new id', async () => {
-      const db = createDb()
+      const db = await createDb()
       await seedBookWithChildren(db, 'old-id')
       await db.queueChange('book', 'old-id', 'upsert', 1000)
 
@@ -297,7 +299,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('merges queue rows on conflict, keeping the newest updated_at_when_queued', async () => {
-      const db = createDb()
+      const db = await createDb()
       await seedBookWithChildren(db, 'old-id')
       await db.queueChange('book', 'old-id', 'upsert', 2000)
       await db.queueChange('book', 'new-id', 'upsert', 1000)
@@ -312,7 +314,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('leaves clip and session queue rows keyed by their own ids', async () => {
-      const db = createDb()
+      const db = await createDb()
       await seedBookWithChildren(db, 'old-id')
       await db.queueChange('clip', 'clip-1', 'upsert', 1000)
 
@@ -326,7 +328,7 @@ describe('DatabaseService (real SQLite)', () => {
 
   describe('backup restore', () => {
     it('preserves local hidden when applying a remote book update', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
       await db.hideBook('book-1')
 
@@ -343,7 +345,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('inserts remote books as visible by default', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.restoreBookFromBackup(
         'book-1', 'Book', 60000, 0,
         Date.now(), 'other-device',
@@ -358,7 +360,7 @@ describe('DatabaseService (real SQLite)', () => {
 
   describe('sync queue (outbox)', () => {
     it('deduplicates by entity via the UNIQUE constraint', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.queueChange('book', 'book-1', 'upsert', 1000)
       await db.queueChange('book', 'book-1', 'upsert', 2000)
 
@@ -368,7 +370,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('resets attempts, last_error and backoff on re-queue', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.queueChange('book', 'book-1', 'upsert', 1000)
       await db.updateOutboxItemAttempt('book', 'book-1', 'network error', 5000, 1000)
       await db.updateOutboxItemAttempt('book', 'book-1', 'network error', 9000, 1000)
@@ -387,7 +389,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('holds items back until next_attempt_at', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.queueChange('book', 'book-1', 'upsert', 1000)
       await db.updateOutboxItemAttempt('book', 'book-1', 'boom', 5000, 1000)
 
@@ -396,7 +398,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('ignores a failure report for an old version (conditional attempt update)', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.queueChange('book', 'book-1', 'upsert', 1000)
       // Entity re-queued fresh mid-flight (stale detection)
       await db.queueChange('book', 'book-1', 'upsert', 2000)
@@ -411,7 +413,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('keeps a re-queued row when removing with a stale timestamp (H1)', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.queueChange('book', 'book-1', 'upsert', 1000)
       // Entity modified mid-upload: stale detection re-queues with fresh timestamp
       await db.queueChange('book', 'book-1', 'upsert', 2000)
@@ -425,7 +427,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('removes the row when the timestamp matches', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.queueChange('book', 'book-1', 'upsert', 1000)
       await db.removeOutboxItem('book', 'book-1', 1000)
 
@@ -433,7 +435,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('keeps counting and returning items regardless of attempts (retry forever)', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.queueChange('book', 'book-1', 'upsert', 1000)
       await db.queueChange('clip', 'clip-1', 'upsert', 1000)
       for (let i = 0; i < 5; i++) {
@@ -445,7 +447,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('counts repeatedly failing items separately', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.queueChange('book', 'book-1', 'upsert', 1000)
       await db.queueChange('clip', 'clip-1', 'upsert', 1000)
       for (let i = 0; i < 3; i++) {
@@ -459,7 +461,7 @@ describe('DatabaseService (real SQLite)', () => {
 
   describe('sync manifest', () => {
     it('upserts on the composite primary key', async () => {
-      const db = createDb()
+      const db = await createDb()
       const entry = {
         entity_type: 'clip' as const, entity_id: 'clip-1',
         local_updated_at: 1000, remote_updated_at: null,
@@ -475,7 +477,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('roundtrips remote_audio_version, defaulting to null when omitted', async () => {
-      const db = createDb()
+      const db = await createDb()
       const entry = {
         entity_type: 'clip' as const, entity_id: 'clip-1',
         local_updated_at: 1000, remote_updated_at: null,
@@ -496,7 +498,7 @@ describe('DatabaseService (real SQLite)', () => {
 
   describe('fingerprint-only lookup', () => {
     it('finds a book by fingerprint blob alone (source size unknown)', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, null, null, null, 1024, FINGERPRINT)
 
       const book = await db.getBookByFingerprintOnly(FINGERPRINT)
@@ -505,7 +507,7 @@ describe('DatabaseService (real SQLite)', () => {
     })
 
     it('does not match a different fingerprint', async () => {
-      const db = createDb()
+      const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, null, null, null, 1024, FINGERPRINT)
 
       const book = await db.getBookByFingerprintOnly(new Uint8Array([9, 9, 9, 9]))

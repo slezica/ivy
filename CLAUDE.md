@@ -462,7 +462,11 @@ Single Zustand store is the source of truth. Services are stateless. Store uses 
 - `store/types.ts` - Type definitions (AppState, Action, ActionFactory)
 - `store/index.ts` - All state, action wiring, and event listeners in one place
 
-**Async initialization:** The store is created synchronously with default state (`initialized: false`). The root layout calls `initializeApplication()` on mount, which hydrates the store (books, clips, sessions), auto-loads the last played book, starts transcription if enabled, and sets `initialized: true`. The native splash screen stays visible until initialization completes (via `expo-splash-screen`).
+**Async initialization:** The store is created synchronously with default state (`initialized: false`, `DEFAULT_SETTINGS`). The root layout calls `initializeApplication()` on mount, which runs database migrations first (`runMigrations` action — nothing touches the DB before it resolves), hydrates the store (settings, books, clips, sessions), auto-loads the last played book, starts transcription if enabled, and sets `initialized: true`. The native splash screen stays visible until initialization completes (via `expo-splash-screen`).
+
+**Migrations are async** (`(db, deps) => Promise<void>`, awaited in order), with native services injected via `MigrationDeps` so data-repair migrations can do real work (e.g. artwork re-encoding). Rules for writing one — a failed migration doesn't bump the index and reruns fully next launch:
+- **Idempotent:** gate data work so a rerun after a mid-way failure is safe
+- **Memory-lean:** never SELECT bulky columns for all rows at once; fetch ids first, then process row-at-a-time
 
 ### 4. **Async Database Layer**
 All database methods use expo-sqlite's async API (`runAsync`, `getFirstAsync`, `getAllAsync`) to avoid blocking the UI thread. A few methods are intentionally kept synchronous for store initialization and fire-and-forget writes:
@@ -548,7 +552,7 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 
 ### New Database Field
 1. Update interface in `services/storage/database.ts`
-2. Add migration with `ALTER TABLE` (wrapped in try/catch)
+2. Append an async migration to the `migrations` array (idempotent + memory-lean; see rules above)
 3. Update `upsertFile` or relevant methods
 4. Update TypeScript types
 

@@ -1,4 +1,4 @@
-export { DatabaseService } from './database'
+export { DatabaseService, DEFAULT_SETTINGS } from './database'
 export type { Book, BookExtras, BookEditableFields, Chapter, Clip, ClipWithFile, Session, SessionWithBook, Settings, SyncEntityType, SyncOperation, SyncManifestEntry, SyncOutboxItem, SyncCheckpoint } from './database'
 
 export { FileStorageService } from './files'

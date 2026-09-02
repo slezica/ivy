@@ -15,6 +15,7 @@ function createDeps(overrides: Partial<InitializeApplicationDeps> = {}) {
     slicer: { warmUp: jest.fn(async () => {}) } as any,
     network: { start: jest.fn() } as any,
     set: createImmerSet(state),
+    runMigrations: jest.fn(async () => {}),
     fetchBooks: jest.fn(async () => {}),
     fetchClips: jest.fn(async () => {}),
     fetchSessions: jest.fn(async () => {}),

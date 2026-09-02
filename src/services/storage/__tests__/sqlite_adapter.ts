@@ -9,6 +9,8 @@
 import type * as SQLite from 'expo-sqlite'
 import { DatabaseSync, SQLInputValue } from 'node:sqlite'
 
+import type { MigrationDeps } from '../database'
+
 type SQLiteParams = SQLInputValue[]
 
 interface SQLiteRunResult {
@@ -65,4 +67,12 @@ export function createTestDatabase(): SQLite.SQLiteDatabase {
   } as unknown as SQLite.SQLiteDatabase
 
   return adapter
+}
+
+/**
+ * Migration deps for tests: an identity downscaler (returns input unchanged).
+ * Tests exercising the downscale behavior pass their own fake instead.
+ */
+export const testMigrationDeps: MigrationDeps = {
+  metadata: { downscaleArtwork: async (dataUri: string) => dataUri },
 }

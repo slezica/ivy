@@ -41,6 +41,8 @@ export type {
 
 export { extrasFromTags, EXTRACTED_METADATA_VERSION } from './audio'
 
+export { DEFAULT_SETTINGS } from './storage'
+
 
 export type {
   CopyBeginResult,

@@ -50,6 +50,7 @@ import { createUpdateBook } from '../actions/update_book'
 import { createExtractBookExtras } from '../actions/extract_book_extras'
 import { createSetSpeed } from '../actions/set_speed'
 import { createCleanupOrphanedFiles } from '../actions/cleanup_orphaned_files'
+import { createRunMigrations } from '../actions/run_migrations'
 import { createInitializeApplication } from '../actions/initialize_application'
 import { createSeedDemoData } from '../actions/seed_demo_data'
 
@@ -114,8 +115,9 @@ export const useStore = create<AppState>()(immer((set, get) => {
   const trackSession = createTrackSession(deps)
   const finalizeSession = createFinalizeSession(deps)
   const seedDemoData = createSeedDemoData(deps)
+  const runMigrations = createRunMigrations(deps)
   const initializeApplication = createInitializeApplication({
-    ...deps, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription, seedDemoData,
+    ...deps, runMigrations, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription, seedDemoData,
   })
 
   // Event listeners -------------------------------------------------------------------------------
@@ -136,7 +138,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
     initialized: false,
     clips: {},
     books: {},
-    settings: db.getSettings(),
+    settings: services.DEFAULT_SETTINGS, // hydrated by initializeApplication (post-migration)
     sessions: {},
 
     library: {
@@ -168,7 +170,7 @@ export const useStore = create<AppState>()(immer((set, get) => {
       isSyncing: false,
       pendingCount: 0,
       failingCount: 0,
-      lastSyncTime: db.getLastSyncTime(),
+      lastSyncTime: null, // hydrated by initializeApplication (post-migration)
       error: null,
     },
 
