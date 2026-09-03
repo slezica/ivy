@@ -18,6 +18,7 @@ and again 2026-07-23.
 3. **Android auto support** - that!
 4. **Tablet UI** - also that!
 5. **Feedback on skip** - show a popping "+30s" sign or text (and backwards) when skipping
+6. **Free whisper model to reduce memory** - `release()` is never called, so the loaded model (~465MB class) stays resident while listening. Sketch: no load at startup, init on clip save (download/wifi gating moves there), release on queue drain (+small slack); disk file always kept. Measure init time first (timing log around `initContext`). Main cost: banner + transcription-states.yaml adjust.
 
 
 ## Refactors / Architecture
