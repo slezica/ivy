@@ -1089,29 +1089,6 @@ describe('sync scenarios', () => {
       expect(await device.db.getOutboxItems()).toEqual([])
     })
 
-    it('renames the Drive audio file when a bounds edit changes the local extension', async () => {
-      const drive = new FakeDrive()
-      const device = await createSyncHarness(drive)
-
-      await addBook(device)
-      // Legacy clip from the pre-ffmpeg slicer era: .mp3 audio file
-      const clip = await device.db.createClip(CLIP_ID, BOOK_ID, `file:///clips/${CLIP_ID}.mp3`, 10000, 5000, 'A note')
-      await device.db.queueChange('clip', CLIP_ID, 'upsert', clip.updated_at)
-      await device.sync.syncNow()
-      await device.sync.syncNow() // consume the upload echo
-      const audioId = drive.getFileByName(`clip_${CLIP_ID}.mp3`)!.id
-
-      // A bounds edit re-slices to .m4a (update_clip hardcodes the extension)
-      await device.db.updateClip(CLIP_ID, { start: 20000, uri: `file:///clips/${CLIP_ID}.m4a` })
-      const edited = await device.db.getClip(CLIP_ID)
-      await device.db.queueChange('clip', CLIP_ID, 'upsert', edited!.updated_at)
-      await device.sync.syncNow()
-
-      // Same Drive file id, name updated to match the new extension — a later
-      // download derives the local extension from this name
-      expect(drive.files.get(audioId)!.name).toBe(`clip_${CLIP_ID}.m4a`)
-    })
-
     it('receives resurrection healing: fresh audio id and version after a re-create', async () => {
       const drive = new FakeDrive()
       const deviceA = await createSyncHarness(drive)

@@ -8,7 +8,7 @@ Ivy is an audiobook app that runs on multiple devices. The sync system keeps boo
 
 **What gets synced:**
 - Book metadata — positions, titles, artists, artwork, playback speed, extras
-- Clips — metadata as JSON, audio as M4A (legacy clips may use MP3)
+- Clips — metadata as JSON, audio as M4A (always `clip_<id>.m4a` — an invariant, see CLIPS.md)
 - Sessions — listening history (time ranges per book)
 
 **What does NOT get synced:**
@@ -122,7 +122,7 @@ If any entities were modified by incoming remote changes, the sync service emits
 
 ## Upload Strategy: Update In-Place
 
-When uploading, the sync engine uses Drive's update API (`PATCH /upload/drive/v3/files/{fileId}`) to modify existing files. This preserves file IDs across versions, requires one request instead of list+delete+create, and produces cleaner change feed events. Updates also pass the current local filename (`drive.updateFile`'s optional `name`), renaming the remote file when the local one changed — downloads derive a clip audio's local extension from the remote name, so a stale name would propagate the wrong extension.
+When uploading, the sync engine uses Drive's update API (`PATCH /upload/drive/v3/files/{fileId}`) to modify existing files. This preserves file IDs across versions, requires one request instead of list+delete+create, and produces cleaner change feed events. Filenames never change (ids are stable and clip audio is always `.m4a`), so updates never rename.
 
 Create-new is only used for the first upload of an entity (no known remote file ID) — or as a **404 fallback**: if the update targets a dead file ID (user cleanup, trash purge), the engine creates the file anew and records the fresh ID in the manifest, healing the dead reference.
 
@@ -279,7 +279,7 @@ The fix is a content version in the manifest: `remote_audio_version` stores the 
 
 This also gives un-deletes and 404-fallback re-uploads a receiving side: the fresh audio file has a new version, so every other device fetches it.
 
-**Download mechanics:** clip audio lands at `{DocumentDirectory}/clips/{id}.{ext}` — the extension derived from the remote filename — written via base64 through RNFS, i.e. the whole file passes through memory. That memory cost is the other half of the 50MB upload cap's rationale.
+**Download mechanics:** clip audio lands at `{DocumentDirectory}/clips/{id}.m4a`, written via base64 through RNFS, i.e. the whole file passes through memory. That memory cost is the other half of the 50MB upload cap's rationale.
 
 **Clips with no audio file:**
 - Full reconcile: a live clip JSON with no audio file alongside it is skipped entirely — it never lands.
@@ -311,7 +311,7 @@ My Drive/
 Files are named `{type}_{uuid}.{ext}`:
 - `book_<id>.json` — book metadata
 - `clip_<id>.json` — clip metadata
-- `clip_<id>.m4a` — clip audio (legacy clips may use `.mp3`)
+- `clip_<id>.m4a` — clip audio
 - `session_<id>.json` — session metadata
 
 ### JSON Payloads
@@ -404,7 +404,7 @@ Files the user moves to Drive's trash arrive in the change feed with `trashed: t
 src/services/backup/
   types.ts        → BookBackup, ClipBackup, SessionBackup (incl. deleted/merged_into), BACKUP_VERSION*, SyncResult, SyncStatus, SyncNotification
   auth.ts         → GoogleAuthService (OAuth sign-in, token management)
-  drive.ts        → GoogleDriveService (REST wrapper + changes API + update-in-place/rename + folder resolution)
+  drive.ts        → GoogleDriveService (REST wrapper + changes API + update-in-place + folder resolution)
   sync.ts         → BackupSyncService (pull, push, LWW reconcile, tombstones, merge, full reconcile)
   index.ts        → Barrel
 

@@ -34,12 +34,12 @@ const log = createLogger('Sync')
 export * from './types'
 
 // Filename format: {type}_{uuid}.{ext}
-const FILENAME_REGEX = /^(book|clip|session)_([a-f0-9-]+)\.(json|mp3|m4a)$/
+const FILENAME_REGEX = /^(book|clip|session)_([a-f0-9-]+)\.(json|m4a)$/
 
 interface ParsedFilename {
   type: 'book' | 'clip' | 'session'
   id: string
-  extension: 'json' | 'mp3' | 'm4a'
+  extension: 'json' | 'm4a'
 }
 
 // A single entry from Drive's change feed
@@ -511,7 +511,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   ): Promise<void> {
     const audioChange = remoteChanges.find(c => {
       const name = c.file?.name
-      return name && (name.endsWith('.m4a') || name.endsWith('.mp3'))
+      return name && name.endsWith('.m4a')
     })
 
     const manifest = await this.db.getManifestEntry('clip', id)
@@ -550,10 +550,9 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     if (!local) {
       // New remotely — need audio file ID (from change or manifest)
       const audioFileId = audioChange?.fileId ?? manifest?.remote_audio_file_id
-      const audioFilename = audioChange?.file?.name
       if (audioFileId) {
         const version = audioChange ? audioVersion : manifest?.remote_audio_version ?? null
-        await this.downloadClip(remote, jsonFileId, audioFileId, audioFilename, version, result, notification)
+        await this.downloadClip(remote, jsonFileId, audioFileId, version, result, notification)
       } else {
         result.errors.push(`Clip ${id}: no audio file found`)
       }
@@ -569,10 +568,9 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       }
     } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
       const audioFileId = audioChange?.fileId ?? manifest?.remote_audio_file_id
-      const audioFilename = audioChange?.file?.name
       if (audioFileId) {
         const version = audioChange ? audioVersion : manifest?.remote_audio_version ?? null
-        await this.downloadClip(remote, jsonFileId, audioFileId, audioFilename, version, result, notification)
+        await this.downloadClip(remote, jsonFileId, audioFileId, version, result, notification)
       }
     } else {
       // Local edit is newer — it wins and re-uploads, audio included, so a
@@ -801,13 +799,11 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     remote: ClipBackup,
     jsonFileId: string,
     audioFileId: string,
-    audioFilename: string | undefined,
     audioVersion: string | null,
     result: SyncResult,
     notification: SyncNotification,
   ): Promise<void> {
-    const ext = audioFilename?.split('.').pop() ?? 'm4a'
-    const localPath = `${RNFS.DocumentDirectoryPath}/clips/${remote.id}.${ext}`
+    const localPath = `${RNFS.DocumentDirectoryPath}/clips/${remote.id}.m4a`
     await this.fetchAudioToFile(audioFileId, localPath)
 
     const localUri = `file://${localPath}`
@@ -1132,7 +1128,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     content: string | Uint8Array,
   ): Promise<DriveFile> {
     try {
-      return await this.drive.updateFile(fileId, content, filename)
+      return await this.drive.updateFile(fileId, content)
     } catch (error) {
       if (!(error instanceof DriveApiError) || error.status !== 404) throw error
       log(`Remote file ${fileId} for ${filename} is gone (404) — creating anew`)
@@ -1211,8 +1207,9 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     }
 
     const jsonFilename = `clip_${clip.id}.json`
-    const ext = clip.uri.split('.').pop() ?? 'm4a'
-    const audioFilename = `clip_${clip.id}.${ext}`
+    // Clip audio is always {id}.m4a: the slicer transcodes every clip to
+    // AAC/MP4, and has since before any release
+    const audioFilename = `clip_${clip.id}.m4a`
     const jsonContent = JSON.stringify(backup, null, 2)
 
     const manifest = await this.db.getManifestEntry('clip', clip.id)
@@ -1508,7 +1505,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         const local = await this.db.getClip(clipId)
 
         if (!local) {
-          await this.downloadClip(remote, json.id, audio.id, audio.name, fileVersion(audio), result, notification)
+          await this.downloadClip(remote, json.id, audio.id, fileVersion(audio), result, notification)
         } else if (this.isSameVersion(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
           const manifest = await this.db.getManifestEntry('clip', clipId)
           if (fileVersion(audio) !== manifest?.remote_audio_version) {
@@ -1524,7 +1521,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
             })
           }
         } else if (this.isRemoteAhead(local.updated_at, local.updated_by, remote.updated_at, remote.updated_by)) {
-          await this.downloadClip(remote, json.id, audio.id, audio.name, fileVersion(audio), result, notification)
+          await this.downloadClip(remote, json.id, audio.id, fileVersion(audio), result, notification)
         } else {
           await this.db.upsertManifestEntry({
             entity_type: 'clip', entity_id: clipId,
@@ -1663,7 +1660,7 @@ function parseFilename(name: string): ParsedFilename | null {
   return {
     type: match[1] as 'book' | 'clip' | 'session',
     id: match[2],
-    extension: match[3] as 'json' | 'mp3' | 'm4a',
+    extension: match[3] as 'json' | 'm4a',
   }
 }
 

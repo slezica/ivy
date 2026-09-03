@@ -22,11 +22,11 @@ Clips live independently of their source book. Even if the user archives the boo
 
 When a clip is created, the relevant segment is extracted from the source book and saved as a standalone audio file at `{DocumentDirectory}/clips/{clipId}.m4a`. All clips are output as `.m4a` regardless of source format — the native slicer (`AudioSlicerModule`) shells out to the bundled FFmpeg (`libffmpeg.so`) to transcode the segment to AAC in an MPEG-4 container (`-map 0:a:0 -c:a aac`). This file is the clip's permanent audio — it doesn't depend on the source book existing.
 
-On creation, the JS side passes a filename prefix (no extension) to the native slicer, which appends `.m4a` and returns the actual path; the return value is what gets persisted. The bounds-edit path hardcodes the `.m4a` destination instead — consistent, since the FFmpeg slicer always outputs `.m4a`. Legacy clips from before the FFmpeg slicer can carry other extensions; an edit migrates them to `.m4a` (the Drive audio file is renamed on the next push so other devices derive the right extension), and the old-extension file is reclaimed by `cleanup_orphaned_files` (1-hour grace period; it sweeps both `audio/` and `clips/`).
+On creation, the JS side passes a filename prefix (no extension) to the native slicer, which appends `.m4a` and returns the actual path; the return value is what gets persisted. The bounds-edit path hardcodes the `.m4a` destination instead — consistent, since the FFmpeg slicer always outputs `.m4a`. **`{id}.m4a` is an invariant**: the slicer has been all-m4a since before the first release, and sync relies on it (no extension is carried anywhere).
 
 **FFmpeg packaging.** Clips are transcoded by an exec'd, vendored `libffmpeg.so` (arm64-v8a, no external dependency). `FFmpegEnvironment.ensureReady()` unpacks the bundle, builds the `LD_LIBRARY_PATH`, and pays the cold-link cost with a throwaway `-version` exec — exposed as `AudioSlicer.warmUp()` and called fire-and-forget at startup so the first slice isn't slow. Packaging, the vendored-soname closure, and the `doctor` check live in CLAUDE.md ("Native Packaging Changes") and [2026-08-04-vendor-ffmpeg.md](2026-08-04-vendor-ffmpeg.md).
 
-Clip rows and audio also arrive via **sync**: a clip pulled from another device downloads its audio to `clips/{id}.{ext}` (extension from the remote filename), and later audio-only changes are refreshed in place via the audio content version. See [SYNC.md](SYNC.md). Sync-arrived clips are not queued for transcription immediately — they're picked up at the next transcription service start ([TRANSCRIPTION.md](TRANSCRIPTION.md)).
+Clip rows and audio also arrive via **sync**: a clip pulled from another device downloads its audio to `clips/{id}.m4a`, and later audio-only changes are refreshed in place via the audio content version. See [SYNC.md](SYNC.md). Sync-arrived clips are not queued for transcription immediately — they're picked up at the next transcription service start ([TRANSCRIPTION.md](TRANSCRIPTION.md)).
 
 ### 2. Clips reference their source, but don't require it
 
@@ -149,7 +149,7 @@ The store is the single writer for transcription results, and discards results m
 
 ### Orphaned audio cleanup
 
-`cleanup_orphaned_files` sweeps `clips/` (and `audio/`) for files with no matching database row, with a 1-hour grace period protecting in-flight slices — the safety net behind the `.bak` swap and legacy-extension cases above.
+`cleanup_orphaned_files` sweeps `clips/` (and `audio/`) for files with no matching database row, with a 1-hour grace period protecting in-flight slices — the safety net behind the `.bak` swap above.
 
 ---
 

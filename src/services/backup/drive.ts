@@ -290,15 +290,11 @@ export class GoogleDriveService {
   }
 
   /**
-   * Update an existing file's content in place (preserves file ID). Passing
-   * `name` also renames the file — needed when the local filename changed
-   * (e.g. a clip's audio extension), since downloads derive extensions from
-   * the remote name.
+   * Update an existing file's content in place (preserves file ID and name).
    */
   async updateFile(
     fileId: string,
-    content: string | Uint8Array,
-    name?: string
+    content: string | Uint8Array
   ): Promise<DriveFile> {
     const token = await this.getToken()
 
@@ -313,7 +309,7 @@ export class GoogleDriveService {
         'Content-Type': 'application/json',
         'X-Upload-Content-Type': mimeType,
       },
-      body: JSON.stringify(name ? { name } : {}),
+      body: JSON.stringify({}),
     })
 
     if (!initResponse.ok) {
