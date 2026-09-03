@@ -197,7 +197,7 @@ export const migrations: Migration[] = [
     `)
 
     db.execSync(`
-      INSERT INTO status (id, migration) VALUES (1, 0);
+      INSERT OR IGNORE INTO status (id, migration) VALUES (1, 0);
     `)
 
     // Files table (books)
@@ -1197,6 +1197,19 @@ export class DatabaseService {
     } catch {
       // Table does not exist, start from special migration 0:
       nextMigration = 0
+    }
+
+    // Guard against a half-bootstrapped database: migration 0 records itself
+    // in status BEFORE creating the rest of the schema, so a mid-way failure
+    // leaves migration = 0 with core tables missing — resuming at 1 would
+    // then fail forever. Rerun the (idempotent) bootstrap instead.
+    if (nextMigration > 0) {
+      const files = this.db.getFirstSync<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'files'")
+      if (!files) {
+        log('Status table present but schema missing — rerunning migration 0')
+        nextMigration = 0
+      }
     }
 
     // Snapshot before touching anything (inspection artifact, not rollback)

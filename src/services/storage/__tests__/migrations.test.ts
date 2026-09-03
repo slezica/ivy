@@ -203,6 +203,30 @@ describe('migration upgrade path', () => {
     })
   })
 
+  it('recovers when migration 0 failed after recording itself', async () => {
+    // Migrations must rerun fully after a mid-way failure (CLAUDE.md rule),
+    // but migration 0 records itself in status BEFORE creating the rest of
+    // the schema. If a later statement in it fails, the next launch resumes
+    // at migration 1 against a half-created schema — and, since v1.6.3
+    // swallows migration errors, fails silently on every launch forever.
+    const db = createTestDatabase()
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS status (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        migration INTEGER NOT NULL
+      )
+    `)
+    db.runSync('INSERT INTO status (id, migration) VALUES (1, 0)')
+
+    const service = new DatabaseService(db)
+    await service.migrate(testMigrationDeps)
+
+    const tables = getAll<{ name: string }>(
+      db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('files', 'clips', 'sessions')"
+    )
+    expect(tables).toHaveLength(3)
+  })
+
   it('upgrades a populated v7 database to latest without loss or crash', async () => {
     const db = await dbAtVersion(7)
     db.runSync("INSERT INTO files (id, uri, name, title, position) VALUES ('book-1', 'file:///a/book-1.mp3', 'Book.mp3', 'A Book', 5000)")

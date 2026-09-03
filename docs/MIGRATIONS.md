@@ -15,7 +15,15 @@ unification), [2026-09-02-migration-testing.md](2026-09-02-migration-testing.md)
   re-encoding via `AudioMetadataService.downscaleArtwork`).
 - The last applied index is tracked in the single-row `status` table.
   `DatabaseService.migrate(deps)` awaits pending migrations in order, bumping
-  the index after each.
+  the index after each. Bootstrap guard: migration 0 records itself in
+  `status` before creating the rest of the schema, so `migrate()` reruns it
+  (it's fully idempotent) whenever `status` exists but the `files` table
+  doesn't — a mid-way bootstrap failure would otherwise resume at 1 against
+  missing tables, forever.
+- A failed migration surfaces as a toast ("Ivy startup problem…"):
+  `initializeApplication` swallows the error so the splash always dismisses,
+  but never silently — the session runs un-hydrated until the next launch
+  retries the migration.
 - Execution: the `runMigrations` action is the **first thing**
   `initializeApplication` does — nothing reads or writes the DB before it
   resolves. The store starts with defaults (`DEFAULT_SETTINGS`); settings and
