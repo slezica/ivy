@@ -14,6 +14,7 @@ function createDeps(overrides: Partial<InitializeApplicationDeps> = {}) {
     }),
     slicer: { warmUp: jest.fn(async () => {}) } as any,
     network: { start: jest.fn() } as any,
+    toast: jest.fn(),
     set: createImmerSet(state),
     runMigrations: jest.fn(async () => {}),
     fetchBooks: jest.fn(async () => {}),
@@ -54,6 +55,22 @@ describe('createInitializeApplication', () => {
 
     await expect(initializeApplication()).resolves.toBeUndefined()
     expect(state.initialized).toBe(true)
+  })
+
+  it('surfaces a migration failure to the user', async () => {
+    // A swallowed migration failure must not be silent: the session runs
+    // un-hydrated (default settings — a Settings toggle would clobber the
+    // stored values) and the user sees no sign anything is wrong. The splash
+    // must still dismiss, but the failure needs a user-visible signal.
+    const { state, deps } = createDeps({
+      runMigrations: jest.fn(async () => { throw new Error('migration 13 failed') }),
+    })
+    const initializeApplication = createInitializeApplication(deps)
+
+    await initializeApplication()
+
+    expect(state.initialized).toBe(true)   // never a permanent splash
+    expect(deps.toast).toHaveBeenCalled()  // but never silent either
   })
 
   it('auto-loads the last played book when available', async () => {

@@ -14,6 +14,7 @@ export interface InitializeApplicationDeps {
   db: DatabaseService
   slicer: AudioSlicerService
   network: NetworkService
+  toast: (message: string) => void
   set: SetState
   runMigrations: RunMigrations
   fetchBooks: FetchBooks
@@ -28,7 +29,7 @@ export type InitializeApplication = Action<[]>
 
 export const createInitializeApplication: ActionFactory<InitializeApplicationDeps, InitializeApplication> = (deps) => (
   async () => {
-    const { db, slicer, network, set, runMigrations, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription, seedDemoData } = deps
+    const { db, slicer, network, toast, set, runMigrations, fetchBooks, fetchClips, fetchSessions, loadBook, startTranscription, seedDemoData } = deps
 
     try {
       // Migrate the database before anything reads or writes it. The store is
@@ -73,8 +74,11 @@ export const createInitializeApplication: ActionFactory<InitializeApplicationDep
         })
       }
     } catch (error) {
-      // Non-fatal: an empty library beats a permanent splash screen
+      // Non-fatal: an empty library beats a permanent splash screen — but
+      // never silent: the session runs un-hydrated (default settings, no
+      // auto-load), and the user must know something went wrong
       console.error('[Store] Initialization failed:', error)
+      toast('Ivy startup problem — some data may be unavailable')
     } finally {
       set((state) => { state.initialized = true })
     }
