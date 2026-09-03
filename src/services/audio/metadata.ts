@@ -54,8 +54,9 @@ export class AudioMetadataService {
 
   /**
    * Re-encode an oversized artwork data URI down to the native cap (512px long
-   * side, JPEG). Returns null when the input can't be decoded — callers should
-   * treat null as "skip", not "clear".
+   * side, JPEG). Returns null when the input is confidently undecodable (a
+   * transient failure rejects instead) — the repair migration drops such
+   * artwork; other callers decide for themselves.
    */
   async downscaleArtwork(dataUri: string): Promise<string | null> {
     return AudioMetadataModule.downscaleArtwork(dataUri)
