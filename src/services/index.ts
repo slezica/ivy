@@ -115,6 +115,6 @@ export const transcription = new TranscriptionQueueService({
   whisper,
   slicer,
   // Short backoff on debug/maestro so e2e can traverse the retry/error states
-  retryDelays: isTestBuild() ? [1_000, 3_000, 5_000] : undefined,
+  retryDelays: isTestBuild() ? [1_000, 3_000] : undefined,
 })
 

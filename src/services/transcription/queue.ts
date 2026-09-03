@@ -41,7 +41,8 @@ export type TranscriptionQueueEvents = {
 
 const MAX_TRANSCRIPTION_DURATION_MS = 180000  // First 3 minutes of clip
 const MAX_START_ATTEMPTS = 3
-const DEFAULT_RETRY_DELAYS = [5_000, 15_000, 30_000]
+// One fewer than MAX_START_ATTEMPTS: no delay follows the last attempt
+const DEFAULT_RETRY_DELAYS = [5_000, 15_000]
 
 // =============================================================================
 // Service

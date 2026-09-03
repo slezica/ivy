@@ -463,7 +463,7 @@ describe('TranscriptionQueueService', () => {
       jest.useFakeTimers()
 
       const deps = createMockDeps()
-      deps.retryDelays = [1_000, 3_000, 5_000]
+      deps.retryDelays = [1_000, 3_000]
       deps.whisper.initialize = jest.fn(() => Promise.reject(new Error('init failed')))
       deps.whisper.isReady = jest.fn(() => false)
 
