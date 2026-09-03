@@ -172,17 +172,6 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
     this.currentDuration = 0
   }
 
-  async updateMetadata(metadata: TrackMetadata): Promise<void> {
-    const trackIndex = await TrackPlayer.getActiveTrackIndex()
-    if (trackIndex !== undefined) {
-      await TrackPlayer.updateNowPlayingMetadata({
-        title: metadata.title || 'Unknown',
-        artist: metadata.artist || 'Unknown Artist',
-        artwork: metadata.artwork || undefined,
-      })
-    }
-  }
-
   // ===========================================================================
   // Private
   // ===========================================================================
