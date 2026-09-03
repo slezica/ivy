@@ -181,6 +181,7 @@ export interface MigrationDeps {
 // - Idempotent: gate data work so a rerun after a mid-way failure is safe.
 // - Memory-lean: never SELECT bulky columns for all rows at once — fetch ids
 //   first, then process row-at-a-time.
+// Full guide: docs/MIGRATIONS.md.
 type Migration = (db: SQLite.SQLiteDatabase, deps: MigrationDeps) => Promise<void>
 
 // Exported for migration tests: the array IS the schema history, so a test can
