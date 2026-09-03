@@ -7,6 +7,8 @@
  * - Pull: Drive change feed since last page token → per-entity LWW reconciliation
  * - Push: Drain local outbox → upload with stale detection
  * - Transport: Update-in-place uploads preserve Drive file IDs
+ *
+ * See docs/SYNC.md.
  */
 
 import RNFS from 'react-native-fs'
