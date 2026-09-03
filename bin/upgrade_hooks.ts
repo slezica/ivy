@@ -61,6 +61,52 @@ export function baselineChecks(): UpgradeCheck[] {
 // ---------------------------------------------------------------------------
 // Hooks
 
+// Clips seeded with the quoting shapes v1.6.2 stored (Whisper output saved
+// unstripped, '...' appended after the closing quote for long clips). The
+// strip is per-device normalization: updated_at must not move and nothing
+// may land in the sync outbox.
+const quoteStripHook: UpgradeHook = {
+  migration: 12,
+  description: 'transcription quote strip',
+  seedSql(): string {
+    const clip = (id: string, transcription: string) =>
+      `INSERT INTO clips (id, source_id, uri, start, duration, note, transcription, created_at, updated_at)
+       VALUES ('${id}', 'upgrade-base-book', 'file:///clips/${id}.m4a', 0, 1000, '', '${transcription}', 1, 77);`
+    return [
+      clip('upgrade-quoted-clip', '"Fully quoted text."'),
+      clip('upgrade-suffixed-clip', '"Long clip text."...'),
+      clip('upgrade-dialogue-clip', '"Hello", he said. "Bye"'),
+    ].join('\n')
+  },
+  checks: [
+    {
+      desc: 'enclosing quotes stripped',
+      sql: "SELECT transcription FROM clips WHERE id = 'upgrade-quoted-clip'",
+      expect: 'Fully quoted text.',
+    },
+    {
+      desc: 'long-clip suffix preserved through the strip',
+      sql: "SELECT transcription FROM clips WHERE id = 'upgrade-suffixed-clip'",
+      expect: 'Long clip text....',
+    },
+    {
+      desc: 'dialogue quotes untouched',
+      sql: "SELECT transcription FROM clips WHERE id = 'upgrade-dialogue-clip'",
+      expect: '"Hello", he said. "Bye"',
+    },
+    {
+      desc: 'strip bumps no updated_at (per-device normalization)',
+      sql: "SELECT count(*) FROM clips WHERE id IN ('upgrade-quoted-clip', 'upgrade-suffixed-clip', 'upgrade-dialogue-clip') AND updated_at = 77",
+      expect: '3',
+    },
+    {
+      desc: 'strip queues nothing for sync',
+      sql: "SELECT count(*) FROM sync_queue WHERE entity_type = 'clip'",
+      expect: '0',
+    },
+  ],
+}
+
 // Books seeded with pre-cap artwork sizes (>100KB base64) the way old versions
 // stored them; one valid (gets downscaled by the real native decoder), one
 // undecodable (gets dropped). Both must land in the sync outbox.
@@ -105,5 +151,6 @@ const artworkRepairHook: UpgradeHook = {
 }
 
 export const UPGRADE_HOOKS: UpgradeHook[] = [
+  quoteStripHook,
   artworkRepairHook,
 ]
