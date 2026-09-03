@@ -178,15 +178,26 @@ describe('migration upgrade path', () => {
       expect(queued).toEqual([{ entity_id: 'book-fat-2' }])
     })
 
-    it('leaves artwork alone when re-encoding returns null or does not shrink', async () => {
+    it('drops undecodable artwork (null from the downscaler) and queues the drop', async () => {
       const db = await seededV12()
 
       await migrations[13](db, { metadata: { downscaleArtwork: async () => null } })
-      let by = artworkRows(db)
-      expect(by['book-fat']).toMatchObject({ artwork: FAT, updated_at: 42 })
+
+      const by = artworkRows(db)
+      expect(by['book-fat'].artwork).toBeNull()          // unrenderable heap bomb: dropped
+      expect(by['book-fat'].updated_at).toBeGreaterThan(42)
+      expect(by['book-fat-2'].artwork).toBeNull()
+      expect(by['book-small'].artwork).toBe(SMALL)       // under threshold: untouched
+      expect(getAll<{ entity_id: string }>(db, 'SELECT entity_id FROM sync_queue ORDER BY entity_id'))
+        .toEqual([{ entity_id: 'book-fat' }, { entity_id: 'book-fat-2' }])
+    })
+
+    it('leaves artwork alone when re-encoding does not shrink it', async () => {
+      const db = await seededV12()
 
       await migrations[13](db, { metadata: { downscaleArtwork: async (uri: string) => uri } })
-      by = artworkRows(db)
+
+      const by = artworkRows(db)
       expect(by['book-fat']).toMatchObject({ artwork: FAT, updated_at: 42 })
       expect(getAll(db, 'SELECT * FROM sync_queue')).toEqual([])
     })

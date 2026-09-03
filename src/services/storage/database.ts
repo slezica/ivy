@@ -437,9 +437,13 @@ export const migrations: Migration[] = [
       try {
         downscaled = await deps.metadata.downscaleArtwork(row.artwork)
       } catch {
-        continue // skip this book; a rerun after failure is safe (size gate)
+        continue // transient/unknown failure: skip; a rerun is safe (size gate)
       }
-      if (!downscaled || downscaled.length >= row.artwork.length) continue
+
+      // null = confidently undecodable: it can't render, and it's exactly the
+      // heap bomb this migration defuses — fall through and drop it (the
+      // UPDATE nulls artwork, and the drop propagates like a repair)
+      if (downscaled !== null && downscaled.length >= row.artwork.length) continue
 
       const now = Date.now()
       db.runSync(
