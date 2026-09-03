@@ -27,7 +27,10 @@ Keep base64 artwork (simplifies sync and correctness). Two-part fix:
 1. **Cap at extraction**: downscale artwork to max 512px in `AudioMetadataModule`.
    Fixes all future imports.
 2. **Repair migration**: downscale stored artwork where base64 length > 100KB.
-   Queued for sync (see LWW note below).
+   Queued for sync (see LWW note below). Amended after review: artwork the
+   native decoder confidently can't decode is **dropped** (nulled + queued),
+   not skipped — it can't render and it's exactly the heap bomb being defused.
+   Transient failures (exceptions) still skip, safe under rerun.
 
 ## Migration system unification
 
