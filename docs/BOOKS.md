@@ -44,18 +44,18 @@ Archive and delete actions update the Zustand store immediately (optimistic), th
 ## Architecture Overview
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                      LibraryScreen                            │
-│  Active books · Archived section · Search · Add/Archive/Delete│
-└──────────┬───────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│                      LibraryScreen                             │
+│  Active books · Archived section · Search · Add/Archive/Delete │
+└──────────┬─────────────────────────────────────────────────────┘
            │
            ▼
-┌──────────────────────────────────────────────────────────────┐
-│                       Store Actions                           │
-│  loadFile · loadFileWithPicker · loadFileWithUri              │
-│  cancelLoadFile                                               │
-│  fetchBooks · archiveBook · deleteBook                        │
-└───┬──────────┬──────────┬──────────┬────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│                       Store Actions              │
+│  loadFile · loadFileWithPicker · loadFileWithUri │
+│  cancelLoadFile                                  │
+│  fetchBooks · archiveBook · deleteBook           │
+└───┬──────────┬──────────┬──────────┬─────────────┘
     │          │          │          │
     ▼          ▼          ▼          ▼
 ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
@@ -120,7 +120,7 @@ The database query uses `file_size` first (indexed, fast integer comparison), th
 
 ### Why first 4KB?
 
-Audio files of the same content but from different sources typically share identical headers and initial audio frames. 4KB is enough to capture the file format headers and the beginning of the audio data, providing extremely low collision probability while being fast to read.
+Audio files of the same content but from different sources typically share identical headers and initial audio frames. 4KB is enough to capture the file format headers and the beginning of the audio data, providing extremely low collision probability while being fast to read. Duplicates can be detected quickly when copying a new file, by pausing at the 4KB mark and comparing.
 
 ### Fingerprints also drive cross-device identity
 
