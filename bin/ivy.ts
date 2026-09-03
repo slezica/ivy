@@ -1284,7 +1284,7 @@ function cmdPrepare(args: Args) {
     adb('install', apkPath('maestro'))
     run('npx', ['jest', '--silent'])
     pushFixtures()
-    maestroRun(['maestro/'])
+    withBridge(url => maestroRun(['maestro/'], url)) // flows need the bridge server (network toggles, DB checks)
     checkDeleteMe()
 
     if (screenshots) {
