@@ -343,12 +343,23 @@ function deliverRelease(): { aab: string, apk: string } {
   return { aab, apk }
 }
 
+// Report wall-clock time of a build step (every toolkit build logs its time)
+function timed<T>(label: string, fn: () => T): T {
+  const start = Date.now()
+  const result = fn()
+  const secs = Math.round((Date.now() - start) / 1000)
+  log(`${label} took ${Math.floor(secs / 60)}m${String(secs % 60).padStart(2, '0')}s`)
+  return result
+}
+
 function runGradle(gradleArgs: string[], env: NodeJS.ProcessEnv) {
-  if (isContainer) containerGradle(gradleArgs, env)
-  else {
-    ensureGradlewExec(ROOT)
-    run('./gradlew', gradleArgs.map(t => t.replace(':app:', '')), { cwd: path.join(ROOT, 'android'), env })
-  }
+  timed(`build (${gradleArgs.filter(a => a.startsWith(':app:')).join(' ') || gradleArgs[0]})`, () => {
+    if (isContainer) containerGradle(gradleArgs, env)
+    else {
+      ensureGradlewExec(ROOT)
+      run('./gradlew', gradleArgs.map(t => t.replace(':app:', '')), { cwd: path.join(ROOT, 'android'), env })
+    }
+  })
 }
 
 function verifyKeystorePassword(password: string) {
@@ -680,7 +691,8 @@ function upgradeBaseApk(tag: string): string {
     run('npm', ['ci'], { cwd: wt })
     run('npx', ['expo', 'prebuild', '--clean', '--platform', 'android'], { cwd: wt })
     ensureGradlewExec(wt)
-    run('./gradlew', ['assembleMaestro'], { cwd: path.join(wt, 'android') })
+    timed(`build (${tag} assembleMaestro)`, () =>
+      run('./gradlew', ['assembleMaestro'], { cwd: path.join(wt, 'android') }))
     fs.mkdirSync(CACHE_UPGRADE, { recursive: true })
     fs.copyFileSync(path.join(wt, 'android/app/build/outputs/apk/maestro/app-maestro.apk'), cached)
     log(`cached ${path.relative(ROOT, cached)}`)
