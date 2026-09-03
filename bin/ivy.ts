@@ -122,7 +122,7 @@ Commands:
                   self-seeds on next launch. Emulator-only.
 
   capture [name]
-      Screenshot the device into captures/<name>.png (default: timestamp).
+      Screenshot the device into captures/<name>.png (default: shot-<timestamp>).
 
   tree [--raw]
       Dump the view hierarchy (uiautomator). Default output is condensed to

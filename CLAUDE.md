@@ -5,12 +5,12 @@
 
 ## What is Ivy?
 
-Ivy is a local-first audiobook/podcast player written in React Native. It can:
+Ivy is a local-first audiobook/podcast player written in React Native (Expo, Android-focused). It can:
 
-- Import audio files into its library (from local files)
-- Play audio files in the library
-- Extract, play and share clips
-- Remember listening sessions
+- Import audio files into its library (from local files), extracting metadata, artwork and chapters
+- Play audio files in the library (GPU-accelerated Skia timeline, system media controls, auto-resume)
+- Extract, play and share clips, with on-device Whisper transcription (privacy-first)
+- Remember listening sessions (history + histogram)
 - Auto-sync data and clips to Google Drive
 
 
@@ -109,28 +109,17 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
 - Decide sync semantics explicitly: converging repair (bump + queue) vs per-device normalization (touch nothing)
 
 
-## Project Overview
+## Tech Stack
 
-**React Native Expo app** for podcast/audiobook playback with:
-- Library management (file history with resume positions + metadata)
-- Clips/bookmarks with notes and automatic transcription
-- Listening history (session tracking)
-- GPU-accelerated timeline UI (Skia Canvas)
-- Auto-play, resume from last position
-- On-device speech-to-text via Whisper (privacy-first)
-- Metadata extraction (title, artist, artwork) via native Android module
-- Clip sharing via native share sheet
-- **System media controls** (notification, lock screen, Bluetooth)
-
-**Tech Stack:**
 - React Native 0.81.5 + Expo 54
 - Zustand + immer for state
 - Expo Router (file-based tabs)
-- react-native-track-player v5 (playback + system media controls)
+- react-native-track-player v5 (playback + system media controls: notification, lock screen, Bluetooth)
 - SQLite (expo-sqlite)
 - Skia for timeline rendering
-- New FileSystem API: `Paths.document`, `Directory`, `File` classes
-- whisper.rn for on-device transcription
+- react-native-fs for most filesystem work (carries a patch in `patches/`, applied by `patch-package` on postinstall); expo-file-system (`Paths.document`, `Directory`, `File`) in a couple of spots
+- whisper.rn for on-device transcription (+ react-native-audio-api for audio decode)
+- mitt (powers `BaseService` typed events)
 - react-native-safe-area-context (not deprecated SafeAreaView)
 - expo-splash-screen (manual splash control during async initialization)
 - Native Kotlin modules for audio slicing, metadata, file copy (local module in `modules/ivy`, autolinked)
@@ -146,14 +135,15 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   │   ├── play.ts, pause.ts, ... # Playback actions
   │   ├── add_clip.ts, ...       # Clip actions
   │   ├── load_file.ts, ...      # Library actions (local files)
-  │   ├── initialize_application.ts # App startup (hydrate store, auto-load, dismiss splash)
-  │   └── ...                     # ~35 action files total
+  │   ├── initialize_application.ts # App startup (migrations, hydrate store, warm-ups, auto-load)
+  │   └── ...                     # ~40 action files total
   ├── store/
   │   ├── index.ts                # All state, action wiring, event listeners
-  │   └── types.ts                # Type definitions (AppState, Action, ActionFactory)
+  │   ├── types.ts                # Type definitions (AppState, Action, ActionFactory)
+  │   └── __tests__/              # Store-level tests (clips, sessions)
   ├── services/
-  │   ├── index.ts                # Barrel exports
-  │   ├── base.ts                 # BaseService with typed events (on/off/emit)
+  │   ├── index.ts                # Singleton registry (every service instance is constructed here) + barrel exports
+  │   ├── base.ts                 # BaseService with typed events (on/off/emit; mitt)
   │   ├── audio/
   │   │   ├── player.ts           # react-native-track-player wrapper
   │   │   ├── integration.ts      # Playback service for remote control events
@@ -162,13 +152,14 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   │   │   └── slicer.ts           # Audio segment extraction (native module)
   │   ├── storage/
   │   │   ├── database.ts         # SQLite operations
-  │   │   ├── files.ts            # File copying to app storage
+  │   │   ├── files.ts            # App-storage file utilities (stat, delete, list — copying is the native copier's job)
   │   │   ├── copier.ts           # Native file copier (progress, fingerprint, cancel)
   │   │   ├── picker.ts           # Document picker
   │   │   └── __tests__/          # database.test.ts + migrations.test.ts + sqlite_adapter (real SQLite in Jest)
   │   ├── transcription/
   │   │   ├── queue.ts            # Background transcription queue
-  │   │   └── whisper.ts          # On-device speech-to-text (whisper.rn)
+  │   │   ├── whisper.ts          # On-device speech-to-text (whisper.rn)
+  │   │   └── errors.ts           # Transcription error causes (shared with store types)
   │   ├── backup/
   │   │   ├── auth.ts             # Google OAuth (@react-native-google-signin)
   │   │   ├── drive.ts            # Google Drive REST API (upload, download, changes, update-in-place)
@@ -178,14 +169,17 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   │   └── system/
   │       ├── sharing.ts          # Share clips via native share sheet
   │       ├── network.ts          # NetworkService (NetInfo wrapper: connectivity + metered events)
-  │       └── toast.ts            # Fire-and-forget Android toast helper
+  │       ├── toast.ts            # Fire-and-forget Android toast helper
+  │       ├── build.ts            # Build-variant detection (isTestBuild, via BuildInfoModule)
+  │       └── clipboard.ts        # Clipboard helper (copyText)
   ├── screens/
   │   ├── LibraryScreen.tsx       # Book list (active + archived sections) with archive action
   │   ├── PlayerScreen.tsx        # Main player
   │   ├── ClipsListScreen.tsx     # Clip management
   │   ├── SessionsScreen.tsx      # Listening history
   │   ├── SettingsScreen.tsx      # App settings (sync, transcription, about link)
-  │   └── AboutScreen.tsx         # About Ivy (version, build date, licenses incl. GPL text for bundled ffmpeg)
+  │   ├── AboutScreen.tsx         # About Ivy (version, build date, licenses incl. GPL text for bundled ffmpeg)
+  │   └── about/gpl3.ts           # Bundled GPL-3.0 license text
   ├── components/
   │   ├── MetadataEditor.tsx      # Book metadata editing (all fields; artwork read-only)
   │   ├── BookDetails.tsx         # Read-only book details (extras; Close/Edit; lazy extraction)
@@ -217,7 +211,10 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   │       ├── Dialog.tsx          # Simple dialog/modal component
   │       └── ErrorBoundary.tsx   # React error boundary
   ├── utils/
-  │   └── index.ts                # Shared utilities (formatTime, formatDate)
+  │   ├── index.ts                # Shared utilities (formatTime, formatDate, stripEnclosingQuotes, ...)
+  │   └── __tests__/
+  ├── types/
+  │   └── whisper.rn.d.ts         # Type augmentation for whisper.rn
   └── theme.ts
 
 /app
@@ -252,6 +249,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
 
 /plugins                          # Expo config plugins (applied in app.json) — recreate all gradle customization on prebuild
   ├── withIvySigning.js           # signingConfigs from secrets/ (release uses $KEYSTORE_PASSWORD)
+  ├── withIvyGradleMemory.js      # Gradle JVM heap bump (release-bundle signing needs > default -Xmx)
   ├── withIvyBuildTypes.js        # `preview` + `maestro` buildTypes and the ivy_build_variant signal
   ├── withIvyHermesFix.js         # arch-aware hermesc path (arm64 Linux container)
   ├── withIvyVersionName.js       # versionName from package.json at build time
@@ -261,7 +259,8 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
 
 /bin
   ├── ivy.ts                      # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below
-  └── upgrade_hooks.ts            # Per-migration seed/verify hooks for `test --upgrade` (kept forever, like migrations)
+  ├── upgrade_hooks.ts            # Per-migration seed/verify hooks for `test --upgrade` (kept forever, like migrations)
+  └── __tests__/                  # Toolkit tests: hygiene.test.ts (repo gates), ivy.test.ts, upgrade_hooks.test.ts
 
 /secrets                          # Keystores. HARD RULE: secrets are NEVER duplicated —
   │                               # no tooling copies this directory anywhere, ever
@@ -289,7 +288,8 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   ├── transcription-states.yaml   # Model-download lifecycle via bridge network control (needs maestro build variant)
   ├── scripts/bridge.js           # Shared helper calling the toolkit bridge (device control mid-flow)
   ├── subflows/                   # Shared steps (import-book)
-  ├── playstore/ + screenshots/   # Play Store screenshot flows
+  ├── playstore/                  # Play Store screenshot flow (screenshots.yaml, run by `generate --screenshots`)
+  ├── screenshots/                # GENERATED (gitignored): screenshot-flow output
   └── README.md
 
 /assets/test
@@ -309,9 +309,18 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
 /dist                             # GENERATED (gitignored): store assets + release artifacts
                                   # audio/, artwork/, screenshots/, feature.png, icon-512.png (bin/ivy.ts generate)
                                   # ivy-X.Y.Z.aab/.apk (delivered by release builds)
+
+/docs                             # Guides (BOOKS, PLAYBACK, CLIPS, ...), dated records (YYYY-MM-DD-<topic>.md),
+                                  # VERSIONS.md (changelog), IDEAS.md (backlog of ideas)
+/web                              # Project site (index.html, privacy.html, assets/ — refreshed by generate --screenshots)
+/patches                          # patch-package patches (react-native-fs), applied on postinstall
+/captures                         # GENERATED (gitignored): device screenshots from `bin/ivy.ts capture`
+/worktrees                        # Git worktrees (gitignored; the only sanctioned worktree location)
 ```
 
 ## Database Schema
+
+Column lists below are annotated summaries — NOT NULL constraints, foreign keys, and indexes are elided; `database.ts` holds the authoritative CREATE statements.
 
 **files table (stores `Book` entities):**
 ```sql
@@ -324,7 +333,7 @@ updated_at INTEGER             -- timestamp (last modification)
 updated_by TEXT                -- device ID that last modified this entity
 title TEXT
 artist TEXT
-artwork TEXT                   -- base64 data URI
+artwork TEXT                   -- base64 data URI, capped at 512px on extraction (see docs/2026-09-02-artwork-oom-repair.md)
 file_size INTEGER              -- File size in bytes (indexed for fast lookup)
 fingerprint BLOB               -- First 4KB of file (for exact matching)
 hidden INTEGER NOT NULL DEFAULT 0  -- Soft-deleted (1 = removed from library)
@@ -425,46 +434,13 @@ migration INTEGER NOT NULL             -- Last applied migration index
 
 ## Store State Structure
 
-See `store/types.ts` for authoritative type definitions (`AppState` interface).
+`store/types.ts` is the authoritative, annotated definition (`AppState` interface): `initialized`, `library`, `books`, `playback`, `clips`, `transcription`, `sync`, `settings`, `sessions`, `currentSessionBookId`. Context its comments don't carry:
 
-```typescript
-// State
-initialized: boolean               // false until initializeApplication completes
-library: {
-  status: 'idle' | 'adding' | 'duplicate' | 'error'
-  addProgress: number | null     // 0-100 percent (copy)
-  addOpId: string | null         // Active operation ID (for cancellation)
-  message: string | null         // Status message shown during loading
-}
-books: Record<string, Book>
-playback: {
-  status: 'idle' | 'loading' | 'paused' | 'playing'
-  position: number              // milliseconds
-  uri: string | null            // URI currently loaded in player (hardware state)
-  duration: number              // Duration of loaded audio (hardware state)
-  ownerId: string | null        // ID of component controlling playback
-  sleepTimer: { endsAt: number, duration: number } | null  // wall-clock; null = off
-  mainContext: { uri: string, position: number } | null  // Main player's book + position, snapshotted when ownership leaves it
-}
-clips: Record<string, ClipWithFile>
-transcription: {
-  status: 'off' | 'starting' | 'downloading' | 'waiting-wifi' | 'on' | 'error'
-  downloadProgress: number | null // 0-100, only while downloading model
-  error: { cause: 'download-failed' | 'init-failed' | 'unknown', message: string } | null
-  retryAt: number | null          // Wall-clock time of next automatic start attempt
-  pending: Record<string, true>   // Clips currently queued/processing
-}
-sync: {
-  isSyncing: boolean            // Sync in progress
-  pendingCount: number          // Items waiting to sync
-  failingCount: number          // Repeatedly failing items (push attempts >= 3 + pull quarantined)
-  lastSyncTime: number | null   // Timestamp of last successful sync
-  error: string | null          // Last sync error (null if successful)
-}
-settings: { sync_enabled: boolean, transcription_enabled: boolean, delete_original_after_import: boolean, clip_editor_linked: boolean }
-sessions: Record<string, SessionWithBook>  // Listening history (keyed by id)
-currentSessionBookId: string | null
-```
+- `initialized` — false until `initializeApplication` completes (the splash screen covers that window)
+- `library.addOpId` — active import operation ID; the cancellation ownership claim
+- `playback.uri`/`duration` — hardware state (what's loaded in the player), not book metadata
+- `sync.failingCount` — push items with attempts >= 3, plus pull-quarantined ones
+- `sessions` — keyed by session id; `currentSessionBookId` is a *book* id (no session id is held)
 
 
 ## Critical Architecture Decisions
@@ -473,18 +449,18 @@ currentSessionBookId: string | null
 External content: URIs (like Google Drive) become invalid after app restart. **Solution:**
 - **All files are copied to app-owned storage** on first load
 - Database stores: `uri` (local file:// path for playback)
-- `FileStorageService` manages copying to `Paths.document/audio/`
+- The native `FileCopier` module performs the copy to `Paths.document/audio/` (progress, fingerprint, cancel); `FileStorageService` provides the surrounding file utilities (stat, delete, list)
 - Audio playback **only uses local file:// URIs**
 
 ### 2. **Time Units**
 Everything internal is **milliseconds**. Convert to MM:SS only at display boundaries.
 
 ### 3. **State Management**
-Single Zustand store is the source of truth. Services are stateless. Store uses **immer middleware** for immutable updates via direct mutations:
+Single Zustand store is the source of truth for app state. Services hold only internal operational state (the player's setup flag and cached duration, the transcription queue's job list, the sync engine's in-flight/quarantine tracking) — never app state; they are constructed once in `services/index.ts` (the singleton registry). Store uses **immer middleware** for immutable updates via direct mutations:
 - `store/types.ts` - Type definitions (AppState, Action, ActionFactory)
 - `store/index.ts` - All state, action wiring, and event listeners in one place
 
-**Async initialization:** The store is created synchronously with default state (`initialized: false`, `DEFAULT_SETTINGS`). The root layout calls `initializeApplication()` on mount, which runs database migrations first (`runMigrations` action — nothing touches the DB before it resolves), hydrates the store (settings, books, clips, sessions), auto-loads the last played book, starts transcription if enabled, and sets `initialized: true`. The native splash screen stays visible until initialization completes (via `expo-splash-screen`).
+**Async initialization:** The store is created synchronously with default state (`initialized: false`, `DEFAULT_SETTINGS`). The root layout calls `initializeApplication()` on mount, which runs database migrations first (`runMigrations` action — nothing touches the DB before it resolves), hydrates settings, starts the network watcher, warms the FFmpeg runtime (fire-and-forget `slicer.warmUp()`), seeds demo data if a seed bundle is present, hydrates the store (books, clips, sessions), auto-loads the last played book, starts transcription if enabled, and sets `initialized: true`. The native splash screen stays visible until then — `app/_layout.tsx` dismisses it when `initialized` flips (via `expo-splash-screen`).
 
 **Migrations are async** (`(db, deps) => Promise<void>`, awaited in order), with native services injected via `MigrationDeps` so data-repair migrations can do real work (e.g. artwork re-encoding). Rules for writing one — a failed migration doesn't bump the index and reruns fully next launch:
 - **Idempotent:** gate data work so a rerun after a mid-way failure is safe
@@ -492,7 +468,7 @@ Single Zustand store is the source of truth. Services are stateless. Store uses 
 
 ### 4. **Async Database Layer**
 All database methods use expo-sqlite's async API (`runAsync`, `getFirstAsync`, `getAllAsync`) to avoid blocking the UI thread. A few methods are intentionally kept synchronous for store initialization and fire-and-forget writes:
-- **Sync reads:** `getSettings()`, `getLastPlayedBook()`, `getLastSyncTime()`, `getSyncMetadata()`, `getDeviceId()` — tiny single-row lookups used during store init, covered by the splash screen
+- **Sync reads:** `getSettings()`, `getLastPlayedBook()`, `getLastSyncTime()`, `getSyncMetadata()`, `getDeviceId()` (plus the cached `deviceId` getter) — tiny single-row lookups used during store init, covered by the splash screen; `getCheckpoint()` is the one sync read called outside init (mid-sync, same single-row rationale)
 - **Sync writes:** `updateBookPosition()`, `updateSessionEndedAt()` — called from event handlers as fire-and-forget (the caller doesn't await them)
 - **Sync utility:** `clearAllData()` — destructive, rarely called
 
@@ -509,8 +485,9 @@ export type UpdateSettings = Action<[Settings]>
 
 export const createUpdateSettings: ActionFactory<UpdateSettingsDeps, UpdateSettings> = (deps) => (
   async (settings) => {
-    deps.db.setSettings(settings)
-    deps.set({ settings })
+    const { db, set } = deps
+    await db.setSettings(settings)
+    set({ settings })
   }
 )
 
@@ -559,9 +536,9 @@ docs/2026-08-10-background-battery-fix.md).
 
 ## Unit Testing (Jest)
 
-Run with `npm test` (or `npm test:watch` for watch mode).
+Run with `npm test` (or `npm run test:watch` for watch mode).
 
-Tests are colocated in `__tests__/` directories next to the code they test. Action tests use shared helpers from `actions/__tests__/helpers.ts` for mock state, services, and immer-compatible `set`.
+Tests are colocated in `__tests__/` directories next to the code they test — including the toolkit's own (`bin/__tests__/`, where `hygiene.test.ts` enforces repo gates). Action tests use shared helpers from `actions/__tests__/helpers.ts` for mock state, services, and immer-compatible `set`.
 
 
 ## Adding Features
@@ -580,8 +557,7 @@ Tests are colocated in `__tests__/` directories next to the code they test. Acti
 
 ### New Screen
 1. Create in `src/screens/`
-2. Add route in `app/(tabs)/`
-3. Update tab bar in `app/(tabs)/_layout.tsx`
+2. Add a route: `app/(tabs)/` for a tab (then update `app/(tabs)/_layout.tsx`), or a root route file in `app/` (like `settings.tsx`, `about.tsx`, `sessions.tsx`) for a pushed screen
 
 
 ## Quick Reference
@@ -590,6 +566,7 @@ Everything project-specific goes through the toolkit CLI — `bin/ivy.ts` (full 
 
 **Start dev server (Metro/Fast Refresh, Mac-only):** `bin/ivy.ts dev` (`npm start` redirects here)
 **Run unit tests:** `npm test` (with console logs: `npm run test:verbose`)
+**Typecheck / lint:** `npx tsc --noEmit` / `npm run lint` (not run by the toolkit or `prepare` — run them yourself)
 **Run e2e tests:** `bin/ivy.ts test --e2e`
 **Build (env-aware, Mac or container):** `bin/ivy.ts build <variant> [--install]`
 **Recreate Play Store screenshots (+ web/README refresh):** `bin/ivy.ts generate --screenshots` (see docs/2026-07-21-playstore-screenshots.md)
@@ -605,11 +582,11 @@ The whole release is one toolkit command, **run by the user on the Mac** (it pro
 bin/ivy.ts prepare --version X.Y.Z --changes '<markdown>' [--screenshots]
 ```
 
-Pipeline: preflight (tools, emulator, clean tree on master, version valid, tag free) → password prompt + verify → maestro build + full test suite → [screenshots + web/README refresh, committed as `web: refresh screenshots`] → version bump (package.json + lockfile via `npm version`) + VERSIONS.md section → commit `release: vX.Y.Z` → release build → artifact checks (version stamp, ffmpeg closure, yt-dlp scan) → deliver `dist/ivy-X.Y.Z.{aab,apk}` → tag `vX.Y.Z` → checklist of the remaining manual steps (push, Play Console upload, GitHub release — never automated).
+Pipeline: preflight (tools, node_modules, release keystore, samples/data.json, emulator, local.properties pollution, clean tree on master, version valid, no VERSIONS.md section yet, tag free) → password prompt + verify → version bump (package.json + lockfile via `npm version` + VERSIONS.md section — files only, committed after tests; a failure reverts them) → maestro build → upgrade test (previous release → this build) → jest + full e2e suite → [screenshots + web/README refresh, committed as `web: refresh screenshots`] → commit `release: vX.Y.Z` → release build → artifact checks (version stamp, ffmpeg closure, yt-dlp scan) → deliver `dist/ivy-X.Y.Z.{aab,apk}` + cache the maestro APK as the next release's upgrade-test base → tag `vX.Y.Z` → checklist of the remaining manual steps (push, Play Console upload, GitHub release — never automated).
 
 **Agent's role:** write the `--changes` markdown (changeset since last tag, VERSIONS.md style: Features/Fixes/Infra), print the exact `prepare` command for the user to paste, and stop — the command itself needs a TTY the agent doesn't have. Pass `--screenshots` only if UI changed since the last release.
 
-Versioning: package.json is the single version of record; `withIvyVersionName` derives versionName and versionCode (major\*10000 + minor\*100 + patch; Play requires strictly increasing, so minor/patch stay < 100 — `prepare` preflight enforces this). app.json carries no version fields.
+Versioning: package.json is the single version of record; `withIvyVersionName` derives versionName and versionCode (major\*10000 + minor\*100 + patch; Play requires strictly increasing, so minor/patch stay < 100 — `prepare` preflight enforces this). app.json's `version` field exists but is unmaintained — ignore it.
 
 `bin/ivy.ts build release` alone still builds, checks, and delivers to `dist/` (for rebuilds), but never tags — tagging is `prepare`'s job, gated on the test suite.
 
@@ -743,7 +720,7 @@ Commands:
                   self-seeds on next launch. Emulator-only.
 
   capture [name]
-      Screenshot the device into captures/<name>.png (default: timestamp).
+      Screenshot the device into captures/<name>.png (default: shot-<timestamp>).
 
   tree [--raw]
       Dump the view hierarchy (uiautomator). Default output is condensed to
