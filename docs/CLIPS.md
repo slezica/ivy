@@ -22,11 +22,11 @@ Clips live independently of their source book. Even if the user archives the boo
 
 When a clip is created, the relevant segment is extracted from the source book and saved as a standalone audio file at `{DocumentDirectory}/clips/{clipId}.m4a`. All clips are output as `.m4a` regardless of source format — the native slicer (`AudioSlicerModule`) shells out to the bundled FFmpeg (`libffmpeg.so`) to transcode the segment to AAC in an MPEG-4 container (`-map 0:a:0 -c:a aac`). This file is the clip's permanent audio — it doesn't depend on the source book existing.
 
-The JS side passes a filename prefix (no extension) to the native slicer, which appends `.m4a` and returns the actual path. The JS code stores the native return value in the database, so the correct extension is always what gets persisted.
+On creation, the JS side passes a filename prefix (no extension) to the native slicer, which appends `.m4a` and returns the actual path; the return value is what gets persisted. The bounds-edit path hardcodes the `.m4a` destination instead — consistent, since the FFmpeg slicer always outputs `.m4a`. Legacy clips from before the FFmpeg slicer can carry other extensions; an edit migrates them to `.m4a` (the Drive audio file is renamed on the next push so other devices derive the right extension), and the old-extension file is reclaimed by `cleanup_orphaned_files` (1-hour grace period; it sweeps both `audio/` and `clips/`).
 
-**FFmpeg packaging.** The slicer (and `FFmetadataReaderModule`) use `libffmpeg.so`, vendored with its shared-lib bundle (`libffmpeg.zip.so`, a termux-packages ffmpeg build) in `modules/ivy/android/src/main/jniLibs` — arm64-v8a only, no external dependency (see [2026-08-04-vendor-ffmpeg.md](2026-08-04-vendor-ffmpeg.md); the yt-dlp engine and later the whole youtubedl-android dependency were removed). `expo.useLegacyPackaging=true` is required so the native `.so` files are extracted to disk rather than kept compressed in the APK (managed via `expo-build-properties` in `app.json`). `FFmpegEnvironment.ensureReady()` (idempotent) unpacks the bundle to `no_backup/ivy-native/ffmpeg` on first use and re-extracts when the bundled zip changes.
+**FFmpeg packaging.** Clips are transcoded by an exec'd, vendored `libffmpeg.so` (arm64-v8a, no external dependency). `FFmpegEnvironment.ensureReady()` unpacks the bundle, builds the `LD_LIBRARY_PATH`, and pays the cold-link cost with a throwaway `-version` exec — exposed as `AudioSlicer.warmUp()` and called fire-and-forget at startup so the first slice isn't slow. Packaging, the vendored-soname closure, and the `doctor` check live in CLAUDE.md ("Native Packaging Changes") and [2026-08-04-vendor-ffmpeg.md](2026-08-04-vendor-ffmpeg.md).
 
-**Vendored shared libs.** The ffmpeg bundle's libs link against four sonames it doesn't ship (`libexpat.so.1`, `libcrypto.so.3`, `libandroid-support.so`, `libandroid-posix-semaphore.so`) — vendored alongside it in `modules/ivy`'s `jniLibs/`. `FFmpegEnvironment.ldLibraryPath()` builds the `LD_LIBRARY_PATH` for every `libffmpeg.so` exec and symlinks the two versioned sonames (which can't be jniLib filenames) into `noBackupFilesDir/ivy-native/lib`. When swapping the vendored ffmpeg bundle, re-verify the dependency closure: every `NEEDED` soname reachable from `libffmpeg.so` must resolve from the bundle itself, the vendored libs, or the app's `nativeLibraryDir`. `bin/ivy.ts doctor` checks this on every built APK it finds and cross-references `FFmpegEnvironment.SYMLINKED_LIBS` (so a vendored versioned lib present but not symlinked at runtime fails too). It used to run as a build finalizer (`withIvyFfmpegClosureCheck`, dropped 2026-07-30); revive from git history if packaging churn returns.
+Clip rows and audio also arrive via **sync**: a clip pulled from another device downloads its audio to `clips/{id}.{ext}` (extension from the remote filename), and later audio-only changes are refreshed in place via the audio content version. See [SYNC.md](SYNC.md). Sync-arrived clips are not queued for transcription immediately — they're picked up at the next transcription service start ([TRANSCRIPTION.md](TRANSCRIPTION.md)).
 
 ### 2. Clips reference their source, but don't require it
 
@@ -36,40 +36,18 @@ When the source book is archived or deleted, clips fall back to their own audio 
 
 ### 3. Playback ownership
 
-Both ClipViewer and ClipEditor are playback components — they control the audio player. Each generates a unique `ownerId` and claims ownership when it plays. This prevents conflicts with the main player or other clip viewers. On dismissal they release playback: pause, then return ownership to the main player with the book and position it had before the clip took over. See the playback ownership system in [PLAYBACK.md](PLAYBACK.md).
+Both ClipViewer and ClipEditor are playback components — they control the audio player via a unique `ownerId`, preventing conflicts with the main player or other clip viewers. ClipViewer generates its own (`clip-viewer-{id}`); ClipEditor takes it as a prop — deliberately, so the caller can claim ownership *for* it (ClipsListScreen passes `clip-editor-{id}`, PlayerScreen passes `clip-editor-draft`). On dismissal they release playback: pause, then return ownership to the main player with the book and position it had before the clip took over. See the playback ownership system in [PLAYBACK.md](PLAYBACK.md).
 
 ---
 
 ## Architecture Overview
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                      ClipsListScreen                          │
-│  Lists all clips · Search · View/Edit/Delete/Share            │
-└───────┬──────────────────────────────────────────────────────┘
-        │ opens
-        ▼
-┌──────────────────┐    ┌──────────────────┐
-│   ClipViewer     │───▶│   ClipEditor     │
-│   (read-only)    │    │   (edit bounds   │
-│                  │    │    and note)      │
-│ Plays from source│    │                  │
-│ or own file      │    │ Requires source  │
-└──────────────────┘    └──────────────────┘
-        │                       │
-        │ play/pause/seek       │ save updates
-        ▼                       ▼
-┌──────────────────────────────────────────────────────────────┐
-│                       Store Actions                           │
-│  addClip · updateClip · deleteClip · shareClip · seekClip     │
-└───────┬──────────┬──────────┬──────────┬─────────────────────┘
-        │          │          │          │
-        ▼          ▼          ▼          ▼
-   ┌────────┐ ┌────────┐ ┌────────┐ ┌────────────┐
-   │Database│ │ Slicer │ │  Sync  │ │Transcription│
-   │(SQLite)│ │(native)│ │ Queue  │ │   Queue     │
-   └────────┘ └────────┘ └────────┘ └─────────────┘
-```
+Layers, top to bottom:
+
+- **ClipsListScreen** — lists all clips, search, context menus (View/Edit/Delete/Share)
+- **ClipViewer** (read-only; plays from source or own file) → opens **ClipEditor** (bounds + note; requires source)
+- **Store actions** — `addClip`, `updateClip`, `deleteClip`, `shareClip`, `seekClip`
+- **Services the actions coordinate** — Database (SQLite), Slicer (native), Sync queue, Transcription queue
 
 The clips system doesn't have a dedicated service — it's built from store actions that coordinate the database, audio slicer, sync queue, and transcription queue. This is appropriate: clips don't need background processing or event streams of their own.
 
@@ -77,11 +55,11 @@ The clips system doesn't have a dedicated service — it's built from store acti
 
 ## Creating a Clip
 
-The clip button on the player opens the **draft clip editor** — the same ClipEditor used for editing, seeded with a selection of `[position, position + 10s]` (capped at the book's end) and an empty note. The user adjusts bounds and note, then Save creates the clip; Cancel creates nothing.
+The clip button on the player opens the **draft clip editor** — the same ClipEditor used for editing, seeded with a selection of `[position, position + 250ms]` (`DEFAULT_CLIP_DURATION_MS`, capped at the book's end) and an empty note — the tiny default assumes the user marks the start and grows the selection from there. The user adjusts bounds and note, then Save creates the clip; Cancel creates nothing.
 
 Playback transitions seamlessly in both directions: PlayerScreen claims ownership *for* the editor (ownerId `clip-editor-draft`) before mounting it, and reclaims for the main player before unmounting it — same file, same position, same playing/paused state. The editor plays at 1x (the clip-owner rule; deliberate — you hear what a shared clip's recipient will hear), and the book's speed is restored on return. The hand-back position is the editor's playhead, so scrubbing in the editor moves the book position ("unified players"). See [2026-07-25-player-clip-editor.md](2026-07-25-player-clip-editor.md).
 
-The creation pipeline is in `add_clip.ts`: validate, resolve duration (explicit from the editor, default 10s otherwise, always capped to remaining audio), slice audio, save to database with the note, queue sync and transcription, reload.
+The creation pipeline is in `add_clip.ts`: validate, resolve duration (explicit from the editor, `DEFAULT_CLIP_DURATION_MS` otherwise, always capped to remaining audio), slice audio, save to database with the note, queue sync, reload (`fetchClips`), then queue transcription — the reload deliberately precedes the transcription queueing, so the `queued` event sets `transcription.pending` for a clip already in the store.
 
 ---
 
@@ -89,14 +67,14 @@ The creation pipeline is in `add_clip.ts`: validate, resolve duration (explicit 
 
 This is one of the most important design decisions in the clip system. A clip's relationship to its source book has two states:
 
-### Source available (`clip.file_uri !== null`)
+### Source available (`file_uri !== null && file_duration !== null`)
 
-The source book's audio file is on disk. The clip can:
+The source book's audio file is on disk *and* its duration is known (both can be null independently — see the LEFT JOIN below). The clip can:
 - **Play from source** — the timeline shows the full book, with the clip's range highlighted
 - **Edit bounds** — the user can expand or shrink the clip, re-slicing from the source
-- **Go to source** — navigate to the main player at the clip's start position
+- **Go to source** — hand playback to the main player, playing the source book from the clip's start (`seekClip`), and navigate to it
 
-### Source unavailable (`clip.file_uri === null`)
+### Source unavailable
 
 The source book has been archived or deleted. The clip can still:
 - **Play from its own file** — the timeline shows only the clip's duration
@@ -106,6 +84,8 @@ The source book has been archived or deleted. The clip can still:
 But it **cannot**:
 - Edit bounds (no source to re-slice from)
 - "Go to source" (no book to navigate to)
+
+In both states, ClipViewer **auto-pauses once** when the playhead reaches the clip's end — the user can resume past it, and seeking back inside the range re-arms the auto-pause.
 
 ### The `ClipWithFile` type
 
@@ -123,13 +103,19 @@ interface ClipWithFile extends Clip {
 
 Book metadata is preserved in the `files` table even after archiving or deletion (soft-delete), so the clip usually knows what book it came from even if the audio is gone. But the LEFT JOIN means the book **row** can also be missing entirely — a clip synced before its book arrived, a book id retired by an identity merge, or an archived (audio-less) row removed by a book tombstone — in which case *all* `file_*` fields are null, not just `file_uri`. Never assume `file_name` or `file_duration` are present.
 
-For display, clips also carry their own **snapshot** of the book's identity: `source_title` (book title, falling back to file name) and `source_artist`, captured at creation, synced in the clip payload, and backfilled once by migration. UI falls back `file_title || file_name || source_title` — the live join wins (reflects later metadata edits), the snapshot only covers orphans. Legacy backups lack the fields, so pulls never null out a local snapshot (`COALESCE` in `restoreClipFromBackup`).
+For display, clips also carry their own **snapshot** of the book's identity: `source_title` (book title, falling back to file name) and `source_artist`, captured at creation, synced in the clip payload, and backfilled once by migration. UI falls back `file_title || file_name || source_title` — the live join wins (reflects later metadata edits), the snapshot only covers orphans. `source_artist` is captured and synced but not currently displayed anywhere. Legacy backups lack the fields, so pulls never null out a local snapshot (`COALESCE` in `restoreClipFromBackup`).
+
+Search in ClipsListScreen matches `file_title`, `file_name`, `transcription`, and `note` — notably *not* `source_title`, so orphaned clips can't be found by book name.
 
 ---
 
 ## Editing Clips
 
-Editing requires the source book's audio file — if the source is archived, editing is disabled. The key non-obvious behavior: when bounds change, the source is re-sliced and the old audio file is replaced via backup-swap (the old file is kept as `.bak` until the move succeeds, so a failed re-slice never loses the clip's only audio), and transcription is cleared and re-queued. Note-only edits skip re-slicing and transcription entirely. See `update_clip.ts` for the full flow.
+Editing requires the source book's audio file — if the source is archived, editing is disabled. When bounds change (`update_clip.ts`):
+
+- The source is re-sliced and the old audio file replaced via backup-swap (`slicer.move`: the old file is kept as `.bak` until the move succeeds, so a failed re-slice never loses the clip's only audio)
+- The transcription is cleared and the clip re-queued
+- Note-only edits skip both entirely
 
 **Linked bounds ("bounds follow playhead").** The editor has a link toggle (lower right; its state is a remembered preference — `settings.clip_editor_linked`, default on). While linked, the playhead is solid and pushes are outward-only: any playhead movement — scrub, fling, tap-to-seek, or playback itself — pushes the start anchor backward or the end anchor forward when it collides with them; reverse movements release the anchor, and shrinking the selection is handle work. The core workflow: scrub to the start point, hit play, pause where the clip should end. Toggle the link off for free playhead movement. Design and rationale in [2026-07-24-linked-clip-bounds.md](2026-07-24-linked-clip-bounds.md); the push mechanic lives in the timeline physics engine (`timeline/engine.ts`, `linked` mode).
 
@@ -159,7 +145,11 @@ Copies live in `<cache>/share/`. There is no post-share deletion — recipients 
 
 ### Transcription results are persisted by the store
 
-The transcription queue never writes the database. Its `finish` event carries the text; the store's handler runs `updateClip(clipId, { transcription })`, which persists it and queues the clip for sync. An empty string is a valid result (silence/music) — only errored jobs skip persistence.
+The store is the single writer for transcription results, and discards results made stale by a concurrent bounds edit — full rules in [TRANSCRIPTION.md](TRANSCRIPTION.md) ("Persistence: the store is the single writer").
+
+### Orphaned audio cleanup
+
+`cleanup_orphaned_files` sweeps `clips/` (and `audio/`) for files with no matching database row, with a 1-hour grace period protecting in-flight slices — the safety net behind the `.bak` swap and legacy-extension cases above.
 
 ---
 
@@ -173,7 +163,8 @@ src/actions/
   delete_clip.ts      → Deletes file, record, queues sync
   share_clip.ts       → Shares clip audio via native sheet (friendly filename)
   fetch_clips.ts      → Loads all clips with source file metadata
-  seek_clip.ts        → Navigates main player to clip's position in source
+  seek_clip.ts        → Plays source book from clip start as main player
+  cleanup_orphaned_files.ts → Sweeps audio/ + clips/ for row-less files (1h grace)
   constants.ts        → DEFAULT_CLIP_DURATION_MS (250ms), CLIPS_DIR
 
 src/services/
@@ -195,3 +186,5 @@ src/store/
   index.ts            → Wires clip actions, transcription events
   types.ts            → ClipWithFile in AppState, action types
 ```
+
+**Testing:** `src/actions/__tests__/{add,update,delete,share,seek}_clip.test.ts`, `cleanup_orphaned_files.test.ts`; maestro flows `add-clip.yaml`, `clip-crud.yaml`, `clip-dismiss-release.yaml`.
