@@ -621,7 +621,7 @@ Any change touching native packaging — `modules/ivy` jniLibs (including the ve
 1. **Closure check:** `bin/ivy.ts doctor` walks the `NEEDED` graph from `libffmpeg.so` in every built APK it finds, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it after any packaging change. (This used to be a build-time gate — `withIvyFfmpegClosureCheck`, dropped 2026-07-30 once the packaging refactor had settled; revive from git history if packaging churn returns.)
 2. **Fresh-install smoke test (manual):** create a clip / import a chaptered file on a **freshly installed** app, not an upgrade — `no_backup/` survives updates, and stale extracted libs there can mask linking failures that break fresh installs (this happened: see git history of `FFmpegEnvironment.kt`). **Uninstalling requires explicit user approval** — the user knows the device's installation state and whether the upgrade path (e.g. pending DB migrations) must be tested before wiping it.
 
-**Build-variant note:** four buildTypes — `debug` (Metro dev loop), `maestro` (e2e: preview clone + test affordances + debuggable for run-as tooling), `preview` (release twin for on-device testing, zero test surface), `release`. Test affordances gate on the `ivy_build_variant` resource (`debug`/`maestro`/`production`, see `plugins/withIvyBuildTypes.js` + `BuildInfoModule.kt`) — never on `__DEV__`. Release builds do **not** minify (`android.enableMinifyInReleaseBuilds` is unset → R8 off), so the `preview`/`maestro` lineage and `release` behave identically for native loading. Even if R8 were enabled it couldn't affect the exec'd-binary link path (native/filesystem, not JVM), and the module classes stay reachable via `IvyPackage`. `doctor` checks the closure on every variant's APK it finds, release included.
+**Build-variant note:** four buildTypes — `debug` (Metro dev loop), `maestro` (e2e: preview clone + test affordances; NOT debuggable — that flips CMake to Debug and breaks linking against the release prefab; DB tooling uses adb root on it), `preview` (release twin for on-device testing, zero test surface), `release`. Test affordances gate on the `ivy_build_variant` resource (`debug`/`maestro`/`production`, see `plugins/withIvyBuildTypes.js` + `BuildInfoModule.kt`) — never on `__DEV__`. Release builds do **not** minify (`android.enableMinifyInReleaseBuilds` is unset → R8 off), so the `preview`/`maestro` lineage and `release` behave identically for native loading. Even if R8 were enabled it couldn't affect the exec'd-binary link path (native/filesystem, not JVM), and the module classes stay reachable via `IvyPackage`. `doctor` checks the closure on every variant's APK it finds, release included.
 
 
 ## Environment
@@ -689,8 +689,9 @@ Commands:
       cache-missed tags are rebuilt from git — Mac-only), seeds old-schema
       data + per-migration hooks (bin/upgrade_hooks.ts), upgrade-installs the
       current maestro build, verifies migrations + data + no crash. --from
-      tests against a specific cached base tag. Needs a built maestro APK
-      and sqlite3. See docs/MIGRATIONS.md.
+      tests against a specific cached base tag. Needs a built maestro APK,
+      sqlite3, and a rootable emulator image (DB access via adb root — the
+      maestro variant is not debuggable). See docs/MIGRATIONS.md.
 
   drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>
       Make the running app do something (one mode per call).
@@ -754,9 +755,10 @@ Commands:
       exits; --follow streams. --tag filters (e.g. ReactNativeJS).
 
   query "<sql>"
-      Run SQL against a pulled copy of the app database (read-only; needs a
-      debuggable build variant installed (debug or maestro) — run-as only
-      works on debuggable builds — plus sqlite3 on the host).
+      Run SQL against a pulled copy of the app database (read-only; needs
+      sqlite3 on the host, plus the debug build variant — run-as only works
+      on debuggable builds — or, for other variants, a rootable emulator
+      (adb root fallback).
 
   help
       This text.

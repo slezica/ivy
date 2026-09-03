@@ -68,8 +68,9 @@ Commands:
       cache-missed tags are rebuilt from git — Mac-only), seeds old-schema
       data + per-migration hooks (bin/upgrade_hooks.ts), upgrade-installs the
       current maestro build, verifies migrations + data + no crash. --from
-      tests against a specific cached base tag. Needs a built maestro APK
-      and sqlite3. See docs/MIGRATIONS.md.
+      tests against a specific cached base tag. Needs a built maestro APK,
+      sqlite3, and a rootable emulator image (DB access via adb root — the
+      maestro variant is not debuggable). See docs/MIGRATIONS.md.
 
   drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>
       Make the running app do something (one mode per call).
@@ -133,9 +134,10 @@ Commands:
       exits; --follow streams. --tag filters (e.g. ReactNativeJS).
 
   query "<sql>"
-      Run SQL against a pulled copy of the app database (read-only; needs a
-      debuggable build variant installed (debug or maestro) — run-as only
-      works on debuggable builds — plus sqlite3 on the host).
+      Run SQL against a pulled copy of the app database (read-only; needs
+      sqlite3 on the host, plus the debug build variant — run-as only works
+      on debuggable builds — or, for other variants, a rootable emulator
+      (adb root fallback).
 
   help
       This text.
@@ -713,16 +715,20 @@ function waitForMigrationIndex(ready: (index: number) => boolean, what: string, 
   }
 }
 
-// Replace the app's DB with a local file (app must be stopped). run-as chdirs
-// to the app data dir, so DB_DEVICE_PATH resolves; no shell operators — each
-// step is a single adb command.
+// Replace the app's DB with a local file (app must be stopped). The maestro
+// variant is not debuggable, so this goes through adb root (emulator-only —
+// which the upgrade test already is). Ownership is restored so the app can
+// still write its own database afterwards.
 function pushDatabase(local: string) {
-  const staging = '/data/local/tmp/ivy-upgrade.db'
   adbShell('am', 'force-stop', APP)
-  adb('push', local, staging)
-  adbShell('run-as', APP, 'cp', staging, DB_DEVICE_PATH)
-  adbShell('run-as', APP, 'rm', '-f', `${DB_DEVICE_PATH}-journal`, `${DB_DEVICE_PATH}-wal`, `${DB_DEVICE_PATH}-shm`)
-  adbShell('rm', '-f', staging)
+  adbRoot()
+  const owner = adbShell('stat', '-c', '%u:%g', path.posix.dirname(DB_ABS_PATH)).trim()
+  if (!/^\d+:\d+$/.test(owner)) fail(`could not resolve db directory ownership (got '${owner}')`)
+  adb('push', local, DB_ABS_PATH)
+  adbShell('rm', '-f', `${DB_ABS_PATH}-journal`, `${DB_ABS_PATH}-wal`, `${DB_ABS_PATH}-shm`)
+  adbShell('chown', owner, DB_ABS_PATH)
+  adbShell('chmod', '660', DB_ABS_PATH)
+  adbShell('restorecon', DB_ABS_PATH) // root push leaves a shell SELinux context
 }
 
 function runUpgradeTest(fromTag?: string) {
@@ -1735,18 +1741,42 @@ function cmdLogs(args: Args) {
   }
 }
 
-// run-as works on debuggable builds only (debug/maestro variants). Pulls a
-// point-in-time copy — force-stop the app first when consistency matters.
+// DB access strategy: run-as works only on debuggable builds (the debug
+// variant); for maestro/preview builds on the EMULATOR, adbd is restarted as
+// root instead (adb root — a no-op if already root; unavailable on Google
+// Play images and real devices).
+const DB_ABS_PATH = `/data/data/${APP}/${DB_DEVICE_PATH}`
+
+function adbRoot() {
+  requireEmulator('adb root db access')
+  const out = capture(findAdb(), ['-s', serial(), 'root'], { allowFail: true })
+  if (/cannot run as root/i.test(out)) {
+    fail('this emulator image refuses adb root (Google Play image?) — db access on a non-debuggable build needs a rootable image')
+  }
+  // adbd restarts; wait for the device to come back
+  run(findAdb(), ['-s', serial(), 'wait-for-device'])
+}
+
+// Pulls a point-in-time copy — force-stop the app first when consistency
+// matters. Tries run-as (debug builds), falls back to adb root (emulator).
 function pullDatabase(): Buffer {
   const res = spawnSync(findAdb(), ['-s', serial(), 'exec-out', 'run-as', APP, 'cat', DB_DEVICE_PATH],
     { maxBuffer: 512 * 1024 * 1024 })
   // adb exec-out can exit 0 with the remote error on stdout — trust only the
   // SQLite magic bytes
-  if (res.status !== 0 || !res.stdout.subarray(0, 15).equals(Buffer.from('SQLite format 3'))) {
-    fail('could not pull the database — is a debuggable build variant installed and initialized? ' +
-      `(${(res.stdout.toString() + res.stderr.toString()).trim().split('\n')[0]})`)
+  const MAGIC = Buffer.from('SQLite format 3')
+  if (res.status === 0 && res.stdout.subarray(0, 15).equals(MAGIC)) return res.stdout
+
+  if (isEmulator()) {
+    adbRoot()
+    const rooted = spawnSync(findAdb(), ['-s', serial(), 'exec-out', 'cat', DB_ABS_PATH],
+      { maxBuffer: 512 * 1024 * 1024 })
+    if (rooted.status === 0 && rooted.stdout.subarray(0, 15).equals(MAGIC)) return rooted.stdout
   }
-  return res.stdout
+
+  fail('could not pull the database — needs the app installed and initialized, plus either a ' +
+    'debuggable build (debug variant) or a rootable emulator ' +
+    `(${(res.stdout.toString() + res.stderr.toString()).trim().split('\n')[0]})`)
 }
 
 // Run SQL (single statement or a script) against a local DB copy, return stdout

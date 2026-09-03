@@ -36,11 +36,16 @@ no-override gate as `device wipe`). Tests the **latest transition** by default:
 previous release tag → current working tree. `--from` tests any cached base.
 
 Both sides use the **maestro build variant**: it embeds a JS bundle (debug is
-Metro-only and never launches headless) and is made `debuggable` (one line in
-`withIvyBuildTypes.js`) so `run-as` DB access works. Signature continuity
-holds: the standard Android debug keystore is now **committed** (`secrets/`
-stays ignored except that one file), so any post-keystore tag checkout builds
-self-contained.
+Metro-only and never launches headless). The review's "make maestro
+debuggable" suggestion turned out to break the build — `debuggable true`
+flips AGP's CMake config to Debug, which references debug-only RN symbols
+while `matchingFallbacks` links the release prefab (undefined symbols at link
+time). DB access on the non-debuggable maestro build goes through **adb
+root** instead (the review's own alternative; emulator-only, which the test
+already is — fails cleanly on unrootable Google Play images). Signature
+continuity holds: the standard Android debug keystore is now **committed**
+(`secrets/` stays ignored except that one file), so any post-keystore tag
+checkout builds self-contained.
 
 Pipeline:
 
@@ -57,8 +62,9 @@ Pipeline:
 5. Seed: baseline data plus selected seed hooks, written as SQL against the
    **previous-release schema** — frozen forever, so committed seed code cannot
    rot. (When several migrations land in one cycle, *all* their seeds target
-   the previous-release schema.) Applied via `run-as` (force-stop first; pull
-   DB, apply, push; clean journal sidecar).
+   the previous-release schema.) Applied via adb root (force-stop first; pull
+   DB, apply on the host with sqlite3, push back; clean journal sidecars,
+   restore ownership + SELinux context).
 6. `adb install -r` the current maestro build (higher versionCode — a true
    upgrade install, exactly what users experience).
 7. Launch; wait for initialization.
