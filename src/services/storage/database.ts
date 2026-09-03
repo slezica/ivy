@@ -436,8 +436,10 @@ export const migrations: Migration[] = [
       let downscaled: string | null
       try {
         downscaled = await deps.metadata.downscaleArtwork(row.artwork)
-      } catch {
-        continue // transient/unknown failure: skip; a rerun is safe (size gate)
+      } catch (error) {
+        // Transient/unknown failure: skip; a rerun is safe (size gate)
+        log(`Artwork repair skipped for book ${id} (${row.artwork.length} chars):`, error)
+        continue
       }
 
       // null = confidently undecodable: it can't render, and it's exactly the
@@ -1204,8 +1206,14 @@ export class DatabaseService {
     for (let i = nextMigration; i < migrations.length; i++) {
       log(`Running migration ${i}`)
 
-      // Apply! If this throws, we should just fail, nothing else makes sense:
-      await migrations[i](this.db, deps)
+      // Apply! If this throws, we should just fail, nothing else makes sense —
+      // but name the culprit: the index is what a crash report needs first
+      try {
+        await migrations[i](this.db, deps)
+      } catch (error) {
+        throw new Error(`Migration ${i} failed (db still at ${i - 1}, reruns next launch): ` +
+          (error instanceof Error ? error.message : String(error)))
+      }
       this.db.runSync('UPDATE status SET migration = ? WHERE id = 1', [i])
     }
 

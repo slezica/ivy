@@ -722,12 +722,28 @@ function tryReadMigrationIndex(): number | null {
   }
 }
 
+function appCrashExcerpt(): string | null {
+  const crashes = adbOut('logcat', '-d', '-b', 'crash')
+  if (!crashes.includes(`Process: ${APP}`)) return null
+  // Last ~25 lines of the crash buffer: exception + top of the stack
+  return crashes.trim().split('\n').slice(-25).join('\n')
+}
+
 function waitForMigrationIndex(ready: (index: number) => boolean, what: string, timeoutMs: number): number {
   const deadline = Date.now() + timeoutMs
+  let lastIndex: number | null = null
   for (;;) {
     const index = tryReadMigrationIndex()
     if (index !== null && ready(index)) return index
-    if (Date.now() > deadline) fail(`timed out waiting for ${what}`)
+    lastIndex = index ?? lastIndex
+    // A crashed app will never reach the target — fail now, with the trace
+    const crash = appCrashExcerpt()
+    if (crash) fail(`app crashed while waiting for ${what} (last seen migration: ${lastIndex ?? 'none — db not created yet'}):\n${crash}`)
+    if (Date.now() > deadline) {
+      fail(`timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${what} ` +
+        `(last seen migration: ${lastIndex ?? 'none — db not created/readable yet'}; ` +
+        `no crash recorded — check \`bin/ivy.ts logs\` for a stuck migration)`)
+    }
     spawnSync('sleep', ['2'])
   }
 }
@@ -781,8 +797,8 @@ function runUpgradeTest(fromTag?: string) {
     const local = path.join(os.tmpdir(), `ivy-upgrade-${process.pid}.db`)
     fs.writeFileSync(local, pullDatabase())
     try {
-      sqliteExec(local, baselineSeedSql())
-      for (const hook of hooks) sqliteExec(local, hook.seedSql(ROOT))
+      sqliteExec(local, baselineSeedSql(), 'the baseline seed')
+      for (const hook of hooks) sqliteExec(local, hook.seedSql(ROOT), `the migration-${hook.migration} seed (${hook.description})`)
       pushDatabase(local)
     } finally {
       fs.rmSync(local, { force: true })
@@ -797,7 +813,7 @@ function runUpgradeTest(fromTag?: string) {
     const checks: UpgradeCheck[] = [...baselineChecks(), ...hooks.flatMap(h => h.checks)]
     withPulledDatabase(db => {
       for (const check of checks) {
-        const got = sqliteExec(db, check.sql).trim()
+        const got = sqliteExec(db, check.sql, `check '${check.desc}'`).trim()
         if (got !== check.expect) {
           fail(`upgrade check failed: ${check.desc} — got '${got}', expected '${check.expect}'`)
         }
@@ -805,8 +821,8 @@ function runUpgradeTest(fromTag?: string) {
       }
     })
 
-    const crashes = adbOut('logcat', '-d', '-b', 'crash')
-    if (crashes.includes(`Process: ${APP}`)) fail('app crashed during the upgrade test (logcat -b crash)')
+    const crash = appCrashExcerpt()
+    if (crash) fail(`app crashed during the upgrade test:\n${crash}`)
 
     log(`upgrade test passed (${tag} → migration ${LATEST_MIGRATION}, ${checks.length} checks)`)
   } finally {
@@ -1236,7 +1252,15 @@ function cmdPrepare(args: Args) {
   // full test phase, so a failure leaves nothing on master to undo.
   step(`bump version files to ${version} (committed only after tests pass)`)
   const bumpedFiles = ['package.json', 'package-lock.json', 'docs/VERSIONS.md']
-  const revertBump = () => { try { git('checkout', '--', ...bumpedFiles) } catch { /* keep original error */ } }
+  const revertBump = () => {
+    try {
+      git('checkout', '--', ...bumpedFiles)
+    } catch (e) {
+      // Keep the original failure as the thrown error, but say the tree is dirty
+      log(`WARNING: could not revert the version bump (${e instanceof Error ? e.message : e}) — ` +
+        `working tree still has ${bumpedFiles.join(', ')} modified; revert by hand`)
+    }
+  }
   run('npm', ['version', '--no-git-tag-version', version])
   const versionsFile = path.join(ROOT, 'docs/VERSIONS.md')
   const code = versionCode(parseSemver(version)!)
@@ -1796,11 +1820,13 @@ function pullDatabase(): Buffer {
     `(${(res.stdout.toString() + res.stderr.toString()).trim().split('\n')[0]})`)
 }
 
-// Run SQL (single statement or a script) against a local DB copy, return stdout
-function sqliteExec(dbFile: string, sql: string, display: string[] = []): string {
+// Run SQL (single statement or a script) against a local DB copy, return
+// stdout. `label` names the operation in failure messages (a seed script is
+// too big to echo back; sqlite's own error names the offending statement).
+function sqliteExec(dbFile: string, sql: string, label = 'sql'): string {
   if (!has('sqlite3')) fail('sqlite3 not found on the host')
-  const res = spawnSync('sqlite3', [...display, dbFile], { input: sql, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
-  if (res.status !== 0) fail(`sqlite3 failed: ${(res.stderr || res.stdout).trim()}`)
+  const res = spawnSync('sqlite3', [dbFile], { input: sql, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  if (res.status !== 0) fail(`sqlite3 failed running ${label}: ${(res.stderr || res.stdout).trim()}`)
   return res.stdout
 }
 
