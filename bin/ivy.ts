@@ -703,7 +703,12 @@ function upgradeBaseApk(tag: string): string {
 }
 
 function launchApp() {
-  adbShell('monkey', '-p', APP, '-c', 'android.intent.category.LAUNCHER', '1')
+  // monkey is flaky on keyless emulator images (SYS_KEYS abort) — resolve the
+  // launcher activity and start it directly
+  const resolved = adbShell('cmd', 'package', 'resolve-activity', '--brief',
+    '-c', 'android.intent.category.LAUNCHER', APP).trim().split('\n').pop() ?? ''
+  const component = resolved.includes('/') ? resolved : `${APP}/.MainActivity`
+  adbShell('am', 'start', '-n', component)
 }
 
 function tryReadMigrationIndex(): number | null {
