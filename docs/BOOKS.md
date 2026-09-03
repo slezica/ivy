@@ -25,7 +25,19 @@ The original file is normally left untouched. With the **"Delete original after 
 
 ### 2. File fingerprinting
 
-Each book stores its `file_size` (bytes) and `fingerprint` (first 4KB of the file as a BLOB). This pair uniquely identifies the audio content. When a file is added, the system checks for an existing book with the same fingerprint before creating a new one. If the source provider doesn't report a size (returns `-1`), the lookup falls back to fingerprint-only matching, and the real size is backfilled from the bytes actually copied — `-1` is never persisted.
+Fingerprinting answers: "Have we seen this audio file before?" Each book stores two values, read by the native copier (`copier.beginCopy`) before anything is written:
+
+| Field | Value | Purpose |
+|-------|-------|---------|
+| `file_size` | Exact byte count | Fast first filter (indexed column) |
+| `fingerprint` | First 4,096 bytes | Content-based identity |
+
+The lookup is `SELECT * FROM files WHERE file_size = ? AND fingerprint = ?` — size first (indexed integer), then the BLOB comparison on candidates. 4KB captures format headers plus the start of the audio data: near-zero collision probability, and cheap to read by pausing the copy at the 4KB mark. If the source provider doesn't report a size (returns `-1`), the lookup falls back to fingerprint-only matching, and the real size is backfilled from the bytes actually copied — `-1` is never persisted.
+
+The fingerprint answers "same audio?" in two places:
+
+- **Re-add restore (local):** adding a file whose fingerprint matches an archived/deleted book restores that book (Case A below).
+- **Identity merge (sync):** when sync downloads a remote book whose fingerprint matches a local book with a *different* id (the same audio imported independently on two devices), the identities merge — every device converges on the lexicographically smaller id, clips/sessions re-keyed to it. See [SYNC.md](SYNC.md).
 
 ### 3. Soft-delete, not hard-delete
 
@@ -43,32 +55,16 @@ Archive and delete actions update the Zustand store immediately (optimistic), th
 
 ## Architecture Overview
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                      LibraryScreen                             │
-│  Active books · Archived section · Search · Add/Archive/Delete │
-└──────────┬─────────────────────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────────┐
-│                       Store Actions              │
-│  loadFile · loadFileWithPicker · loadFileWithUri │
-│  cancelLoadFile                                  │
-│  fetchBooks · archiveBook · deleteBook           │
-└───┬──────────┬──────────┬──────────┬─────────────┘
-    │          │          │          │
-    ▼          ▼          ▼          ▼
-┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
-│  File  │ │Metadata│ │Database│ │  Sync  │
-│Storage │ │Service │ │Service │ │ Queue  │
-└────────┘ └────────┘ └────────┘ └────────┘
-  delete,    title,     upsert,    queue
-  list,      artist,    archive,   changes
-  fingerprint artwork,   hide,
-             duration   restore
-```
+No dedicated "library service" — the actions coordinate services directly:
 
-No dedicated "library service" — the actions coordinate the storage, metadata, and database services directly.
+- **LibraryScreen** → actions: `loadFileWithPicker` / `loadFileWithUri` → `loadFile`; plus `cancelLoadFile`, `fetchBooks`, `archiveBook`, `deleteBook`, `updateBook`, `extractBookExtras`, `cleanupOrphanedFiles`
+- **`loadFile`** coordinates:
+  - `FileCopierService` (native) — copy with progress, size + fingerprint, cancellation
+  - `AudioMetadataService` (native) — title, artist, artwork, duration
+  - `FFmetadataService` — extras + chapters (exec'd FFmpeg, best-effort)
+  - `DatabaseService` — upsert / touch / restore
+  - `SyncQueueService` — queue changes for sync
+  - `FileStorageService` — delete, list, modification times (cleanup)
 
 ---
 
@@ -80,17 +76,19 @@ When the user picks a file (or one is provided by URI), `loadFile()` runs a pipe
 
 ### Check for existing book
 
-The fingerprint is looked up in the database:
-
-```sql
-SELECT * FROM files WHERE file_size = ? AND fingerprint = ?
-```
-
-This produces one of three outcomes, each handled differently. See [The Three Loading Cases](#the-three-loading-cases).
+The fingerprint lookup (see Core Concepts #2) produces one of three outcomes, each handled differently. See [The Three Loading Cases](#the-three-loading-cases).
 
 ### Refresh
 
-After the database is updated, `fetchBooks()` and `fetchClips()` reload all data from the database. The library status returns to `'idle'`.
+`fetchBooks()` and `fetchClips()` reload all data from the database in a `finally` — after the final library status is already set. That status is per-case: new-book and restore paths return to `'idle'`; the duplicate path sets `'duplicate'` and the error path `'error'`, both of which persist until the user dismisses the modal (`LibraryLoadingDialog`).
+
+### Cancellation
+
+`library.addOpId` is the active operation's ownership claim. `cancelLoadFile` clears it and dismisses the dialog immediately; the pipeline then dies quietly:
+
+- `loadFile` re-checks `wasCancelled` (opId mismatch) at three points: after the copy, before the DB write, and before the duplicate touch — and deletes the copied file itself on a post-copy cancel
+- Every library store write goes through an opId-guarded updater, so a stale operation can't overwrite a newer one
+- A cancel surfacing as an error is treated as cancellation, not failure
 
 ### Cleanup
 
@@ -98,36 +96,8 @@ Files are copied directly to their final path (`audio/{bookId}{ext}`) — there 
 
 - The native copier deletes the destination file itself when the copy fails or is cancelled
 - If metadata extraction or the DB write fails after the copy, `loadFile`'s catch deletes the copied file — but only if no database record references it
-- Any leftovers that slip through are reclaimed by `cleanupOrphanedFiles`, which runs at the start of the next `loadFile` and deletes files with no matching database record — but only files last modified more than 60 minutes ago, so in-flight writes (background sync downloads, clip slices) are never swept mid-operation
+- Any leftovers that slip through are reclaimed by `cleanupOrphanedFiles`, which runs at the start of the next `loadFile` and sweeps **both** `audio/` and `clips/` for files with no matching database record — but only files last modified more than 60 minutes ago (`GRACE_PERIOD_MS`), so in-flight writes (background sync downloads, clip slices) are never swept mid-operation
 - Cleanup failures are swallowed — they never affect the operation's outcome
-
----
-
-## File Fingerprinting
-
-Fingerprinting answers: "Have we seen this audio file before?"
-
-### How it works
-
-Two values are stored per book:
-
-| Field | Value | Purpose |
-|-------|-------|---------|
-| `file_size` | Exact byte count | Fast first filter (indexed column) |
-| `fingerprint` | First 4,096 bytes | Content-based identity |
-
-The database query uses `file_size` first (indexed, fast integer comparison), then `fingerprint` (BLOB comparison, only on candidates with matching size).
-
-### Why first 4KB?
-
-Audio files of the same content but from different sources typically share identical headers and initial audio frames. 4KB is enough to capture the file format headers and the beginning of the audio data, providing extremely low collision probability while being fast to read. Duplicates can be detected quickly when copying a new file, by pausing at the 4KB mark and comparing.
-
-### Fingerprints also drive cross-device identity
-
-The fingerprint answers "same audio?" in two places:
-
-- **Re-add restore (local):** adding a file whose fingerprint matches an archived/deleted book restores that book (Case A above).
-- **Identity merge (sync):** when sync downloads a remote book whose fingerprint matches a local book with a *different* id (the same audio was imported independently on two devices), the two identities are merged — every device converges on the lexicographically smaller id, and clips/sessions are re-keyed to it. See [SYNC.md](SYNC.md) for the mechanism.
 
 ---
 
@@ -142,8 +112,13 @@ After fingerprinting, `loadFile()` branches into one of three cases:
 The existing book record is restored:
 
 1. Commit the copy directly to `audio/{existingBook.id}{ext}`
-2. Call `db.restoreBook()` — sets the new URI, updates metadata, sets `hidden = 0`, preserves the saved position
+2. Call `db.restoreBook()` — sets the new URI, sets `hidden = 0`, refreshes `updated_at`/`updated_by`
 3. Queue for sync
+
+What restore preserves vs. replaces:
+
+- **Preserved:** `position` and `speed` (the user's progress), and title/artist/artwork *when already set* (see [Restoration](#restoration))
+- **Replaced from the newly picked file:** `name`, `duration`, `file_size`, `fingerprint`, `chapters`
 
 The user gets their book back exactly where they left off, with all clips intact. This works the same whether the book was archived or fully deleted.
 
@@ -181,7 +156,11 @@ Beyond title/artist/artwork/duration, a book carries seven optional **extras** c
 
 **Lazy extraction (backfill):** `extractBookExtras(bookId)` re-extracts on demand — called when the Book Details dialog opens. It no-ops unless `book.uri !== null` and `(metadata_version ?? 0) < EXTRACTED_METADATA_VERSION` (in `services/audio/ffmetadata.ts`). `metadata_version` distinguishes "never extracted" (null) from "extracted, file is sparse", and bumping the constant lazily re-extracts every book as it's next viewed. On import, extras are extracted inline and the version stamped; on ffmpeg failure the version stays null so a later view retries.
 
-**Extras are editable, and edits win over extraction.** Every extraction path (import, restore-on-reimport, lazy backfill) merges via `fillMissingExtras`: only null fields take the file's value. The empty string is a sentinel meaning "edited and cleared" — the editor writes it when the user empties a field that had a value (`editedField` in `MetadataEditor.tsx`), and extraction never refills it. An input left empty on a field that was already null stays null, so extraction may still fill it later. Consequence: `metadata_version` means "the extractor ran", not "extras match the file". Display code must treat `''` like null (hidden).
+Note that a successful lazy extraction is a real write: `setBookExtras` bumps `updated_at`/`updated_by` and the action queues a sync upsert. Merely opening a book's details (when extraction fires) makes this device the LWW winner for the whole book entity — deliberate converging repair, so extras propagate, but it can beat an unsynced concurrent edit from another device.
+
+**Chapters are import-only.** Extracted alongside extras (same ffmetadata read) but written only by `upsertBook`/`restoreBook` at import time. Lazy extraction does *not* backfill them, and they're excluded from the sync payload — so a book whose ffmpeg call failed at import, or one that arrived via sync, has no chapters until re-imported. Consumed by the player's "Show chapters" menu.
+
+**Extras are editable, and edits win over extraction.** Every extraction path (import, restore-on-reimport, lazy backfill) merges via `fillMissingExtras`: only null fields take the file's value. The empty string is a sentinel meaning "edited and cleared" — the editor writes it when the user empties a field that had a value (`editedField` in `MetadataEditor.tsx`), and extraction never refills it. An input left empty on a field that was already null stays null, so extraction may still fill it later. Consequence: `metadata_version` means "the extractor ran", not "extras match the file". Display code must treat `''` like null (hidden). The sentinel applies to **extras only** — title/artist emptied in the editor are saved as `null` (display falls back to `book.name`), never `''`.
 
 **Sync:** extras + `metadata_version` ride the book payload (additive fields; old payloads read as null — see [SYNC.md](SYNC.md)). Whole-entity LWW applies as usual — the merge semantics above are local, per-device behavior at extraction time.
 
@@ -199,19 +178,19 @@ A book exists in one of three states, determined by two fields:
 | **Archived** | `null` | `false` | Yes (archived section) | Partial (own audio only) | Re-add same file |
 | **Deleted** | `null` | `true` | No | Partial (own audio only) | Re-add same file |
 
-```typescript
-const isActive   = book.uri !== null
-const isArchived = book.uri === null && !book.hidden
-const isDeleted  = book.uri === null && book.hidden
-```
-
 The `getAllBooks()` database query filters by `hidden = 0`, so deleted books don't appear in the store at all. Archived books appear because `hidden` is false — the UI separates them by checking `uri === null`.
+
+**Archived has a second origin besides archiving:** books arriving via sync land with `uri = null` (the book payload carries no audio), so a remote book you haven't imported locally shows up in the Archived section. Importing its file restores it like any re-add. See [SYNC.md](SYNC.md).
+
+**Local-only recency:** `last_played_at` is written exclusively by position updates during real playback, never synced, and drives startup auto-load (most recently played active book wins).
 
 ---
 
 ## Archiving
 
 Archiving frees disk space while keeping the book visible. Uses optimistic-update-with-rollback (see Core Concepts).
+
+If the book is currently loaded in the player, both archive and delete first unload it: `playback.status/uri/ownerId` reset (`'idle'`/null/null) and `audio.unload()` fired. This is the only route to `'idle'` besides load failure.
 
 **After archiving:**
 - The book appears in the "Archived" section of the library
@@ -224,7 +203,7 @@ Archiving frees disk space while keeping the book visible. Uses optimistic-updat
 
 ## Deletion
 
-Deletion hides the book from the library entirely. Uses optimistic-update-with-rollback (see Core Concepts).
+Deletion hides the book from the library entirely. Uses optimistic-update-with-rollback (see Core Concepts). In the UI it's a two-step flow: an active book's menu offers only "Show details" and "Archive"; "Remove forever" appears once the book is archived.
 
 **After deletion:**
 - The book disappears from the library UI
@@ -235,9 +214,7 @@ Deletion hides the book from the library entirely. Uses optimistic-update-with-r
 
 ### Deletion is local-only
 
-Archive and delete are **per-device** operations — they never sync. `hidden` is a local-only field (excluded from the book backup payload), and neither operation bumps `updated_at`/`updated_by` or queues a sync change. Deleting a book on your phone doesn't touch your tablet; the book's JSON stays in the shared cloud library. See [SYNC.md](SYNC.md) for the rationale and consequences.
-
-This is why not bumping `updated_at` matters: the sync engine re-queues an upsert whenever local `updated_at` exceeds remote (local-ahead), so an archive-time bump would ship the book's pre-archive fields anyway and could revert a newer edit from another device.
+Archive and delete are **per-device** operations — they never sync. `hidden` is a local-only field (excluded from the book backup payload), and neither operation bumps `updated_at`/`updated_by` or queues a sync change (a bump alone would trigger a local-ahead re-upload). Deleting a book on your phone doesn't touch your tablet; the book's JSON stays in the shared cloud library. See [SYNC.md](SYNC.md) for the rationale and consequences.
 
 ---
 
@@ -265,8 +242,7 @@ src/actions/
   update_book.ts         → Update title/artist, queue sync
   extract_book_extras.ts → Lazy metadata extras extraction (summary, narrator, ...)
   delete_book.ts         → Set uri=null + hidden=true, delete file
-  cleanup_orphaned_files.ts → Delete app-storage files with no DB record
-  constants.ts           → CLIPS_DIR, skip durations (no book-specific constants)
+  cleanup_orphaned_files.ts → Delete audio/ + clips/ files with no DB record (GRACE_PERIOD_MS)
 
 src/components/
   MetadataEditor.tsx     → Dialog content for editing all book metadata fields (shows artwork read-only)
@@ -284,6 +260,9 @@ src/services/audio/
   metadata.ts            → AudioMetadataService (native ID3 tag extraction)
   ffmetadata.ts          → FFmetadataService (tags + chapters parsed from raw ffmetadata; extras mapping)
 
+src/services/system/
+  clipboard.ts           → copyText helper (clipboard + "Copied" toast)
+
 src/screens/
   LibraryScreen.tsx      → Book list with active/archived sections, search, menus
 
@@ -296,3 +275,8 @@ modules/ivy/android/src/main/java/com/salezica/ivy/
   FileCopierModule.kt       → Native file copy with progress, fingerprint, cancellation
   FFmetadataReaderModule.kt → Raw ffmetadata dump via bundled FFmpeg (parsed in JS: services/audio/ffmetadata.ts)
 ```
+
+## Testing
+
+- Jest: `src/actions/__tests__/load_file.test.ts` (all three cases, cancellation, cleanup), `cancel_load_file.test.ts`, `archive_book.test.ts`, `delete_book.test.ts`, `update_book.test.ts`, `extract_book_extras.test.ts`, `cleanup_orphaned_files.test.ts`
+- Maestro: `book-details.yaml`, `delete-original.yaml`, `chapter-extraction.yaml`, `artwork-cap.yaml`, `subflows/import-book.yaml`
