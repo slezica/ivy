@@ -44,8 +44,10 @@ app-example
 # local native module build outputs
 /modules/ivy/android/build
 
-# keystores (never commit release.keystore)
-/secrets/
+# keystores (never commit release.keystore; the standard debug keystore is
+# committed so old-tag checkouts build self-contained — see docs/MIGRATIONS.md)
+/secrets/*
+!/secrets/debug.keystore
 
 # Maestro test artifacts
 maestro/screenshots/
