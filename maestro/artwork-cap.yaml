@@ -1,0 +1,50 @@
+appId: com.salezica.ivy
+---
+# Import a book with an oversized embedded cover (~900KB, 1400px) and verify
+# the native extraction cap stored a downscaled artwork. This is the IMPORT
+# path of the artwork OOM fix; the repair path is covered by the upgrade
+# test's migration-13 hook (see docs/MIGRATIONS.md).
+#
+# Own import steps rather than the shared subflow: this flow imports the
+# test-audio-cover.m4a fixture, not the default book.
+
+# Offline first — fresh state starts the whisper-model download (see the
+# import-book subflow for the full rationale).
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/off" } }
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/data/off" } }
+
+- launchApp:
+    clearState: true
+
+- assertVisible: "No books yet"
+
+- tapOn:
+    id: "library-menu-button"
+- tapOn: "Settings"
+- tapOn:
+    id: "transcription-switch"
+- back
+
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/on" } }
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/data/on" } }
+
+# Import via the header menu → system document picker
+- tapOn:
+    id: "library-menu-button"
+- tapOn: "Import audio file"
+- tapOn:
+    id: ".*:id/option_menu_search"
+- inputText: "test-audio-cover"
+- extendedWaitUntil:
+    visible: "test-audio-cover.m4a"
+    timeout: 10000
+- tapOn: "test-audio-cover.m4a"
+
+# Import copies the file and extracts metadata (cold-FFmpeg timeout, see the
+# import-book subflow)
+- extendedWaitUntil:
+    visible: "Ivy Test Book"
+    timeout: 150000
+
+# The cap check runs on the host against a pulled copy of the DB
+- runScript: { file: scripts/bridge.js, env: { CMD: "check/artwork-cap" } }

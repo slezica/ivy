@@ -64,3 +64,6 @@ dist/
 # Server logs
 /log/
 .claude/
+
+# upgrade-test base APK cache (written by prepare; see docs/MIGRATIONS.md)
+/cache/

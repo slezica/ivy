@@ -15,11 +15,16 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import * as readline from 'node:readline'
 
+// The one deliberate second file: per-migration upgrade-test hooks grow
+// forever (kept as historical record, like migrations)
+import { LATEST_MIGRATION, UPGRADE_HOOKS, baselineSeedSql, baselineChecks, UpgradeCheck } from './upgrade_hooks'
+
 const APP = 'com.salezica.ivy'
 const DB_DEVICE_PATH = 'files/SQLite/audioplayer.db' // expo-sqlite default dir, relative to app data
 const ROOT = path.resolve(__dirname, '..')
 const MIRROR = process.env.IVY_BUILD_DIR || '/home/claude/ivy-build'
 const CAPTURES_DIR = path.join(ROOT, 'captures')
+const CACHE_UPGRADE = path.join(ROOT, 'cache', 'upgrade') // upgrade-base APKs, written by prepare
 
 const HELP = `Ivy toolkit — project CLI (build, test, prepare, drive, inspect)
 
@@ -48,16 +53,23 @@ Commands:
       never builds native — install first with \`build debug --install\`.
       --clear resets the Metro cache. Ctrl-C to stop.
 
-  test [name] [--unit | --e2e] [--server-only [--port <n>]]
+  test [name] [--unit | --e2e | --upgrade [--from <tag>]] [--server-only [--port <n>]]
       No flag = both suites. --unit = jest. --e2e = maestro suite; pushes and
       media-scans the fixtures first, verifies delete-original afterwards.
       [name] runs a single case (jest pattern or maestro flow name) and needs
       exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
       a localhost HTTP interface flows use for device control (network
-      toggles) via maestro/scripts/bridge.js; BRIDGE_URL is injected into
-      every run and network state is restored afterwards (emulator only).
-      --server-only starts just the bridge (foreground, Ctrl-C to stop) for
-      hand-run maestro sessions.
+      toggles, DB checks) via maestro/scripts/bridge.js; BRIDGE_URL is
+      injected into every run and network state is restored afterwards
+      (emulator only). --server-only starts just the bridge (foreground,
+      Ctrl-C to stop) for hand-run maestro sessions.
+      --upgrade = migration upgrade smoke test (emulator-only, wipes app
+      state): installs the previous release's maestro APK (from cache/upgrade/,
+      cache-missed tags are rebuilt from git — Mac-only), seeds old-schema
+      data + per-migration hooks (bin/upgrade_hooks.ts), upgrade-installs the
+      current maestro build, verifies migrations + data + no crash. --from
+      tests against a specific cached base tag. Needs a built maestro APK
+      and sqlite3. See docs/MIGRATIONS.md.
 
   drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>
       Make the running app do something (one mode per call).
@@ -81,11 +93,12 @@ Commands:
   prepare --version <X.Y.Z> --changes <markdown> [--screenshots]
       The release pipeline, start to finish. Interactive (keystore password
       prompted up front, held in memory only) — run it on the Mac from a
-      terminal. Steps: preflight -> password -> maestro build + full test
-      suite -> [screenshots ->] version bump + VERSIONS.md -> commit ->
-      release build -> artifact checks -> dist/ delivery -> tag. Nothing is
-      pushed or uploaded; it ends with a checklist of the manual Play
-      Console / GitHub steps.
+      terminal. Steps: preflight -> password -> version bump (files only;
+      committed after tests) -> maestro build -> upgrade test -> jest + e2e
+      suite -> [screenshots ->] commit -> release build -> artifact checks ->
+      dist/ delivery + upgrade-base cache -> tag. A test failure reverts the
+      bumped files, leaving the tree clean. Nothing is pushed or uploaded; it
+      ends with a checklist of the manual Play Console / GitHub steps.
 
   doctor
       Full environment report: tools, devices, project state, the
@@ -120,9 +133,9 @@ Commands:
       exits; --follow streams. --tag filters (e.g. ReactNativeJS).
 
   query "<sql>"
-      Run SQL against a pulled copy of the app database (read-only; needs the
-      debug build variant installed — run-as only works on debuggable builds —
-      plus sqlite3 on the host).
+      Run SQL against a pulled copy of the app database (read-only; needs a
+      debuggable build variant installed (debug or maestro) — run-as only
+      works on debuggable builds — plus sqlite3 on the host).
 
   help
       This text.
@@ -444,6 +457,9 @@ const FIXTURES = [
   // after import" enabled, asserted gone afterwards. Re-pushed every run so
   // the suite stays idempotent.
   { src: 'assets/test/test-audio.m4a', dest: '/sdcard/Download/delete-me.m4a' },
+  // Oversized embedded cover (~900KB, 1400px) for artwork-cap.yaml: verifies
+  // the native extraction cap on the import path (see docs/MIGRATIONS.md)
+  { src: 'assets/test/test-audio-cover.m4a', dest: '/sdcard/Download/test-audio-cover.m4a' },
 ]
 const DELETE_ME = '/sdcard/Download/delete-me.m4a'
 
@@ -491,6 +507,17 @@ const BRIDGE_ENDPOINTS: Record<string, () => void> = {
   'net/wifi/off': () => { requireEmulator('bridge net control'); adbShell('svc', 'wifi', 'disable') },
   'net/data/on': () => { requireEmulator('bridge net control'); adbShell('svc', 'data', 'enable') },
   'net/data/off': () => { requireEmulator('bridge net control'); adbShell('svc', 'data', 'disable') },
+  // Import-path check for the artwork extraction cap (artwork-cap.yaml):
+  // extraction must have produced artwork, and none may exceed the repair
+  // threshold — a 512px JPEG lands far below it (see docs/MIGRATIONS.md)
+  'check/artwork-cap': () => {
+    withPulledDatabase(local => {
+      const extracted = sqliteExec(local, 'SELECT count(*) FROM files WHERE artwork IS NOT NULL;').trim()
+      if (extracted === '0') throw new Error('no artwork extracted from the cover fixture')
+      const oversized = sqliteExec(local, 'SELECT count(*) FROM files WHERE length(artwork) > 100000;').trim()
+      if (oversized !== '0') throw new Error(`${oversized} book(s) above the 100KB artwork cap`)
+    })
+  },
 }
 
 function startBridgeServer(port: number): http.Server {
@@ -589,6 +616,11 @@ function cmdTest(args: Args) {
     return // server keeps the process alive; Ctrl-C to stop
   }
 
+  if (args.flags.upgrade) {
+    runUpgradeTest(typeof args.flags.from === 'string' ? args.flags.from : undefined)
+    return
+  }
+
   if (name && unit === e2e) fail('test <name> needs exactly one of --unit or --e2e')
 
   const both = !unit && !e2e
@@ -609,6 +641,156 @@ function cmdTest(args: Args) {
       withBridge(url => maestroRun(['maestro/'], url))
       checkDeleteMe() // whole suite includes delete-original.yaml
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// upgrade smoke test — previous release → working tree, on the emulator.
+// Design + rationale: docs/2026-09-02-migration-testing.md; hook contract in
+// bin/upgrade_hooks.ts. Emulator-only and destructive (wipes app state).
+
+function latestReleaseTag(): string {
+  try {
+    return git('describe', '--tags', '--abbrev=0', '--match', 'v*')
+  } catch {
+    fail('no release tag found (and no --from given)')
+  }
+}
+
+// Cached by prepare at release time; rebuilding from the tag is the fallback.
+// NEVER copies secrets — a tag that predates the committed debug keystore
+// must have its base APK seeded into the cache by hand.
+function upgradeBaseApk(tag: string): string {
+  const version = tag.replace(/^v/, '')
+  const cached = path.join(CACHE_UPGRADE, `ivy-${version}-maestro.apk`)
+  if (fs.existsSync(cached)) return cached
+
+  log(`upgrade base ${tag} not cached — rebuilding from tag (slow)`)
+  if (isContainer) fail(`cache miss for ${tag}: the rebuild fallback is Mac-only — seed ${path.relative(ROOT, cached)} manually`)
+  const wt = path.join(ROOT, 'worktrees', `upgrade-${version}`)
+  if (fs.existsSync(wt)) run('git', ['worktree', 'remove', '--force', wt])
+  run('git', ['worktree', 'add', wt, tag])
+  try {
+    if (!fs.existsSync(path.join(wt, 'secrets/debug.keystore'))) {
+      fail(`${tag} predates the committed debug keystore — build its maestro APK by hand once ` +
+        `and place it at ${path.relative(ROOT, cached)} (secrets are never copied by tooling)`)
+    }
+    run('npm', ['ci'], { cwd: wt })
+    run('npx', ['expo', 'prebuild', '--clean', '--platform', 'android'], { cwd: wt })
+    ensureGradlewExec(wt)
+    run('./gradlew', ['assembleMaestro'], { cwd: path.join(wt, 'android') })
+    fs.mkdirSync(CACHE_UPGRADE, { recursive: true })
+    fs.copyFileSync(path.join(wt, 'android/app/build/outputs/apk/maestro/app-maestro.apk'), cached)
+    log(`cached ${path.relative(ROOT, cached)}`)
+  } finally {
+    run('git', ['worktree', 'remove', '--force', wt])
+  }
+  return cached
+}
+
+function launchApp() {
+  adbShell('monkey', '-p', APP, '-c', 'android.intent.category.LAUNCHER', '1')
+}
+
+function tryReadMigrationIndex(): number | null {
+  try {
+    return withPulledDatabase(local => {
+      const out = sqliteExec(local, 'SELECT migration FROM status;').trim()
+      return out === '' ? null : Number(out)
+    })
+  } catch {
+    return null // app not initialized yet, or DB caught mid-write
+  }
+}
+
+function waitForMigrationIndex(ready: (index: number) => boolean, what: string, timeoutMs: number): number {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const index = tryReadMigrationIndex()
+    if (index !== null && ready(index)) return index
+    if (Date.now() > deadline) fail(`timed out waiting for ${what}`)
+    spawnSync('sleep', ['2'])
+  }
+}
+
+// Replace the app's DB with a local file (app must be stopped). run-as chdirs
+// to the app data dir, so DB_DEVICE_PATH resolves; no shell operators — each
+// step is a single adb command.
+function pushDatabase(local: string) {
+  const staging = '/data/local/tmp/ivy-upgrade.db'
+  adbShell('am', 'force-stop', APP)
+  adb('push', local, staging)
+  adbShell('run-as', APP, 'cp', staging, DB_DEVICE_PATH)
+  adbShell('run-as', APP, 'rm', '-f', `${DB_DEVICE_PATH}-journal`, `${DB_DEVICE_PATH}-wal`, `${DB_DEVICE_PATH}-shm`)
+  adbShell('rm', '-f', staging)
+}
+
+function runUpgradeTest(fromTag?: string) {
+  requireEmulator('upgrade test')
+  if (!has('sqlite3')) fail('sqlite3 not found on the host')
+  const tag = fromTag || latestReleaseTag()
+  const currentApk = apkPath('maestro')
+  if (!fs.existsSync(currentApk)) fail(`current maestro APK not found at ${currentApk} — run: bin/ivy.ts build maestro`)
+  const baseApk = upgradeBaseApk(tag)
+
+  log(`upgrade test: ${tag} → working tree (migration target ${LATEST_MIGRATION})`)
+  capture(findAdb(), ['-s', serial(), 'uninstall', APP], { allowFail: true })
+  adb('install', baseApk)
+  adb('logcat', '-c')
+
+  // Radios off for the whole test: a fresh install immediately starts the
+  // 465MB whisper-model download, which saturates the emulator (same reason
+  // the maestro subflow goes offline first). Restored in finally.
+  adbShell('svc', 'wifi', 'disable')
+  adbShell('svc', 'data', 'disable')
+  try {
+    log('launching old build to create its database')
+    launchApp()
+    waitForMigrationIndex(() => true, 'the old build database', 90_000)
+    spawnSync('sleep', ['5']) // let any old-build migrations settle
+    const oldIndex = waitForMigrationIndex(() => true, 'the old build database', 10_000)
+    log(`old build settled at migration ${oldIndex}`)
+    if (oldIndex >= LATEST_MIGRATION) fail(`${tag} is already at migration ${oldIndex} — nothing to test`)
+
+    const hooks = UPGRADE_HOOKS.filter(h => h.migration > oldIndex && h.migration <= LATEST_MIGRATION)
+    log(`seeding baseline + ${hooks.length} hook(s)${hooks.length ? ': ' + hooks.map(h => `${h.migration} (${h.description})`).join(', ') : ''}`)
+    adbShell('am', 'force-stop', APP)
+    const local = path.join(os.tmpdir(), `ivy-upgrade-${process.pid}.db`)
+    fs.writeFileSync(local, pullDatabase())
+    try {
+      sqliteExec(local, baselineSeedSql())
+      for (const hook of hooks) sqliteExec(local, hook.seedSql(ROOT))
+      pushDatabase(local)
+    } finally {
+      fs.rmSync(local, { force: true })
+    }
+
+    log('upgrade-installing the current build')
+    adb('install', '-r', currentApk)
+    launchApp()
+    waitForMigrationIndex(i => i >= LATEST_MIGRATION, `migration ${LATEST_MIGRATION}`, 180_000)
+    adbShell('am', 'force-stop', APP)
+
+    const checks: UpgradeCheck[] = [...baselineChecks(), ...hooks.flatMap(h => h.checks)]
+    withPulledDatabase(db => {
+      for (const check of checks) {
+        const got = sqliteExec(db, check.sql).trim()
+        if (got !== check.expect) {
+          fail(`upgrade check failed: ${check.desc} — got '${got}', expected '${check.expect}'`)
+        }
+        log(`check passed: ${check.desc}`)
+      }
+    })
+
+    const crashes = adbOut('logcat', '-d', '-b', 'crash')
+    if (crashes.includes(`Process: ${APP}`)) fail('app crashed during the upgrade test (logcat -b crash)')
+
+    log(`upgrade test passed (${tag} → migration ${LATEST_MIGRATION}, ${checks.length} checks)`)
+  } finally {
+    try {
+      adbShell('svc', 'wifi', 'enable')
+      adbShell('svc', 'data', 'enable')
+    } catch { /* device gone — nothing to restore */ }
   }
 }
 
@@ -993,6 +1175,16 @@ function preflight(version: string, screenshots: boolean) {
   const tag = git('tag', '-l', `v${version}`)
   report(tag === '', `tag v${version}`, tag === '' ? 'available' : 'already exists')
 
+  // Informational: a cache miss doesn't fail preflight, but the upgrade test
+  // will fall back to a slow rebuild-from-tag mid-pipeline
+  try {
+    const prev = latestReleaseTag()
+    const cached = path.join(CACHE_UPGRADE, `ivy-${prev.replace(/^v/, '')}-maestro.apk`)
+    report(true, 'upgrade base', fs.existsSync(cached)
+      ? `${prev} cached`
+      : `${prev} NOT cached — the upgrade test will rebuild it from the tag (slow)`)
+  } catch { /* no release tag yet — first release, upgrade test will be skipped */ }
+
   if (doctorFailed) {
     fail(`preflight: ${failedChecks.length} check(s) failed (${failedChecks.join(', ')}) — nothing was changed`)
   }
@@ -1016,42 +1208,57 @@ function cmdPrepare(args: Args) {
   verifyKeystorePassword(password)
   log('password verified — the rest runs unattended, walk away')
 
-  step('build maestro variant (test affordances) + install on emulator')
-  runGradle(GRADLE_TASKS.maestro, { ...process.env })
-  adb('install', '-r', apkPath('maestro'))
-
-  step('unit tests (jest)')
-  run('npx', ['jest', '--silent'])
-
-  step('e2e tests (full maestro suite)')
-  pushFixtures()
-  maestroRun(['maestro/'])
-  checkDeleteMe()
-
-  if (screenshots) {
-    step('screenshots: Play Store set + web/README refresh')
-    generateScreenshots()
-    git('add', 'web/assets', 'docs/screenshots.png')
-    if (git('status', '--porcelain', '-uno') !== '') {
-      git('commit', '-m', 'web: refresh screenshots')
-      log('committed: web: refresh screenshots')
-    } else {
-      log('screenshots unchanged — nothing to commit')
-    }
-  }
-
-  step(`bump version to ${version} + log changes in VERSIONS.md`)
+  // Version files are bumped BEFORE any build so every tested artifact is
+  // version-identical to the released pack; the commit happens only after the
+  // full test phase, so a failure leaves nothing on master to undo.
+  step(`bump version files to ${version} (committed only after tests pass)`)
+  const bumpedFiles = ['package.json', 'package-lock.json', 'docs/VERSIONS.md']
+  const revertBump = () => { try { git('checkout', '--', ...bumpedFiles) } catch { /* keep original error */ } }
   run('npm', ['version', '--no-git-tag-version', version])
-  log(`package.json + package-lock.json set to ${version}`)
   const versionsFile = path.join(ROOT, 'docs/VERSIONS.md')
   const code = versionCode(parseSemver(version)!)
   const date = new Date().toISOString().slice(0, 10)
   fs.writeFileSync(versionsFile,
     insertVersionSection(fs.readFileSync(versionsFile, 'utf8'), version, code, date, changes))
-  log(`VERSIONS.md: added section ${version} (versionCode ${code})`)
+  log(`package.json + package-lock.json + VERSIONS.md set to ${version} (versionCode ${code})`)
+
+  try {
+    step('build maestro variant (test affordances)')
+    runGradle(GRADLE_TASKS.maestro, { ...process.env })
+
+    step('upgrade test (previous release → this build)')
+    let prevTag: string | null = null
+    try { prevTag = latestReleaseTag() } catch { /* first release */ }
+    if (prevTag) runUpgradeTest(prevTag)
+    else log('no previous release tag — skipping the upgrade test')
+
+    step('unit tests (jest) + e2e tests (full maestro suite)')
+    capture(findAdb(), ['-s', serial(), 'uninstall', APP], { allowFail: true }) // clear upgrade-test state
+    adb('install', apkPath('maestro'))
+    run('npx', ['jest', '--silent'])
+    pushFixtures()
+    maestroRun(['maestro/'])
+    checkDeleteMe()
+
+    if (screenshots) {
+      step('screenshots: Play Store set + web/README refresh')
+      generateScreenshots()
+      git('add', 'web/assets', 'docs/screenshots.png')
+      if (git('status', '--porcelain', '-uno') !== '') {
+        git('commit', '-m', 'web: refresh screenshots')
+        log('committed: web: refresh screenshots')
+      } else {
+        log('screenshots unchanged — nothing to commit')
+      }
+    }
+  } catch (error) {
+    revertBump()
+    log('version bump reverted — the working tree is clean again')
+    throw error
+  }
 
   step('commit release')
-  git('add', 'package.json', 'package-lock.json', 'docs/VERSIONS.md')
+  git('add', ...bumpedFiles)
   git('commit', '-m', `release: v${version}`)
   log(`committed: release: v${version}`)
 
@@ -1062,10 +1269,14 @@ function cmdPrepare(args: Args) {
   fixAndroidPerms(ROOT)
   runGradle(GRADLE_TASKS.release, env)
 
-  step('artifact checks + delivery to dist/')
+  step('artifact checks + delivery to dist/ + upgrade-base cache')
   checkBuiltArtifact(apkPath('release'))
   checkBuiltArtifact(aabPath())
   deliverRelease()
+  // Cache this release's maestro APK as the next release's upgrade-test base
+  fs.mkdirSync(CACHE_UPGRADE, { recursive: true })
+  fs.copyFileSync(apkPath('maestro'), path.join(CACHE_UPGRADE, `ivy-${version}-maestro.apk`))
+  log(`cached cache/upgrade/ivy-${version}-maestro.apk (upgrade-test base for the next release)`)
 
   git('tag', `v${version}`)
   log(`tagged v${version}`)
@@ -1524,26 +1735,43 @@ function cmdLogs(args: Args) {
   }
 }
 
-function cmdQuery(args: Args) {
-  const sql = args.positionals[0]
-  if (!sql) fail('usage: query "<sql>"')
-  if (!has('sqlite3')) fail('sqlite3 not found on the host')
-  // run-as works on debuggable builds only (debug/maestro variants)
-  const local = path.join(os.tmpdir(), `toolkit-db-${process.pid}.db`)
+// run-as works on debuggable builds only (debug/maestro variants). Pulls a
+// point-in-time copy — force-stop the app first when consistency matters.
+function pullDatabase(): Buffer {
   const res = spawnSync(findAdb(), ['-s', serial(), 'exec-out', 'run-as', APP, 'cat', DB_DEVICE_PATH],
     { maxBuffer: 512 * 1024 * 1024 })
   // adb exec-out can exit 0 with the remote error on stdout — trust only the
   // SQLite magic bytes
   if (res.status !== 0 || !res.stdout.subarray(0, 15).equals(Buffer.from('SQLite format 3'))) {
-    fail('could not pull the database — is the debug build variant installed and initialized? ' +
+    fail('could not pull the database — is a debuggable build variant installed and initialized? ' +
       `(${(res.stdout.toString() + res.stderr.toString()).trim().split('\n')[0]})`)
   }
-  fs.writeFileSync(local, res.stdout)
+  return res.stdout
+}
+
+// Run SQL (single statement or a script) against a local DB copy, return stdout
+function sqliteExec(dbFile: string, sql: string, display: string[] = []): string {
+  if (!has('sqlite3')) fail('sqlite3 not found on the host')
+  const res = spawnSync('sqlite3', [...display, dbFile], { input: sql, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  if (res.status !== 0) fail(`sqlite3 failed: ${(res.stderr || res.stdout).trim()}`)
+  return res.stdout
+}
+
+function withPulledDatabase<T>(fn: (local: string) => T): T {
+  const local = path.join(os.tmpdir(), `toolkit-db-${process.pid}.db`)
+  fs.writeFileSync(local, pullDatabase())
   try {
-    run('sqlite3', ['-header', '-column', local, sql])
+    return fn(local)
   } finally {
     fs.rmSync(local, { force: true })
   }
+}
+
+function cmdQuery(args: Args) {
+  const sql = args.positionals[0]
+  if (!sql) fail('usage: query "<sql>"')
+  if (!has('sqlite3')) fail('sqlite3 not found on the host')
+  withPulledDatabase(local => run('sqlite3', ['-header', '-column', local, sql]))
 }
 
 // ---------------------------------------------------------------------------
@@ -1553,7 +1781,7 @@ interface Args { positionals: string[], flags: Record<string, string | boolean> 
 
 // Tiny parser: `--flag` is boolean unless listed in valued (then takes the
 // next token); everything else is positional.
-const VALUED_FLAGS = new Set(['device', 'arch', 'file', 'inline', 'tap', 'nav', 'tag', 'version', 'changes', 'port'])
+const VALUED_FLAGS = new Set(['device', 'arch', 'file', 'inline', 'tap', 'nav', 'tag', 'version', 'changes', 'port', 'from'])
 
 function parseArgs(argv: string[]): Args {
   const args: Args = { positionals: [], flags: {} }

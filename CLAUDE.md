@@ -260,7 +260,8 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   └── withIvyArchitectures.js     # default reactNativeArchitectures=arm64-v8a (vendored ffmpeg is arm64-only)
 
 /bin
-  └── ivy.ts                      # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below
+  ├── ivy.ts                      # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below
+  └── upgrade_hooks.ts            # Per-migration seed/verify hooks for `test --upgrade` (kept forever, like migrations)
 
 /secrets                          # Keystores. HARD RULE: secrets are NEVER duplicated —
   │                               # no tooling copies this directory anywhere, ever
@@ -283,6 +284,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   ├── chapter-extraction.yaml     # Chaptered import
   ├── delete-original.yaml        # Delete original after import
   ├── timeline-gestures.yaml      # Timeline drag/fling/tap
+  ├── artwork-cap.yaml            # Oversized-cover import → artwork extraction cap (bridge DB check)
   ├── sleep-timer.yaml            # Sleep timer arm/expiry (needs maestro build variant)
   ├── transcription-states.yaml   # Model-download lifecycle via bridge network control (needs maestro build variant)
   ├── scripts/bridge.js           # Shared helper calling the toolkit bridge (device control mid-flow)
@@ -292,7 +294,12 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
 
 /assets/test
   ├── test-audio.m4a              # Bundled test file (chapters + standard extras tags: narrator, summary, date)
-  └── test-audio-2.m4a            # Second fixture: all extras filled (Libation-style freeform atoms)
+  ├── test-audio-2.m4a            # Second fixture: all extras filled (Libation-style freeform atoms)
+  ├── test-audio-cover.m4a        # Oversized embedded cover (~900KB, 1400px) — artwork-cap.yaml import-path check
+  └── test-artwork.jpg            # >100KB-as-base64 JPEG — upgrade-test hook seed for the artwork repair migration
+
+/cache                            # GENERATED (gitignored): persistent toolkit caches
+                                  # upgrade/ivy-<version>-maestro.apk — upgrade-test bases, written by prepare
 
 /samples                          # Committed sources for generated store/web assets
   ├── data.json                   # Demo library fixture (screenshot seeding; see docs/2026-07-21-playstore-screenshots.md)
@@ -667,16 +674,23 @@ Commands:
       never builds native — install first with `build debug --install`.
       --clear resets the Metro cache. Ctrl-C to stop.
 
-  test [name] [--unit | --e2e] [--server-only [--port <n>]]
+  test [name] [--unit | --e2e | --upgrade [--from <tag>]] [--server-only [--port <n>]]
       No flag = both suites. --unit = jest. --e2e = maestro suite; pushes and
       media-scans the fixtures first, verifies delete-original afterwards.
       [name] runs a single case (jest pattern or maestro flow name) and needs
       exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
       a localhost HTTP interface flows use for device control (network
-      toggles) via maestro/scripts/bridge.js; BRIDGE_URL is injected into
-      every run and network state is restored afterwards (emulator only).
-      --server-only starts just the bridge (foreground, Ctrl-C to stop) for
-      hand-run maestro sessions.
+      toggles, DB checks) via maestro/scripts/bridge.js; BRIDGE_URL is
+      injected into every run and network state is restored afterwards
+      (emulator only). --server-only starts just the bridge (foreground,
+      Ctrl-C to stop) for hand-run maestro sessions.
+      --upgrade = migration upgrade smoke test (emulator-only, wipes app
+      state): installs the previous release's maestro APK (from cache/upgrade/,
+      cache-missed tags are rebuilt from git — Mac-only), seeds old-schema
+      data + per-migration hooks (bin/upgrade_hooks.ts), upgrade-installs the
+      current maestro build, verifies migrations + data + no crash. --from
+      tests against a specific cached base tag. Needs a built maestro APK
+      and sqlite3. See docs/MIGRATIONS.md.
 
   drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>
       Make the running app do something (one mode per call).
@@ -700,11 +714,12 @@ Commands:
   prepare --version <X.Y.Z> --changes <markdown> [--screenshots]
       The release pipeline, start to finish. Interactive (keystore password
       prompted up front, held in memory only) — run it on the Mac from a
-      terminal. Steps: preflight -> password -> maestro build + full test
-      suite -> [screenshots ->] version bump + VERSIONS.md -> commit ->
-      release build -> artifact checks -> dist/ delivery -> tag. Nothing is
-      pushed or uploaded; it ends with a checklist of the manual Play
-      Console / GitHub steps.
+      terminal. Steps: preflight -> password -> version bump (files only;
+      committed after tests) -> maestro build -> upgrade test -> jest + e2e
+      suite -> [screenshots ->] commit -> release build -> artifact checks ->
+      dist/ delivery + upgrade-base cache -> tag. A test failure reverts the
+      bumped files, leaving the tree clean. Nothing is pushed or uploaded; it
+      ends with a checklist of the manual Play Console / GitHub steps.
 
   doctor
       Full environment report: tools, devices, project state, the
@@ -739,9 +754,9 @@ Commands:
       exits; --follow streams. --tag filters (e.g. ReactNativeJS).
 
   query "<sql>"
-      Run SQL against a pulled copy of the app database (read-only; needs the
-      debug build variant installed — run-as only works on debuggable builds —
-      plus sqlite3 on the host).
+      Run SQL against a pulled copy of the app database (read-only; needs a
+      debuggable build variant installed (debug or maestro) — run-as only
+      works on debuggable builds — plus sqlite3 on the host).
 
   help
       This text.

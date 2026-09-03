@@ -99,6 +99,7 @@ $ANDROID_HOME/emulator/emulator -avd <name> -no-audio -no-boot-anim &
 | `clip-dismiss-release.yaml` | Dismissing a clip dialog returns playback to the main player: paused, same book, same position (cross-book) |
 | `book-details.yaml` | Extras extracted on import → details viewer → edit narrator → verify persistence |
 | `timeline-gestures.yaml` | Tap-seek / scrub / flick on the Skia timeline; app stays responsive |
+| `artwork-cap.yaml` | Oversized-cover import → native extraction cap → bridge DB check (`check/artwork-cap`) |
 | `sleep-timer.yaml` | Arm 5s preset → countdown on button → expiry pauses playback, clears timer (maestro/debug builds only) |
 | `transcription-states.yaml` | Model-download lifecycle via bridge network control: metered gate (waiting-wifi) → auto-download on Wi-Fi → failure backoff countdown → give-up (tap-to-retry, Settings match) → auto-retry on reconnect (maestro/debug builds only: fast backoff) |
 
