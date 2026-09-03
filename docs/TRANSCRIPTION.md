@@ -4,7 +4,7 @@ A guide for Ivy's on-device clip transcription.
 
 ## The Big Picture
 
-When a user creates a clip (a bookmarked audio segment), Ivy automatically transcribes it using on-device speech recognition. No server, no internet, no data leaving the phone. The transcription appears in the clip viewer as quoted text.
+When a user creates a clip (a bookmarked audio segment), Ivy automatically transcribes it using on-device speech recognition. No server, no internet, no data leaving the phone. The transcription appears in the clip viewer as plain text under a "Transcription" label.
 
 This is powered by [Whisper](https://github.com/openai/whisper), OpenAI's open-source speech recognition model, running natively via `whisper.rn`. The model (~465MB) downloads once on first use and is cached locally.
 
@@ -15,9 +15,10 @@ This is powered by [Whisper](https://github.com/openai/whisper), OpenAI's open-s
 - Creating a new clip
 - Editing a clip's bounds (start/duration) — clears the old transcription and re-queues
 
-**What doesn't trigger transcription:**
+**What doesn't trigger transcription (immediately):**
 - Editing a clip's note (that's user-written, separate from transcription)
 - Clips created while the feature is disabled (they're picked up when re-enabled)
+- Clips arriving via sync with `transcription = null` — nothing queues them on arrival; they wait for the next service start, which queries the database for untranscribed clips
 
 ---
 
@@ -27,7 +28,7 @@ This is powered by [Whisper](https://github.com/openai/whisper), OpenAI's open-s
 
 The system is split into two services that each do one thing:
 
-- **WhisperService** — knows how to prepare audio and run the model. One transcription at a time, no queue awareness.
+- **WhisperService** — knows how to prepare audio and run the model. No queue awareness — and no internal lock: sequencing is entirely the queue's guarantee.
 - **TranscriptionQueueService** — knows which clips need transcribing and in what order. Feeds clips to Whisper one by one.
 
 The queue owns the lifecycle. Whisper is a tool it uses.
@@ -44,48 +45,17 @@ Everything happens on-device. The Whisper model runs locally via native bindings
 
 ## Architecture Overview
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                       Zustand Store                       │
-│                                                           │
-│  transcription: { status, pending }                       │
-│  actions: startTranscription, stopTranscription           │
-└───────┬────────────────────────────────────────┬──────────┘
-        │ calls start/stop/queueClip             │ subscribes to events
-        ▼                                        │
-┌─────────────────────────────────────┐          │
-│     TranscriptionQueueService       │          │
-│                                     │          │
-│  queue: string[]  (clip IDs)        │          │
-│  processing: boolean                │          │
-│  started: boolean                   │          │
-│                                     │          │
-│  Events:                            │          │
-│    queued → { clipId }              │──────────┘
-│    started → { clipId }             │
-│    finish → { clipId, transcription?, error?, start, duration }
-└───────┬──────────────┬──────────────┘
-        │              │
-        │ calls        │ calls slice()
-        │ transcribe() │
-        ▼              ▼
-┌──────────────┐ ┌──────────────────────┐
-│ WhisperService│ │  AudioSlicerService  │
-│              │ │  (native Kotlin)     │
-│ initialize() │ │                      │
-│ transcribe() │ │  Extracts first 3min │
-│              │ │  of clip audio       │
-│              │ └──────────────────────┘
-└──────────────┘
-```
+Three files, clear responsibilities:
 
-**Three files, clear responsibilities:**
+- **`queue.ts`** (TranscriptionQueueService) — job queue (`queue: string[]` of clip ids, `processing`, `started`), clip lifecycle, sequential processing. Events the store subscribes to:
+  - `queued → { clipId }`
+  - `started → { clipId }`
+  - `retry → { attempt, maxAttempts, delayMs, error }` (between failed start attempts)
+  - `finish → { clipId, transcription?, error?, start, duration }`
+- **`whisper.ts`** (WhisperService) — model download, audio conversion, native inference. The store also subscribes to its `status` events directly — that's what drives the `'downloading'` state.
+- **`audio/slicer.ts`** — extracts the first 3 minutes of clip audio (native, shared with the clips system).
 
-| File | Role | Has side effects? |
-|------|------|:-:|
-| `whisper.ts` | Model download, audio conversion, native transcription | Yes |
-| `queue.ts` | Job queue, clip lifecycle, sequential processing | Yes |
-| `(audio/slicer.ts)` | Extracts audio segments from source files | Yes |
+The store calls `start`/`stop`/`queueClip` on the queue; the queue calls `whisper.transcribe()` and `slicer.slice()`.
 
 ---
 
@@ -111,17 +81,15 @@ The service converts input audio to the format Whisper expects (16kHz mono PCM W
 
 ### Running transcription
 
-With the model loaded and audio prepared, it calls `context.transcribe(wavPath, { language: 'en' })`. The result is trimmed and returned.
+With the model loaded and audio prepared, it calls `context.transcribe(wavPath, { language: 'en' })` — the language is hard-wired to English; non-English audio is decoded as English. The result is trimmed and **stripped of enclosing quotes** (straight and curly, `stripEnclosingQuotes` in utils) — Whisper commonly wraps output in quotation marks. Existing rows were backfilled by migration 12.
 
 ### Initialization deduplication
 
-Multiple parts of the app might trigger initialization concurrently (e.g., the queue starts while a clip is being created). The service stores the initialization promise and returns it to all concurrent callers:
+Multiple parts of the app might trigger initialization concurrently (e.g., the queue starts while a clip is being created). The service stores the initialization promise and returns it to all concurrent callers; once initialized, `initialize()` returns immediately.
 
-```
-If already initialized → return immediately
-If currently initializing → return the existing promise
-Otherwise → start initializing, store the promise
-```
+### The model is never released
+
+Nothing calls `WhisperService.release()`: disabling transcription clears the queue and status but leaves the Whisper context (and its ~465MB of memory) resident. The flip side: re-enabling is instant. Current behavior, not a contract.
 
 ---
 
@@ -135,23 +103,9 @@ The queue is a simple in-memory array of clip IDs (`string[]`). It's not persist
 
 ### Processing loop
 
-```
-processQueue():
-  if not started → return
-  if already processing → return
-  if queue empty → return
-  if whisper not ready → return
+`processQueue()` bails unless started, not already processing, queue non-empty, and Whisper ready; then it shifts clip ids FIFO while the queue is non-empty and the service stays started. The `processing` flag is the key concurrency guard — only one clip is transcribed at any time — and is reset in a `finally` block so a failed clip can't stall the queue.
 
-  processing = true
-
-  while queue is not empty AND started:
-    clipId = queue.shift()    // FIFO
-    processClip(clipId)
-
-  processing = false
-```
-
-The `processing` flag is the key concurrency guard. It ensures only one clip is being transcribed at any time. The flag is reset in a `finally` block to prevent it from getting stuck if a clip fails.
+Per clip, `processClip` re-queries `getClipsNeedingTranscription()` (a full untranscribed-clips query, not a by-id lookup) and skips clips that are gone or already transcribed — emitting a bare `finish` with no result so listeners clear their pending state.
 
 ### The 3-minute limit
 
@@ -191,7 +145,7 @@ The store listens to `NetworkService` `change` events (listener started in `init
 - `'waiting-wifi'` + unmetered connection appears → auto-start (the gate re-checks)
 - `'error'` with cause `'download-failed'` + connectivity returns → auto-retry (a metered connection lands back on `'waiting-wifi'` via the gate)
 
-Re-entrancy is safe: `startTranscription` sets `'starting'` synchronously, so repeated network events no-op through the status checks.
+Re-entrancy is safe: `startTranscription` sets `'starting'` synchronously, so repeated network events no-op through the status checks. A second guard (`startsInFlight` counter) keeps a concurrent gate check from regressing state to `'waiting-wifi'` while a manual `ignoreMetered` download is in flight.
 
 ### The clips-screen banner
 
@@ -206,7 +160,7 @@ Two store actions integrate with transcription as a side effect:
 
 ### Persistence: the store is the single writer
 
-The queue **never writes the database**. Its `finish` event carries the result *plus the clip bounds the job was started with*; the store's handler compares those bounds against the current clip and **discards stale results** (the clip's bounds were edited mid-transcription — the re-queued job for the new audio supersedes it, and `pending` is kept alive for it). For current results it clears `pending` and runs the `updateClip` action, which persists the text and queues the clip for sync. An **empty string is a valid result** (silence, music) and is persisted like any other text; only errored jobs skip persistence, leaving `transcription = null` so a later service start re-queues the clip.
+The queue **never writes the database**. Its `finish` event carries the result *plus the clip bounds the job was started with*; the store's handler compares those bounds against the current clip and **discards stale results** (the clip's bounds were edited mid-transcription — the re-queued job for the new audio supersedes it). The general rule for the pending indicator: on every `finish`, `pending` is cleared unless the queue still holds a job for that clip (`hasQueuedJob(clipId)`) — which is what keeps the spinner alive through a stale result. For current results the handler runs the `updateClip` action, which persists the text and queues the clip for sync. An **empty string is a valid result** (silence, music) and is persisted like any other text; only errored jobs skip persistence, leaving `transcription = null` so a later service start re-queues the clip.
 
 ---
 
@@ -222,11 +176,11 @@ Calling `queueClip()` when the service isn't started is a silent no-op. The clip
 
 ### Start failure drains the queue
 
-If all start attempts fail (Whisper never becomes ready), `doStart()` sets `started = false`, empties the queue, and emits a `finish` event **with an error** for every abandoned clip — so listeners (the store) clear their pending indicators instead of spinning forever. The clips still have `transcription = null` in the database, so a later successful `start()` picks them up again.
+If all start attempts fail (Whisper never becomes ready), `doStart()` sets `started = false`, empties the queue, and emits a `finish` event **with an error** for every abandoned clip — so listeners (the store) clear their pending indicators instead of spinning forever. It then **rethrows the last error**: that rejection is what makes `startTranscription` land on `'error'`. The clips still have `transcription = null` in the database, so a later successful `start()` picks them up again.
 
 ### Start/stop lifecycle
 
-`start()` is idempotent — concurrent calls share the same initialization promise. Each call re-asserts `started = true`, so a `stop()` followed by `start()` during initialization cancels the stop intent. Retry logic (3 attempts with backoff) lives inside the service; the delays are injected via deps — 5/15/30s in production, 1/3/5s on test builds (`isTestBuild()`, wired in `services/index.ts`) so e2e can traverse the retry/error states quickly. After initialization, `doStart()` checks `started` before processing the queue — if `stop()` was called and not re-asserted, it bails.
+`start()` is idempotent — concurrent calls share the same initialization promise. Each call re-asserts `started = true`, so a `stop()` followed by `start()` during initialization cancels the stop intent. Retry logic (3 attempts with backoff, no delay after the last) lives inside the service; the two delays are injected via deps — 5/15s in production, 1/3s on test builds (`isTestBuild()`, wired in `services/index.ts`) so the `transcription-states.yaml` e2e flow can traverse the whole state machine (metered gate → auto-download → backoff countdown → give-up → recovery) via the toolkit bridge's network control. After initialization, `doStart()` checks `started` before processing the queue — if `stop()` was called and not re-asserted, it bails.
 
 ### Stop while processing
 
@@ -263,6 +217,12 @@ src/screens/
 
 src/components/
   ClipViewer.tsx           → Displays transcription text
+  ClipItem.tsx             → "Transcribing..." row indicator (from transcription.pending)
   TranscriptionBanner.tsx  → Clips-screen status banner (unexpected states only)
   transcription_banner_content.ts → Pure banner content logic (unit-tested)
+
+src/screens/
+  ClipsListScreen.tsx      → Search matches transcription text
 ```
+
+**Testing:** `src/services/transcription/__tests__/queue.test.ts`, `src/components/__tests__/transcription_banner_content.test.ts`, `src/actions/__tests__/start_transcription.test.ts`; maestro flow `transcription-states.yaml` (needs the maestro build variant).
