@@ -40,6 +40,9 @@ appId: com.salezica.ivy
 - tapOn:
     id: ".*:id/option_menu_search"
 - inputText: "delete-me"
+# Grid-view pickers (fresh AVDs) show results in 2 columns: without this,
+# row-2 tiles hide behind the keyboard and their names never turn visible
+- hideKeyboard
 - extendedWaitUntil:
     visible: "delete-me.m4a"
     timeout: 10000

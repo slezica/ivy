@@ -45,6 +45,9 @@ appId: com.salezica.ivy
 - tapOn:
     id: ".*:id/option_menu_search"
 - inputText: "test-audio"
+# Grid-view pickers (fresh AVDs) show results in 2 columns: without this,
+# row-2 tiles hide behind the keyboard and their names never turn visible
+- hideKeyboard
 - extendedWaitUntil:
     visible: "test-audio.m4a"
     timeout: 10000
