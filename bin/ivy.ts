@@ -1269,9 +1269,14 @@ function cmdPrepare(args: Args) {
     insertVersionSection(fs.readFileSync(versionsFile, 'utf8'), version, code, date, changes))
   log(`package.json + package-lock.json + VERSIONS.md set to ${version} (versionCode ${code})`)
 
+  // The release build's `prebuild --clean` wipes android/ — including the
+  // maestro APK built below — so stash a copy now and cache it at delivery
+  const maestroStash = path.join(os.tmpdir(), `ivy-prepare-${version}-maestro.apk`)
+
   try {
     step('build maestro variant (test affordances)')
     runGradle(GRADLE_TASKS.maestro, { ...process.env })
+    fs.copyFileSync(apkPath('maestro'), maestroStash)
 
     step('upgrade test (previous release → this build)')
     let prevTag: string | null = null
@@ -1320,9 +1325,11 @@ function cmdPrepare(args: Args) {
   checkBuiltArtifact(apkPath('release'))
   checkBuiltArtifact(aabPath())
   deliverRelease()
-  // Cache this release's maestro APK as the next release's upgrade-test base
+  // Cache this release's maestro APK (stashed before the release build's
+  // prebuild --clean wiped android/) as the next release's upgrade-test base
   fs.mkdirSync(CACHE_UPGRADE, { recursive: true })
-  fs.copyFileSync(apkPath('maestro'), path.join(CACHE_UPGRADE, `ivy-${version}-maestro.apk`))
+  fs.copyFileSync(maestroStash, path.join(CACHE_UPGRADE, `ivy-${version}-maestro.apk`))
+  fs.rmSync(maestroStash, { force: true })
   log(`cached cache/upgrade/ivy-${version}-maestro.apk (upgrade-test base for the next release)`)
 
   git('tag', `v${version}`)
