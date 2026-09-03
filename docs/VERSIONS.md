@@ -7,6 +7,43 @@ written by `bin/ivy.ts prepare` from its `--changes` argument (see CLAUDE.md
 "Preparing a Release") — the agent drafts that markdown in this file's style
 (Features/Fixes/Infra headings as applicable).
 
+## 1.6.3 (versionCode 10603) — 2026-09-03
+
+Fixes:
+
+- Out-of-memory crashes from oversized cover art eliminated: extracted
+  artwork is capped at 512px, and a repair migration downscales artwork
+  stored by earlier versions (undecodable artwork is dropped), with the
+  repaired covers syncing across devices
+- Transcriptions are no longer wrapped in stray quotes: new results are
+  stripped at the source and existing ones cleaned up by a migration
+- Opening a book no longer flashes "Playing" in the library before playback
+  actually starts
+
+Improvements:
+
+- Transcription model download waits for Wi-Fi on metered connections, with
+  a "Download now" override and matching status everywhere (clips banner and
+  Settings, including the retry countdown)
+- Transcription status banner restyled (amber warning treatment, clearer
+  content)
+- Settings screen restyled with descriptive state subtitles
+- Library progress text is green only for in-progress books
+- Books load faster (duration polled at 25ms during load)
+
+Infra:
+
+- Migration system unified as async with injected native services;
+  the database is snapshotted before pending migrations run
+- Device-level upgrade smoke test (test --upgrade): previous release
+  installed, seeded, upgraded and verified with per-migration hooks — runs
+  inside prepare, with upgrade-base APKs cached per release
+- prepare bumps the version before building, so every tested artifact is
+  version-identical to the released pack (commit still gated on tests)
+- Standard debug keystore committed for self-contained tag checkouts
+- E2e: bridge server for mid-flow device control, transcription-states and
+  artwork-cap flows, whisper download suppressed during flows
+
 ## 1.6.2 (versionCode 10602) — 2026-08-11
 
 Fixes:
