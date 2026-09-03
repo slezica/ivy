@@ -8,7 +8,9 @@ Ivy plays audiobooks and podcast clips. Playback is backed by `react-native-trac
 
 Multiple UI components can control playback — the main PlayerScreen, ClipViewer, and ClipEditor — but only one at a time. An **ownership model** prevents them from fighting over the audio player.
 
-The playback state in the store is deliberately minimal — it represents **hardware state** (what's loaded, where it's playing, who's controlling it), not domain state. Book metadata like title and artist aren't stored in playback; the `play()` action looks them up from the database when loading a file (for system notification display), and PlayerScreen looks them up from the `books` map (for the UI).
+The playback state in the store is deliberately minimal — it represents **hardware state** (what's loaded, where it's playing, who's controlling it), not domain state. Book metadata like title and artist aren't stored in playback; `loadBook()` looks them up from the database when loading a file (for system notification display), and PlayerScreen looks them up from the `books` map (for the UI).
+
+Related design records: [2026-07-24-sleep-timer.md](2026-07-24-sleep-timer.md), [2026-07-23-timeline-smooth-playback.md](2026-07-23-timeline-smooth-playback.md), [2026-07-25-player-clip-editor.md](2026-07-25-player-clip-editor.md), [2026-07-28-CLIP_EDITOR_PLAYBACK.md](2026-07-28-CLIP_EDITOR_PLAYBACK.md), [2026-08-08-detached-playhead.md](2026-08-08-detached-playhead.md).
 
 ---
 
@@ -16,19 +18,11 @@ The playback state in the store is deliberately minimal — it represents **hard
 
 ### 1. Playback state is hardware-only
 
-```typescript
-playback: {
-  status: 'idle' | 'loading' | 'paused' | 'playing'
-  position: number       // ms — where the playhead is
-  uri: string | null     // what file is loaded
-  duration: number       // ms — length of loaded file
-  ownerId: string | null // who's controlling playback
-  sleepTimer: { endsAt: number, duration: number } | null  // wall-clock; null = off
-  mainContext: { uri: string, position: number } | null  // main player's book + position, snapshotted when ownership leaves it
-}
-```
+`playback` in the store (authoritative shape: `store/types.ts`, `PlaybackState`) holds status, position, uri, duration, ownerId, sleepTimer, and mainContext. Notes the type file doesn't carry:
 
-This is what the audio player is physically doing right now. There's no book title, no artwork, no "currently playing book" concept here. Components that need that information look up the `Book` from the `books` map by matching `playback.uri`.
+- There's no book title, artwork, or "currently playing book" concept. Components look up the `Book` from the `books` map by matching `playback.uri`.
+- `status: 'idle'` means nothing is loaded. It's reached three ways: initial state, a failed fresh load, and archiving/deleting the currently loaded book (`archive_book`/`delete_book` reset status/uri/ownerId and call `audio.unload()`).
+- `mainContext` is the main player's `{ uri, position }` snapshot for ownership hand-back (see "Release on unmount"). It is never cleared after a restore — only overwritten on the next main→clip takeover. A stale value is harmless: it's only read while a non-main owner holds playback.
 
 ### 2. Local-first UI state
 
@@ -40,45 +34,12 @@ Each playback component (PlayerScreen, ClipViewer, ClipEditor) maintains its own
 
 This prevents the timeline from jumping when another component takes over playback.
 
----
+### 3. Layering
 
-## Architecture Overview
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                     UI Components                            │
-│  PlayerScreen · ClipViewer · ClipEditor                      │
-│                                                              │
-│  Each has:                                                   │
-│    ownPosition (local)     ← syncs from global when owner    │
-│    ownerId (unique per component)                            │
-└──────────┬───────────────────────────────────────────────────┘
-           │ play(), pause(), seek()
-           ▼
-┌──────────────────────────────────────────────────────────────┐
-│                     Store Actions                            │
-│  loadBook · play · pause · seek · skipForward · skipBackward │
-│  setSpeed · fetchPlaybackState                               │
-└──────────┬───────────────────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────────────────────┐
-│                  AudioPlayerService                          │
-│                                                              │
-│  load(uri, metadata) → duration (ms)                         │
-│  play() · pause() · seek(ms) · skip(ms)                      │
-│                                                              │
-│  Emits: 'status' events (position, duration, status — in ms) │
-└──────────┬───────────────────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────────────────────┐
-│              react-native-track-player (v5)                  │
-│  Time measured in seconds                                    │
-│  Native audio engine · Background playback                   │
-│  System notification · Lock screen · Bluetooth               │
-└──────────────────────────────────────────────────────────────┘
-```
+- **UI components** (PlayerScreen, ClipViewer, ClipEditor): hold `ownPosition` and an `ownerId`, call store actions.
+- **Store actions** (`loadBook`, `play`, `pause`, `seek`, `skipForward`, `skipBackward`, `setSpeed`, `setSleepTimer`, `releasePlayback`, `seekClip`, `fetchPlaybackState`): own all state transitions.
+- **`AudioPlayerService`**: wraps TrackPlayer with a millisecond API; emits `'status'` events (position, duration, status — in ms).
+- **react-native-track-player**: seconds, native engine, background playback, system controls.
 
 ---
 
@@ -86,16 +47,34 @@ This prevents the timeline from jumping when another component takes over playba
 
 `AudioPlayerService` wraps TrackPlayer with a clean millisecond-based API and typed events. It's the conversion boundary — it accepts and returns milliseconds, converting to/from seconds internally.
 
+### Player setup
+
+The service configures TrackPlayer lazily on first use (`ensureSetup`):
+
+- `autoHandleInterruptions: true` — phone calls and audio ducking are handled natively; the store never sees them.
+- `AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification` — swiping the app away stops playback.
+- Capabilities: Play, Pause, SeekTo, JumpForward, JumpBackward.
+- `forwardJumpInterval: 25` / `backwardJumpInterval: 30` (seconds) — the notification jump buttons, matching `SKIP_FORWARD_MS`/`SKIP_BACKWARD_MS`.
+- `progressUpdateEventInterval: 1` — the origin of the **1 Hz** status cadence cited throughout the codebase.
+- A "player has already been initialized" error is swallowed — the player survives dev reloads.
+
 ### Loading audio
 
 `load(uri, metadata?)` is the most complex method:
 
 1. Reset the player (unload previous track)
 2. Add the new track with metadata (title, artist, artwork — used for system notification)
-3. **Poll for duration** — TrackPlayer doesn't return duration immediately after adding a track. The service polls `getProgress()` every 25ms until `duration > 0`, with a 10-second timeout
+3. **Poll for duration** — TrackPlayer doesn't return duration immediately after adding a track (it needs time to probe the file's headers). The service polls `getProgress()` every 25ms until `duration > 0`, with a 10-second timeout. On timeout (corrupt file, unsupported format) `load()` throws; `loadBook()` catches, resets playback to `'idle'` with `uri = null`, and rethrows.
 4. Convert the duration from seconds to milliseconds and return it
 
-The polling is necessary because TrackPlayer needs time to probe the audio file's headers.
+### Status events — two paths
+
+The service emits `'status'` from two TrackPlayer events with different duration sources:
+
+- `PlaybackProgressUpdated` (the 1 Hz tick) → `event.duration`
+- `PlaybackState` (transitions) and `getStatus()` → the service's cached `currentDuration` (0 until a load completes)
+
+This matters because `onAudioStatus` gates position persistence on `status.duration > 0` — early transition events can't write positions.
 
 ### State mapping
 
@@ -110,14 +89,14 @@ The `'idle'` and `'loading'` states are managed by the store actions, not the au
 
 ## The Ownership Model
 
-Multiple components can control playback, but only one "owns" it at a time.
+Multiple components can control playback, but only one "owns" it at a time. Without ownership, every playback component would react to every status change and their position displays would fight.
 
 ### How it works
 
 Each playback component has a stable `ownerId`:
 - PlayerScreen → `MAIN_PLAYER_OWNER_ID` (`'main'`)
-- ClipViewer → `'clip-viewer-{clipId}'`
-- ClipEditor → `'clip-editor-{clipId}'` (editing an existing clip), `'clip-editor-draft'` (drafting a new clip from the player)
+- ClipViewer → `'clip-viewer-{clipId}'` (generated internally)
+- ClipEditor → `'clip-editor-{clipId}'` (passed by ClipsListScreen when editing an existing clip), `'clip-editor-draft'` (passed by PlayerScreen when drafting)
 
 The ownerId is a **prop** of ClipEditor — the caller owns it. This lets PlayerScreen claim ownership *on the editor's behalf* before mounting it (see "Ownership handoff" below).
 
@@ -128,11 +107,7 @@ isOwner  = playback.ownerId === myOwnerId
 isPlaying = isOwner && playback.status === 'playing'
 ```
 
-### Why it matters
-
-Without ownership, every playback component would react to every status change. If ClipViewer is playing a clip and the PlayerScreen is visible, both would think playback is theirs. The PlayerScreen's position display would jump to the clip's position.
-
-With ownership, each component ignores global playback state unless it's the owner. Non-owners keep their own local position, undisturbed.
+Non-owners ignore global playback state and keep their own local position, undisturbed.
 
 ### Position persistence
 
@@ -142,13 +117,13 @@ Only the main player persists position to the database. The `onAudioStatus` hand
 if (playback.ownerId !== MAIN_PLAYER_OWNER_ID) return
 ```
 
-This means clip playback (ClipViewer, ClipEditor) never overwrites the book's saved position.
+This means clip playback (ClipViewer, ClipEditor) never overwrites the book's saved position — including playback resumed from the system notification while a clip owner holds ownership.
 
 ### Release on unmount
 
-ClipViewer and ClipEditor call `releasePlayback(myOwnerId)` when they unmount. The action no-ops unless the caller still owns playback (`playback.ownerId === myOwnerId`) — if another component has since taken over, unmounting a clip modal leaves that playback untouched.
+ClipViewer and ClipEditor call `releasePlayback(myOwnerId)` when they unmount. The action no-ops unless the caller still owns playback (`playback.ownerId === myOwnerId`) — if another component has since taken over, unmounting a clip modal leaves that playback untouched. Ownership is re-checked after the internal `pause()` await, so a takeover racing the release also wins.
 
-When the caller does still own playback, release pauses and returns ownership to the main player by restoring `playback.mainContext` — a `{ uri, position }` snapshot that `loadBook` captures whenever ownership passes from the main player to a non-main owner. The main player gets back exactly what it had — same book, same position, paused — even if the clip came from a different book or the same book at another position. This prevents orphan playback: a dismissed clip dialog can't leave its audio loaded under a dead ownerId, where the system notification could resume it with no visible component tracking it. With no snapshot (nothing was ever loaded by the main player), release just pauses.
+When the caller does still own playback, release pauses and returns ownership to the main player by restoring `playback.mainContext` — a `{ uri, position }` snapshot that `loadBook` captures whenever ownership passes from the main player to a non-main owner. The main player gets back exactly what it had — same book, same position, paused — even if the clip came from a different book or the same book at another position. This prevents orphan playback: a dismissed clip dialog can't leave its audio loaded under a dead ownerId, where the system notification could resume it with no visible component tracking it. Two soft spots: with no snapshot (nothing was ever loaded by the main player), release just pauses; and if the restore `loadBook` fails (the snapshotted book was archived/deleted), the error is swallowed — audio stays paused but ownership remains with the dismissed component.
 
 The snapshot lives in the store rather than the dismissing component because only `loadBook` sees the exact takeover moment — the store's `playback.position` is current there (1 Hz status events plus seeks), while the database position is written only by main-player playback and can be stale after a paused scrub.
 
@@ -156,7 +131,7 @@ The snapshot lives in the store rather than the dismissing component because onl
 
 The player's clip button opens the draft ClipEditor with a seamless playback transition, in both directions:
 
-- **Open:** before mounting the editor, PlayerScreen claims ownership for it — `play()` if playing, `loadBook()` if paused — with the same file and position. Audio never stops; the rate drops to 1x (clip owners always play at 1x).
+- **Open:** the open is aborted while `status === 'loading'` (the claim below would no-op and the editor would open unowned). PlayerScreen first calls `fetchPlaybackState()` to read the live hardware position (store positions are up to a second stale at 1 Hz) and timestamps the capture. It then claims ownership for the editor — `play()` if playing, `loadBook()` if paused — with the same file and position. Audio never stops; the rate drops to 1x (clip owners always play at 1x). While playing, ClipEditor extrapolates its own mount latency from the capture timestamp (`initialPositionAt`) and skips its first store-position sync (that value is the stale one it extrapolated from).
 - **Close (save or cancel):** PlayerScreen reads the editor's final position/state from global playback, reclaims with `MAIN_PLAYER_OWNER_ID` **before** unmounting the editor (so the editor's release-on-unmount sees it no longer owns and no-ops), then closes. The book's speed is re-applied by the main-owner claim.
 
 Consequences: the hand-back position is the editor's playhead — scrubbing in the editor moves the book position. Sessions finalize when the editor takes over and resume on return (merged by the 5-minute resume window).
@@ -172,8 +147,8 @@ The most important actions. Both take `{ fileUri, position, ownerId }` (`PlayCon
 `loadBook()` also no-ops while loading, then branches:
 
 1. If a different file is loaded:
-   - Look up the book via `db.getBookByAnyUri(fileUri)` — checks books first, then clips (so clip playback still shows the source book's metadata on the system notification)
-   - Set status to `'loading'`, clear `uri`, set ownerId
+   - Look up the book via `db.getBookByAnyUri(fileUri)` — checks books first, then clips (so clip playback still shows the source book's metadata on the system notification). **No matching row → throw**, before any state mutation.
+   - Set status to `'loading'`, clear `uri`, set ownerId. The `uri` is nulled so in-flight 1 Hz status events can't write the incoming position onto the *previous* book.
    - Call `audio.load(fileUri, metadata)` — returns duration
    - **On load failure, reset to `'idle'` with `uri = null`** (nothing is loaded, and the loading guard must not block forever), then rethrow
    - Update store with uri, duration, position, status `'paused'`
@@ -191,11 +166,15 @@ If `loadBook()` throws inside `play()`, the catch sets status to `'paused'` when
 
 Each book has a per-book `speed` (integer percentage, 100 = 1.0x). `loadBook`'s `applyRate` applies it on **every** path — including same-file loads — but only when the owner is the main player; clip owners (ClipViewer, ClipEditor) always play at 1.0x. The `setSpeed` action persists a new speed to the book (queued for sync) and applies it immediately if that book is loaded in the main player (playing or paused — the guard checks uri and ownership, not status).
 
+### `seekClip(clipId)`
+
+"Go to source" from the clips screen. Requires `clip.file_uri` (throws when the source is gone), then calls `play()` with the source file at `clip.start` under `MAIN_PLAYER_OWNER_ID` — it starts playback, not just navigation; the screen routes to the player afterwards.
+
 ---
 
 ## The Loading State Guard
 
-A critical detail in `onAudioStatus`: status updates are ignored while the current status is `'loading'`:
+Status updates are ignored while the current status is `'loading'`:
 
 ```typescript
 if (state.playback.status !== 'loading') {
@@ -205,13 +184,17 @@ if (state.playback.status !== 'loading') {
 
 This prevents a race condition. When `play()` sets status to `'loading'` and then calls `audio.load()`, TrackPlayer may emit intermediate state events (like `Paused` or `Ready`). Without this guard, those events would briefly flash the UI to a paused state during what should be a loading transition.
 
-Position updates still flow through regardless — only the status field is protected.
+Position updates still flow through regardless — only the status field is protected. The guard lives in **both** consumers of player status: the store's `onAudioStatus` handler and the `fetchPlaybackState` action.
+
+### `fetchPlaybackState()`
+
+Reads the hardware status into the store on demand, bypassing the 1 Hz wait. Triggers: PlayerScreen focus, app returning to foreground (AppState `active`), and the pre-handoff live-position read when opening the draft clip editor.
 
 ---
 
 ## The Sleep Timer
 
-Design doc: `docs/2026-07-24-sleep-timer.md`.
+Design doc: [2026-07-24-sleep-timer.md](2026-07-24-sleep-timer.md).
 
 `setSleepTimer(durationMs | null)` arms (or clears) a **wall-clock** countdown: `endsAt = now + duration`, exactly like a clock-app timer. State lives in `playback.sleepTimer`; the action factory's closure holds the scheduled timeout. On expiry: volume ramps to zero over the last `SLEEP_TIMER_FADE_MS` (10s, *included* in the interval; per-call override via `setSleepTimer(duration, fadeMs)` — the 5s test preset uses 2s), then `pause()` — global, whoever owns playback — then volume resets to full and the timer clears to off.
 
@@ -228,23 +211,33 @@ Rules:
 
 ## System Media Controls
 
-System media controls (notification, lock screen, Bluetooth) are handled by a separate **playback service** that runs in a background context.
+System media controls (notification, lock screen, Bluetooth) are handled by a separate **playback service** (`integration.ts`, registered in `index.js` before the app loads) that runs in a background context.
+
+### Remote transport events bypass the store
+
+The handlers (`RemotePlay`, `RemotePause`, `RemoteStop`, `RemoteSeek`, `RemoteJumpForward/Backward`, `RemoteNext/Previous`) call `TrackPlayer` directly — no store, no actions, no ownership checks. The store still observes the results via the normal status events. Consequences:
+
+- A remote play while a clip owner holds playback resumes the *clip*, and no book position is persisted (the main-owner gate in `onAudioStatus` still applies).
+- `RemoteJumpForward/Backward` use `event.interval` (the 25/30s setup values); `RemoteNext/Previous` reuse `SKIP_FORWARD_MS`/`SKIP_BACKWARD_MS`.
 
 ### Notification click
 
-Tapping the notification opens a deep link (`trackplayer://notification.click`). This behavior is split across three files: `index.js` registers the playback service, `integration.ts` defines the background event handler, and `+not-found.tsx` catches the deep link and redirects to the player tab.
+Tapping the notification opens a deep link (`trackplayer://notification.click`), emitted natively by TrackPlayer. `app/+not-found.tsx` catches the unmatched route and redirects to the player tab.
 
 ---
 
 ## Edge Cases and Robustness
 
-### Load timeout
-
-If TrackPlayer can't return a valid duration within 10 seconds (corrupt file, unsupported format), `load()` throws. `loadBook()` catches this, resets playback to `'idle'` with `uri = null` (nothing is loaded), and rethrows.
-
 ### Skip asymmetry
 
-Forward skip is 25 seconds, backward skip is 30 seconds. This is intentional — when rewinding to re-hear something, users typically need to go further back to get context. These values match the system notification skip intervals configured during player setup.
+Forward skip is 25 seconds (`SKIP_FORWARD_MS`), backward skip is 30 seconds (`SKIP_BACKWARD_MS`) — when rewinding to re-hear something, users typically need extra context. The same values configure the notification jump buttons (see "Player setup").
+
+---
+
+## Testing
+
+Jest: `src/actions/__tests__/{play,load_book,release_playback,seek_clip,set_sleep_timer,skip}.test.ts`.
+Maestro: `load-and-play.yaml`, `timeline-gestures.yaml`, `sleep-timer.yaml`, `clip-dismiss-release.yaml`.
 
 ---
 
@@ -252,34 +245,41 @@ Forward skip is 25 seconds, backward skip is 30 seconds. This is intentional —
 
 ```
 src/services/audio/
-  player.ts           → AudioPlayerService (TrackPlayer wrapper, ms↔s boundary)
-  integration.ts      → playbackService (background remote event handler)
+  player.ts           → AudioPlayerService (TrackPlayer wrapper, ms↔s boundary, setup)
+  integration.ts      → playbackService (remote transport events, direct TrackPlayer)
 
 index.js              → Registers playback service before app loads
+app/+not-found.tsx    → Notification-click deep link → player tab
 
 src/actions/
-  load_book.ts        → Load file / seek / claim ownership / apply rate
+  load_book.ts        → Load file / seek / claim ownership / apply rate / mainContext snapshot
   play.ts             → Thin wrapper: loadBook + play (no-op while loading)
   pause.ts            → Pause playback
   release_playback.ts → Pause + return ownership to main player (clip dialog dismissal)
+  seek_clip.ts        → "Go to source": play source book at clip.start as main player
   set_sleep_timer.ts  → Arm/clear the sleep timer (wall-clock, fade via audio service)
-  set_speed.ts        → Persist per-book speed, apply if playing in main player
+  set_speed.ts        → Persist per-book speed, apply if loaded in main player
   seek.ts             → Seek to position (guarded by fileUri match)
-  skip_forward.ts     → Skip +25 seconds
-  skip_backward.ts    → Skip -30 seconds
-  fetch_playback_state.ts → Read current status into store
+  skip_forward.ts     → Skip +SKIP_FORWARD_MS
+  skip_backward.ts    → Skip -SKIP_BACKWARD_MS
+  fetch_playback_state.ts → On-demand hardware status read (focus/foreground/handoff)
   constants.ts        → SKIP_FORWARD_MS (25000), SKIP_BACKWARD_MS (30000), SLEEP_TIMER_FADE_MS (10000)
 
 src/store/
   index.ts            → onAudioStatus handler, playback state, ownership
-  types.ts            → PlaybackState shape
+  types.ts            → PlaybackState shape (authoritative)
 
 src/screens/
-  PlayerScreen.tsx    → Main player (ownBook, ownPosition, adoption)
+  PlayerScreen.tsx    → Main player (ownBook, ownPosition, draft-editor handoff)
+  ClipsListScreen.tsx → Passes 'clip-editor-{id}' ownerId when opening the editor
+
+src/components/
+  ClipViewer.tsx      → Clip playback owner ('clip-viewer-{clipId}')
+  ClipEditor.tsx      → Clip editing owner (ownerId prop; handoff extrapolation)
 
 src/components/timeline/  → GPU-accelerated Skia waveform (see code for details)
 ```
 
 Note: during playback the timeline animates its own smooth motion from a
 `playbackRate` prop; the 1 Hz position events only correct drift. See
-docs/2026-07-23-timeline-smooth-playback.md.
+[2026-07-23-timeline-smooth-playback.md](2026-07-23-timeline-smooth-playback.md).
