@@ -1197,6 +1197,9 @@ export class DatabaseService {
       nextMigration = 0
     }
 
+    // Snapshot before touching anything (inspection artifact, not rollback)
+    const snapshot = nextMigration < migrations.length ? this.snapshotDatabase() : null
+
     // Run pending migrations:
     for (let i = nextMigration; i < migrations.length; i++) {
       log(`Running migration ${i}`)
@@ -1204,6 +1207,41 @@ export class DatabaseService {
       // Apply! If this throws, we should just fail, nothing else makes sense:
       await migrations[i](this.db, deps)
       this.db.runSync('UPDATE status SET migration = ? WHERE id = 1', [i])
+    }
+
+    if (snapshot) this.deleteSnapshotFile(snapshot)
+  }
+
+  /**
+   * Write a pre-migration copy of the database next to it (VACUUM INTO), for
+   * inspection if a migration fails. Best-effort: failure logs and proceeds —
+   * the safety net must never block startup. Returns the snapshot path, or
+   * null when unavailable (in-memory test databases) or failed.
+   */
+  private snapshotDatabase(): string | null {
+    try {
+      const path = (this.db as { databasePath?: string }).databasePath
+      if (!path || path === ':memory:') return null
+
+      const target = `${path}.pre-migration`
+      this.deleteSnapshotFile(target) // VACUUM INTO refuses to overwrite
+      this.db.execSync(`VACUUM INTO '${target}'`)
+      log('Pre-migration snapshot written')
+      return target
+    } catch (error) {
+      log('Pre-migration snapshot failed (continuing):', error)
+      return null
+    }
+  }
+
+  private deleteSnapshotFile(path: string): void {
+    try {
+      // Lazy import: keeps expo-file-system out of jest's module graph
+      const { File } = require('expo-file-system') as typeof import('expo-file-system')
+      const file = new File(path.startsWith('file://') ? path : `file://${path}`)
+      if (file.exists) file.delete()
+    } catch {
+      // Best-effort: a stale snapshot only costs disk space
     }
   }
 
