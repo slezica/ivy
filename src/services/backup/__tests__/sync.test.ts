@@ -476,7 +476,7 @@ describe('BackupSyncService', () => {
       const service = new BackupSyncService(db, drive, auth)
       await service.syncNow()
 
-      expect(drive.updateFile).toHaveBeenCalledWith('existing-drive-id', expect.any(String))
+      expect(drive.updateFile).toHaveBeenCalledWith('existing-drive-id', expect.any(String), `book_${BOOK_ID}.json`)
       expect(drive.uploadFile).not.toHaveBeenCalled()
     })
 

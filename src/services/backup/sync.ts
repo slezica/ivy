@@ -1130,7 +1130,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     content: string | Uint8Array,
   ): Promise<DriveFile> {
     try {
-      return await this.drive.updateFile(fileId, content)
+      return await this.drive.updateFile(fileId, content, filename)
     } catch (error) {
       if (!(error instanceof DriveApiError) || error.status !== 404) throw error
       log(`Remote file ${fileId} for ${filename} is gone (404) — creating anew`)

@@ -113,11 +113,12 @@ export class FakeDrive {
     return toDriveFile(this.files.get(id)!)
   }
 
-  async updateFile(fileId: string, content: string | Uint8Array): Promise<DriveFile> {
+  async updateFile(fileId: string, content: string | Uint8Array, name?: string): Promise<DriveFile> {
     this.maybeFail('updateFile')
     const file = this.files.get(fileId)
     if (!file) throw new DriveApiError('Failed to init update: 404 - File not found', 404)
     file.content = content
+    if (name) file.name = name
     this.recordChange(fileId, false)
     return toDriveFile(file)
   }
