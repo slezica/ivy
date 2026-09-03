@@ -120,6 +120,57 @@ describe('startTranscription', () => {
     expect(transcription.start).toHaveBeenCalled()
   })
 
+  it('lands on error when the model-presence check itself fails', async () => {
+    // The metered-gate awaits run outside the try/catch: a rejection here
+    // leaves status stuck at 'starting' forever (no banner, no retry path)
+    // and the rejection escapes to callers that don't catch (onNetworkChange).
+    const { state, set, transcription, whisper, network } = createDeps(
+      async () => {}, {}, { modelDownloaded: false },
+    )
+    whisper.isModelDownloaded = jest.fn(async () => { throw new Error('fs unavailable') })
+
+    await expect(
+      createStartTranscription({ transcription, whisper, network, set })()
+    ).resolves.toBeUndefined()
+
+    expect(state.transcription.status).toBe('error')
+  })
+
+  it('lands on error when the network check itself fails', async () => {
+    const { state, set, transcription, whisper, network } = createDeps(
+      async () => {}, {}, { modelDownloaded: false },
+    )
+    network.fetch = jest.fn(async () => { throw new Error('netinfo unavailable') })
+
+    await expect(
+      createStartTranscription({ transcription, whisper, network, set })()
+    ).resolves.toBeUndefined()
+
+    expect(state.transcription.status).toBe('error')
+  })
+
+  it('a manual download-now start ends on despite a concurrent metered check', async () => {
+    // Race from the wild: waiting-wifi → Wi-Fi appears (auto-start fires) →
+    // user taps "Download now" → Wi-Fi drops before the auto call's network
+    // check resolves. The auto call re-enters waiting-wifi while the manual
+    // download is running; when the manual start completes, the state must
+    // land on 'on' — not stay 'waiting-wifi' through a 465MB download.
+    let releaseStart!: () => void
+    const startPromise = new Promise<void>(resolve => { releaseStart = resolve })
+    const { state, set, transcription, whisper, network } = createDeps(
+      () => startPromise, {}, { modelDownloaded: false, metered: true },
+    )
+    const action = createStartTranscription({ transcription, whisper, network, set })
+
+    const manual = action({ ignoreMetered: true })  // skips the gate, start() in flight
+    await action()                                  // auto-start hits the metered gate
+
+    releaseStart()
+    await manual
+
+    expect(state.transcription.status).toBe('on')
+  })
+
   it('does not override a stop that happened while starting', async () => {
     const { state, set, transcription, whisper, network } = createDeps(async () => {
       state.transcription.status = 'off'

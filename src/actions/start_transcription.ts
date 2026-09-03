@@ -17,11 +17,17 @@ export interface StartTranscriptionOptions {
 
 export type StartTranscription = Action<[options?: StartTranscriptionOptions]>
 
-export const createStartTranscription: ActionFactory<StartTranscriptionDeps, StartTranscription> = (deps) => (
-  async (options) => {
-    const { transcription, whisper, network, set } = deps
-    const log = createLogger('StartTranscription')
+export const createStartTranscription: ActionFactory<StartTranscriptionDeps, StartTranscription> = (deps) => {
+  const { transcription, whisper, network, set } = deps
+  const log = createLogger('StartTranscription')
 
+  // Calls currently past the metered gate (download/start in flight). A
+  // concurrent gate check must not regress the state to 'waiting-wifi' while
+  // a manual (ignoreMetered) start is already downloading — that call's
+  // completion owns the final state.
+  let startsInFlight = 0
+
+  return async (options) => {
     log('Starting')
 
     set(state => {
@@ -31,32 +37,40 @@ export const createStartTranscription: ActionFactory<StartTranscriptionDeps, Sta
       state.transcription.retryAt = null
     })
 
-    // Metered gate: never auto-download the 465MB model on a metered
-    // connection — wait for Wi-Fi (a network 'change' listener re-runs this
-    // action when an unmetered connection appears). A model already on disk
-    // starts regardless of network.
-    if (!options?.ignoreMetered && !(await whisper.isModelDownloaded())) {
-      const net = await network.fetch()
-
-      if (net.metered) {
-        log('Model missing and connection is metered — waiting for Wi-Fi')
-
-        set(state => {
-          if (state.transcription.status === 'starting') {
-            state.transcription.status = 'waiting-wifi'
-          }
-        })
-
-        return
-      }
-    }
-
     // The whisper 'status' listener may move status to 'downloading' while
     // start() is in flight — both count as "still starting" below
     const starting = (status: string) => status === 'starting' || status === 'downloading'
 
     try {
-      await transcription.start()
+      // Metered gate: never auto-download the 465MB model on a metered
+      // connection — wait for Wi-Fi (a network 'change' listener re-runs this
+      // action when an unmetered connection appears). A model already on disk
+      // starts regardless of network. Inside the try: a failing check must
+      // land on 'error', never strand 'starting' or reject to callers.
+      if (!options?.ignoreMetered && !(await whisper.isModelDownloaded())) {
+        const net = await network.fetch()
+
+        if (net.metered) {
+          log('Model missing and connection is metered — waiting for Wi-Fi')
+
+          if (startsInFlight === 0) {
+            set(state => {
+              if (state.transcription.status === 'starting') {
+                state.transcription.status = 'waiting-wifi'
+              }
+            })
+          }
+
+          return
+        }
+      }
+
+      startsInFlight++
+      try {
+        await transcription.start()
+      } finally {
+        startsInFlight--
+      }
     } catch (error) {
       log('Failed to start:', error)
 
@@ -88,4 +102,4 @@ export const createStartTranscription: ActionFactory<StartTranscriptionDeps, Sta
 
     log('Started')
   }
-)
+}
