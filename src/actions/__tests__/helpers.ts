@@ -192,9 +192,6 @@ export function createMockDb(overrides: Record<string, jest.Mock | jest.Mock<any
 export function createMockFiles(overrides: Record<string, jest.Mock> = {}) {
   return {
     audioDirectoryPath: '/audio',
-    copyToAppStorage: jest.fn(async () => 'file:///audio/temp-abc.mp3'),
-    readFileFingerprint: jest.fn(async () => ({ fileSize: 1024, fingerprint: new Uint8Array([1, 2, 3]) })),
-    rename: jest.fn(async (_uri: string, newName: string) => `file:///audio/${newName}.mp3`),
     deleteFile: jest.fn(async () => {}),
     ensureAudioDirectory: jest.fn(async () => {}),
     ...overrides,
