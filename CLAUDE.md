@@ -299,7 +299,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   └── test-artwork.jpg            # >100KB-as-base64 JPEG — upgrade-test hook seed for the artwork repair migration
 
 /cache                            # GENERATED (gitignored): persistent toolkit caches
-                                  # upgrade/ivy-<version>-maestro.apk — upgrade-test bases, written by prepare
+                                  # upgrade/ivy-maestro-<version>.apk — upgrade-test bases, written by prepare
 
 /samples                          # Committed sources for generated store/web assets
   ├── data.json                   # Demo library fixture (screenshot seeding; see docs/2026-07-21-playstore-screenshots.md)
@@ -308,7 +308,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
 
 /dist                             # GENERATED (gitignored): store assets + release artifacts
                                   # audio/, artwork/, screenshots/, feature.png, icon-512.png (bin/ivy.ts generate)
-                                  # ivy-X.Y.Z.aab/.apk (delivered by release builds)
+                                  # ivy-release-X.Y.Z.aab/.apk (delivered by release builds)
 
 /docs                             # Guides (BOOKS, PLAYBACK, CLIPS, ...), dated records (YYYY-MM-DD-<topic>.md),
                                   # VERSIONS.md (changelog), IDEAS.md (backlog of ideas)
@@ -582,7 +582,7 @@ The whole release is one toolkit command, **run by the user on the Mac** (it pro
 bin/ivy.ts prepare --version X.Y.Z --changes '<markdown>' [--screenshots]
 ```
 
-Pipeline: preflight (tools, node_modules, release keystore, samples/data.json, emulator, local.properties pollution, clean tree on master, version valid, no VERSIONS.md section yet, tag free) → password prompt + verify → version bump (package.json + lockfile via `npm version` + VERSIONS.md section — files only, committed after tests; a failure reverts them) → maestro build → upgrade test (previous release → this build) → jest + full e2e suite → [screenshots + web/README refresh, committed as `web: refresh screenshots`] → commit `release: vX.Y.Z` → release build → artifact checks (version stamp, ffmpeg closure, yt-dlp scan) → deliver `dist/ivy-X.Y.Z.{aab,apk}` + cache the maestro APK as the next release's upgrade-test base → tag `vX.Y.Z` → checklist of the remaining manual steps (push, Play Console upload, GitHub release — never automated).
+Pipeline: preflight (tools, node_modules, release keystore, samples/data.json, emulator, local.properties pollution, clean tree on master, version valid, no VERSIONS.md section yet, tag free) → password prompt + verify → version bump (package.json + lockfile via `npm version` + VERSIONS.md section — files only, committed after tests; a failure reverts them) → maestro build → upgrade test (previous release → this build) → jest + full e2e suite → [screenshots + web/README refresh, committed as `web: refresh screenshots`] → commit `release: vX.Y.Z` → release build → artifact checks (version stamp, ffmpeg closure, yt-dlp scan) → deliver `dist/ivy-release-X.Y.Z.{aab,apk}` + cache the maestro APK as the next release's upgrade-test base → tag `vX.Y.Z` → checklist of the remaining manual steps (push, Play Console upload, GitHub release — never automated).
 
 **Agent's role:** write the `--changes` markdown (changeset since last tag, VERSIONS.md style: Features/Fixes/Infra), print the exact `prepare` command for the user to paste, and stop — the command itself needs a TTY the agent doesn't have. Pass `--screenshots` only if UI changed since the last release.
 
@@ -638,7 +638,7 @@ Commands:
       runs prebuild --clean first and needs $KEYSTORE_PASSWORD (prompts on
       a TTY). preview/release artifacts are checked after building (version
       stamp, ffmpeg closure, yt-dlp scan); release is also copied to
-      dist/ivy-<version>.{aab,apk}. --install installs the built APK on the
+      dist/ivy-release-<version>.{aab,apk}. --install installs the built APK on the
       device. --arch limits native ABIs (e.g. arm64-v8a for emulator).
 
   clean

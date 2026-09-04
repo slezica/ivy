@@ -25,6 +25,7 @@ const ROOT = path.resolve(__dirname, '..')
 const MIRROR = process.env.IVY_BUILD_DIR || '/home/claude/ivy-build'
 const CAPTURES_DIR = path.join(ROOT, 'captures')
 const CACHE_UPGRADE = path.join(ROOT, 'cache', 'upgrade') // upgrade-base APKs, written by prepare
+const upgradeCachePath = (version: string) => path.join(CACHE_UPGRADE, `ivy-maestro-${version}.apk`)
 
 const HELP = `Ivy toolkit — project CLI (build, test, prepare, drive, inspect)
 
@@ -40,7 +41,7 @@ Commands:
       runs prebuild --clean first and needs ${'$'}KEYSTORE_PASSWORD (prompts on
       a TTY). preview/release artifacts are checked after building (version
       stamp, ffmpeg closure, yt-dlp scan); release is also copied to
-      dist/ivy-<version>.{aab,apk}. --install installs the built APK on the
+      dist/ivy-release-<version>.{aab,apk}. --install installs the built APK on the
       device. --arch limits native ABIs (e.g. arm64-v8a for emulator).
 
   clean
@@ -337,8 +338,8 @@ function checkBuiltArtifact(file: string) {
 function deliverRelease(): { aab: string, apk: string } {
   const version = pkgVersion()
   fs.mkdirSync(DIST, { recursive: true })
-  const aab = path.join(DIST, `ivy-${version}.aab`)
-  const apk = path.join(DIST, `ivy-${version}.apk`)
+  const aab = path.join(DIST, `ivy-release-${version}.aab`)
+  const apk = path.join(DIST, `ivy-release-${version}.apk`)
   fs.copyFileSync(aabPath(), aab)
   fs.copyFileSync(apkPath('release'), apk)
   log(`delivered ${path.relative(ROOT, aab)}`)
@@ -678,7 +679,7 @@ function latestReleaseTag(): string {
 // must have its base APK seeded into the cache by hand.
 function upgradeBaseApk(tag: string): string {
   const version = tag.replace(/^v/, '')
-  const cached = path.join(CACHE_UPGRADE, `ivy-${version}-maestro.apk`)
+  const cached = upgradeCachePath(version)
   if (fs.existsSync(cached)) return cached
 
   log(`upgrade base ${tag} not cached — rebuilding from tag (slow)`)
@@ -1155,8 +1156,8 @@ export function renderChecklist(version: string, code: number): string {
     'pushed or uploaded — the remaining steps are manual:',
     '',
     `  1. Push:         git push origin master v${version}`,
-    `  2. Play Console: upload dist/ivy-${version}.aab (versionCode ${code})`,
-    `  3. GitHub:       upload dist/ivy-${version}.apk (tag v${version})`,
+    `  2. Play Console: upload dist/ivy-release-${version}.aab (versionCode ${code})`,
+    `  3. GitHub:       upload dist/ivy-release-${version}.apk (tag v${version})`,
   ].join('\n')
 }
 
@@ -1225,7 +1226,7 @@ function preflight(version: string, screenshots: boolean) {
   // will fall back to a slow rebuild-from-tag mid-pipeline
   try {
     const prev = latestReleaseTag()
-    const cached = path.join(CACHE_UPGRADE, `ivy-${prev.replace(/^v/, '')}-maestro.apk`)
+    const cached = upgradeCachePath(prev.replace(/^v/, ''))
     report(true, 'upgrade base', fs.existsSync(cached)
       ? `${prev} cached`
       : `${prev} NOT cached — the upgrade test will rebuild it from the tag (slow)`)
@@ -1335,9 +1336,9 @@ function cmdPrepare(args: Args) {
   // Cache this release's maestro APK (stashed before the release build's
   // prebuild --clean wiped android/) as the next release's upgrade-test base
   fs.mkdirSync(CACHE_UPGRADE, { recursive: true })
-  fs.copyFileSync(maestroStash, path.join(CACHE_UPGRADE, `ivy-${version}-maestro.apk`))
+  fs.copyFileSync(maestroStash, upgradeCachePath(version))
   fs.rmSync(maestroStash, { force: true })
-  log(`cached cache/upgrade/ivy-${version}-maestro.apk (upgrade-test base for the next release)`)
+  log(`cached ${path.relative(ROOT, upgradeCachePath(version))} (upgrade-test base for the next release)`)
 
   git('tag', `v${version}`)
   log(`tagged v${version}`)
