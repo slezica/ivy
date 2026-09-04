@@ -7,6 +7,25 @@ written by `bin/ivy.ts prepare` from its `--changes` argument (see CLAUDE.md
 "Preparing a Release") — the agent drafts that markdown in this file's style
 (Features/Fixes/Infra headings as applicable).
 
+## 1.6.4 (versionCode 10604) — 2026-09-04
+
+Fixes:
+
+- Clip audio on Drive always keeps its m4a name: the invariant is enforced
+  at upload, so renames and re-uploads can no longer leave stale names
+- Transcription metered gate hardened: failed connectivity checks no longer
+  pass as Wi-Fi, and concurrent download starts are prevented
+- A partially-applied bootstrap migration no longer wedges the app: the
+  database recovers and migrations rerun cleanly
+- Initialization failures now surface a toast instead of failing silently
+
+Infra:
+
+- Toolkit: repo hygiene test (bans tracked debug dumps), upgrade-test hook
+  for migration 12, maestro APK stashed across release prebuild
+- Dead code trimmed (unused metadata/file-service methods, dead retry delay)
+- Docs: correction pass across all guides, READMEs and CLAUDE.md
+
 ## 1.6.3 (versionCode 10603) — 2026-09-03
 
 Fixes:
