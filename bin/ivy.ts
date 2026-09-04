@@ -789,7 +789,11 @@ function runUpgradeTest(fromTag?: string) {
     spawnSync('sleep', ['5']) // let any old-build migrations settle
     const oldIndex = waitForMigrationIndex(() => true, 'the old build database', 10_000)
     log(`old build settled at migration ${oldIndex}`)
-    if (oldIndex >= LATEST_MIGRATION) fail(`${tag} is already at migration ${oldIndex} — nothing to test`)
+    if (oldIndex >= LATEST_MIGRATION) {
+      // No pending migrations: still worth an upgrade-install smoke test —
+      // native/schema-independent regressions can break upgrades too.
+      log(`${tag} is already at migration ${oldIndex} — no migrations to replay, smoke-testing the upgrade install`)
+    }
 
     const hooks = UPGRADE_HOOKS.filter(h => h.migration > oldIndex && h.migration <= LATEST_MIGRATION)
     log(`seeding baseline + ${hooks.length} hook(s)${hooks.length ? ': ' + hooks.map(h => `${h.migration} (${h.description})`).join(', ') : ''}`)

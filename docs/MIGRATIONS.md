@@ -107,7 +107,10 @@ Three layers (see the testing design record for full rationale):
    `sqlite3`, and a rootable emulator image (DB access via adb root — the
    maestro variant is not debuggable); it **uninstalls the app** and disables
    wifi/data for the run (restored afterwards; suppresses the whisper-model
-   download). `--from <tag>` targets a specific cached base.
+   download). `--from <tag>` targets a specific cached base. When the base is
+   already at the latest migration, the run degrades to a reinstall smoke
+   test: baseline seed + upgrade install + baseline checks + crash check,
+   no migration replay.
 3. **Per-migration hooks** (`bin/upgrade_hooks.ts`): seed/verify SQL keyed by
    migration index — device-level assertions for data-transforming
    migrations, exercised with real native deps and real expo-sqlite. A
