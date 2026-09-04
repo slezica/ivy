@@ -145,6 +145,9 @@ Commands:
 Global:
   --device <serial>   target device; defaults to the sole attached device,
                       honors ${'$'}ANDROID_SERIAL (same as adb)
+  --no-log            skip the run log. build/test/generate/prepare/doctor
+                      tee their full output (stdout+stderr, ANSI stripped)
+                      to log/<command>.txt, overwritten each run.
 
 Destructive commands (wipe, put --samples, generate --screenshots) refuse to
 run on anything that is not verifiably an emulator. There is no override flag.`
@@ -1863,6 +1866,46 @@ function cmdQuery(args: Args) {
 
 interface Args { positionals: string[], flags: Record<string, string | boolean> }
 
+// ---------------------------------------------------------------------------
+// Run logs — long-output commands re-exec themselves with stdout+stderr teed
+// to log/<command>.txt (overwritten each run, ANSI stripped) so the latest
+// full output is always sharable without shell plumbing. --no-log opts out.
+// stdin stays inherited: interactive prompts (keystore password) still work,
+// and the password is read with echo off, so it never reaches the log.
+
+const LOGGED_COMMANDS = new Set(['build', 'test', 'generate', 'prepare', 'doctor'])
+
+function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+}
+
+function relaunchWithLog(cmd: string): void {
+  const dir = path.join(ROOT, 'log')
+  fs.mkdirSync(dir, { recursive: true })
+  const logFile = path.join(dir, `${cmd}.txt`)
+  const fd = fs.openSync(logFile, 'w')
+  // Re-exec the script itself (shebang: npx tsx) rather than process.argv[0],
+  // which is plain node and can't run TypeScript.
+  const child = spawn(path.resolve(process.argv[1]), process.argv.slice(2), {
+    stdio: ['inherit', 'pipe', 'pipe'],
+    env: { ...process.env, IVY_LOG_ACTIVE: '1' },
+  })
+  const pump = (from: NodeJS.ReadableStream, to: NodeJS.WriteStream) => {
+    from.on('data', (chunk: Buffer) => {
+      to.write(chunk)
+      fs.writeSync(fd, stripAnsi(chunk.toString('utf8')))
+    })
+  }
+  pump(child.stdout!, process.stdout)
+  pump(child.stderr!, process.stderr)
+  process.on('SIGINT', () => { /* child shares the process group and handles it */ })
+  child.on('close', (code) => {
+    fs.closeSync(fd)
+    process.exit(code ?? 1)
+  })
+}
+
 // Tiny parser: `--flag` is boolean unless listed in valued (then takes the
 // next token); everything else is positional.
 const VALUED_FLAGS = new Set(['device', 'arch', 'file', 'inline', 'tap', 'nav', 'tag', 'version', 'changes', 'port', 'from'])
@@ -1912,6 +1955,10 @@ function main() {
   const handler = COMMANDS[cmd]
   if (!handler) fail(`unknown command: ${cmd} (see \`bin/ivy.ts help\`)`)
   const args = parseArgs(rest)
+  if (LOGGED_COMMANDS.has(cmd) && !args.flags['no-log'] && !process.env.IVY_LOG_ACTIVE) {
+    relaunchWithLog(cmd)
+    return
+  }
   if (args.flags.device) deviceFlag = String(args.flags.device)
   handler(args)
 }

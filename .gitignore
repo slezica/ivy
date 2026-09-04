@@ -61,7 +61,7 @@ dist/
 # Git worktrees (standard location; also excluded from jest/tsc/eslint/metro/builds)
 /worktrees/
 
-# Server logs
+# Toolkit run logs (log/<command>.txt) and server logs
 /log/
 .claude/
 

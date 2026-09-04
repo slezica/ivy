@@ -743,6 +743,9 @@ Commands:
 Global:
   --device <serial>   target device; defaults to the sole attached device,
                       honors $ANDROID_SERIAL (same as adb)
+  --no-log            skip the run log. build/test/generate/prepare/doctor
+                      tee their full output (stdout+stderr, ANSI stripped)
+                      to log/<command>.txt, overwritten each run.
 
 Destructive commands (wipe, put --samples, generate --screenshots) refuse to
 run on anything that is not verifiably an emulator. There is no override flag.
