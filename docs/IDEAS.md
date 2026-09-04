@@ -7,6 +7,8 @@
 
 2. **Mark as finished** - ability to force-display an item as finished even if the saved position says otherwise. Separate attribute, independent of position.
 
+3. **Filter/sort in clips and sessions** - can group same book together in list, filter for fields, etc.
+
 ## Quality of Life
 
 1. **Animations** - add some niceties.
