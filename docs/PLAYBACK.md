@@ -215,10 +215,11 @@ System media controls (notification, lock screen, Bluetooth) are handled by a se
 
 ### Remote transport events bypass the store
 
-The handlers (`RemotePlay`, `RemotePause`, `RemoteStop`, `RemoteSeek`, `RemoteJumpForward/Backward`, `RemoteNext/Previous`) call `TrackPlayer` directly — no store, no actions, no ownership checks. The store still observes the results via the normal status events. Consequences:
+The handlers (`RemotePlay`, `RemotePause`, `RemotePlayPause`, `RemoteStop`, `RemoteSeek`, `RemoteJumpForward/Backward`, `RemoteNext/Previous`) call `TrackPlayer` directly — no store, no actions, no ownership checks. The store still observes the results via the normal status events. Consequences:
 
 - A remote play while a clip owner holds playback resumes the *clip*, and no book position is persisted (the main-owner gate in `onAudioStatus` still applies).
 - `RemoteJumpForward/Backward` use `event.interval` (the 25/30s setup values); `RemoteNext/Previous` reuse `SKIP_FORWARD_MS`/`SKIP_BACKWARD_MS`.
+- `RemotePlayPause` is what single-button headsets and most Bluetooth controls send (`KEYCODE_MEDIA_PLAY_PAUSE`); track-player forwards it unresolved, so the handler reads `getPlaybackState()` and pauses while playing/buffering/loading, plays otherwise. The `playback-integration.yaml` e2e flow dispatches this key through the media session (bridge `media/play-pause`).
 
 ### Notification click
 

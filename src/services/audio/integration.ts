@@ -5,7 +5,7 @@
  * This runs in a separate context and communicates with the main app via events.
  */
 
-import TrackPlayer, { Event } from 'react-native-track-player'
+import TrackPlayer, { Event, State } from 'react-native-track-player'
 import { SKIP_FORWARD_MS, SKIP_BACKWARD_MS } from '../../actions/constants'
 import { createLogger } from '../../utils'
 
@@ -22,6 +22,18 @@ export async function playbackService() {
   TrackPlayer.addEventListener(Event.RemotePause, () => {
     log('Remote pause')
     TrackPlayer.pause()
+  })
+
+  // Single-button headsets and most Bluetooth controls send PLAY_PAUSE rather
+  // than separate keys. RNTP forwards it as its own event instead of resolving
+  // it against the player, so resolve here. (Found by the playback-integration
+  // e2e flow, which dispatches the key through the media session.)
+  TrackPlayer.addEventListener(Event.RemotePlayPause, async () => {
+    const { state } = await TrackPlayer.getPlaybackState()
+    const active = state === State.Playing || state === State.Buffering || state === State.Loading
+    log('Remote play/pause', active ? '→ pause' : '→ play')
+    if (active) TrackPlayer.pause()
+    else TrackPlayer.play()
   })
 
   TrackPlayer.addEventListener(Event.RemoteStop, () => {
