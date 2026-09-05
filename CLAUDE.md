@@ -582,7 +582,7 @@ The whole release is one toolkit command, **run by the user on the Mac** (it pro
 bin/ivy.ts prepare --version X.Y.Z --changes '<markdown>' [--screenshots]
 ```
 
-Pipeline: preflight (tools, node_modules, release keystore, samples/data.json, emulator, local.properties pollution, clean tree on master, version valid, no VERSIONS.md section yet, tag free) → password prompt + verify → version bump (package.json + lockfile via `npm version` + VERSIONS.md section — files only, committed after tests; a failure reverts them) → maestro build → upgrade test (previous release → this build) → jest + full e2e suite → [screenshots + web/README refresh, committed as `web: refresh screenshots`] → commit `release: vX.Y.Z` → release build → artifact checks (version stamp, ffmpeg closure, yt-dlp scan) → deliver `dist/ivy-release-X.Y.Z.{aab,apk}` + cache the maestro APK as the next release's upgrade-test base → tag `vX.Y.Z` → checklist of the remaining manual steps (push, Play Console upload, GitHub release — never automated).
+Pipeline: preflight (tools, node_modules, release keystore, samples/data.json, emulator, local.properties pollution, clean tree on master, version valid, no VERSIONS.md section yet, tag free) → password prompt + verify → version bump (package.json + lockfile via `npm version` + VERSIONS.md section — files only, committed after tests; a failure reverts them) → maestro build → upgrade test (previous release → this build) → jest + full e2e suite → [screenshots + web/README refresh, committed as `web: refresh screenshots`] → commit `release: vX.Y.Z` → release build → artifact checks (version stamp, ffmpeg closure) → deliver `dist/ivy-release-X.Y.Z.{aab,apk}` + cache the maestro APK as the next release's upgrade-test base → tag `vX.Y.Z` → checklist of the remaining manual steps (push, Play Console upload, GitHub release — never automated).
 
 **Agent's role:** write the `--changes` markdown (changeset since last tag, VERSIONS.md style: Features/Fixes/Infra), print the exact `prepare` command for the user to paste, and stop — the command itself needs a TTY the agent doesn't have. Pass `--screenshots` only if UI changed since the last release.
 
@@ -637,7 +637,7 @@ Commands:
       there (never Gradle in /workspace). release = assemble + bundle (AAB),
       runs prebuild --clean first and needs $KEYSTORE_PASSWORD (prompts on
       a TTY). preview/release artifacts are checked after building (version
-      stamp, ffmpeg closure, yt-dlp scan); release is also copied to
+      stamp, ffmpeg closure); release is also copied to
       dist/ivy-release-<version>.{aab,apk}. --install installs the built APK on the
       device. --arch limits native ABIs (e.g. arm64-v8a for emulator).
 
@@ -702,8 +702,8 @@ Commands:
   doctor
       Full environment report: tools, devices, project state, the
       local.properties pollution check, all built APKs/AABs found (with
-      version name/code, ffmpeg closure check on each APK, and a yt-dlp
-      trace scan on every artifact). Exits nonzero on failures.
+      version name/code, ffmpeg closure check on each APK). Exits nonzero
+      on failures.
 
   device connect
       adb connect to the Mac-hosted emulator (host.docker.internal:5555).

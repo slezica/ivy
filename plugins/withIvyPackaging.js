@@ -1,7 +1,8 @@
 // Config plugin: app-level packaging options. libffmpeg.zip.so is a zip
-// masquerading as a shared library (youtubedl-android packaging trick, see
-// docs/CLIPS.md) — llvm-strip prints a scary-but-harmless "error: not a valid
-// object file" for it on every build. Skip stripping it.
+// masquerading as a shared library so the vendored ffmpeg payload rides along
+// in jniLibs (see docs/2026-08-04-vendor-ffmpeg.md) — llvm-strip prints a
+// scary-but-harmless "error: not a valid object file" for it on every build.
+// Skip stripping it.
 const { withAppBuildGradle } = require('expo/config-plugins')
 
 const GRADLE_BLOCK = [
