@@ -53,7 +53,9 @@
         "expo-build-properties",
         {
           "android": {
-            "useLegacyPackaging": true
+            "useLegacyPackaging": true,
+            "enableMinifyInReleaseBuilds": true,
+            "extraProguardRules": "# whisper.rn: JNI resolves onProgress/onNewSegments/emitNativeLog by name (no consumer rules)\n-keep class com.rnwhisper.** { *; }\n# react-native-audio-api: JNI resolves classes/methods by name (no consumer rules)\n-keep class com.swmansion.audioapi.** { *; }"
           }
         }
       ],
