@@ -83,6 +83,34 @@ has a known baseline.
    maestro, run the existing e2e suite, hand-run one transcription. Answers
    "does R8 break Ivy" in half a day. Record build-time and size delta.
 
+**Spike result (2026-09-05): R8 breaks nothing reachable.**
+
+| | v1.6.4 release (D8) | maestro, R8 full mode |
+|---|---|---|
+| APK | 84.7MB | 73.1MB |
+| DEX | 5 files, 47.7MB | 2 files, 13.5MB |
+| classes in mapping | — | 19,321 (94.7% renamed) |
+| build (container, cold) | — | 4m03s |
+
+- Build clean: no R8 warnings, no missing classes.
+- `usage.txt`: zero removals under `com.rnwhisper`, `com.swmansion.audioapi`,
+  `com.salezica`. All `*Module` classes, `MainActivity`, `MainApplication`
+  kept by name; `FFmpegEnvironment` → `s9.e`, `IvyPackage` → `s9.k`.
+- E2e 12/12. One flow took 16m39s: maestro waited 15m44s for the view
+  hierarchy to "settle" before a tap; rerun alone passed in ~90s. Flake,
+  not R8.
+- Whisper under R8: tiny model seeded as `ggml-small.bin` via adb root,
+  transcription toggled on, pending clip transcribed and persisted
+  (`(electronic music)`) within ~10s. Path covered: ffmpeg exec →
+  audio-api decode (JNI) → Whisper JNI → DB.
+- Logcat grep for the R8 signature list: zero hits — but the default dump
+  held only the last flow's pid, confirming the streaming/pid-set design if
+  the scan is built at all (decision deferred: build it only if a baseline
+  shows the caught-and-logged category is real).
+- Gotchas: `adb root`/`unroot` destabilize the TCP adb connection (maestro
+  "device offline"); reconnect after. Maestro is not on PATH in the
+  container (`~/.maestro/bin`).
+
 ### Phase 0 — harness, calibrated on the unminified build
 
 2. **R8 artifact checks** (`doctor` + release artifact checks), deterministic:
