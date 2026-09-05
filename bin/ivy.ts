@@ -60,10 +60,14 @@ Commands:
       [name] runs a single case (jest pattern or maestro flow name) and needs
       exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
       a localhost HTTP interface flows use for device control (network
-      toggles, DB checks) via maestro/scripts/bridge.js; BRIDGE_URL is
-      injected into every run and network state is restored afterwards
-      (emulator only). --server-only starts just the bridge (foreground,
-      Ctrl-C to stop) for hand-run maestro sessions.
+      toggles, media keys, DB checks) via maestro/scripts/bridge.js, and
+      which serves the Whisper model to maestro builds (cache/whisper/
+      ggml-tiny.bin, fetched once; reached from the device via adb reverse;
+      model/mode/* simulates download failures). BRIDGE_URL is injected
+      into every run, adb goes root up front (rootable emulator), and
+      network state is restored afterwards (emulator only). --server-only
+      starts just the bridge (foreground, Ctrl-C to stop) for hand-run
+      maestro sessions.
       --upgrade = migration upgrade smoke test (emulator-only, wipes app
       state): installs the previous release's maestro APK (from cache/upgrade/,
       cache-missed tags are rebuilt from git — Mac-only), seeds old-schema

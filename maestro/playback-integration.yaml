@@ -1,0 +1,40 @@
+appId: com.salezica.ivy
+---
+# Playback beyond the screen: media-button control, background playback, and
+# cold-restart auto-resume — the track-player integration paths (system media
+# session, foreground service, persisted position) that the on-screen flows
+# never exercise and that R8 or a library bump can break without a JS error.
+#
+# Uses the toolkit bridge (media key dispatch, DB checks) — run via
+# `bin/ivy.ts test --e2e [playback-integration]`, not bare `maestro test`.
+
+- runFlow: subflows/import-book.yaml
+
+# Opening a book from the library starts playback
+- tapOn: "Ivy Test Book"
+- assertVisible: "Pause"
+
+# A media-button press (what Bluetooth/headset controls send) toggles playback
+# through the media session → remote-control integration → player
+- runScript: { file: scripts/bridge.js, env: { CMD: "media/play-pause" } }
+- extendedWaitUntil:
+    visible: "Play"
+    timeout: 5000
+- runScript: { file: scripts/bridge.js, env: { CMD: "media/play-pause" } }
+- extendedWaitUntil:
+    visible: "Pause"
+    timeout: 5000
+
+# Backgrounded, playback keeps going: the listening session's ended_at keeps
+# advancing (bumped every 5s while playing)
+- pressKey: Home
+- runScript: { file: scripts/bridge.js, env: { CMD: "check/session-advancing" } }
+
+# Cold restart: the last played book is auto-loaded into the player
+- stopApp
+- launchApp
+- tapOn: "Player"
+- extendedWaitUntil:
+    visible: "Ivy Test Book"
+    timeout: 15000
+- assertVisible: "Play"

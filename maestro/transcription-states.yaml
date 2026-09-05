@@ -1,13 +1,22 @@
 appId: com.salezica.ivy
 ---
 # Transcription status lifecycle: metered gate, auto-download on Wi-Fi,
-# failure backoff with countdown, give-up, and automatic recovery.
+# failure backoff with countdown, give-up, automatic recovery, and the
+# download completing into a loaded model.
 #
-# Uses the toolkit bridge for network control (scripts/bridge.js) and the
+# The model comes from the toolkit bridge (maestro builds only: the model URL
+# override, see bin/ivy.ts "whisper model server"), so the failure is
+# simulated by the server (`model/mode/*`) instead of by cutting the network,
+# and the download is a 75MB tiny model rather than 465MB from HuggingFace.
+# Network toggles remain the trigger for the gate and the auto-retry. Uses the
 # short test-build retry backoff (1/3/5s) — run via `bin/ivy.ts test --e2e
 # [transcription-states]`, not bare `maestro test`.
 
-# Metered-only network (LTE, no Wi-Fi): the 465MB model download must wait
+# Throttled serving keeps "Downloading…" observable (at loopback speed the tiny
+# model would land in about a second)
+- runScript: { file: scripts/bridge.js, env: { CMD: "model/mode/slow" } }
+
+# Metered-only network (LTE, no Wi-Fi): the model download must wait
 - runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/off" } }
 - runScript: { file: scripts/bridge.js, env: { CMD: "net/data/on" } }
 
@@ -26,9 +35,9 @@ appId: com.salezica.ivy
     visible: "Downloading transcription model.*"
     timeout: 20000
 
-# Connectivity lost mid-download → visible backoff countdown, then give-up
-- runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/off" } }
-- runScript: { file: scripts/bridge.js, env: { CMD: "net/data/off" } }
+# Server fails mid-download (in-flight stream cut, retries answered 500) →
+# visible backoff countdown, then give-up
+- runScript: { file: scripts/bridge.js, env: { CMD: "model/mode/error" } }
 - extendedWaitUntil:
     visible: "Could not download transcription model. Retrying in .*"
     timeout: 30000
@@ -42,8 +51,19 @@ appId: com.salezica.ivy
 - assertVisible: "Retry"
 - back
 
-# Connectivity returns → automatic retry, no tap needed
+# Server recovers; a connectivity change triggers the automatic retry (no tap)
+- runScript: { file: scripts/bridge.js, env: { CMD: "model/mode/slow" } }
+- runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/off" } }
 - runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/on" } }
 - extendedWaitUntil:
     visible: "Downloading transcription model.*"
     timeout: 20000
+
+# The download completes and the model loads: the banner goes away
+- extendedWaitUntil:
+    notVisible: "Downloading transcription model.*"
+    timeout: 120000
+- assertNotVisible: "Could not download transcription model.*"
+
+# Leave the shared bridge in its default state for the next flow
+- runScript: { file: scripts/bridge.js, env: { CMD: "model/mode/ok" } }

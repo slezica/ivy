@@ -285,8 +285,10 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   ├── timeline-gestures.yaml      # Timeline drag/fling/tap
   ├── artwork-cap.yaml            # Oversized-cover import → artwork extraction cap (bridge DB check)
   ├── sleep-timer.yaml            # Sleep timer arm/expiry (needs maestro build variant)
-  ├── transcription-states.yaml   # Model-download lifecycle via bridge network control (needs maestro build variant)
-  ├── scripts/bridge.js           # Shared helper calling the toolkit bridge (device control mid-flow)
+  ├── transcription-states.yaml   # Model-download lifecycle against the bridge model server + network gates (needs maestro build variant)
+  ├── transcription-inference.yaml # Whisper end to end: tiny model from the bridge → clip → persisted transcription (needs maestro build variant)
+  ├── playback-integration.yaml   # Media-button play/pause, background playback, cold-restart auto-resume (bridge media key + DB checks)
+  ├── scripts/bridge.js           # Shared helper calling the toolkit bridge (device control, DB checks, model-server modes mid-flow)
   ├── subflows/                   # Shared steps (import-book)
   ├── playstore/                  # Play Store screenshot flow (screenshots.yaml, run by `generate --screenshots`)
   ├── screenshots/                # GENERATED (gitignored): screenshot-flow output
@@ -300,6 +302,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
 
 /cache                            # GENERATED (gitignored): persistent toolkit caches
                                   # upgrade/ivy-maestro-<version>.apk — upgrade-test bases, written by prepare
+                                  # whisper/ggml-tiny.bin — model served to maestro builds by the e2e bridge (fetched once)
 
 /samples                          # Committed sources for generated store/web assets
   ├── data.json                   # Demo library fixture (screenshot seeding; see docs/2026-07-21-playstore-screenshots.md)
@@ -657,10 +660,14 @@ Commands:
       [name] runs a single case (jest pattern or maestro flow name) and needs
       exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
       a localhost HTTP interface flows use for device control (network
-      toggles, DB checks) via maestro/scripts/bridge.js; BRIDGE_URL is
-      injected into every run and network state is restored afterwards
-      (emulator only). --server-only starts just the bridge (foreground,
-      Ctrl-C to stop) for hand-run maestro sessions.
+      toggles, media keys, DB checks) via maestro/scripts/bridge.js, and
+      which serves the Whisper model to maestro builds (cache/whisper/
+      ggml-tiny.bin, fetched once; reached from the device via adb reverse;
+      model/mode/* simulates download failures). BRIDGE_URL is injected
+      into every run, adb goes root up front (rootable emulator), and
+      network state is restored afterwards (emulator only). --server-only
+      starts just the bridge (foreground, Ctrl-C to stop) for hand-run
+      maestro sessions.
       --upgrade = migration upgrade smoke test (emulator-only, wipes app
       state): installs the previous release's maestro APK (from cache/upgrade/,
       cache-missed tags are rebuilt from git — Mac-only), seeds old-schema

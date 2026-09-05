@@ -68,13 +68,32 @@ run (`test --e2e`, `drive --file/--inline`), injecting its address as the
 - runScript: { file: scripts/bridge.js, env: { CMD: "net/wifi/off" } }
 ```
 
-Endpoints are a curated semantic vocabulary (`net/wifi/on|off`,
-`net/data/on|off`, `check/artwork-cap`, plus a `health` probe — see
-`BRIDGE_ENDPOINTS` in `bin/ivy.ts`); adb knowledge stays in the toolkit,
-never in yaml. Network endpoints refuse non-emulator devices, server errors
-fail the calling flow, and the toolkit restores wifi+data after every bridged
-run (emulator only). The port defaults to 7799, overridable via
-`test --server-only --port <n>` / `$IVY_BRIDGE_PORT`.
+Endpoints are a curated semantic vocabulary — see `BRIDGE_ENDPOINTS` in
+`bin/ivy.ts`; adb knowledge stays in the toolkit, never in yaml:
+
+- `net/wifi/on|off`, `net/data/on|off` — radios (emulator only)
+- `media/play-pause` — a media-button press through the system media session
+  (what Bluetooth/headset controls send)
+- `check/artwork-cap`, `check/transcribed`, `check/session-advancing` — DB
+  assertions (pull the app database via adb root; poll where the app needs time)
+- `model/mode/ok|slow|error|stall` — behaviour of the bridge's **Whisper model
+  server**: the maestro build downloads its model from `GET /model` on the
+  bridge (a 75MB `ggml-tiny.bin`, cached once in `cache/whisper/`) instead of
+  465MB from HuggingFace, so transcription flows are deterministic and
+  failures are simulated by the server rather than by cutting the network.
+  Mode is per bridge process; a flow that changes it restores `ok` before it
+  ends (the suite shares one bridge). Plumbing: `plugins/withIvyBuildTypes.js`
+  (maestro-only `ivy_whisper_model_url` resValue + cleartext placeholder),
+  docs/2026-09-05-r8-obfuscation.md.
+- `health` — probe
+
+Network endpoints refuse non-emulator devices, server errors fail the calling
+flow, and the toolkit restores wifi+data after every bridged run (emulator
+only). The bridge listens on 7799 by default (`test --server-only --port <n>` /
+`$IVY_BRIDGE_PORT`) and is mapped to the device's `127.0.0.1:7799` with
+`adb reverse` for the model download; the toolkit also goes `adb root` before
+maestro connects, because a mid-run adbd restart leaves maestro's transport
+dead ("device offline").
 
 Flows that use `launchApp.clearState` wipe app data — **only run against test
 devices/emulators**, never a device with real library data.
@@ -114,14 +133,18 @@ $ANDROID_HOME/emulator/emulator -avd <name> -no-audio -no-boot-anim &
 | `timeline-gestures.yaml` | Tap-seek / scrub / flick on the Skia timeline; app stays responsive |
 | `artwork-cap.yaml` | Oversized-cover import → native extraction cap → bridge DB check (`check/artwork-cap`) |
 | `sleep-timer.yaml` | Arm 5s preset → countdown on button → expiry pauses playback, clears timer (maestro/debug builds only) |
-| `transcription-states.yaml` | Model-download lifecycle via bridge network control: metered gate (waiting-wifi) → auto-download on Wi-Fi → failure backoff countdown → give-up (tap-to-retry, Settings match) → auto-retry on reconnect (maestro/debug builds only: fast backoff) |
+| `transcription-states.yaml` | Model-download lifecycle against the bridge model server: metered gate (waiting-wifi) → auto-download on Wi-Fi (throttled) → server failure mid-download → backoff countdown → give-up (tap-to-retry, Settings match) → auto-retry on reconnect → download completes, model loads (maestro builds only) |
+| `transcription-inference.yaml` | Whisper end to end: tiny model from the bridge → clip → on-device inference → transcription persisted (bridge `check/transcribed`; content not asserted) — guards the audio-api/whisper.rn JNI path under R8 (maestro builds only) |
+| `playback-integration.yaml` | Off-screen playback paths: media-button play/pause through the media session (bridge `media/play-pause`), background playback keeps the session advancing (`check/session-advancing`), cold restart auto-resumes the book |
 
 Every flow is **independently runnable** — each starts from `clearState` and does
 its own setup, so `maestro test maestro/` (which runs flows alphabetically) has
 no ordering dependency. Most import via `subflows/import-book.yaml` (`runFlow`);
 `artwork-cap.yaml` and `delete-original.yaml` carry their own import steps
 (different fixtures), and `smoke-test.yaml` / `transcription-states.yaml` don't
-import at all. `config.yaml` scopes the suite to top-level `*.yaml`, excluding
+import at all. Flows that need the maestro build (test affordances, the model
+URL override) say so in their header; on preview/release they fail at the
+first affordance. `config.yaml` scopes the suite to top-level `*.yaml`, excluding
 `subflows/`. Outside the suite, `playstore/screenshots.yaml` drives the Play
 Store screenshot set (run via `bin/ivy.ts generate --screenshots`).
 

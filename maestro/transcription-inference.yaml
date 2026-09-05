@@ -1,0 +1,37 @@
+appId: com.salezica.ivy
+---
+# Whisper runs end to end: model download from the toolkit bridge → clip →
+# on-device inference → transcription persisted. The oracle is "inference
+# completed and was persisted" (bridge `check/transcribed`; empty text counts),
+# NOT what the text says — this guards the native path (audio-api decode →
+# whisper.rn JNI → DB) that R8 or a packaging change can break silently
+# (docs/2026-09-05-r8-obfuscation.md), not transcription quality.
+#
+# maestro builds only: the model URL override points at the bridge, which
+# serves the tiny model (bin/ivy.ts "whisper model server"). Run via
+# `bin/ivy.ts test --e2e [transcription-inference]`, not bare `maestro test`.
+
+- runScript: { file: scripts/bridge.js, env: { CMD: "model/mode/ok" } }
+
+# Launches offline, switches transcription OFF, restores connectivity, imports
+- runFlow: subflows/import-book.yaml
+
+# Transcription back on: model missing + Wi-Fi → download starts (from the bridge)
+- openLink: ivy://settings
+- tapOn:
+    id: "transcription-switch"
+- back
+
+# A clip created meanwhile queues up and is transcribed once the model is ready
+- tapOn: "Ivy Test Book"
+- tapOn:
+    id: "add-clip-button"
+- assertVisible: "Save"
+- tapOn: "Save"
+- tapOn: "Clips"
+- extendedWaitUntil:
+    visible: "Ivy Test Book"
+    timeout: 10000
+
+# Polls the DB (up to 90s) for a clip with a non-null transcription
+- runScript: { file: scripts/bridge.js, env: { CMD: "check/transcribed" } }
