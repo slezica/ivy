@@ -40,9 +40,9 @@ Commands:
       there (never Gradle in /workspace). release = assemble + bundle (AAB),
       runs prebuild --clean first and needs ${'$'}KEYSTORE_PASSWORD (prompts on
       a TTY). preview/release artifacts are checked after building (version
-      stamp, ffmpeg closure); release is also copied to
-      dist/ivy-release-<version>.{aab,apk}. --install installs the built APK on the
-      device. --arch limits native ABIs (e.g. arm64-v8a for emulator).
+      stamp, ffmpeg closure, R8 marker + mapping + kept classes); release is
+      also copied to dist/ivy-release-<version>.{aab,apk,-mapping.txt}.
+      --install installs the built APK on the device. --arch limits native ABIs (e.g. arm64-v8a for emulator).
 
   clean
       Recover a Gradle-polluted /workspace: sweep native build outputs and
@@ -105,8 +105,9 @@ Commands:
   doctor
       Full environment report: tools, devices, project state, the
       local.properties pollution check, all built APKs/AABs found (with
-      version name/code, ffmpeg closure check on each APK). Exits nonzero
-      on failures.
+      version name/code, ffmpeg closure check on each APK, R8 checks: marker
+      in every DEX, mapping id, native modules kept by name, JNI-lookup
+      packages unstripped). Exits nonzero on failures.
 
   device connect
       adb connect to the Mac-hosted emulator (host.docker.internal:5555).
@@ -295,6 +296,11 @@ function apkPath(variant: string): string {
   return path.join(base, 'app/build/outputs/apk', variant, `app-${variant}.apk`)
 }
 
+function mappingPath(variant: string): string {
+  const base = isContainer ? path.join(MIRROR, 'android') : path.join(ROOT, 'android')
+  return path.join(base, 'app/build/outputs/mapping', variant, 'mapping.txt')
+}
+
 function aabPath(): string {
   const base = isContainer ? path.join(MIRROR, 'android') : path.join(ROOT, 'android')
   return path.join(base, 'app/build/outputs/bundle/release/app-release.aab')
@@ -335,16 +341,20 @@ function checkBuiltArtifact(file: string) {
 
 // Copy the checked release artifacts to dist/ under their versioned names
 // (in the container this moves them out of the build mirror onto the mount)
-function deliverRelease(): { aab: string, apk: string } {
+function deliverRelease(): { aab: string, apk: string, mapping: string } {
   const version = pkgVersion()
   fs.mkdirSync(DIST, { recursive: true })
   const aab = path.join(DIST, `ivy-release-${version}.aab`)
   const apk = path.join(DIST, `ivy-release-${version}.apk`)
+  // The R8 mapping retraces obfuscated stack traces from this exact build
+  // (the AAB embeds a copy for Play; this one is for local retrace and
+  // pairs with the APK by name — checkR8 finds it as the APK's sibling)
+  const mapping = path.join(DIST, `ivy-release-${version}-mapping.txt`)
   fs.copyFileSync(aabPath(), aab)
   fs.copyFileSync(apkPath('release'), apk)
-  log(`delivered ${path.relative(ROOT, aab)}`)
-  log(`delivered ${path.relative(ROOT, apk)}`)
-  return { aab, apk }
+  fs.copyFileSync(mappingPath('release'), mapping)
+  for (const f of [aab, apk, mapping]) log(`delivered ${path.relative(ROOT, f)}`)
+  return { aab, apk, mapping }
 }
 
 // Report wall-clock time of a build step (every toolkit build logs its time)
