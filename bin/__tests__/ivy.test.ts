@@ -202,3 +202,25 @@ describe('R8 artifact helpers', () => {
     expect(usageRemovals(usage, ['com.salezica.'])).toEqual([])
   })
 })
+
+describe('r8LogHits', () => {
+  const { r8LogHits } = require('../ivy')
+  const app = 'com.salezica.ivy'
+  const log = [
+    '09-05 07:00:00.000  1000  1000 I ActivityManager: Start proc 4242:com.salezica.ivy/u0a240 for activity',
+    '09-05 07:00:01.000  4242  4242 W System.err: java.lang.ClassNotFoundException: Didn\'t find class "a.b.C" 0x7f3a',
+    '09-05 07:00:01.500  4242  4242 W System.err: java.lang.ClassNotFoundException: Didn\'t find class "a.b.C" 0x7f3b',
+    '09-05 07:00:02.000  4242  4242 I ReactNativeJS: all fine',
+    '09-05 07:00:03.000  9999  9999 E OtherApp: java.lang.NoSuchMethodError: elsewhere',
+    '09-05 07:00:04.000  9999  9999 F DEBUG   : >>> com.salezica.ivy <<< Fatal signal 6',
+  ].join('\n')
+
+  it('scopes to app pids (plus lines naming the app) and collapses volatile bits', () => {
+    const { appLines, hits } = r8LogHits(log, app)
+    expect(appLines).toBe(5) // incl. the ActivityManager line naming the app
+    expect([...hits.entries()]).toEqual([
+      ['System.err: java.lang.ClassNotFoundException: Didn\'t find class "a.b.C" #', 2],
+      ['DEBUG   : >>> com.salezica.ivy <<< Fatal signal 6', 1],
+    ])
+  })
+})

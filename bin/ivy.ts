@@ -687,6 +687,57 @@ function startBridgeServer(port: number): http.Server {
   return server
 }
 
+// --- R8 signature log scan (advisory) ---
+// R8 breakage that doesn't crash shows up as caught reflection/JNI failures
+// some library logs and moves on from. The suite streams logcat for its whole
+// duration (maestro clears the ring buffer per flow, and the app's pid changes
+// on every clearState, so a post-hoc dump sees one flow at most), then reports
+// every app line matching a known signature. Advisory only — there is no
+// baseline yet to turn hits into failures; the report exists to build one.
+
+export const R8_LOG_PATTERNS = [
+  'ClassNotFoundException', 'NoClassDefFoundError', 'NoSuchMethodError', 'NoSuchMethodException',
+  'NoSuchFieldError', 'NoSuchFieldException', 'UnsatisfiedLinkError', 'AbstractMethodError',
+  'IncompatibleClassChangeError', 'ExceptionInInitializerError', 'VerifyError',
+  'KotlinReflectionInternalError', 'JNI DETECTED ERROR', 'No implementation found',
+  'Fatal signal', 'libc++abi',
+]
+
+// threadtime lines: `MM-DD HH:MM:SS.mmm  PID  TID  L TAG: message`
+const THREADTIME = /^\d\d-\d\d \d\d:\d\d:\d\d\.\d+\s+(\d+)\s+\d+\s+([A-Z])\s+(.*)$/
+
+export function r8LogHits(logcat: string, app: string): { appLines: number, hits: Map<string, number> } {
+  const pids = new Set<string>()
+  for (const m of logcat.matchAll(new RegExp(`Start proc (\\d+):${app.replace(/\./g, '\\.')}`, 'g'))) pids.add(m[1])
+  const pattern = new RegExp(R8_LOG_PATTERNS.map(p => p.replace(/[+]/g, '\\+')).join('|'))
+  const hits = new Map<string, number>()
+  let appLines = 0
+  for (const line of logcat.split('\n')) {
+    const m = line.match(THREADTIME)
+    if (!m) continue
+    const [, pid, , rest] = m
+    if (!pids.has(pid) && !rest.includes(app)) continue
+    appLines++
+    if (!pattern.test(rest)) continue
+    // Normalize volatile bits so identical events collapse into one entry
+    const key = rest.replace(/0x[0-9a-f]+/gi, '#').replace(/\b\d{3,}\b/g, '#')
+    hits.set(key, (hits.get(key) ?? 0) + 1)
+  }
+  return { appLines, hits }
+}
+
+function reportR8LogScan(logFile: string) {
+  if (!fs.existsSync(logFile)) return
+  const { appLines, hits } = r8LogHits(fs.readFileSync(logFile, 'utf8'), APP)
+  if (hits.size === 0) {
+    report(null, 'r8 log scan', `no R8 signatures in ${appLines} app log lines (${path.relative(ROOT, logFile)})`)
+    return
+  }
+  const top = [...hits.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([k, n]) => `      ${n}× ${k.slice(0, 160)}`)
+  report(null, 'r8 log scan', `${hits.size} distinct signature(s) in ${appLines} app log lines — advisory, inspect ${path.relative(ROOT, logFile)}:\n${top.join('\n')}`)
+}
+
 // Spawn the bridge as a child process (this process blocks on spawnSync while
 // maestro runs, so an in-process server could never answer), wait until it is
 // healthy, run `fn`, then tear it down and restore network state.
@@ -698,6 +749,13 @@ function withBridge(fn: (url: string) => void) {
 
   ensureWhisperModelCache()
   reverseBridgePort(port)
+
+  // Stream logcat for the whole run (see the R8 log scan above)
+  fs.mkdirSync(path.join(ROOT, 'log'), { recursive: true })
+  const logcatFile = path.join(ROOT, 'log', 'e2e-logcat.txt')
+  adbOut('logcat', '-c')
+  const logcatFd = fs.openSync(logcatFile, 'w')
+  const logcat = spawn(findAdb(), ['-s', serial(), 'logcat', '-v', 'threadtime'], { stdio: ['ignore', logcatFd, 'ignore'] })
 
   // Own process group: `npx tsx` wraps the real node process, and killing the
   // wrapper alone leaves the server listening (stale bridge on the port next run)
@@ -720,6 +778,9 @@ function withBridge(fn: (url: string) => void) {
   } finally {
     try { process.kill(-child.pid!, 'SIGTERM') } catch { child.kill() }
     fs.closeSync(logFd)
+    logcat.kill()
+    fs.closeSync(logcatFd)
+    reportR8LogScan(logcatFile)
 
     // Flows may leave radios off; restore the default state (emulator only)
     if (isEmulator()) {
