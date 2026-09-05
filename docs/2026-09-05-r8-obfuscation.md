@@ -210,6 +210,58 @@ has a known baseline.
     oracle; the pre-launch report (robo crawl on real devices) is a second
     crash detector.
 
+## Outcome (2026-09-05, same day)
+
+Phases −1 through 2 done on branch `obfuscate`; Phase 3 (manual, real
+device) and Phase 4 (ship) remain.
+
+**Harness built** (all in `bin/ivy.ts` unless noted):
+- Artifact checks `r8` / `r8 mapping` / `r8 renamed` / `r8 native modules` /
+  `r8 keep-whole`, in `doctor` and the post-build gate; pure helpers unit
+  tested. Our own package is deliberately *not* keep-whole: R8 legitimately
+  drops `R`/`BuildConfig` and inlines constants there.
+- Native-crash detection in `appCrashExcerpt` (`>>> pkg <<<`).
+- Mapping delivered as `dist/ivy-release-X.Y.Z-mapping.txt`; retrace
+  round-trip verified (`AudioMetadataModule$a` → `$Companion`, source file
+  restored). `FFmpegEnvironment` has no member mappings at all — everything
+  in it was inlined.
+- Bridge Whisper model server (`GET /model`, modes `ok|slow|error|stall`,
+  `adb reverse`, tiny model cached in `cache/whisper/`), the maestro-only
+  URL override (`resValue` + `BuildInfoModule` + `getWhisperModelUrlOverride`)
+  and the cleartext placeholder. Bridge endpoints `check/transcribed`,
+  `check/session-advancing`, `media/play-pause`.
+- Flows: `transcription-inference.yaml` (43s), `playback-integration.yaml`
+  (49s); `transcription-states.yaml` rewritten on the model server (1m44s,
+  now ends with the download completing and the model loading — previously
+  it started a real 465MB HuggingFace download every run).
+- The R8 signature log scan was built after all, as **advisory**: maestro
+  clears the logcat ring buffer per flow, so no post-hoc dump can see more
+  than one flow — streaming was the only option, and it turned out to be
+  ~40 lines. It streams `logcat -v threadtime` to `log/e2e-logcat.txt` for
+  the run and reports app-scoped hits without failing anything. Promote to
+  a gate once a few runs establish the baseline.
+- `stabilizeAdbForMaestro`: `adb root` + reconnect before maestro connects.
+
+**Results, R8 build:** e2e 14/14 (12m50s), upgrade test v1.6.4 → current
+passed, static checks green, log scan clean on every run so far.
+
+**Found along the way (not R8):**
+- **Bug:** the single-button headset / Bluetooth play-pause key did nothing.
+  track-player forwards `KEYCODE_MEDIA_PLAY_PAUSE` as `Event.RemotePlayPause`
+  and Ivy only handled `RemotePlay`/`RemotePause`. Fixed in
+  `services/audio/integration.ts` (resolves from `getPlaybackState()`).
+  Caught by the new playback-integration flow on its first run — the
+  harness paid for itself before R8 had a chance to.
+- **Toolkit:** `adb root` mid-run restarts adbd and the next maestro session
+  (or the current one's transport) dies with "device offline". Root once,
+  up front.
+- **Toolkit:** `withBridge` killed only the `npx` wrapper, leaving the real
+  bridge process listening — stale server on the port for the next run.
+  Now kills the process group.
+- **Environment:** `expo prebuild` on the virtiofs bind mount writes a
+  root-owned, mode-200 `android/gradle.properties` the container can't read
+  or delete without sudo. Prebuild in the mirror and copy back.
+
 ## Rejected alternatives
 
 - **Release-only R8** (preview/maestro unminified): minimal, but the suite
