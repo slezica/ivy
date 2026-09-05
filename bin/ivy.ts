@@ -527,6 +527,92 @@ function maestroRun(args: string[], bridgeUrl?: string) {
 
 const BRIDGE_DEFAULT_PORT = 7799
 
+// --- whisper model server ---
+// The maestro build downloads its Whisper model from the bridge (see
+// plugins/withIvyBuildTypes.js: ivy_whisper_model_url → 127.0.0.1:7799/model,
+// reached through `adb reverse`, so the device-side port is fixed while the
+// bridge's own port may vary). Serving ggml-tiny.bin (~75MB, cached once in
+// cache/whisper/) instead of 465MB from HuggingFace makes transcription e2e
+// deterministic, and the mode switch simulates what the network used to:
+//   ok     stream the model at full speed
+//   slow   stream it throttled (~1MB/s) so "Downloading…" stays observable
+//   error  answer 500 and cut any download in flight
+//   stall  accept the request and never answer (cut in-flight downloads too)
+// Mode is per bridge process — a flow that changes it restores `ok` before it
+// ends (the suite shares one bridge). Design: docs/2026-09-05-r8-obfuscation.md.
+
+const WHISPER_CACHE = path.join(ROOT, 'cache', 'whisper')
+const WHISPER_TINY = path.join(WHISPER_CACHE, 'ggml-tiny.bin')
+const WHISPER_TINY_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin'
+const SLOW_CHUNK_BYTES = 64 * 1024
+const SLOW_CHUNK_MS = 60 // 64KB / 60ms ≈ 1.1MB/s → ~70s for the tiny model
+
+const { BRIDGE_DEVICE_PORT } = require(path.join(ROOT, 'plugins/withIvyBuildTypes.js')) as { BRIDGE_DEVICE_PORT: number }
+
+type ModelMode = 'ok' | 'slow' | 'error' | 'stall'
+const MODEL_MODES: ModelMode[] = ['ok', 'slow', 'error', 'stall']
+let modelMode: ModelMode = 'ok'
+const modelStreams = new Set<http.ServerResponse>()
+
+function setModelMode(mode: ModelMode) {
+  modelMode = mode
+  if (mode === 'error' || mode === 'stall') {
+    for (const res of modelStreams) res.destroy()
+    modelStreams.clear()
+  }
+}
+
+// Fetch the tiny model into cache/ once (the bridge serves it from there)
+function ensureWhisperModelCache() {
+  if (fs.existsSync(WHISPER_TINY)) return
+  log(`fetching ggml-tiny.bin (~75MB, once) into ${path.relative(ROOT, WHISPER_CACHE)}/`)
+  fs.mkdirSync(WHISPER_CACHE, { recursive: true })
+  const tmp = `${WHISPER_TINY}.download`
+  run('curl', ['-fsSL', '-o', tmp, WHISPER_TINY_URL])
+  fs.renameSync(tmp, WHISPER_TINY)
+}
+
+function serveModel(req: http.IncomingMessage, res: http.ServerResponse) {
+  if (!fs.existsSync(WHISPER_TINY)) {
+    res.writeHead(500).end('bridge: cache/whisper/ggml-tiny.bin missing (run via bin/ivy.ts test --e2e)')
+    return
+  }
+  if (modelMode === 'error') {
+    res.writeHead(500).end('simulated model server failure')
+    return
+  }
+  modelStreams.add(res)
+  req.on('close', () => modelStreams.delete(res))
+  if (modelMode === 'stall') return // hold the request open; setModelMode cuts it
+
+  const size = fs.statSync(WHISPER_TINY).size
+  res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': size })
+  const stream = fs.createReadStream(WHISPER_TINY, { highWaterMark: SLOW_CHUNK_BYTES })
+  if (modelMode === 'ok') {
+    stream.pipe(res)
+    return
+  }
+  // slow: one chunk per tick
+  stream.on('data', (chunk) => {
+    stream.pause()
+    if (res.destroyed) return stream.destroy()
+    res.write(chunk, () => setTimeout(() => stream.resume(), SLOW_CHUNK_MS))
+  })
+  stream.on('end', () => res.end())
+  res.on('close', () => stream.destroy())
+}
+
+// Poll a DB predicate until it holds (bridge checks that wait for the app)
+function waitForDb(sql: string, label: string, timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const hit = withPulledDatabase(local => sqliteExec(local, sql).trim()) !== '0'
+    if (hit) return
+    if (Date.now() > deadline) throw new Error(`${label}: not observed within ${Math.round(timeoutMs / 1000)}s`)
+    spawnSync('sleep', ['3'])
+  }
+}
+
 // Semantic endpoint vocabulary. Network toggles are emulator-only: flipping
 // radios on a physical device (the developer's phone) is never acceptable.
 const BRIDGE_ENDPOINTS: Record<string, () => void> = {
@@ -534,6 +620,25 @@ const BRIDGE_ENDPOINTS: Record<string, () => void> = {
   'net/wifi/off': () => { requireEmulator('bridge net control'); adbShell('svc', 'wifi', 'disable') },
   'net/data/on': () => { requireEmulator('bridge net control'); adbShell('svc', 'data', 'enable') },
   'net/data/off': () => { requireEmulator('bridge net control'); adbShell('svc', 'data', 'disable') },
+  // Whisper model server behaviour (see above)
+  ...Object.fromEntries(MODEL_MODES.map(m => [`model/mode/${m}`, () => setModelMode(m)])),
+  // Media-button press (what Bluetooth/headset controls send) → track-player's
+  // remote-control integration
+  'media/play-pause': () => { adbShell('cmd', 'media_session', 'dispatch', 'play-pause') },
+  // Whisper ran end to end: some clip has a persisted transcription (empty
+  // string counts — the oracle is "inference completed", not its content)
+  'check/transcribed': () => {
+    waitForDb('SELECT count(*) FROM clips WHERE transcription IS NOT NULL;', 'transcribed clip', 90_000)
+  },
+  // Playback is alive: the current session's ended_at keeps advancing (bumped
+  // every 5s while playing — see docs/SESSIONS.md)
+  'check/session-advancing': () => {
+    const read = () => withPulledDatabase(local => sqliteExec(local, 'SELECT coalesce(max(ended_at), 0) FROM sessions;').trim())
+    const before = Number(read())
+    spawnSync('sleep', ['8'])
+    const after = Number(read())
+    if (!(after > before)) throw new Error(`session ended_at did not advance (${before} → ${after})`)
+  },
   // Import-path check for the artwork extraction cap (artwork-cap.yaml):
   // extraction must have produced artwork, and none may exceed the repair
   // threshold — a 512px JPEG lands far below it (see docs/MIGRATIONS.md)
@@ -553,6 +658,10 @@ function startBridgeServer(port: number): http.Server {
 
     if (cmd === 'health') {
       res.writeHead(200).end('ok')
+      return
+    }
+    if (cmd === 'model') {
+      serveModel(req, res)
       return
     }
 
@@ -583,9 +692,14 @@ function withBridge(fn: (url: string) => void) {
   const logPath = path.join(os.tmpdir(), 'ivy-bridge.log')
   const logFd = fs.openSync(logPath, 'a')
 
+  ensureWhisperModelCache()
+  reverseBridgePort(port)
+
+  // Own process group: `npx tsx` wraps the real node process, and killing the
+  // wrapper alone leaves the server listening (stale bridge on the port next run)
   const child = spawn('npx', ['tsx', path.join(ROOT, 'bin/ivy.ts'),
     'test', '--server-only', '--port', String(port), '--device', serial()],
-    { cwd: ROOT, stdio: ['ignore', logFd, logFd] })
+    { cwd: ROOT, stdio: ['ignore', logFd, logFd], detached: true })
 
   const healthy = () => spawnSync(process.execPath, ['-e',
     `fetch(process.argv[1]).then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))`,
@@ -600,7 +714,7 @@ function withBridge(fn: (url: string) => void) {
 
     fn(url)
   } finally {
-    child.kill()
+    try { process.kill(-child.pid!, 'SIGTERM') } catch { child.kill() }
     fs.closeSync(logFd)
 
     // Flows may leave radios off; restore the default state (emulator only)
@@ -610,6 +724,35 @@ function withBridge(fn: (url: string) => void) {
         adbShell('svc', 'data', 'enable')
       } catch { /* device gone — nothing to restore */ }
     }
+    try { adbOut('reverse', '--remove', `tcp:${BRIDGE_DEVICE_PORT}`) } catch { /* device gone */ }
+  }
+}
+
+// Make the bridge reachable from the device at 127.0.0.1:<BRIDGE_DEVICE_PORT>
+// (the address baked into the maestro build). Works over TCP-connected
+// emulators and USB alike — the mapping lives in adbd.
+function reverseBridgePort(port: number) {
+  adb('reverse', `tcp:${BRIDGE_DEVICE_PORT}`, `tcp:${port}`)
+}
+
+// Bridge DB checks (check/artwork-cap, check/transcribed, ...) read the maestro
+// build's database through `adb root`, which restarts adbd. A maestro session
+// whose transport that restart went through — or one started right after it —
+// dies with "device offline" (seen 2026-09-05). So: go root once, up front,
+// and re-establish the transport before maestro connects. Non-rootable images
+// just skip this (their DB checks fail on their own, with a clear message).
+function stabilizeAdbForMaestro() {
+  if (!isEmulator()) return
+  const out = capture(findAdb(), ['-s', serial(), 'root'], { allowFail: true })
+  if (/cannot run as root/i.test(out)) {
+    log('emulator refuses adb root — flows with bridge DB checks will fail')
+    return
+  }
+  if (!/already running as root/i.test(out)) {
+    run(findAdb(), ['-s', serial(), 'wait-for-device'])
+    adb('reconnect')
+    run(findAdb(), ['-s', serial(), 'wait-for-device'])
+    spawnSync('sleep', ['2'])
   }
 }
 
@@ -637,8 +780,10 @@ function cmdTest(args: Args) {
   if (args.flags['server-only']) {
     const port = Number(args.flags.port || process.env.IVY_BRIDGE_PORT || BRIDGE_DEFAULT_PORT)
     serial() // resolve the device now so endpoint calls target the right one
+    ensureWhisperModelCache()
+    reverseBridgePort(port)
     startBridgeServer(port)
-    log(`bridge server on http://127.0.0.1:${port}`)
+    log(`bridge server on http://127.0.0.1:${port} (device: 127.0.0.1:${BRIDGE_DEVICE_PORT} via adb reverse)`)
     log(`run flows with: maestro test -e BRIDGE_URL=http://127.0.0.1:${port} <flow.yaml>`)
     return // server keeps the process alive; Ctrl-C to stop
   }
@@ -657,6 +802,7 @@ function cmdTest(args: Args) {
     run('npx', ['jest', '--silent', ...(name ? [name] : [])])
   }
   if (e2e || both) {
+    stabilizeAdbForMaestro()
     pushFixtures()
     if (name) {
       const flow = resolveFlow(name)
