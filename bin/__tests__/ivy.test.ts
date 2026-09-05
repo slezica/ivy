@@ -149,3 +149,56 @@ describe('renderChecklist', () => {
     expect(out).toContain('upload dist/ivy-release-1.7.0.apk (tag v1.7.0)')
   })
 })
+
+describe('R8 artifact helpers', () => {
+  const { parseDexMarker, mappingId, mappingRenameRatio, mappingKeptByName, usageRemovals } = require('../ivy')
+
+  it('parses R8 and D8 compiler markers out of DEX bytes', () => {
+    const r8 = Buffer.concat([Buffer.from('junk\0'),
+      Buffer.from('~~R8{"backend":"dex","pg-map-id":"4a423e7","r8-mode":"full","version":"8.11.18"}'), Buffer.from('\0more')])
+    expect(parseDexMarker(r8)).toEqual({ tool: 'R8', mode: 'full', mapId: '4a423e7' })
+    const d8 = Buffer.from('~~D8{"backend":"dex","compilation-mode":"release","version":"8.11.18"}')
+    expect(parseDexMarker(d8)).toEqual({ tool: 'D8', mode: null, mapId: null })
+    expect(parseDexMarker(Buffer.from('no marker here'))).toBeNull()
+  })
+
+  const mapping = [
+    '# compiler: R8',
+    '# pg_map_id: 4a423e7',
+    'com.salezica.ivy.BuildInfoModule -> com.salezica.ivy.BuildInfoModule:',
+    '    java.lang.String getName() -> getName',
+    'com.salezica.ivy.FFmpegEnvironment -> s9.e:',
+    'com.salezica.ivy.IvyPackage -> s9.k:',
+    '',
+  ].join('\n')
+
+  it('reads the mapping id and rename ratio', () => {
+    expect(mappingId(mapping)).toBe('4a423e7')
+    expect(mappingId('# compiler: R8\n')).toBeNull()
+    expect(mappingRenameRatio(mapping)).toEqual({ classes: 3, renamed: 2 })
+  })
+
+  it('tells kept-by-name classes from renamed ones', () => {
+    expect(mappingKeptByName(mapping, [
+      'com.salezica.ivy.BuildInfoModule', 'com.salezica.ivy.FFmpegEnvironment', 'com.salezica.ivy.Missing',
+    ])).toEqual(['com.salezica.ivy.BuildInfoModule'])
+  })
+
+  it('lists usage.txt removals under the watched prefixes only', () => {
+    const usage = [
+      'com.doublesymmetry.kotlinaudio.models.BufferConfig',
+      'com.rnwhisper.WhisperContext:',
+      '    void onProgress(int)',
+      '    void onNewSegments(int,int)',
+      'com.rnwhisper.Unused',
+      'expo.modules.BuildConfig',
+      '',
+    ].join('\n')
+    expect(usageRemovals(usage, ['com.rnwhisper.'])).toEqual([
+      'com.rnwhisper.WhisperContext#void onProgress(int)',
+      'com.rnwhisper.WhisperContext#void onNewSegments(int,int)',
+      'com.rnwhisper.Unused',
+    ])
+    expect(usageRemovals(usage, ['com.salezica.'])).toEqual([])
+  })
+})

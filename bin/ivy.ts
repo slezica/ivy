@@ -329,6 +329,7 @@ function checkBuiltArtifact(file: string) {
   const got = artifactVersion(file) ?? 'unreadable'
   report(got === want, 'version stamp', got === want ? got : `${got} — expected ${want}`)
   if (file.endsWith('.apk')) checkFfmpegClosure(file)
+  checkR8(file)
   if (doctorFailed) fail(`artifact checks failed for ${file} (${failedChecks.join(', ')})`)
 }
 
@@ -1428,6 +1429,7 @@ function cmdDoctor() {
     const version = artifactVersion(f) ?? 'version unknown'
     console.log(`  · ${f} (${version}, ${mb} MB, ${stat.mtime.toISOString().slice(0, 16).replace('T', ' ')})`)
     if (f.endsWith('.apk')) checkFfmpegClosure(f)
+    checkR8(f)
   }
 
   if (doctorFailed) fail(`doctor: ${failedChecks.length} check(s) failed (${failedChecks.join(', ')})`)
@@ -1512,6 +1514,170 @@ export function protoAttr(buf: Buffer, name: string): string | null {
   const len = buf[p + 1]
   if (buf[p] !== 0x1a || len === undefined || len > 127) return null
   return buf.subarray(p + 2, p + 2 + len).toString('utf8')
+}
+
+// --- R8 artifact checks (docs/2026-09-05-r8-obfuscation.md) ---
+// Play scores obfuscation; R8 failures are runtime-only. These checks are the
+// static half: the artifact was actually minified (R8 marker in every DEX —
+// an unminified build carries only a D8 marker), the mapping delivered with it
+// is the one that produced it (pg-map-id), the native-module classes RN must
+// find by name survived, and nothing was stripped from the packages whose
+// Java members JNI looks up by name (keep rules for those are asserted, not
+// hoped for). Debug is unminified by design and skipped.
+
+export interface R8Marker { tool: 'R8' | 'D8', mode: string | null, mapId: string | null }
+
+// The DEX compiler stamps `~~R8{json}` / `~~D8{json}` into the string table.
+export function parseDexMarker(dex: Buffer): R8Marker | null {
+  for (const tool of ['R8', 'D8'] as const) {
+    const i = dex.indexOf(`~~${tool}{`)
+    if (i < 0) continue
+    const end = dex.indexOf('}', i)
+    if (end < 0) return null
+    try {
+      const json = JSON.parse(dex.subarray(i + 4, end + 1).toString('utf8'))
+      return { tool, mode: json['r8-mode'] ?? null, mapId: json['pg-map-id'] ?? null }
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+// `# pg_map_id: <id>` header of an R8 mapping file.
+export function mappingId(mapping: string): string | null {
+  return mapping.match(/^# pg_map_id: (\S+)/m)?.[1] ?? null
+}
+
+// Class lines are `original -> obfuscated:`; a rename is when the two differ.
+export function mappingRenameRatio(mapping: string): { classes: number, renamed: number } {
+  let classes = 0, renamed = 0
+  for (const line of mapping.split('\n')) {
+    const m = line.match(/^(\S+) -> (\S+):$/)
+    if (!m) continue
+    classes++
+    if (m[1] !== m[2]) renamed++
+  }
+  return { classes, renamed }
+}
+
+// Classes the mapping kept under their original name.
+export function mappingKeptByName(mapping: string, classNames: string[]): string[] {
+  return classNames.filter(c => mapping.includes(`\n${c} -> ${c}:`) || mapping.startsWith(`${c} -> ${c}:`))
+}
+
+// usage.txt (-printusage): a bare class line is a fully removed class; a
+// `Class:` header is followed by indented removed members. Returns every
+// removal under the given package prefixes as `Class` or `Class#member`.
+export function usageRemovals(usage: string, prefixes: string[]): string[] {
+  const out: string[] = []
+  let header: string | null = null
+  for (const line of usage.split('\n')) {
+    if (line === '') continue
+    if (/^\s/.test(line)) {
+      if (header) out.push(`${header}#${line.trim()}`)
+      continue
+    }
+    const cls = line.replace(/:$/, '')
+    header = prefixes.some(p => cls.startsWith(p)) ? cls : null
+    if (header && !line.endsWith(':')) out.push(cls)
+  }
+  return out
+}
+
+// Packages that must ship whole: JNI resolves their Java members by name
+// (no consumer rules upstream — see the keep rules in app.json). Our own
+// package is NOT here: R8 legitimately drops its R/BuildConfig classes and
+// inlines constants; the modules RN needs are covered by the kept-by-name
+// check instead.
+const R8_KEEP_WHOLE = ['com.rnwhisper.', 'com.swmansion.audioapi.']
+
+const IVY_NATIVE_SRC = path.join(ROOT, 'modules/ivy/android/src/main/java/com/salezica/ivy')
+
+// Native-module classes RN registers by name (kept by its NativeModule rule),
+// plus the manifest-referenced entry points.
+function ivyKeptClassNames(): string[] {
+  const modules = fs.readdirSync(IVY_NATIVE_SRC)
+    .filter(f => f.endsWith('Module.kt'))
+    .map(f => `com.salezica.ivy.${f.replace(/\.kt$/, '')}`)
+  return [...modules, 'com.salezica.ivy.MainActivity', 'com.salezica.ivy.MainApplication']
+}
+
+// Build variant an artifact path belongs to: `outputs/{apk,bundle}/<variant>/`
+// for build outputs, release for dist/ deliveries.
+function artifactVariant(file: string): string | null {
+  const m = file.match(/[\\/]outputs[\\/](?:apk|bundle)[\\/]([^\\/]+)[\\/]/)
+  if (m) return m[1]
+  if (path.basename(file).startsWith('ivy-release-')) return 'release'
+  return null
+}
+
+// The mapping that goes with an artifact: build outputs keep it under
+// outputs/mapping/<variant>/, dist/ deliveries carry a sibling
+// ivy-release-<v>-mapping.txt, and AABs embed it.
+function artifactMapping(file: string, variant: string): { text: string, usage: string | null, source: string } | null {
+  const outputs = file.match(/^(.*[\\/]outputs)[\\/](?:apk|bundle)[\\/]/)?.[1]
+  if (outputs) {
+    const dir = path.join(outputs, 'mapping', variant)
+    const mapping = path.join(dir, 'mapping.txt')
+    if (!fs.existsSync(mapping)) return null
+    const usage = path.join(dir, 'usage.txt')
+    return {
+      text: fs.readFileSync(mapping, 'utf8'),
+      usage: fs.existsSync(usage) ? fs.readFileSync(usage, 'utf8') : null,
+      source: mapping.startsWith(ROOT) ? path.relative(ROOT, mapping) : mapping,
+    }
+  }
+  if (file.endsWith('.apk')) {
+    const sibling = file.replace(/\.apk$/, '-mapping.txt')
+    if (!fs.existsSync(sibling)) return null
+    return { text: fs.readFileSync(sibling, 'utf8'), usage: null, source: path.relative(ROOT, sibling) }
+  }
+  const embedded = spawnSync('unzip', ['-p', file, 'BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map'],
+    { maxBuffer: 512 * 1024 * 1024 })
+  if (embedded.status !== 0 || embedded.stdout.length === 0) return null
+  return { text: embedded.stdout.toString('utf8'), usage: null, source: 'embedded proguard.map' }
+}
+
+function checkR8(file: string) {
+  const variant = artifactVariant(file)
+  if (variant === 'debug') return report(null, 'r8', 'debug variant — unminified by design')
+
+  // Every DEX must carry an R8 marker with one shared map id
+  const listing = capture('unzip', ['-Z1', file], { allowFail: true })
+  const dexes = listing.split('\n').filter(e => /(^|\/)classes\d*\.dex$/.test(e))
+  if (dexes.length === 0) return report(false, 'r8', 'no DEX entries found')
+  const markers = dexes.map(d => parseDexMarker(execFileSync('unzip', ['-p', file, d], { maxBuffer: 512 * 1024 * 1024 })))
+  const d8 = markers.some(m => m?.tool === 'D8')
+  const missing = markers.filter(m => m === null).length
+  const ids = new Set(markers.map(m => m?.mapId ?? '?'))
+  if (d8 || missing > 0 || ids.size !== 1) {
+    return report(false, 'r8', d8 ? 'NOT minified — D8 marker only (minifyEnabled off for this variant?)'
+      : missing > 0 ? `${missing}/${dexes.length} DEX files carry no compiler marker`
+      : `DEX files disagree on pg-map-id (${[...ids].join(', ')})`)
+  }
+  const mapId = [...ids][0]
+  report(true, 'r8', `${dexes.length} DEX, mode ${markers[0]!.mode ?? '?'}, pg-map-id ${mapId}`)
+
+  const mapping = variant ? artifactMapping(file, variant) : null
+  if (!mapping) return report(false, 'r8 mapping', 'not found — the artifact cannot be retraced')
+  const id = mappingId(mapping.text)
+  report(id === mapId, 'r8 mapping', id === mapId ? `${mapping.source} matches` : `${mapping.source} has pg_map_id ${id ?? 'none'}, artifact ${mapId}`)
+
+  const { classes, renamed } = mappingRenameRatio(mapping.text)
+  report(null, 'r8 renamed', `${renamed}/${classes} classes (${(renamed / classes * 100).toFixed(1)}%) — advisory; Play's own metric is the oracle`)
+
+  const want = ivyKeptClassNames()
+  const kept = mappingKeptByName(mapping.text, want)
+  const lost = want.filter(c => !kept.includes(c))
+  report(lost.length === 0, 'r8 native modules', lost.length === 0 ? `${kept.length} kept by name` : `renamed or removed: ${lost.join(', ')}`)
+
+  if (mapping.usage) {
+    const removed = usageRemovals(mapping.usage, R8_KEEP_WHOLE)
+    report(removed.length === 0, 'r8 keep-whole', removed.length === 0
+      ? `nothing stripped under ${R8_KEEP_WHOLE.join(' ')}`
+      : `${removed.length} stripped: ${removed.slice(0, 3).join(', ')}${removed.length > 3 ? ', …' : ''}`)
+  }
 }
 
 function findReadelf(): string | null {
