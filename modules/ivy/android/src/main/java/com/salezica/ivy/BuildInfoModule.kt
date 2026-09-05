@@ -13,6 +13,9 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
  *   plugins/withIvyVersionName.js).
  * - buildDate: the `ivy_build_date` string resource (yyyy-MM-dd), stamped at
  *   build time by plugins/withIvyVersionName.js. Missing resource reads as "".
+ * - whisperModelUrl: the `ivy_whisper_model_url` string resource — a maestro-only
+ *   resValue pointing the model download at the toolkit bridge (see
+ *   plugins/withIvyBuildTypes.js). Missing resource reads as "" (no override).
  */
 class BuildInfoModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
 
@@ -24,6 +27,7 @@ class BuildInfoModule(private val context: ReactApplicationContext) : ReactConte
             "variant" to stringResource("ivy_build_variant", "production"),
             "versionName" to versionName,
             "buildDate" to stringResource("ivy_build_date", ""),
+            "whisperModelUrl" to stringResource("ivy_whisper_model_url", ""),
         )
     }
 

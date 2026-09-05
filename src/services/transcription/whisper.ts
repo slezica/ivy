@@ -13,6 +13,7 @@ import { decodeAudioData } from 'react-native-audio-api'
 import RNFS from 'react-native-fs'
 import { BaseService } from '../base'
 import { ModelDownloadError, ModelInitError } from './errors'
+import { getWhisperModelUrlOverride } from '../system/build'
 import { createLogger, stripEnclosingQuotes } from '../../utils'
 
 const log = createLogger('Whisper')
@@ -21,7 +22,7 @@ const log = createLogger('Whisper')
 // Constants
 // =============================================================================
 
-const MODEL_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin'
+const DEFAULT_MODEL_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin'
 const MODEL_FILENAME = 'ggml-small.bin'
 
 // Whisper requires 16kHz mono 16-bit PCM WAV
@@ -254,7 +255,11 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
       throw new Error('Download already in progress')
     }
 
-    log(' Downloading model...')
+    // Test builds may redirect the download to the toolkit bridge (whatever it
+    // serves lands under the same filename — the model file carries its own
+    // header, the name is just where we look for it)
+    const modelUrl = getWhisperModelUrlOverride() ?? DEFAULT_MODEL_URL
+    log(' Downloading model from', modelUrl)
     this.downloading = true
     this.emit('status', { status: 'downloading' })
 
@@ -266,7 +271,7 @@ export class WhisperService extends BaseService<WhisperServiceEvents> {
 
       // Download to temp file (overwrites any leftover partial download)
       const result = await RNFS.downloadFile({
-        fromUrl: MODEL_URL,
+        fromUrl: modelUrl,
         toFile: downloadPath,
         background: false,
         discretionary: false,

@@ -170,7 +170,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   │       ├── sharing.ts          # Share clips via native share sheet
   │       ├── network.ts          # NetworkService (NetInfo wrapper: connectivity + metered events)
   │       ├── toast.ts            # Fire-and-forget Android toast helper
-  │       ├── build.ts            # Build-variant detection (isTestBuild, via BuildInfoModule)
+  │       ├── build.ts            # Build-variant detection (isTestBuild, via BuildInfoModule) + test-only whisper model URL override
   │       └── clipboard.ts        # Clipboard helper (copyText)
   ├── screens/
   │   ├── LibraryScreen.tsx       # Book list (active + archived sections) with archive action
@@ -245,12 +245,12 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
               ├── AudioMetadataModule.kt  # Native module for metadata extraction
               ├── FileCopierModule.kt     # Native module for file copy with progress
               ├── FFmetadataReaderModule.kt # Native module for raw ffmetadata dump (FFmpeg -f ffmetadata; parsed in JS)
-              └── BuildInfoModule.kt      # Exposes ivy_build_variant to JS (test-affordance gate)
+              └── BuildInfoModule.kt      # Exposes ivy_build_variant (test-affordance gate), version, build date, maestro whisper model URL to JS
 
 /plugins                          # Expo config plugins (applied in app.json) — recreate all gradle customization on prebuild
   ├── withIvySigning.js           # signingConfigs from secrets/ (release uses $KEYSTORE_PASSWORD)
   ├── withIvyGradleMemory.js      # Gradle JVM heap bump (release-bundle signing needs > default -Xmx)
-  ├── withIvyBuildTypes.js        # `preview` + `maestro` buildTypes and the ivy_build_variant signal
+  ├── withIvyBuildTypes.js        # `preview` + `maestro` buildTypes (R8 on, like release), the ivy_build_variant signal, maestro-only whisper model URL + cleartext placeholder
   ├── withIvyHermesFix.js         # arch-aware hermesc path (arm64 Linux container)
   ├── withIvyVersionName.js       # versionName from package.json at build time
   ├── withIvyApkPathPrint.js      # print APK/AAB output paths after assemble/bundle tasks

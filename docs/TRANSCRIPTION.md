@@ -73,6 +73,8 @@ On first use, the service downloads `ggml-small.bin` (~465MB) from HuggingFace:
 
 This atomic-rename pattern means a partial download (from a crash or lost connection) is simply overwritten on the next attempt. The app never tries to load a corrupt model file.
 
+**Test-build override.** The maestro build carries an `ivy_whisper_model_url` string resource (a `resValue` in `plugins/withIvyBuildTypes.js`) pointing at the toolkit bridge on loopback; `getWhisperModelUrlOverride()` (`services/system/build.ts`) returns it on test builds and `null` in production, whatever the native side reports. E2e runs therefore download a small model (`ggml-tiny.bin`, served by `bin/ivy.ts` from `cache/whisper/`) instead of 465MB from HuggingFace, and the bridge can simulate failures (`model/mode/*`). Whatever is served lands under the `ggml-small.bin` filename — the model file carries its own header, the name is only where the app looks. The loopback URL is plain http, which Android blocks by default; the same plugin sets `usesCleartextTraffic` through a manifest placeholder that is `true` for debug and maestro only. See docs/2026-09-05-r8-obfuscation.md.
+
 Concurrent `initialize()` calls share the same initialization promise (see below), so the download never runs twice in practice. A `downloading` flag inside `ensureModelDownloaded` remains as a defensive guard: a hypothetical concurrent entry would throw rather than start a duplicate download.
 
 ### Audio preparation

@@ -1,4 +1,5 @@
-// Config plugin: custom buildTypes + the build-variant signal.
+// Config plugin: custom buildTypes + the build-variant signal + the maestro
+// build's test plumbing.
 //
 // Build variants and their ivy_build_variant value:
 //   debug    → "debug"       dev loop (Metro, __DEV__)
@@ -10,7 +11,21 @@
 // (strings.xml), debug/maestro override it via resValue. JS reads it through
 // modules/ivy BuildInfoModule — test affordances (e.g. the short sleep-timer
 // preset) gate on it, so preview/release carry zero test surface.
-const { withAppBuildGradle, withStringsXml, AndroidConfig } = require('expo/config-plugins')
+//
+// Maestro-only plumbing for the e2e suite (docs/2026-09-05-r8-obfuscation.md):
+//   - ivy_whisper_model_url resValue: the Whisper model downloads from the
+//     toolkit bridge (reached through `adb reverse`, so the device-side port is
+//     fixed) instead of HuggingFace. Only the maestro build has the resource.
+//   - usesCleartextTraffic: that URL is plain http on loopback, which Android
+//     blocks by default (no localhost exemption). A manifest placeholder turns
+//     it on for debug (matching Expo's own debug manifest) and maestro; every
+//     other variant resolves to "false", the platform default since targetSdk 28.
+const { withAppBuildGradle, withAndroidManifest, withStringsXml, AndroidConfig } = require('expo/config-plugins')
+
+// Device-side address of the toolkit bridge's model endpoint (bin/ivy.ts maps
+// it to the bridge's actual port with `adb reverse`). Exported for the toolkit.
+const BRIDGE_DEVICE_PORT = 7799
+const WHISPER_MODEL_URL = `http://127.0.0.1:${BRIDGE_DEVICE_PORT}/model`
 
 const CUSTOM_BLOCK = [
   '        // Standalone testing build: embedded JS bundle (no Metro), no dev-launcher,',
@@ -50,6 +65,10 @@ const RESVALUE_BLOCK = [
   '',
   "android.buildTypes.debug.resValue 'string', 'ivy_build_variant', 'debug'",
   "android.buildTypes.maestro.resValue 'string', 'ivy_build_variant', 'maestro'",
+  `android.buildTypes.maestro.resValue 'string', 'ivy_whisper_model_url', '${WHISPER_MODEL_URL}'`,
+  "android.defaultConfig.manifestPlaceholders.ivyCleartext = 'false'",
+  "android.buildTypes.debug.manifestPlaceholders.ivyCleartext = 'true'",
+  "android.buildTypes.maestro.manifestPlaceholders.ivyCleartext = 'true'",
 ].join('\n')
 
 function apply(contents) {
@@ -74,6 +93,12 @@ module.exports = function withIvyBuildTypes(config) {
     return config
   })
 
+  config = withAndroidManifest(config, (config) => {
+    const app = AndroidConfig.Manifest.getMainApplicationOrThrow(config.modResults)
+    app.$['android:usesCleartextTraffic'] = '${ivyCleartext}'
+    return config
+  })
+
   return withAppBuildGradle(config, (config) => {
     if (config.modResults.language !== 'groovy') {
       throw new Error('withIvyBuildTypes: cannot modify a non-groovy app/build.gradle')
@@ -82,3 +107,6 @@ module.exports = function withIvyBuildTypes(config) {
     return config
   })
 }
+
+module.exports.BRIDGE_DEVICE_PORT = BRIDGE_DEVICE_PORT
+module.exports.WHISPER_MODEL_URL = WHISPER_MODEL_URL
