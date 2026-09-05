@@ -726,9 +726,12 @@ function tryReadMigrationIndex(): number | null {
   }
 }
 
+// Java crashes print `Process: <pkg>` (AndroidRuntime); native aborts — JNI
+// lookups failing under R8, fbjni, whisper — print a debuggerd tombstone
+// header `>>> <pkg> <<<` instead. Match both.
 function appCrashExcerpt(): string | null {
   const crashes = adbOut('logcat', '-d', '-b', 'crash')
-  if (!crashes.includes(`Process: ${APP}`)) return null
+  if (!crashes.includes(`Process: ${APP}`) && !crashes.includes(`>>> ${APP} <<<`)) return null
   // Last ~25 lines of the crash buffer: exception + top of the stack
   return crashes.trim().split('\n').slice(-25).join('\n')
 }
