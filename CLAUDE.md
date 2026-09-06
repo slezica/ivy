@@ -576,6 +576,15 @@ Everything project-specific goes through the toolkit CLI — `bin/ivy.ts` (full 
 **Prepare a release (user-run, interactive):** `bin/ivy.ts prepare --version X.Y.Z --changes <markdown>`
 **Environment + built-APK report (incl. ffmpeg linking):** `bin/ivy.ts doctor`
 
+### Driving the running app from the CLI
+
+What holds up during playback (the emulator is a normal device to adb; the app is not idle while playing):
+
+- `tree` is instant while the UI is idle but ~25s during playback (uiautomator's 10s idle wait, then maestro's JVM). Read playback state from logcat instead: `bin/ivy.ts logs --tag ReactNativeJS | grep -E '\[Play\]|\[Pause\]|TLTRACE.*state' | tail -3` (maestro/debug builds; the `TLTRACE state` sample carries playhead + rate).
+- Play/pause is a toggle: confirm the state before tapping, and expect the `[Play]`/`[Pause]` logcat line within a second after.
+- Play at the end of a book does not restart it: seek first. `adb shell input tap` / `input swipe` on the timeline work (tap-seek, scrub); `TLTRACE ... onSeek` confirms the seek landed.
+- Sampling on-screen values over time (timers, counters): `adb exec-out screencap -p` at ~0.3s intervals, crop the region, stack the crops into one image and read it. Hierarchy dumps cannot keep up.
+
 
 ## Preparing a Release
 
