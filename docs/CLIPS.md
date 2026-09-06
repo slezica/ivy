@@ -30,9 +30,9 @@ Clip rows and audio also arrive via **sync**: a clip pulled from another device 
 
 ### 2. Clips reference their source, but don't require it
 
-Each clip stores a `source_id` pointing to the book it came from. When the source book is available, clips can play from the full book audio (showing surrounding context on the timeline), be edited to expand or shrink their bounds, and offer "go to source" navigation.
+Each clip stores a `source_id` pointing to the book it came from. Playback never needs it: the viewer always plays the clip's own audio file, and its timeline is the clip. When the source book is available, clips can additionally be edited to expand or shrink their bounds (the editor plays the surrounding book) and offer "go to source" navigation.
 
-When the source book is archived or deleted, clips fall back to their own audio file. Editing is disabled, but playback, notes, transcription, and sharing all continue to work.
+When the source book is archived or deleted, editing and "go to source" are disabled, but playback, notes, transcription, and sharing all continue to work.
 
 ### 3. Playback ownership
 
@@ -45,7 +45,7 @@ Both ClipViewer and ClipEditor are playback components — they control the audi
 Layers, top to bottom:
 
 - **ClipsListScreen** — lists all clips, search, context menus (View/Edit/Delete/Share)
-- **ClipViewer** (read-only; plays from source or own file) → opens **ClipEditor** (bounds + note; requires source)
+- **ClipViewer** (read-only; plays the clip's own file) → opens **ClipEditor** (bounds + note; requires source, plays the surrounding book)
 - **Store actions** — `addClip`, `updateClip`, `deleteClip`, `shareClip`, `seekClip`
 - **Services the actions coordinate** — Database (SQLite), Slicer (native), Sync queue, Transcription queue
 
@@ -65,27 +65,26 @@ The creation pipeline is in `add_clip.ts`: validate, resolve duration (explicit 
 
 ## Clip Independence
 
-This is one of the most important design decisions in the clip system. A clip's relationship to its source book has two states:
+This is one of the most important design decisions in the clip system. The viewer **always plays the clip's own file**: the timeline is the clip (same look as the main player, tap-to-seek instead of skip taps), playback ends where the file does, and play with the playhead parked at the end restarts from the top. There is no way to hear the surrounding book from the viewer — that is the editor's job (see [2026-09-06-clip-viewer-own-audio.md](2026-09-06-clip-viewer-own-audio.md); the viewer used to play from the source, which overplayed past the clip's end and let users wander outside the clip).
+
+A clip's relationship to its source book has two states:
 
 ### Source available (`file_uri !== null && file_duration !== null`)
 
-The source book's audio file is on disk *and* its duration is known (both can be null independently — see the LEFT JOIN below). The clip can:
-- **Play from source** — the timeline shows the full book, with the clip's range highlighted
-- **Edit bounds** — the user can expand or shrink the clip, re-slicing from the source
+The source book's audio file is on disk *and* its duration is known (both can be null independently — see the LEFT JOIN below). On top of playback, the clip can:
+- **Edit bounds** — the user can expand or shrink the clip, re-slicing from the source; the editor's timeline is the full book
 - **Go to source** — hand playback to the main player, playing the source book from the clip's start (`seekClip`), and navigate to it
 
 ### Source unavailable
 
 The source book has been archived or deleted. The clip can still:
-- **Play from its own file** — the timeline shows only the clip's duration
+- **Play** — from its own file, exactly as always
 - **Display notes and transcription** — these are stored in the clip record
 - **Be shared** — the clip's own audio file is sent via the share sheet
 
 But it **cannot**:
 - Edit bounds (no source to re-slice from)
 - "Go to source" (no book to navigate to)
-
-In both states, ClipViewer **auto-pauses once** when the playhead reaches the clip's end — the user can resume past it, and seeking back inside the range re-arms the auto-pause.
 
 ### The `ClipWithFile` type
 

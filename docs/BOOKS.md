@@ -174,8 +174,8 @@ A book exists in one of three states, determined by two fields:
 
 | State | `uri` | `hidden` | In library UI | Clips work | Can restore |
 |-------|-------|----------|---------------|------------|-------------|
-| **Active** | `file://...` | `false` | Yes (main list) | Full (edit, play from source) | N/A |
-| **Archived** | `null` | `false` | Yes (archived section) | Partial (own audio only) | Re-add same file |
+| **Active** | `file://...` | `false` | Yes (main list) | Full (edit, go to source) | N/A |
+| **Archived** | `null` | `false` | Yes (archived section) | Partial (play/share only) | Re-add same file |
 | **Deleted** | `null` | `true` | No | Partial (own audio only) | Re-add same file |
 
 The `getAllBooks()` database query filters by `hidden = 0`, so deleted books don't appear in the store at all. Archived books appear because `hidden` is false — the UI separates them by checking `uri === null`.

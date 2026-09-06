@@ -68,11 +68,11 @@ Audio playback via react-native-track-player v5. See **[docs/PLAYBACK.md](docs/P
 
 Bookmarks with their own audio files. See **[docs/CLIPS.md](docs/CLIPS.md)** for the full guide.
 
-**Quick summary:** Clips are sliced from source books as standalone `.m4a` audio files at `clips/{uuid}.m4a`. They work independently of the source — if the book is archived, clips fall back to their own audio. Each clip has a note (user-written) and a transcription (auto-generated).
+**Quick summary:** Clips are sliced from source books as standalone `.m4a` audio files at `clips/{uuid}.m4a`. The viewer always plays the clip's own audio (the source book is only for editing and "go to source"), so clips work identically with the book archived. Each clip has a note (user-written) and a transcription (auto-generated).
 
 **Key rules for working with clips:**
 - Check `clip.file_uri !== null` before enabling edit or "go to source"
-- Use `clip.file_uri` (source) when available, fall back to `clip.uri` (clip's own file)
+- Playback in the viewer uses `clip.uri` (the clip's own file), never the source; only the editor and `seekClip` play `clip.file_uri`
 - Clips LEFT JOIN their book: **all** `file_*` fields (`file_name`, `file_duration` included) are null when the book row is missing — don't assume any of them
 - Every clip mutation must queue for sync (`db.queueChange`); clip deletion is global (propagates via sync tombstones)
 - `note` and `transcription` are separate fields — don't conflate them
