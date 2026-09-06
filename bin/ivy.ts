@@ -779,9 +779,13 @@ function withBridge(fn: (url: string) => void) {
     `${url}/health`]).status === 0
 
   try {
-    const deadline = Date.now() + 10_000
+    // npx tsx alone takes >10s to start on a loaded machine (parallel build)
+    const deadline = Date.now() + 60_000
     while (!healthy()) {
-      if (Date.now() > deadline) fail(`bridge server did not come up on ${url} (log: ${logPath})`)
+      if (Date.now() > deadline) {
+        const tail = fs.readFileSync(logPath, 'utf8').trim().split('\n').slice(-5).join('\n')
+        fail(`bridge server did not come up on ${url} within 60s — ${logPath} ends with:\n${tail}`)
+      }
       spawnSync('sleep', ['0.2'])
     }
 
