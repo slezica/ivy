@@ -131,9 +131,11 @@ Commands:
       Screenshot the device into captures/<name>.png (default: shot-<timestamp>).
 
   tree [--raw]
-      Dump the view hierarchy (uiautomator). Default output is condensed to
-      elements with text/resource-id/content-desc; --raw prints full XML.
-      Note: React Native testIDs surface as resource-ids.
+      Dump the view hierarchy (uiautomator; falls back to maestro's hierarchy
+      when the UI never goes idle, e.g. during playback). Default output is
+      condensed to elements with text/resource-id/content-desc; --raw prints
+      the full XML (or maestro's JSON). Note: React Native testIDs surface as
+      resource-ids.
 
   logs [--tag <tag>] [--follow]
       Logcat scoped to the app's pid (app must be running). Default dumps and
@@ -2093,9 +2095,42 @@ function cmdCapture(args: Args) {
 
 interface UiNode { depth: number, attrs: Record<string, string> }
 
-function dumpHierarchy(): string {
-  adbShell('uiautomator', 'dump', '/sdcard/window_dump.xml')
-  return adbShell('cat', '/sdcard/window_dump.xml')
+const DUMP_PATH = '/sdcard/window_dump.xml'
+
+// uiautomator waits up to 10s for a 1s accessibility-idle window; when it
+// never comes (playback follow redraws, a running animation) it prints
+// "ERROR: could not get idle state.", exits 0 and writes nothing — a naive
+// cat then serves the previous dump as if it were current. So the old file
+// goes first and a missing one is the failure it is; maestro's hierarchy
+// (no idle wait, slower JVM startup) covers the never-idle case.
+function dumpHierarchy(): { raw: string, nodes: UiNode[] } {
+  adbShell('rm', '-f', DUMP_PATH)
+  adbShell('uiautomator', 'dump', DUMP_PATH)
+  const xml = adbShell('cat', DUMP_PATH, '2>/dev/null', '||', 'true')
+  if (xml.includes('<hierarchy')) return { raw: xml, nodes: parseHierarchy(xml) }
+
+  log('UI never went idle for uiautomator (playback/animation) — using maestro hierarchy')
+  const json = capture(requireMaestro(), ['--device', serial(), 'hierarchy'])
+  return { raw: json, nodes: hierarchyFromMaestro(json) }
+}
+
+// maestro's JSON tree, flattened to the shape uiautomator XML parses into
+function hierarchyFromMaestro(json: string): UiNode[] {
+  type MaestroNode = { attributes?: Record<string, string>, children?: MaestroNode[] }
+  const nodes: UiNode[] = []
+  const walk = (node: MaestroNode, depth: number) => {
+    const a = node.attributes ?? {}
+    const attrs: Record<string, string> = {}
+    if (a.text) attrs.text = a.text
+    if (a['resource-id']) attrs['resource-id'] = a['resource-id']
+    if (a.accessibilityText) attrs['content-desc'] = a.accessibilityText
+    if (a.bounds) attrs.bounds = a.bounds
+    if (a.class) attrs.class = a.class
+    nodes.push({ depth, attrs })
+    for (const child of node.children ?? []) walk(child, depth + 1)
+  }
+  walk(JSON.parse(json), 0)
+  return nodes
 }
 
 function parseHierarchy(xml: string): UiNode[] {
@@ -2112,9 +2147,9 @@ function parseHierarchy(xml: string): UiNode[] {
 }
 
 function cmdTree(args: Args) {
-  const xml = dumpHierarchy()
-  if (args.flags.raw) return console.log(xml)
-  for (const node of parseHierarchy(xml)) {
+  const { raw, nodes } = dumpHierarchy()
+  if (args.flags.raw) return console.log(raw)
+  for (const node of nodes) {
     const { text, 'resource-id': id, 'content-desc': desc, bounds, class: cls } = node.attrs
     if (!text && !id && !desc) continue
     const parts = [cls?.split('.').pop() ?? 'View']
@@ -2127,7 +2162,7 @@ function cmdTree(args: Args) {
 }
 
 function findUiNode(query: string): UiNode | null {
-  const nodes = parseHierarchy(dumpHierarchy())
+  const { nodes } = dumpHierarchy()
   const fields = ['resource-id', 'text', 'content-desc']
   // Exact match on any field wins; substring match is the fallback
   for (const exact of [true, false]) {
@@ -2343,5 +2378,5 @@ if (path.basename(process.argv[1] ?? '').startsWith('ivy')) {
   }
 }
 
-export { parseArgs, parseHierarchy, findArtifacts, nodeCenter }
+export { parseArgs, parseHierarchy, hierarchyFromMaestro, findArtifacts, nodeCenter }
 export type { Args, UiNode }

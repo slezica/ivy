@@ -731,9 +731,11 @@ Commands:
       Screenshot the device into captures/<name>.png (default: shot-<timestamp>).
 
   tree [--raw]
-      Dump the view hierarchy (uiautomator). Default output is condensed to
-      elements with text/resource-id/content-desc; --raw prints full XML.
-      Note: React Native testIDs surface as resource-ids.
+      Dump the view hierarchy (uiautomator; falls back to maestro's hierarchy
+      when the UI never goes idle, e.g. during playback). Default output is
+      condensed to elements with text/resource-id/content-desc; --raw prints
+      the full XML (or maestro's JSON). Note: React Native testIDs surface as
+      resource-ids.
 
   logs [--tag <tag>] [--follow]
       Logcat scoped to the app's pid (app must be running). Default dumps and

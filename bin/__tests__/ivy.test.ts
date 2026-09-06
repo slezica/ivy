@@ -1,5 +1,5 @@
 import {
-  parseArgs, parseHierarchy, nodeCenter, protoAttr,
+  parseArgs, parseHierarchy, hierarchyFromMaestro, nodeCenter, protoAttr,
   parseSemver, versionCode, validateNextVersion,
   hasVersionSection, insertVersionSection, renderChecklist,
 } from '../ivy'
@@ -38,6 +38,21 @@ describe('parseHierarchy', () => {
   it('computes element centers from bounds', () => {
     const nodes = parseHierarchy(xml)
     expect(nodeCenter(nodes[1])).toEqual([619, 1352])
+  })
+})
+
+describe('hierarchyFromMaestro', () => {
+  it('flattens maestro JSON into uiautomator-shaped nodes', () => {
+    const json = JSON.stringify({ attributes: {}, children: [{
+      attributes: { text: '', 'resource-id': 'root', accessibilityText: '', class: 'android.widget.FrameLayout', bounds: '[0,0][1080,2400]' },
+      children: [{ attributes: { text: 'Walden', accessibilityText: 'book', class: 'android.widget.TextView', bounds: '[210,1300][1028,1404]' } }],
+    }] })
+    const nodes = hierarchyFromMaestro(json)
+    expect(nodes.map(n => n.depth)).toEqual([0, 1, 2])
+    expect(nodes[0].attrs).toEqual({})
+    expect(nodes[1].attrs['resource-id']).toBe('root')
+    expect(nodes[2].attrs).toEqual({ text: 'Walden', 'content-desc': 'book', class: 'android.widget.TextView', bounds: '[210,1300][1028,1404]' })
+    expect(nodeCenter(nodes[2])).toEqual([619, 1352])
   })
 })
 
