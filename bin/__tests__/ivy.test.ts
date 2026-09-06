@@ -1,5 +1,8 @@
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
 import {
-  parseArgs, parseHierarchy, hierarchyFromMaestro, nodeCenter, protoAttr,
+  parseArgs, parseHierarchy, hierarchyFromMaestro, parseMediaSession, collectFlowScreenshots, nodeCenter, protoAttr,
   parseSemver, versionCode, validateNextVersion,
   hasVersionSection, insertVersionSection, renderChecklist,
 } from '../ivy'
@@ -53,6 +56,42 @@ describe('hierarchyFromMaestro', () => {
     expect(nodes[1].attrs['resource-id']).toBe('root')
     expect(nodes[2].attrs).toEqual({ text: 'Walden', 'content-desc': 'book', class: 'android.widget.TextView', bounds: '[210,1300][1028,1404]' })
     expect(nodeCenter(nodes[2])).toEqual([619, 1352])
+  })
+})
+
+describe('parseMediaSession', () => {
+  const dump = [
+    '  Sessions Stack - have 2 sessions:',
+    '    androidx.media3.session.id. com.other.app/androidx.media3.session.id./12 (userId=0)',
+    '      package=com.other.app',
+    '      state=PlaybackState {state=PLAYING(3), position=99, buffered position=0, speed=1.0, updated=1, actions=0}',
+    '    androidx.media3.session.id. com.salezica.ivy/androidx.media3.session.id./36 (userId=0)',
+    '      package=com.salezica.ivy',
+    '      state=PlaybackState {state=PAUSED(2), position=2190, buffered position=2161, speed=0.0, updated=68822980, actions=262020, custom actions=[]}',
+    '      metadata: size=11, description=Ivy Test Book, Ivy QA, Ivy Test Book',
+    '',
+  ].join('\n')
+
+  it('reads the app session, not another package', () => {
+    expect(parseMediaSession(dump, 'com.salezica.ivy')).toEqual({ state: 'paused', position: 2190, speed: 0, title: 'Ivy Test Book' })
+  })
+
+  it('is null without a session for the package', () => {
+    expect(parseMediaSession(dump, 'com.nobody')).toBeNull()
+  })
+})
+
+describe('collectFlowScreenshots', () => {
+  it('copies takeScreenshot PNGs keyed by the flow-given path', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ivy-shots-'))
+    const src = path.join(root, 'out/clip-crud/takeScreenshot/screenshots')
+    fs.mkdirSync(src, { recursive: true })
+    fs.writeFileSync(path.join(src, 'crud-01.png'), 'png')
+    fs.writeFileSync(path.join(root, 'out/clip-crud/commands.json'), '{}')
+    const dest = path.join(root, 'dest')
+    expect(collectFlowScreenshots(path.join(root, 'out'), dest)).toEqual(['crud-01.png'])
+    expect(fs.existsSync(path.join(dest, 'crud-01.png'))).toBe(true)
+    expect(collectFlowScreenshots(path.join(root, 'nope'), dest)).toEqual([])
   })
 })
 

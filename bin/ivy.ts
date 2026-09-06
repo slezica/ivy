@@ -130,12 +130,16 @@ Commands:
   capture [name]
       Screenshot the device into captures/<name>.png (default: shot-<timestamp>).
 
+  state
+      One-line playback state from the system media session (playing/paused,
+      position, speed, title) — the hardware truth, any build, sub-second.
+
   tree [--raw]
-      Dump the view hierarchy (uiautomator; falls back to maestro's hierarchy
-      when the UI never goes idle, e.g. during playback). Default output is
-      condensed to elements with text/resource-id/content-desc; --raw prints
-      the full XML (or maestro's JSON). Note: React Native testIDs surface as
-      resource-ids.
+      Dump the view hierarchy. uiautomator while the app is idle; maestro's
+      hierarchy (slower JVM start, no idle wait) while it is playing or when
+      uiautomator gives up on a never-idle UI. Default output is condensed to
+      elements with text/resource-id/content-desc; --raw prints the full XML
+      (or maestro's JSON). Note: React Native testIDs surface as resource-ids.
 
   logs [--tag <tag>] [--follow]
       Logcat scoped to the app's pid (app must be running). Default dumps and
@@ -2147,6 +2151,42 @@ function cmdCapture(args: Args) {
 
 interface UiNode { depth: number, attrs: Record<string, string> }
 
+// What the system media session says about the app's playback — the
+// hardware truth (track-player publishes a media3 session), independent of
+// build variant and readable in well under a second. Null when the app has no
+// session (not running, nothing loaded yet).
+interface PlaybackSnapshot { state: string, position: number, speed: number, title: string | null }
+
+function parseMediaSession(dump: string, pkg: string): PlaybackSnapshot | null {
+  const block = dump.split(/\n(?=    \S)/).find(b => b.includes(`package=${pkg}`))
+  if (!block) return null
+  const st = block.match(/PlaybackState \{state=([A-Z_]+)\(\d+\), position=(-?\d+),.*?speed=([\d.]+)/)
+  if (!st) return null
+  const meta = block.match(/metadata: size=\d+, description=([^\n]*)/)
+  const title = meta ? meta[1].split(', ')[0].trim() || null : null
+  return { state: st[1].toLowerCase(), position: Number(st[2]), speed: Number(st[3]), title }
+}
+
+const playbackSnapshot = () => parseMediaSession(adbShell('dumpsys', 'media_session'), APP)
+
+const describePlayback = (s: PlaybackSnapshot | null) => s
+  ? `${s.state} at ${(s.position / 1000).toFixed(1)}s${s.speed ? ` @${s.speed}x` : ''}${s.title ? ` — ${s.title}` : ''}`
+  : 'no media session (app not running, or nothing loaded yet)'
+
+function waitForPlayback(ok: (s: PlaybackSnapshot) => boolean, timeoutMs: number): PlaybackSnapshot | null {
+  const deadline = Date.now() + timeoutMs
+  let snap = playbackSnapshot()
+  while (!(snap && ok(snap)) && Date.now() < deadline) {
+    spawnSync('sleep', ['0.25'])
+    snap = playbackSnapshot()
+  }
+  return snap
+}
+
+function cmdState() {
+  console.log(`playback: ${describePlayback(playbackSnapshot())}`)
+}
+
 const DUMP_PATH = '/sdcard/window_dump.xml'
 
 // uiautomator waits up to 10s for a 1s accessibility-idle window; when it
@@ -2156,12 +2196,18 @@ const DUMP_PATH = '/sdcard/window_dump.xml'
 // goes first and a missing one is the failure it is; maestro's hierarchy
 // (no idle wait, slower JVM startup) covers the never-idle case.
 function dumpHierarchy(): { raw: string, nodes: UiNode[] } {
-  adbShell('rm', '-f', DUMP_PATH)
-  adbShell('uiautomator', 'dump', DUMP_PATH)
-  const xml = adbShell('cat', DUMP_PATH, '2>/dev/null', '||', 'true')
-  if (xml.includes('<hierarchy')) return { raw: xml, nodes: parseHierarchy(xml) }
+  // Playback follow redraws the timeline every frame, so uiautomator would
+  // only burn its 10s before failing — go straight to maestro
+  const playing = playbackSnapshot()?.state === 'playing'
+  if (!playing) {
+    adbShell('rm', '-f', DUMP_PATH)
+    adbShell('uiautomator', 'dump', DUMP_PATH)
+    const xml = adbShell('cat', DUMP_PATH, '2>/dev/null', '||', 'true')
+    if (xml.includes('<hierarchy')) return { raw: xml, nodes: parseHierarchy(xml) }
+  }
 
-  log('UI never went idle for uiautomator (playback/animation) — using maestro hierarchy')
+  log(playing ? 'app is playing (UI never idle) — using maestro hierarchy'
+    : 'UI never went idle for uiautomator (animation?) — using maestro hierarchy')
   const json = capture(requireMaestro(), ['--device', serial(), 'hierarchy'])
   return { raw: json, nodes: hierarchyFromMaestro(json) }
 }
@@ -2397,6 +2443,7 @@ const COMMANDS: Record<string, (args: Args) => void> = {
   device: cmdDevice,
   capture: cmdCapture,
   tree: cmdTree,
+  state: cmdState,
   logs: cmdLogs,
   query: cmdQuery,
 }
@@ -2430,5 +2477,5 @@ if (path.basename(process.argv[1] ?? '').startsWith('ivy')) {
   }
 }
 
-export { parseArgs, parseHierarchy, hierarchyFromMaestro, findArtifacts, nodeCenter }
+export { parseArgs, parseHierarchy, hierarchyFromMaestro, parseMediaSession, collectFlowScreenshots, findArtifacts, nodeCenter }
 export type { Args, UiNode }

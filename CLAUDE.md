@@ -740,12 +740,16 @@ Commands:
   capture [name]
       Screenshot the device into captures/<name>.png (default: shot-<timestamp>).
 
+  state
+      One-line playback state from the system media session (playing/paused,
+      position, speed, title) — the hardware truth, any build, sub-second.
+
   tree [--raw]
-      Dump the view hierarchy (uiautomator; falls back to maestro's hierarchy
-      when the UI never goes idle, e.g. during playback). Default output is
-      condensed to elements with text/resource-id/content-desc; --raw prints
-      the full XML (or maestro's JSON). Note: React Native testIDs surface as
-      resource-ids.
+      Dump the view hierarchy. uiautomator while the app is idle; maestro's
+      hierarchy (slower JVM start, no idle wait) while it is playing or when
+      uiautomator gives up on a never-idle UI. Default output is condensed to
+      elements with text/resource-id/content-desc; --raw prints the full XML
+      (or maestro's JSON). Note: React Native testIDs surface as resource-ids.
 
   logs [--tag <tag>] [--follow]
       Logcat scoped to the app's pid (app must be running). Default dumps and
