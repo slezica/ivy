@@ -57,6 +57,15 @@ Flows that call the bridge (below) additionally need `bin/ivy.ts test
 --server-only` running and `-e BRIDGE_URL=http://127.0.0.1:7799` passed to
 maestro.
 
+## Waiting for real time
+
+Maestro has no sleep command. When a flow must let time pass (playback
+advancing, a timer running), use the busy-wait helper:
+
+```yaml
+- runScript: { file: scripts/sleep.js, env: { MS: "3000" } }
+```
+
 ## The toolkit bridge
 
 Maestro's JS sandbox can't run adb, so device control during a flow goes

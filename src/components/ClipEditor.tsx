@@ -176,6 +176,7 @@ export default function ClipEditor({
           onPress={handlePlayPause}
           size={48}
           backgroundColor={isLoading ? Color.TEXT_DISABLED : undefined}
+          testID={isPlaying ? 'clip-editor-pause-button' : 'clip-editor-play-button'}
         />
         <IconButton
           iconName="link"

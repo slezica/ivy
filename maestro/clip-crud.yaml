@@ -6,11 +6,31 @@ appId: com.salezica.ivy
 
 - runFlow: subflows/import-book.yaml
 
-# Create a clip (the clip button opens the draft editor; Save creates it)
+# Create a clip (the clip button opens the draft editor; Save creates it).
+# Grow the draft first: with linked bounds, playing pushes the end anchor along
+# with the playhead, so play → wait → pause leaves a clip a few seconds long
+# instead of the 250ms default — long enough to watch it play through below
 - tapOn: "Ivy Test Book"
 - tapOn:
     id: "add-clip-button"
 - assertVisible: "Save"
+# Opening a book from the library starts playback, so the draft usually opens
+# already playing; press play only if it didn't
+- runFlow:
+    when:
+      visible:
+        id: "clip-editor-play-button"
+    commands:
+      - tapOn:
+          id: "clip-editor-play-button"
+- extendedWaitUntil:
+    visible:
+      id: "clip-editor-pause-button"
+    timeout: 10000
+- runScript: { file: scripts/sleep.js, env: { MS: "3000" } }
+- tapOn:
+    id: "clip-editor-pause-button"
+- takeScreenshot: screenshots/crud-00-draft-grown
 - tapOn: "Save"
 
 # It appears in the Clips tab — the slice runs after Save, so wait for it
@@ -45,6 +65,33 @@ appId: com.salezica.ivy
 - takeScreenshot: screenshots/crud-02-note-persisted
 # Editor Cancel drops to the ClipViewer (not the list); Close returns to the list
 - tapOn: "Cancel"
+
+# The viewer plays the clip's OWN audio (the source book is still available
+# here — the discriminating case): it plays through and ends on its own, with
+# the playhead parked at the clip's end (remaining label reads -0:00) rather
+# than running on into the book; play again restarts from the top
+- tapOn:
+    id: "clip-viewer-play-button"
+- extendedWaitUntil:
+    visible:
+      id: "clip-viewer-pause-button"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "clip-viewer-play-button"
+    timeout: 15000
+- assertVisible: "-0:00"
+- takeScreenshot: screenshots/crud-03-viewer-played-through
+- tapOn:
+    id: "clip-viewer-play-button"
+- extendedWaitUntil:
+    visible:
+      id: "clip-viewer-pause-button"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "clip-viewer-play-button"
+    timeout: 15000
 - tapOn: "Close"
 
 # Delete the clip
@@ -56,4 +103,4 @@ appId: com.salezica.ivy
 
 # Back to empty state
 - assertVisible: "No clips yet"
-- takeScreenshot: screenshots/crud-03-deleted
+- takeScreenshot: screenshots/crud-04-deleted

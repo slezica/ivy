@@ -289,6 +289,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   ├── transcription-inference.yaml # Whisper end to end: tiny model from the bridge → clip → persisted transcription (needs maestro build variant)
   ├── playback-integration.yaml   # Media-button play/pause, background playback, cold-restart auto-resume (bridge media key + DB checks)
   ├── scripts/bridge.js           # Shared helper calling the toolkit bridge (device control, DB checks, model-server modes mid-flow)
+  ├── scripts/sleep.js            # Busy-wait for real-time effects (maestro has no sleep command)
   ├── subflows/                   # Shared steps (import-book)
   ├── playstore/                  # Play Store screenshot flow (screenshots.yaml, run by `generate --screenshots`)
   ├── screenshots/                # GENERATED (gitignored): screenshot-flow output
