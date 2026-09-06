@@ -176,6 +176,16 @@ function findAdb(): string {
   return fail('adb not found (set ANDROID_HOME or ADB)')
 }
 
+// maestro's installer puts it in ~/.maestro/bin and only adds that to the
+// interactive shell's PATH — agent shells (and cron-like runs) don't see it
+function findMaestro(): string | null {
+  if (process.env.MAESTRO) return process.env.MAESTRO
+  const which = spawnSync('which', ['maestro'], { encoding: 'utf8' })
+  if (which.status === 0) return which.stdout.trim()
+  const candidate = path.join(os.homedir(), '.maestro/bin/maestro')
+  return fs.existsSync(candidate) ? candidate : null
+}
+
 // Run a command, inherit stdio, fail on nonzero exit
 function run(cmd: string, args: string[], opts: { cwd?: string, env?: NodeJS.ProcessEnv } = {}) {
   const res = spawnSync(cmd, args, { stdio: 'inherit', cwd: opts.cwd ?? ROOT, env: opts.env ?? process.env })
@@ -507,14 +517,15 @@ function pushFixtures() {
   }
 }
 
-function requireMaestro() {
-  if (!has('maestro')) fail('maestro not found — install from https://maestro.mobile.dev')
+const MAESTRO_HINT = 'install from https://maestro.mobile.dev'
+
+function requireMaestro(): string {
+  return findMaestro() ?? fail(`maestro not found — ${MAESTRO_HINT}`)
 }
 
 function maestroRun(args: string[], bridgeUrl?: string) {
-  requireMaestro()
   const env = bridgeUrl ? ['-e', `BRIDGE_URL=${bridgeUrl}`] : []
-  run('maestro', ['--device', serial(), 'test', ...env, ...args],
+  run(requireMaestro(), ['--device', serial(), 'test', ...env, ...args],
     { env: { ...process.env, ANDROID_SERIAL: serial() } })
 }
 
@@ -1395,12 +1406,12 @@ function preflight(version: string, screenshots: boolean) {
   if (!process.stdin.isTTY) fail('prepare is interactive (keystore password prompt) — run it from a terminal')
 
   console.log('Tools:')
-  const tool = (name: string, hint = '') =>
-    report(has(name), name, has(name) ? 'present' : `not found${hint ? ` — ${hint}` : ''}`)
+  const tool = (name: string, hint = '', bin = name) =>
+    report(has(bin), name, has(bin) ? 'present' : `not found${hint ? ` — ${hint}` : ''}`)
   tool('java')
   tool('keytool')
   tool('adb')
-  tool('maestro', 'install from https://maestro.mobile.dev')
+  tool('maestro', MAESTRO_HINT, findMaestro() ?? 'maestro')
   tool('unzip')
   report(!!findAapt2(), 'aapt2', findAapt2() ?? 'not found in SDK build-tools')
   report(!!findReadelf(), 'llvm-readelf', findReadelf() ?? 'not found in any NDK')
@@ -1597,14 +1608,14 @@ function cmdDoctor() {
   console.log(`Context: ${isContainer ? 'container' : 'mac'}`)
 
   console.log('Tools:')
-  const tool = (name: string, versionArgs: string[] | null = null, hint = '') => {
-    if (!has(name)) return report(false, name, `not found${hint ? ` — ${hint}` : ''}`)
-    const v = versionArgs ? capture(name, versionArgs, { allowFail: true }).split('\n')[0].trim() : 'present'
+  const tool = (name: string, versionArgs: string[] | null = null, hint = '', bin = name) => {
+    if (!has(bin)) return report(false, name, `not found${hint ? ` — ${hint}` : ''}`)
+    const v = versionArgs ? capture(bin, versionArgs, { allowFail: true }).split('\n')[0].trim() : 'present'
     report(true, name, v)
   }
   tool('node', ['--version'])
   tool('adb', ['--version'])
-  tool('maestro', ['--version'], 'install from https://maestro.mobile.dev')
+  tool('maestro', ['--version'], MAESTRO_HINT, findMaestro() ?? 'maestro')
   tool('java', null)
   tool('sqlite3', null, 'needed by `query`')
   tool('unzip', null, 'needed by the ffmpeg closure check')
