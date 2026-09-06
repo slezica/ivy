@@ -506,7 +506,16 @@ const FIXTURES = [
 ]
 const DELETE_ME = '/sdcard/Download/delete-me.m4a'
 
+// Gboard's "Try out your stylus" promo pops over the first text field a fresh
+// emulator focuses — the document picker's search box, in the import subflow —
+// and swallows the typed filename. Off for good, before any flow runs.
+function disableStylusPromo() {
+  if (!isEmulator()) return
+  adbShell('settings', 'put', 'secure', 'stylus_handwriting_enabled', '0')
+}
+
 function pushFixtures() {
+  disableStylusPromo()
   for (const { src, dest } of FIXTURES) {
     const abs = path.join(ROOT, src)
     if (!fs.existsSync(abs)) fail(`fixture missing: ${src}`)
