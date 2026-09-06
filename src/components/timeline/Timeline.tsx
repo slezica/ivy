@@ -55,7 +55,7 @@ import {
 } from 'react-native-gesture-handler'
 
 import { Color } from '../../theme'
-import { formatTime } from '../../utils'
+import { formatRemaining, formatTime } from '../../utils'
 import {
   SEGMENT_DURATION,
   TIMELINE_HEIGHT,
@@ -561,7 +561,7 @@ function TimeIndicators({ position, duration, placement }: TimeIndicatorsProps) 
     <View style={[styles.timeContainer, marginStyle]}>
       <View style={styles.timeSpacer} />
       <Text style={styles.timeCurrent}>{formatTime(position)}</Text>
-      <Text style={styles.timeTotal}>-{formatTime(Math.max(0, duration - position))}</Text>
+      <Text style={styles.timeTotal}>-{formatRemaining(position, duration)}</Text>
     </View>
   )
 }

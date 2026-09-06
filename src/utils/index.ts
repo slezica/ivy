@@ -18,6 +18,17 @@ export function formatTime(milliseconds: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
+/**
+ * Remaining-time label that ticks in lockstep with `formatTime(position)`:
+ * both labels are derived from the same floored-second position, so they roll
+ * over at the same instant (flooring `duration - position` separately drifts
+ * out of phase whenever the duration isn't a whole second).
+ */
+export function formatRemaining(position: number, duration: number): string {
+  const seconds = Math.floor(duration / 1000) - Math.floor(Math.max(0, position) / 1000)
+  return formatTime(Math.max(0, seconds) * 1000)
+}
+
 export function formatDuration(milliseconds: number, options?: { seconds?: boolean }): string {
   const totalSeconds = Math.floor(milliseconds / 1000)
   const hours = Math.floor(totalSeconds / 3600)
