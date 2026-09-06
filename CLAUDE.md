@@ -579,13 +579,14 @@ Everything project-specific goes through the toolkit CLI — `bin/ivy.ts` (full 
 
 ### Driving the running app from the CLI
 
-What holds up during playback (the emulator is a normal device to adb; the app is not idle while playing):
+What holds up during playback (the app is not idle while playing, and play/pause is a toggle):
 
-- `tree` is instant while the UI is idle but ~25s during playback (uiautomator's 10s idle wait, then maestro's JVM). Read playback state from logcat instead: `bin/ivy.ts logs --tag ReactNativeJS | grep -E '\[Play\]|\[Pause\]|TLTRACE.*state' | tail -3` (maestro/debug builds; the `TLTRACE state` sample carries playhead + rate).
-- Play/pause is a toggle: confirm the state before tapping, and expect the `[Play]`/`[Pause]` logcat line within a second after.
-- Play at the end of a book does not restart it: seek first. `adb shell input tap` / `input swipe` on the timeline work (tap-seek, scrub); `TLTRACE ... onSeek` confirms the seek landed.
+- `bin/ivy.ts state` — playback state, position, speed, title from the system media session. Sub-second, any build. Check it before and after every action instead of guessing.
+- `drive --play` / `--pause` — deterministic (media key only if the state differs, then confirmed). A *stopped* session (track ended, clip viewer) ignores the media key: `drive --seek` first.
+- `drive --seek <ms>` — main player, test builds, confirmed via the session. Play at the end of a book does not restart it, so seek before playing.
+- `tree` — instant while idle, ~4s while playing (maestro hierarchy), ~25s only if uiautomator times out on an animation. For state, prefer `state`.
 - Sampling on-screen values over time (timers, counters): `adb exec-out screencap -p` at ~0.3s intervals, crop the region, stack the crops into one image and read it. Hierarchy dumps cannot keep up.
-
+- Sequences of several steps: `drive --inline` (one maestro session) beats chained `drive --tap` calls (~3s toolkit startup each). Inline steps run from a temp file, so script paths must be absolute.
 
 ## Preparing a Release
 
