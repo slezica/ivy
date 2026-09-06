@@ -78,13 +78,22 @@ Commands:
       maestro variant is not debuggable). See docs/MIGRATIONS.md.
 
   drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>
+        | --seek <ms> | --play | --pause
       Make the running app do something (one mode per call).
         --file    run a maestro flow (fixtures pushed first)
         --inline  run ad-hoc maestro steps, no flow file needed
-                  e.g. --inline '- tapOn: "Library"'
+                  e.g. --inline '- tapOn: "Library"' (the steps run from a
+                  temp file: refer to scripts by absolute path)
         --tap     find element by resource-id/text/content-desc in the view
                   hierarchy and tap it via adb (fast path, no maestro startup)
         --nav     deep-link via ivy:// scheme (e.g. --nav player)
+        --seek    move the main player to <ms> (test builds; deep link
+                  ivy://player?seek=<ms>), confirmed via the media session
+        --play / --pause
+                  deterministic play/pause through the media session: presses
+                  the media key only if the state differs, then confirms it
+      Flow screenshots (takeScreenshot: screenshots/<name>) are collected into
+      maestro/screenshots/ after every --file/--inline run.
 
   generate [--audio] [--artwork] [--feature] [--screenshots] [--icon]
       Generate store/web assets from samples/ into dist/ (one or more flags).
@@ -1155,12 +1164,48 @@ function cmdDev(args: Args) {
 // drive
 
 function cmdDrive(args: Args) {
-  const modes = ['file', 'inline', 'tap', 'nav'].filter(m => args.flags[m])
+  const modes = ['file', 'inline', 'tap', 'nav', 'seek', 'play', 'pause'].filter(m => args.flags[m])
   if (modes.length !== 1) {
-    fail('usage: drive --file <flow.yaml> | --inline \'<steps yaml>\' | --tap <id|text> | --nav <route> (exactly one)')
+    fail('usage: drive --file <flow.yaml> | --inline \'<steps yaml>\' | --tap <id|text> | --nav <route> | --seek <ms> | --play | --pause (exactly one)')
   }
   const value = args.flags[modes[0]] as string
   switch (modes[0]) {
+    case 'play':
+    case 'pause': {
+      // Deterministic, unlike a tap on the toggle: read the session, press the
+      // media key only if needed, confirm the session flipped
+      const wantPlaying = modes[0] === 'play'
+      const before = playbackSnapshot()
+      if (!before) fail(`cannot ${modes[0]}: ${describePlayback(null)}`)
+      if ((before!.state === 'playing') === wantPlaying) {
+        log(`already ${before!.state}: ${describePlayback(before)}`)
+        break
+      }
+      adbShell('cmd', 'media_session', 'dispatch', 'play-pause')
+      const after = waitForPlayback(s => (s.state === 'playing') === wantPlaying, 3000)
+      if (!after || (after.state === 'playing') !== wantPlaying) {
+        const hint = after?.state === 'stopped'
+          ? ' — a stopped session (track ended, or a clip viewer) ignores the media key: --seek first, or tap the play button'
+          : ''
+        fail(`${modes[0]} did not take: ${describePlayback(after)}${hint}`)
+      }
+      log(describePlayback(after))
+      break
+    }
+    case 'seek': {
+      // Test-build deep link handled by PlayerScreen (main player only; the
+      // nonce makes repeated seeks to the same position distinct)
+      const ms = Number(value)
+      if (!Number.isFinite(ms) || ms < 0) fail(`--seek needs a position in ms, got "${value}"`)
+      // quoted: adb shell hands the line to the device shell, where & would background
+      adbShell('am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', `'ivy://player?seek=${ms}&n=${Date.now()}'`, APP)
+      const after = waitForPlayback(s => Math.abs(s.position - ms) < 1500, 3000)
+      if (!after || Math.abs(after.position - ms) >= 1500) {
+        fail(`seek did not take (test build with the book loaded in the main player?): ${describePlayback(after)}`)
+      }
+      log(describePlayback(after))
+      break
+    }
     case 'file': {
       if (!fs.existsSync(path.resolve(ROOT, value))) fail(`flow not found: ${value}`)
       pushFixtures()
@@ -2409,7 +2454,7 @@ function relaunchWithLog(cmd: string): void {
 
 // Tiny parser: `--flag` is boolean unless listed in valued (then takes the
 // next token); everything else is positional.
-const VALUED_FLAGS = new Set(['device', 'arch', 'file', 'inline', 'tap', 'nav', 'tag', 'version', 'changes', 'port', 'from'])
+const VALUED_FLAGS = new Set(['device', 'arch', 'file', 'inline', 'tap', 'nav', 'seek', 'tag', 'version', 'changes', 'port', 'from'])
 
 function parseArgs(argv: string[]): Args {
   const args: Args = { positionals: [], flags: {} }

@@ -25,7 +25,12 @@ type SleepTimer = { endsAt: number, duration: number } | null
 // PlayerScreen claims/releases ownership on its behalf around mount/unmount
 const CLIP_DRAFT_OWNER_ID = 'clip-editor-draft'
 
-export default function PlayerScreen() {
+interface PlayerScreenProps {
+  /** Test-build deep-link seek (`ivy://player?seek=<ms>&n=<nonce>`); the nonce distinguishes repeats */
+  seekRequest?: { position: number, nonce: string } | null
+}
+
+export default function PlayerScreen({ seekRequest = null }: PlayerScreenProps) {
   const playback = useStore(s => s.playback)
   const addClip = useStore(s => s.addClip)
   const loadBook = useStore(s => s.loadBook)
@@ -190,6 +195,14 @@ export default function PlayerScreen() {
       seek({ fileUri: ownBook.uri, position })
     }
   }, [isOwner, isFileLoaded, ownBook, seek])
+
+  // Deep-link seek (toolkit `drive --seek`): test builds only, and only once
+  // the book is loaded in the main player — otherwise the request is dropped
+  useEffect(() => {
+    if (!seekRequest || !isTestBuild() || !isOwner || !isFileLoaded) return
+    handleSeek(seekRequest.position)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seekRequest?.nonce, isOwner, isFileLoaded])
 
   // Show play button unless we're owner AND playing
   const isPlaying = isOwner && playback.status === 'playing'

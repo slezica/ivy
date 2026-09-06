@@ -688,13 +688,22 @@ Commands:
       maestro variant is not debuggable). See docs/MIGRATIONS.md.
 
   drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>
+        | --seek <ms> | --play | --pause
       Make the running app do something (one mode per call).
         --file    run a maestro flow (fixtures pushed first)
         --inline  run ad-hoc maestro steps, no flow file needed
-                  e.g. --inline '- tapOn: "Library"'
+                  e.g. --inline '- tapOn: "Library"' (the steps run from a
+                  temp file: refer to scripts by absolute path)
         --tap     find element by resource-id/text/content-desc in the view
                   hierarchy and tap it via adb (fast path, no maestro startup)
         --nav     deep-link via ivy:// scheme (e.g. --nav player)
+        --seek    move the main player to <ms> (test builds; deep link
+                  ivy://player?seek=<ms>), confirmed via the media session
+        --play / --pause
+                  deterministic play/pause through the media session: presses
+                  the media key only if the state differs, then confirms it
+      Flow screenshots (takeScreenshot: screenshots/<name>) are collected into
+      maestro/screenshots/ after every --file/--inline run.
 
   generate [--audio] [--artwork] [--feature] [--screenshots] [--icon]
       Generate store/web assets from samples/ into dist/ (one or more flags).
