@@ -214,6 +214,12 @@ export default function SettingsScreen() {
   )
 }
 
+const secondaryMetrics = {
+  fontSize: 14,
+  lineHeight: 20,
+  marginBottom: 4,
+}
+
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
@@ -233,19 +239,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 6,
   },
+  // Inline siblings in a secondary row (text, error, link) share one metric
+  // set — a differing lineHeight/margin would center them at different heights
   secondaryText: {
-    fontSize: 14,
+    ...secondaryMetrics,
     color: Color.TEXT_3,
     flexShrink: 1,  // long state descriptions wrap instead of overflowing the row
-    lineHeight: 20,
-    marginBottom: 4
   },
   errorText: {
-    fontSize: 14,
+    ...secondaryMetrics,
     color: Color.DESTRUCTIVE,
   },
   linkText: {
-    fontSize: 14,
+    ...secondaryMetrics,
     color: Color.PRIMARY,
   },
   primaryText: {
