@@ -534,10 +534,53 @@ function requireMaestro(): string {
   return findMaestro() ?? fail(`maestro not found — ${MAESTRO_HINT}`)
 }
 
+const FLOW_SCREENSHOTS_DIR = path.join(ROOT, 'maestro/screenshots')
+
+// Since maestro 2.x a flow's `takeScreenshot: screenshots/<name>` lands under
+// the run's artifact dir (<test-output-dir>/<flow>/takeScreenshot/...), not
+// next to the flow. Callers that don't pick an output dir get a temp one, and
+// the PNGs are collected into maestro/screenshots/ (the documented location)
+// after the run — failures included, their last screen is what you want.
 function maestroRun(args: string[], bridgeUrl?: string) {
   const env = bridgeUrl ? ['-e', `BRIDGE_URL=${bridgeUrl}`] : []
-  run(requireMaestro(), ['--device', serial(), 'test', ...env, ...args],
-    { env: { ...process.env, ANDROID_SERIAL: serial() } })
+  const ownOutput = args.includes('--test-output-dir')
+  const out = ownOutput ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'ivy-maestro-'))
+  const outArgs = out ? ['--test-output-dir', out] : []
+  try {
+    run(requireMaestro(), ['--device', serial(), 'test', ...env, ...outArgs, ...args],
+      { env: { ...process.env, ANDROID_SERIAL: serial() } })
+  } finally {
+    if (out) {
+      const shots = collectFlowScreenshots(out, FLOW_SCREENSHOTS_DIR)
+      if (shots.length) log(`${shots.length} flow screenshot(s) in maestro/screenshots/: ${shots.join(', ')}`)
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  }
+}
+
+// Copy every takeScreenshot PNG under a maestro artifact dir into dest, keyed
+// by the path the flow gave (a leading `screenshots/` segment dropped, so
+// `takeScreenshot: screenshots/crud-01` becomes dest/crud-01.png). Returns
+// the copied names.
+function collectFlowScreenshots(artifactDir: string, dest: string): string[] {
+  const copied: string[] = []
+  const walk = (dir: string, underShots: string | null) => {
+    if (!fs.existsSync(dir)) return
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        walk(abs, underShots !== null ? path.join(underShots, entry.name) : entry.name === 'takeScreenshot' ? '' : null)
+      } else if (underShots !== null && entry.name.endsWith('.png')) {
+        const rel = path.join(underShots, entry.name).replace(/^screenshots\//, '')
+        const target = path.join(dest, rel)
+        fs.mkdirSync(path.dirname(target), { recursive: true })
+        fs.copyFileSync(abs, target)
+        copied.push(rel)
+      }
+    }
+  }
+  walk(artifactDir, null)
+  return copied
 }
 
 // ---------------------------------------------------------------------------
