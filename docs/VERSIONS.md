@@ -7,6 +7,35 @@ written by `bin/ivy.ts prepare` from its `--changes` argument (see CLAUDE.md
 "Preparing a Release") — the agent drafts that markdown in this file's style
 (Features/Fixes/Infra headings as applicable).
 
+## 1.6.5 (versionCode 10605) — 2026-09-07
+
+Features:
+
+- Play at the end of a book or clip restarts it from the top (on-screen button
+  and media key alike) instead of resuming into silence
+- Clip viewer always plays the clip's own audio, with the main player's timeline
+  look: playback ends where the clip does (it used to run on into the book),
+  and the surrounding book is the editor's job
+
+Fixes:
+
+- Player timers: remaining time now ticks in lockstep with the current
+  position (they drifted apart at speeds other than 1x)
+- Settings: inline links ("Sync now", "Retry") and error labels sit on the
+  same baseline as the text beside them
+- Single-button headset and Bluetooth play/pause keys now toggle playback
+
+Infra:
+
+- Release, preview and maestro builds are minified and obfuscated by R8;
+  the mapping ships alongside release artifacts and artifact checks verify
+  the kept native modules
+- Toolkit: `state`, `drive --seek/--play/--pause`, tree fallback while
+  playing, flow screenshot collection, bridge model server for transcription
+  e2e, help gains workflow/recipes/gotchas
+- E2e: transcription inference, playback integration (media key, background,
+  cold restart, finished-track restart), clip viewer play-through
+
 ## 1.6.4 (versionCode 10604) — 2026-09-04
 
 Fixes:
