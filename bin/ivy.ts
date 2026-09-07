@@ -215,8 +215,8 @@ GOTCHAS
   - Playback state drifts while you work (tracks end, flows leave things
     playing). Check state before acting on it, or use drive --play/--pause,
     which check for you.
-  - tree: instant while idle, ~4s while playing (maestro hierarchy), ~25s
-    only when uiautomator times out on an animating, non-playing screen.
+  - tree: ~3s while idle, ~4s while playing (maestro hierarchy), ~15s only
+    when uiautomator gives up on an animating, non-playing screen.
   - Toolkit startup is cheap (~0.2s); maestro sessions are not (~10s JVM).
     Batch steps in one --inline rather than many --tap/--inline calls.`
 
@@ -2295,7 +2295,10 @@ function dumpHierarchy(): { raw: string, nodes: UiNode[] } {
   const playing = playbackSnapshot()?.state === 'playing'
   if (!playing) {
     adbShell('rm', '-f', DUMP_PATH)
-    adbShell('uiautomator', 'dump', DUMP_PATH)
+    // uiautomator waits up to 10s for the UI to idle; an idle screen dumps in
+    // ~2.5s, so cap the wait (timeout exits 124 — swallowed, the missing file
+    // is the signal)
+    adbShell('timeout', '5', 'uiautomator', 'dump', DUMP_PATH, '||', 'true')
     const xml = adbShell('cat', DUMP_PATH, '2>/dev/null', '||', 'true')
     if (xml.includes('<hierarchy')) return { raw: xml, nodes: parseHierarchy(xml) }
   }

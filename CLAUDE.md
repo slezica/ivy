@@ -825,8 +825,8 @@ GOTCHAS
   - Playback state drifts while you work (tracks end, flows leave things
     playing). Check state before acting on it, or use drive --play/--pause,
     which check for you.
-  - tree: instant while idle, ~4s while playing (maestro hierarchy), ~25s
-    only when uiautomator times out on an animating, non-playing screen.
+  - tree: ~3s while idle, ~4s while playing (maestro hierarchy), ~15s only
+    when uiautomator gives up on an animating, non-playing screen.
   - Toolkit startup is cheap (~0.2s); maestro sessions are not (~10s JVM).
     Batch steps in one --inline rather than many --tap/--inline calls.
 ```
