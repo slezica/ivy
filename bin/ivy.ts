@@ -215,8 +215,6 @@ GOTCHAS
   - Playback state drifts while you work (tracks end, flows leave things
     playing). Check state before acting on it, or use drive --play/--pause,
     which check for you.
-  - A *stopped* session (track ended, clip viewer open) ignores the media
-    key: drive --seek first, or tap the on-screen button.
   - tree: instant while idle, ~4s while playing (maestro hierarchy), ~25s
     only when uiautomator times out on an animating, non-playing screen.
   - Toolkit startup is cheap (~0.2s); maestro sessions are not (~10s JVM).
@@ -1234,12 +1232,7 @@ function cmdDrive(args: Args) {
       }
       adbShell('cmd', 'media_session', 'dispatch', 'play-pause')
       const after = waitForPlayback(s => (s.state === 'playing') === wantPlaying, 3000)
-      if (!after || (after.state === 'playing') !== wantPlaying) {
-        const hint = after?.state === 'stopped'
-          ? ' — a stopped session (track ended, or a clip viewer) ignores the media key: --seek first, or tap the play button'
-          : ''
-        fail(`${modes[0]} did not take: ${describePlayback(after)}${hint}`)
-      }
+      if (!after || (after.state === 'playing') !== wantPlaying) fail(`${modes[0]} did not take: ${describePlayback(after)}`)
       log(describePlayback(after))
       break
     }

@@ -825,8 +825,6 @@ GOTCHAS
   - Playback state drifts while you work (tracks end, flows leave things
     playing). Check state before acting on it, or use drive --play/--pause,
     which check for you.
-  - A *stopped* session (track ended, clip viewer open) ignores the media
-    key: drive --seek first, or tap the on-screen button.
   - tree: instant while idle, ~4s while playing (maestro hierarchy), ~25s
     only when uiautomator times out on an animating, non-playing screen.
   - Toolkit startup is cheap (~0.2s); maestro sessions are not (~10s JVM).
