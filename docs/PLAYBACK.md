@@ -142,7 +142,7 @@ Consequences: the hand-back position is the editor's playhead — scrubbing in t
 
 The most important actions. Both take `{ fileUri, position, ownerId }` (`PlayContext` is an alias of `LoadBookContext`).
 
-`play()` is a thin wrapper: it **no-ops if a load is already in flight** (`status === 'loading'` — it must not play whatever that load ends up loading), delegates loading and seeking to `loadBook()`, then sets status to `'playing'` and calls `audio.play()`.
+`play()` is a thin wrapper: it **no-ops if a load is already in flight** (`status === 'loading'` — it must not play whatever that load ends up loading), delegates loading and seeking to `loadBook()`, then sets status to `'playing'` and calls `audio.play()`. One rule of its own: **play at the end restarts from the top** — if the loaded position is within `TRACK_END_TOLERANCE_MS` (250 ms) of the duration, it seeks to 0 first (a finished book or clip would otherwise resume into silence). The remote-control service mirrors the rule for media-key play, which bypasses the store (see "System Media Controls").
 
 `loadBook()` also no-ops while loading, then branches:
 
@@ -214,6 +214,8 @@ Rules:
 System media controls (notification, lock screen, Bluetooth) are handled by a separate **playback service** (`integration.ts`, registered in `index.js` before the app loads) that runs in a background context.
 
 ### Remote transport events bypass the store
+
+Remote play (`RemotePlay`, and the play half of `RemotePlayPause`) goes through `remotePlay()`, which applies the same restart-from-the-top rule as the store's `play()` action before calling `TrackPlayer.play()`.
 
 The handlers (`RemotePlay`, `RemotePause`, `RemotePlayPause`, `RemoteStop`, `RemoteSeek`, `RemoteJumpForward/Backward`, `RemoteNext/Previous`) call `TrackPlayer` directly — no store, no actions, no ownership checks. The store still observes the results via the normal status events. Consequences:
 

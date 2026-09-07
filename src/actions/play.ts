@@ -1,3 +1,4 @@
+import { TRACK_END_TOLERANCE_MS } from './constants'
 import type { AudioPlayerService } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
 import type { LoadBook } from './load_book'
@@ -27,6 +28,17 @@ export const createPlay: ActionFactory<PlayDeps, Play> = (deps) => (
 
     try {
       await loadBook(context)
+
+      // Play with the playhead parked at the end restarts from the top —
+      // resuming a finished book or clip would otherwise do nothing audible
+      const { duration, position } = get().playback
+      if (duration > 0 && duration - position <= TRACK_END_TOLERANCE_MS) {
+        log('At the end — restarting from the top')
+        set(state => {
+          state.playback.position = 0
+        })
+        await audio.seek(0)
+      }
 
       set(state => {
         state.playback.status = 'playing'

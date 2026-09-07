@@ -69,12 +69,9 @@ export default function ClipViewer({ clip, onClose, onEdit }: ClipViewerProps) {
       if (isPlaying) {
         await pause()
       } else {
-        // Claim ownership and play from our remembered position; a playhead
-        // parked at the end (the clip played through) restarts from the top.
-        // The end is the loaded file's real length — the slice can differ
-        // from clip.duration by an AAC frame either way
-        const atEnd = isFileLoaded && ownPosition >= playback.duration
-        await play({ fileUri: clip.uri, position: atEnd ? 0 : ownPosition, ownerId })
+        // Claim ownership and play from our remembered position (a playhead
+        // parked at the end restarts from the top — the play action's rule)
+        await play({ fileUri: clip.uri, position: ownPosition, ownerId })
       }
     } catch (error) {
       console.error('Error toggling playback:', error)

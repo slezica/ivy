@@ -63,6 +63,7 @@ Audio playback via react-native-track-player v5. See **[docs/PLAYBACK.md](docs/P
 - Check `playback.ownerId === myId` before syncing from global playback state
 - Don't update `playback.status` from audio events while in `'loading'` state
 - Only `MAIN_PLAYER_OWNER_ID` persists position to the database
+- Play with the playhead at the end restarts from the top (`play` action + remote-control mirror) — don't add per-screen end checks
 
 ### Clips
 
@@ -581,7 +582,7 @@ Everything project-specific goes through the toolkit CLI — `bin/ivy.ts` (full 
 
 `bin/ivy.ts help` — read WORKFLOW, RECIPES and GOTCHAS before touching the device (reproduced at the end of this file). App and emulator facts the toolkit can't fix for you:
 
-- A fresh app has no media session until a book is opened (`state` says so). Play at the end of a book does not restart it: seek first.
+- A fresh app has no media session until a book is opened (`state` says so).
 - A dialog on top (Error, Archive Book) blocks every tap under it; dismiss it first. Books archived by a flow (add-clip.yaml) open as "Book Unavailable"; re-run `maestro/subflows/import-book.yaml` for a clean library.
 - The document picker's search finds nothing if MediaStore is wedged (`device fix-media`) or Gboard's stylus promo steals the field (the toolkit disables it before flows; `settings put secure stylus_handwriting_enabled 0` by hand).
 - `adb shell am start` URLs containing `&` must be quoted (`drive --seek` does).

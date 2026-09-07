@@ -6,17 +6,28 @@
  */
 
 import TrackPlayer, { Event, State } from 'react-native-track-player'
-import { SKIP_FORWARD_MS, SKIP_BACKWARD_MS } from '../../actions/constants'
+import { SKIP_FORWARD_MS, SKIP_BACKWARD_MS, TRACK_END_TOLERANCE_MS } from '../../actions/constants'
 import { createLogger } from '../../utils'
 
 const log = createLogger('PlaybackService')
+
+// Remote play bypasses the store's play action, so its restart-from-the-top
+// rule (a finished track resumes from 0) is mirrored here
+async function remotePlay() {
+  const { position, duration } = await TrackPlayer.getProgress()
+  if (duration > 0 && (duration - position) * 1000 <= TRACK_END_TOLERANCE_MS) {
+    log('At the end — restarting from the top')
+    await TrackPlayer.seekTo(0)
+  }
+  await TrackPlayer.play()
+}
 
 export async function playbackService() {
   log('Registered')
 
   TrackPlayer.addEventListener(Event.RemotePlay, () => {
     log('Remote play')
-    TrackPlayer.play()
+    remotePlay()
   })
 
   TrackPlayer.addEventListener(Event.RemotePause, () => {
@@ -33,7 +44,7 @@ export async function playbackService() {
     const active = state === State.Playing || state === State.Buffering || state === State.Loading
     log('Remote play/pause', active ? '→ pause' : '→ play')
     if (active) TrackPlayer.pause()
-    else TrackPlayer.play()
+    else remotePlay()
   })
 
   TrackPlayer.addEventListener(Event.RemoteStop, () => {

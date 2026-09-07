@@ -59,6 +59,42 @@ describe('createPlay', () => {
     expect(callOrder).toEqual(['loadBook', 'audio.play'])
   })
 
+  describe('at the end of the track', () => {
+    // loadBook is mocked: it would normally have written position/duration
+    const atEnd = (position: number, duration = 30_000) =>
+      createStatefulDeps({ uri: CONTEXT.fileUri, position, duration })
+
+    it('restarts from the top when the playhead is parked at the end', async () => {
+      const { state, deps } = atEnd(29_999)
+      const play = createPlay(deps)
+
+      await play({ ...CONTEXT, position: 29_999 })
+
+      expect(deps.audio.seek).toHaveBeenCalledWith(0)
+      expect(state.playback.position).toBe(0)
+      expect(state.playback.status).toBe('playing')
+    })
+
+    it('leaves a playhead short of the end alone', async () => {
+      const { state, deps } = atEnd(29_000)
+      const play = createPlay(deps)
+
+      await play({ ...CONTEXT, position: 29_000 })
+
+      expect(deps.audio.seek).not.toHaveBeenCalled()
+      expect(state.playback.position).toBe(29_000)
+    })
+
+    it('ignores an unknown duration', async () => {
+      const { deps } = atEnd(0, 0)
+      const play = createPlay(deps)
+
+      await play({ ...CONTEXT, position: 0 })
+
+      expect(deps.audio.seek).not.toHaveBeenCalled()
+    })
+  })
+
   it('no-ops while another load is in flight', async () => {
     const { state, deps } = createStatefulDeps({ status: 'loading' })
     const play = createPlay(deps)
