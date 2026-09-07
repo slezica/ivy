@@ -88,6 +88,8 @@ Endpoints are a curated semantic vocabulary — see `BRIDGE_ENDPOINTS` in
 `bin/ivy.ts`; adb knowledge stays in the toolkit, never in yaml:
 
 - `net/wifi/on|off`, `net/data/on|off` — radios (emulator only)
+- `player/seek/<ms>` — move the main player (test-build deep link, confirmed via
+  the media session); the only parametrized endpoint
 - `media/play-pause` — a media-button press through the system media session
   (what Bluetooth/headset controls send)
 - `check/artwork-cap`, `check/transcribed`, `check/session-advancing` — DB

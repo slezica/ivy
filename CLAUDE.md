@@ -670,7 +670,7 @@ Commands:
       [name] runs a single case (jest pattern or maestro flow name) and needs
       exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
       a localhost HTTP interface flows use for device control (network
-      toggles, media keys, DB checks) via maestro/scripts/bridge.js, and
+      toggles, media keys, player seek, DB checks) via maestro/scripts/bridge.js, and
       which serves the Whisper model to maestro builds (cache/whisper/
       ggml-tiny.bin, fetched once; reached from the device via adb reverse;
       model/mode/* simulates download failures). BRIDGE_URL is injected

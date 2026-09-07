@@ -60,7 +60,7 @@ Commands:
       [name] runs a single case (jest pattern or maestro flow name) and needs
       exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
       a localhost HTTP interface flows use for device control (network
-      toggles, media keys, DB checks) via maestro/scripts/bridge.js, and
+      toggles, media keys, player seek, DB checks) via maestro/scripts/bridge.js, and
       which serves the Whisper model to maestro builds (cache/whisper/
       ggml-tiny.bin, fetched once; reached from the device via adb reverse;
       model/mode/* simulates download failures). BRIDGE_URL is injected
@@ -796,7 +796,9 @@ function startBridgeServer(port: number): http.Server {
       return
     }
 
-    const handler = BRIDGE_ENDPOINTS[cmd]
+    // The one parametrized endpoint: player/seek/<ms> (main player, test builds)
+    const seek = cmd.match(/^player\/seek\/(\d+)$/)
+    const handler = seek ? () => { seekMainPlayer(Number(seek[1])) } : BRIDGE_ENDPOINTS[cmd]
     if (!handler) {
       res.writeHead(404).end(`unknown bridge command: ${cmd}`)
       return
@@ -1242,17 +1244,9 @@ function cmdDrive(args: Args) {
       break
     }
     case 'seek': {
-      // Test-build deep link handled by PlayerScreen (main player only; the
-      // nonce makes repeated seeks to the same position distinct)
       const ms = Number(value)
       if (!Number.isFinite(ms) || ms < 0) fail(`--seek needs a position in ms, got "${value}"`)
-      // quoted: adb shell hands the line to the device shell, where & would background
-      adbShell('am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', `'ivy://player?seek=${ms}&n=${Date.now()}'`, APP)
-      const after = waitForPlayback(s => Math.abs(s.position - ms) < 1500, 3000)
-      if (!after || Math.abs(after.position - ms) >= 1500) {
-        fail(`seek did not take (test build with the book loaded in the main player?): ${describePlayback(after)}`)
-      }
-      log(describePlayback(after))
+      log(describePlayback(seekMainPlayer(ms)))
       break
     }
     case 'file': {
@@ -2279,6 +2273,19 @@ function waitForPlayback(ok: (s: PlaybackSnapshot) => boolean, timeoutMs: number
 
 function cmdState() {
   console.log(`playback: ${describePlayback(playbackSnapshot())}`)
+}
+
+// Move the main player via the test-build deep link handled by PlayerScreen
+// (the nonce makes repeated seeks to the same position distinct), and confirm
+// through the media session. Shared by `drive --seek` and the bridge.
+function seekMainPlayer(ms: number): PlaybackSnapshot {
+  // quoted: adb shell hands the line to the device shell, where & would background
+  adbShell('am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', `'ivy://player?seek=${ms}&n=${Date.now()}'`, APP)
+  const after = waitForPlayback(s => Math.abs(s.position - ms) < 1500, 3000)
+  if (!after || Math.abs(after.position - ms) >= 1500) {
+    fail(`seek did not take (test build with the book loaded in the main player?): ${describePlayback(after)}`)
+  }
+  return after
 }
 
 const DUMP_PATH = '/sdcard/window_dump.xml'
