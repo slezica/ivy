@@ -212,8 +212,9 @@ RECIPES
     logs --tag ReactNativeJS | grep -F -e '[Play]' -e '[Pause]' -e '[Seek]'
 
 GOTCHAS
-  - The app's play/pause button and the media key are toggles. Never press
-    them blind: state first, or drive --play/--pause, which check.
+  - Playback state drifts while you work (tracks end, flows leave things
+    playing). Check state before acting on it, or use drive --play/--pause,
+    which check for you.
   - A *stopped* session (track ended, clip viewer open) ignores the media
     key: drive --seek first, or tap the on-screen button.
   - tree: instant while idle, ~4s while playing (maestro hierarchy), ~25s
