@@ -579,14 +579,7 @@ Everything project-specific goes through the toolkit CLI — `bin/ivy.ts` (full 
 
 ### Driving the running app from the CLI
 
-What holds up during playback (the app is not idle while playing, and play/pause is a toggle):
-
-- `bin/ivy.ts state` — playback state, position, speed, title from the system media session. Sub-second, any build. Check it before and after every action instead of guessing.
-- `drive --play` / `--pause` — deterministic (media key only if the state differs, then confirmed). A *stopped* session (track ended, clip viewer) ignores the media key: `drive --seek` first.
-- `drive --seek <ms>` — main player, test builds, confirmed via the session. Play at the end of a book does not restart it, so seek before playing.
-- `tree` — instant while idle, ~4s while playing (maestro hierarchy), ~25s only if uiautomator times out on an animation. For state, prefer `state`.
-- Sampling on-screen values over time (timers, counters): `adb exec-out screencap -p` at ~0.3s intervals, crop the region, stack the crops into one image and read it. Hierarchy dumps cannot keep up.
-- Sequences of several steps: `drive --inline` (one maestro session) beats chained `drive --tap` calls (~3s toolkit startup each). Inline steps run from a temp file, so script paths must be absolute.
+`bin/ivy.ts help` — read WORKFLOW, RECIPES and GOTCHAS before touching the device (reproduced at the end of this file). The short version: `state` before and after every action; `drive --play/--pause/--seek` over blind taps; `drive --inline` for sequences; screencap sampling for values that change over time.
 
 ## Preparing a Release
 
@@ -783,6 +776,65 @@ Global:
 
 Destructive commands (wipe, put --samples, generate --screenshots) refuse to
 run on anything that is not verifiably an emulator. There is no override flag.
+
+WORKFLOW
+  Seeing a change in the real app, from a cold start:
+    device connect                       # container -> Mac-hosted emulator
+    build maestro --install --arch arm64-v8a   # ~3 min; JS-only changes too
+    drive --file maestro/subflows/import-book.yaml   # known state: fresh app,
+                                         #   one book, transcription off
+    drive --tap "Ivy Test Book"          # library row -> player, playing
+    state                                # playing at 0.0s @1x — Ivy Test Book
+    capture before                       # captures/before.png
+  Then act (drive), observe (state, tree, capture, logs, query), repeat.
+  Variant: maestro (e2e twin of the release build, with test affordances:
+  --seek, TLTRACE, 5s sleep preset). debug needs Metro on the Mac.
+
+  Observe                              Act
+    state    playback, sub-second        drive --play/--pause  confirmed toggle
+    tree     screen elements + bounds    drive --seek <ms>     main player
+    capture  screenshot -> captures/     drive --tap <id|text> one element
+    logs     app logcat (--tag)          drive --nav <route>   deep link
+    query    the app DB, read-only       drive --inline/--file maestro steps
+
+RECIPES
+  Book at a known position, playing:
+    drive --seek 5000 && drive --play
+  Clip of ~N seconds (draft grows with linked bounds while playing):
+    drive --inline '- tapOn: { id: add-clip-button }
+    - runScript: { file: /abs/path/maestro/scripts/sleep.js, env: { MS: "3000" } }
+    - tapOn: { id: clip-editor-pause-button }
+    - tapOn: "Save"'
+  Value changing over time (timer labels, counters) — dumps are too slow:
+    for i in $(seq 12); do adb exec-out screencap -p > s/$i.png; sleep 0.3; done
+    then crop the region from each and stack the crops into one image.
+  Screen state from a flow's own eyes:
+    takeScreenshot: screenshots/<name>   ->  maestro/screenshots/<name>.png
+  Timeline internals (maestro/debug builds):
+    logs --tag ReactNativeJS | grep TLTRACE   # gestures, seeks, mode changes
+  Playback ownership / actions:
+    logs --tag ReactNativeJS | grep -F -e '[Play]' -e '[Pause]' -e '[Seek]'
+
+GOTCHAS
+  - Play/pause is a toggle. Never tap it blind: state first, or use
+    drive --play/--pause, which check.
+  - Play at the end of a book does not restart it. --seek first.
+  - A fresh app has no media session until a book is opened; state says so.
+  - A *stopped* session (track ended, clip viewer open) ignores the media
+    key. --seek first, or tap the on-screen button.
+  - Books archived by a flow (add-clip.yaml) say "Book Unavailable" when
+    opened. Re-run import-book.yaml for a clean library.
+  - drive --tap and --inline see the current screen only — a dialog on
+    top (Error, Archive Book) blocks everything under it; tap OK first.
+  - tree is slow (~25s) only when uiautomator times out on an animation
+    and the app is not playing; otherwise instant, or ~4s while playing.
+  - am start URLs with & must be quoted (--seek does this).
+  - The document picker's search box: Gboard's stylus promo is disabled
+    before every flow run; if a picker search shows nothing, device
+    fix-media rescans MediaStore.
+  - Everything here costs: toolkit start ~3s, a maestro session ~10s, a
+    build ~3 min. Batch steps in --inline; read state from logcat rather
+    than dumping the screen twice.
 ```
 
 
