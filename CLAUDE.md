@@ -579,7 +579,12 @@ Everything project-specific goes through the toolkit CLI — `bin/ivy.ts` (full 
 
 ### Driving the running app from the CLI
 
-`bin/ivy.ts help` — read WORKFLOW, RECIPES and GOTCHAS before touching the device (reproduced at the end of this file). The short version: `state` before and after every action; `drive --play/--pause/--seek` over blind taps; `drive --inline` for sequences; screencap sampling for values that change over time.
+`bin/ivy.ts help` — read WORKFLOW, RECIPES and GOTCHAS before touching the device (reproduced at the end of this file). App and emulator facts the toolkit can't fix for you:
+
+- A fresh app has no media session until a book is opened (`state` says so). Play at the end of a book does not restart it: seek first.
+- A dialog on top (Error, Archive Book) blocks every tap under it; dismiss it first. Books archived by a flow (add-clip.yaml) open as "Book Unavailable"; re-run `maestro/subflows/import-book.yaml` for a clean library.
+- The document picker's search finds nothing if MediaStore is wedged (`device fix-media`) or Gboard's stylus promo steals the field (the toolkit disables it before flows; `settings put secure stylus_handwriting_enabled 0` by hand).
+- `adb shell am start` URLs containing `&` must be quoted (`drive --seek` does).
 
 ## Preparing a Release
 
@@ -816,25 +821,14 @@ RECIPES
     logs --tag ReactNativeJS | grep -F -e '[Play]' -e '[Pause]' -e '[Seek]'
 
 GOTCHAS
-  - Play/pause is a toggle. Never tap it blind: state first, or use
-    drive --play/--pause, which check.
-  - Play at the end of a book does not restart it. --seek first.
-  - A fresh app has no media session until a book is opened; state says so.
+  - The app's play/pause button and the media key are toggles. Never press
+    them blind: state first, or drive --play/--pause, which check.
   - A *stopped* session (track ended, clip viewer open) ignores the media
-    key. --seek first, or tap the on-screen button.
-  - Books archived by a flow (add-clip.yaml) say "Book Unavailable" when
-    opened. Re-run import-book.yaml for a clean library.
-  - drive --tap and --inline see the current screen only — a dialog on
-    top (Error, Archive Book) blocks everything under it; tap OK first.
-  - tree is slow (~25s) only when uiautomator times out on an animation
-    and the app is not playing; otherwise instant, or ~4s while playing.
-  - am start URLs with & must be quoted (--seek does this).
-  - The document picker's search box: Gboard's stylus promo is disabled
-    before every flow run; if a picker search shows nothing, device
-    fix-media rescans MediaStore.
-  - Everything here costs: toolkit start ~3s, a maestro session ~10s, a
-    build ~3 min. Batch steps in --inline; read state from logcat rather
-    than dumping the screen twice.
+    key: drive --seek first, or tap the on-screen button.
+  - tree: instant while idle, ~4s while playing (maestro hierarchy), ~25s
+    only when uiautomator times out on an animating, non-playing screen.
+  - Toolkit startup is cheap (~0.2s); maestro sessions are not (~10s JVM).
+    Batch steps in one --inline rather than many --tap/--inline calls.
 ```
 
 

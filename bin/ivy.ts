@@ -212,25 +212,14 @@ RECIPES
     logs --tag ReactNativeJS | grep -F -e '[Play]' -e '[Pause]' -e '[Seek]'
 
 GOTCHAS
-  - Play/pause is a toggle. Never tap it blind: state first, or use
-    drive --play/--pause, which check.
-  - Play at the end of a book does not restart it. --seek first.
-  - A fresh app has no media session until a book is opened; state says so.
+  - The app's play/pause button and the media key are toggles. Never press
+    them blind: state first, or drive --play/--pause, which check.
   - A *stopped* session (track ended, clip viewer open) ignores the media
-    key. --seek first, or tap the on-screen button.
-  - Books archived by a flow (add-clip.yaml) say "Book Unavailable" when
-    opened. Re-run import-book.yaml for a clean library.
-  - drive --tap and --inline see the current screen only — a dialog on
-    top (Error, Archive Book) blocks everything under it; tap OK first.
-  - tree is slow (~25s) only when uiautomator times out on an animation
-    and the app is not playing; otherwise instant, or ~4s while playing.
-  - am start URLs with & must be quoted (--seek does this).
-  - The document picker's search box: Gboard's stylus promo is disabled
-    before every flow run; if a picker search shows nothing, device
-    fix-media rescans MediaStore.
-  - Everything here costs: toolkit start ~3s, a maestro session ~10s, a
-    build ~3 min. Batch steps in --inline; read state from logcat rather
-    than dumping the screen twice.`
+    key: drive --seek first, or tap the on-screen button.
+  - tree: instant while idle, ~4s while playing (maestro hierarchy), ~25s
+    only when uiautomator times out on an animating, non-playing screen.
+  - Toolkit startup is cheap (~0.2s); maestro sessions are not (~10s JVM).
+    Batch steps in one --inline rather than many --tap/--inline calls.`
 
 // ---------------------------------------------------------------------------
 // Small infra
