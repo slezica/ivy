@@ -14,17 +14,24 @@ appId: com.salezica.ivy
     visible: "Meditations"
     timeout: 30000
 - assertVisible: "The Art of War"        # archived section rendered
+# Settle before every shot: maestro's asserts see the view hierarchy, not
+# painted pixels. On a cold, freshly seeded app the first paint of a screen
+# (Skia timeline, header icons) can lag the hierarchy — v1.6.5 shipped a
+# player screenshot without its timeline.
+- runScript: { file: ../scripts/sleep.js, env: { MS: "1000" } }
 - takeScreenshot: 01-library
 
 # Player: hero book auto-loaded at its saved position
 - tapOn: "Player"
 - assertVisible: "Marcus Aurelius"
+- runScript: { file: ../scripts/sleep.js, env: { MS: "1000" } }  # settle, see above
 - takeScreenshot: 02-player
 
 # Clips: notes + transcriptions
 - tapOn: "Clips"
 - assertVisible:
     id: "clip-card"
+- runScript: { file: ../scripts/sleep.js, env: { MS: "1000" } }  # settle, see above
 - takeScreenshot: 03-clips
 
 # Clip viewer: transcription with the source book's timeline
@@ -33,6 +40,7 @@ appId: com.salezica.ivy
     index: 0
 - assertVisible:
     id: "clip-viewer-play-button"
+- runScript: { file: ../scripts/sleep.js, env: { MS: "1000" } }  # settle, see above
 - takeScreenshot: 04-clip
 - tapOn: "Close"
 
@@ -42,4 +50,5 @@ appId: com.salezica.ivy
     id: "library-menu-button"
 - tapOn: "History"
 - assertVisible: "History"
+- runScript: { file: ../scripts/sleep.js, env: { MS: "1000" } }  # settle, see above
 - takeScreenshot: 05-history
