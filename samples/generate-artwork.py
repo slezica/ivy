@@ -68,10 +68,6 @@ def make_cover(book, out_path):
     image = gradient(cover['bg1'], cover['bg2'])
     draw = ImageDraw.Draw(image)
 
-    # Double border frame
-    draw.rectangle([24, 24, SIZE - 25, SIZE - 25], outline=fg, width=2)
-    draw.rectangle([34, 34, SIZE - 35, SIZE - 35], outline=fg, width=1)
-
     title_font = load_font([SERIF_BOLD] + FALLBACKS[:1], 64)
     author_font = load_font([SERIF] + FALLBACKS[1:], 30)
 
