@@ -6,7 +6,7 @@ A local-first podcast and audiobook player for Android with library management, 
 
 ### AI Notice
 
-This project was created with assistance from Claude.
+This project is developed with assistance from Claude.
 
 
 ## Development
