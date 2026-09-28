@@ -7,6 +7,14 @@ written by `bin/ivy.ts prepare` from its `--changes` argument (see CLAUDE.md
 "Preparing a Release") — the agent drafts that markdown in this file's style
 (Features/Fixes/Infra headings as applicable).
 
+## 1.6.6 (versionCode 10606) — 2026-09-28
+
+Fixes:
+
+  - System media controls: no longer crash the phone's system UI (screen flash,
+    back to lock screen) on play/pause for books with large cover art; cover art
+    is temporarily hidden from the notification and lock screen
+
 ## 1.6.5 (versionCode 10605) — 2026-09-07
 
 Features:
