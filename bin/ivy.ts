@@ -65,7 +65,10 @@ Commands:
       ggml-tiny.bin, fetched once; reached from the device via adb reverse;
       model/mode/* simulates download failures). BRIDGE_URL is injected
       into every run, adb goes root up front (rootable emulator), and
-      network state is restored afterwards (emulator only). --server-only
+      network state is restored afterwards (emulator only). E2e runs fail
+      on media-session metadata replies over the binder log threshold
+      (artwork back in the session; see docs/2026-09-28-media-session-
+      artwork-files.md). --server-only
       starts just the bridge (foreground, Ctrl-C to stop) for hand-run
       maestro sessions.
       --upgrade = migration upgrade smoke test (emulator-only, wipes app
@@ -865,6 +868,32 @@ function reportR8LogScan(logFile: string) {
   report(null, 'r8 log scan', `${hits.size} distinct signature(s) in ${appLines} app log lines — advisory, inspect ${path.relative(ROOT, logFile)}:\n${top.join('\n')}`)
 }
 
+// Media-session metadata over the binder log threshold (~300KB) means the
+// artwork went back into the session as a data URI or inline bitmap: One UI's
+// SystemUI crashes on replies like these (docs/2026-09-28-systemui-artwork-crash.md).
+// system_server logs them, so this scans every line, not just the app's.
+const LARGE_SESSION_REPLY = /Large reply transaction of (\d+) bytes, interface descriptor android\.media\.session\.ISessionController/
+
+export function largeSessionReplies(logcat: string): number[] {
+  const sizes: number[] = []
+  for (const line of logcat.split('\n')) {
+    const m = line.match(LARGE_SESSION_REPLY)
+    if (m) sizes.push(Number(m[1]))
+  }
+  return sizes
+}
+
+function checkSessionReplies(logFile: string) {
+  if (!fs.existsSync(logFile)) return
+  const sizes = largeSessionReplies(fs.readFileSync(logFile, 'utf8'))
+  if (sizes.length === 0) {
+    report(true, 'media session replies', `none over the binder log threshold (${path.relative(ROOT, logFile)})`)
+    return
+  }
+  fail(`media session: ${sizes.length} metadata replies over the binder log threshold (max ${Math.max(...sizes)} bytes) — ` +
+    `artwork is back in the session metadata? See docs/2026-09-28-systemui-artwork-crash.md and ${path.relative(ROOT, logFile)}`)
+}
+
 // Spawn the bridge as a child process (this process blocks on spawnSync while
 // maestro runs, so an in-process server could never answer), wait until it is
 // healthy, run `fn`, then tear it down and restore network state.
@@ -894,6 +923,7 @@ function withBridge(fn: (url: string) => void) {
     `fetch(process.argv[1]).then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))`,
     `${url}/health`]).status === 0
 
+  let passed = false
   try {
     // npx tsx alone takes >10s to start on a loaded machine (parallel build)
     const deadline = Date.now() + 60_000
@@ -906,6 +936,7 @@ function withBridge(fn: (url: string) => void) {
     }
 
     fn(url)
+    passed = true
   } finally {
     try { process.kill(-child.pid!, 'SIGTERM') } catch { child.kill() }
     fs.closeSync(logFd)
@@ -922,6 +953,8 @@ function withBridge(fn: (url: string) => void) {
     }
     try { adbOut('reverse', '--remove', `tcp:${BRIDGE_DEVICE_PORT}`) } catch { /* device gone */ }
   }
+  // Flows passed: now hold the run to the metadata-size invariant
+  if (passed) checkSessionReplies(logcatFile)
 }
 
 // Make the bridge reachable from the device at 127.0.0.1:<BRIDGE_DEVICE_PORT>

@@ -278,3 +278,22 @@ describe('r8LogHits', () => {
     ])
   })
 })
+
+describe('largeSessionReplies', () => {
+  const { largeSessionReplies } = require('../ivy')
+
+  it('collects oversized media-session replies from any process', () => {
+    const log = [
+      '09-28 20:01:16.500  7048  7236 W libbinder.Binder: Large reply transaction of 521636 bytes, interface descriptor android.media.session.ISessionController, code 32, flags 16',
+      '09-28 20:01:16.501  7048  7236 W libbinder.Binder: Large reply transaction of 400000 bytes, interface descriptor android.content.pm.IPackageManager, code 5, flags 16',
+      '09-28 20:01:16.502  4242  4242 I ReactNativeJS: all fine',
+      '09-28 02:04:49.261  3307  6977 W libbinder.Binder: Large reply transaction of 523264 bytes, interface descriptor android.media.session.ISessionController, code 32, flags 16',
+    ].join('\n')
+
+    expect(largeSessionReplies(log)).toEqual([521636, 523264])
+  })
+
+  it('is empty for a clean run', () => {
+    expect(largeSessionReplies('09-28 20:01:16.502  4242  4242 I ReactNativeJS: all fine')).toEqual([])
+  })
+})

@@ -676,7 +676,10 @@ Commands:
       ggml-tiny.bin, fetched once; reached from the device via adb reverse;
       model/mode/* simulates download failures). BRIDGE_URL is injected
       into every run, adb goes root up front (rootable emulator), and
-      network state is restored afterwards (emulator only). --server-only
+      network state is restored afterwards (emulator only). E2e runs fail
+      on media-session metadata replies over the binder log threshold
+      (artwork back in the session; see docs/2026-09-28-media-session-
+      artwork-files.md). --server-only
       starts just the bridge (foreground, Ctrl-C to stop) for hand-run
       maestro sessions.
       --upgrade = migration upgrade smoke test (emulator-only, wipes app
