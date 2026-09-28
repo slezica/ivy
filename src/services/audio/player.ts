@@ -33,7 +33,6 @@ export interface PlaybackStatus {
 export interface TrackMetadata {
   title?: string | null
   artist?: string | null
-  artwork?: string | null  // base64 data URI or file:// path
 }
 
 export type AudioPlayerEvents = {
@@ -59,12 +58,15 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
     await this.ensureSetup()
     await TrackPlayer.reset()
 
+    // No artwork: media3 copies the URI into 3 session metadata keys, and a
+    // data URI inflates to ~0.5MB replies that overflow SystemUI's binder
+    // buffer on concurrent fetches, crashing it (One UI; see
+    // docs/2026-09-28-systemui-artwork-crash.md)
     const track = {
       id: uri,
       url: uri,
       title: metadata?.title || 'Unknown',
       artist: metadata?.artist || 'Unknown Artist',
-      artwork: metadata?.artwork || undefined,
     }
 
     await TrackPlayer.add(track)

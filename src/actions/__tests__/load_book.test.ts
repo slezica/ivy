@@ -78,7 +78,7 @@ describe('createLoadBook', () => {
       expect(draft.playback.uri).toBeNull()
     })
 
-    it('loads audio with book metadata', async () => {
+    it('loads audio with book metadata, without artwork', async () => {
       const book = createMockBook({ title: 'My Book', artist: 'Author', artwork: 'art-data' })
       const { deps } = createStatefulDeps({ uri: null }, {
         db: createMockDb({ getBookByAnyUri: jest.fn(() => book) }),
@@ -90,7 +90,6 @@ describe('createLoadBook', () => {
       expect(deps.audio.load).toHaveBeenCalledWith(CONTEXT.fileUri, {
         title: 'My Book',
         artist: 'Author',
-        artwork: 'art-data',
       })
     })
 
