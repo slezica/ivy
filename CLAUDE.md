@@ -150,7 +150,8 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   │   │   ├── integration.ts      # Playback service for remote control events
   │   │   ├── metadata.ts         # ID3/metadata extraction
   │   │   ├── ffmetadata.ts       # Tags + chapter extraction (parses raw text from FFmetadataReaderModule.kt)
-  │   │   └── slicer.ts           # Audio segment extraction (native module)
+  │   │   ├── slicer.ts           # Audio segment extraction (native module)
+  │   │   └── artwork.ts          # Media-session artwork as cache files (file:// URIs, never data URIs)
   │   ├── storage/
   │   │   ├── database.ts         # SQLite operations
   │   │   ├── files.ts            # App-storage file utilities (stat, delete, list — copying is the native copier's job)
