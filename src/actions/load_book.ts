@@ -70,6 +70,7 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
         duration = await audio.load(context.fileUri, {
           title: bookRecord.title,
           artist: bookRecord.artist,
+          artwork: bookRecord.artwork,
         })
       } catch (error) {
         // Nothing is loaded — reset so the loading guard doesn't block forever

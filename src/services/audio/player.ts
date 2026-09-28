@@ -14,6 +14,7 @@ import TrackPlayer, {
 import type { EmitterSubscription } from 'react-native'
 
 import { BaseService } from '../base'
+import { artworkFileUri } from './artwork'
 import { createLogger } from '../../utils'
 
 const log = createLogger('AudioPlayer')
@@ -33,6 +34,7 @@ export interface PlaybackStatus {
 export interface TrackMetadata {
   title?: string | null
   artist?: string | null
+  artwork?: string | null  // base64 data URI
 }
 
 export type AudioPlayerEvents = {
@@ -52,21 +54,29 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
   private fadeTimer: ReturnType<typeof setInterval> | null = null
   private fadeResolve: ((completed: boolean) => void) | null = null
 
+  // Artwork goes to the media session as a file:// URI, never a data URI (see
+  // artwork.ts). A failed write loses the cover, never playback.
+  private async sessionArtwork(artwork?: string | null): Promise<string | undefined> {
+    try {
+      return (await artworkFileUri(artwork)) ?? undefined
+    } catch (error) {
+      log(`Artwork file failed, playing without cover: ${error}`)
+      return undefined
+    }
+  }
+
   async load(uri: string, metadata?: TrackMetadata): Promise<number> {
     log(`Loading: ${metadata?.title || 'unknown'}`)
 
     await this.ensureSetup()
     await TrackPlayer.reset()
 
-    // No artwork: media3 copies the URI into 3 session metadata keys, and a
-    // data URI inflates to ~0.5MB replies that overflow SystemUI's binder
-    // buffer on concurrent fetches, crashing it (One UI; see
-    // docs/2026-09-28-systemui-artwork-crash.md)
     const track = {
       id: uri,
       url: uri,
       title: metadata?.title || 'Unknown',
       artist: metadata?.artist || 'Unknown Artist',
+      artwork: await this.sessionArtwork(metadata?.artwork),
     }
 
     await TrackPlayer.add(track)
