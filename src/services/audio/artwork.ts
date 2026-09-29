@@ -12,6 +12,8 @@
 
 import RNFS from 'react-native-fs'
 
+import { fnv1a } from '../../utils'
+
 export const ARTWORK_CACHE_DIR = `${RNFS.CachesDirectoryPath}/artwork`
 
 const DATA_URI = /^data:image\/(\w+);base64,/
@@ -33,7 +35,7 @@ export async function artworkFileUri(artwork: string | null | undefined): Promis
 
   const base64 = artwork.slice(match[0].length)
   const ext = match[1] === 'jpeg' ? 'jpg' : match[1]
-  const name = `${fnv1a(base64)}-${base64.length}.${ext}`
+  const name = `${fnv1a(base64).toString(16).padStart(8, '0')}-${base64.length}.${ext}`
   const path = `${ARTWORK_CACHE_DIR}/${name}`
 
   if (!(await RNFS.exists(path))) {
@@ -48,14 +50,4 @@ export async function artworkFileUri(artwork: string | null | undefined): Promis
   }
 
   return `file://${path}`
-}
-
-/** 32-bit FNV-1a, hex. Identity for cache names, not security. */
-function fnv1a(text: string): string {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0')
 }

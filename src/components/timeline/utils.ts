@@ -2,17 +2,8 @@
  * Shared utilities for timeline components.
  */
 
+import { fnv1a } from '../../utils'
 import { TIMELINE_HEIGHT } from './constants'
-
-/** FNV-1a 32-bit string hash. */
-function hashString(str: string): number {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < str.length; i++) {
-    hash ^= str.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return hash >>> 0
-}
 
 /** Mulberry32 PRNG — deterministic [0, 1) sequence from a numeric seed. */
 function mulberry32(seed: number): () => number {
@@ -31,7 +22,7 @@ function mulberry32(seed: number): () => number {
  * layer's frequency and phase, so books get distinct (stable) shapes.
  */
 export function createSegmentHeightFn(seed: string): (index: number) => number {
-  const rand = mulberry32(hashString(seed))
+  const rand = mulberry32(fnv1a(seed))
   const f1 = 0.1 + rand() * 0.12
   const f2 = 0.3 + rand() * 0.25
   const f3 = 1.5 + rand() * 1.3
