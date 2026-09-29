@@ -6,7 +6,8 @@ the comment block in `database.ts` and CLAUDE.md carry pointers, not the full
 story. Design records:
 [2026-09-02-artwork-oom-repair.md](2026-09-02-artwork-oom-repair.md) (async
 unification), [2026-09-02-migration-testing.md](2026-09-02-migration-testing.md)
-(testing system).
+(testing system), [2026-09-28-upgrade-scenarios.md](2026-09-28-upgrade-scenarios.md)
+(upgrade test rework: scenarios per live version).
 
 ## The system
 
@@ -70,23 +71,27 @@ The shipped data-transforming migrations, as worked examples:
 
 1. Append to the `migrations` array in `database.ts` (rules above).
 2. If data-transforming: add a jest prefix-replay case
-   (`migrations.test.ts`) and an upgrade hook (`bin/upgrade_hooks.ts`).
+   (`migrations.test.ts`) and an upgrade scenario (`bin/upgrade_scenarios.ts`)
+   naming it in `migrations: [n]`, seeded by the live versions below it.
    Pure ADD COLUMN migrations need neither.
-3. Bump `LATEST_MIGRATION` in `bin/upgrade_hooks.ts` — hand-maintained
+3. If an existing scenario's data changes representation, update its
+   `verify` in the same commit (same invariant, new representation).
+4. Bump `LATEST_MIGRATION` in `bin/upgrade_scenarios.ts` — hand-maintained
    (the toolkit can't import `database.ts`); a unit test fails if you forget.
-4. If data-transforming: append the index to `DATA_TRANSFORMING` in
-   `bin/__tests__/upgrade_hooks.test.ts` — also hand-maintained; forgetting
-   leaves the hook-coverage guard blind to the new migration.
-5. `bin/ivy.ts build maestro` then `bin/ivy.ts test --upgrade`.
+5. If data-transforming: append the index to `DATA_TRANSFORMING` in
+   `bin/__tests__/upgrade_scenarios.test.ts` — also hand-maintained;
+   forgetting leaves the coverage guard blind to the new migration.
+6. `bin/ivy.ts build maestro` then `bin/ivy.ts test --upgrade`.
 
-**Seed-schema trap:** when several migrations ship in one release, ALL their
-hook seeds run against the *previous release's* schema — a later hook cannot
-use columns an earlier migration in the same batch added.
+**Seed-schema trap:** seeds run against the *base version's* schema — a
+scenario cannot use columns that version doesn't have (branch on
+`ctx.hasColumn`, never on version numbers).
 
-**Release coupling:** `prepare` runs the upgrade test unconditionally (when a
-previous release tag exists), and the test aborts when the base tag is already
-at `LATEST_MIGRATION` — so a release that ships migrations must bump it, and
-the abort happens inside the try that reverts the version bump.
+**Release coupling:** `prepare` runs the upgrade test from every listed
+version (when a previous release tag exists), and its preflight fails when the
+previous release has no `VERSIONS` entry — so each release forces adding its
+own entry before the next one. A base already at `LATEST_MIGRATION` still
+runs: the upgrade install, scenario verifies and crash check apply.
 
 ## Testing
 
@@ -99,26 +104,35 @@ Three layers (see the testing design record for full rationale):
    `testMigrationDeps` with an identity downscaler), seed period-correct rows
    via raw SQL, run the pending migration, assert. **Required for every
    data-transforming migration.**
-2. **Upgrade smoke test** (`bin/ivy.ts test --upgrade`): installs the previous
-   release's maestro APK (cached in `cache/upgrade/` by `prepare`; rebuilt
-   from tag as fallback — Mac-only), seeds baseline data + hook seeds,
-   upgrade-installs the current build, verifies migration index + data + no
-   crash. Prerequisites and side effects: needs a built maestro APK, host
-   `sqlite3`, and a rootable emulator image (DB access via adb root — the
+2. **Upgrade test** (`bin/ivy.ts test --upgrade`): for each release users
+   still run (`VERSIONS`), installs its maestro APK (cached in
+   `cache/upgrade/` by `prepare`; rebuilt from tag as fallback — Mac-only),
+   seeds the scenarios that version lists, upgrade-installs the current
+   build, then verifies exactly those scenarios + migration index + no crash.
+   All versions run even when one fails; one verdict at the end.
+   Prerequisites and side effects: needs a built maestro APK, host `sqlite3`,
+   and a rootable emulator image (DB and app storage via adb root — the
    maestro variant is not debuggable); it **uninstalls the app** and disables
    wifi/data for the run (restored afterwards; suppresses the whisper-model
-   download). `--from <tag>` targets a specific cached base. When the base is
-   already at the latest migration, the run degrades to a reinstall smoke
-   test: baseline seed + upgrade install + baseline checks + crash check,
-   no migration replay.
-3. **Per-migration hooks** (`bin/upgrade_hooks.ts`): seed/verify SQL keyed by
-   migration index — device-level assertions for data-transforming
-   migrations, exercised with real native deps and real expo-sqlite. A
-   **baseline** (not a hook) is seeded and checked on *every* run, using only
-   initial-schema columns: index at latest + one book/clip/session surviving.
-   Hooks are kept forever (they tell the story, like migrations); the runner
-   selects only the ones in the tested transition's range.
+   download). Defaults to the previous release; `--from <tag>` picks another
+   listed version; `prepare` runs them all.
+3. **Scenarios and versions** (`bin/upgrade_scenarios.ts`): we test app
+   upgrades, not just migrations — seeds and verifies are code (SQL on the
+   pulled DB, files pushed into app storage, root shell).
+   - A **scenario** is one interesting situation: `seed(ctx)` always produces
+     the same semantic state, `verify(ctx)` checks it on the current build.
+     Scenario constants (ids, expected values) live next to it.
+   - A **version** is a release users still run (Play Console → Statistics →
+     install base by app version). Its `seed(run)` lists the scenarios its
+     app could have produced — never a state it couldn't (seeds bypass the
+     app). `migration` is asserted at runtime.
+   - Seeds are stable; verifies follow the current schema. Drop a version
+     when nobody runs it, then scenarios no version seeds — git keeps them.
+   - Guards (jest): `LATEST_MIGRATION` mirror; every data-transforming
+     migration above the oldest live version is crossed by a scenario;
+     versions unique, tagged, not ahead; every version seeds
+     `baselineLibrary`.
 
 **Testing:** `src/services/storage/__tests__/migrations.test.ts`,
 `src/services/storage/__tests__/sqlite_adapter.ts`,
-`bin/__tests__/upgrade_hooks.test.ts`, `bin/ivy.ts test --upgrade`.
+`bin/__tests__/upgrade_scenarios.test.ts`, `bin/ivy.ts test --upgrade`.
