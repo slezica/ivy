@@ -18,6 +18,8 @@
 5. **Feedback on skip** - show a popping "+30s" sign or text (and backwards) when skipping
 6. **Free whisper model to reduce memory** - `release()` is never called, so the loaded model (~465MB class) stays resident while listening. Sketch: no load at startup, init on clip save (download/wifi gating moves there), release on queue drain (+small slack); disk file always kept. Measure init time first (timing log around `initContext`). Main cost: banner + transcription-states.yaml adjust.
 
+7. **Purge hidden books' leftovers** - soft-deleted (`hidden`) books keep their row, and after artwork-as-files their cover file too. A library with dozens of hidden books accumulates invisible data: slower sync, dead files. Rare (archive is the common path); maybe a "purge deleted" action or an age-based sweep.
+
 ## Questions
 
 - **Verify everything works with 0-length audio files, books and clips** — import, playback, slicing, transcription, sync.
