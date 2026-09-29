@@ -101,12 +101,12 @@ Offline-first multi-device sync via Google Drive. See **[docs/SYNC.md](docs/SYNC
 
 Database migration system and its testing layers. See **[docs/MIGRATIONS.md](docs/MIGRATIONS.md)** for the full guide.
 
-**Quick summary:** Single ordered async migration array in `database.ts`, deps-injected, run by the `runMigrations` action before anything else touches the DB. Pre-migration `VACUUM INTO` snapshot. Tested by jest prefix-replay + device upgrade smoke test (`test --upgrade`) with per-migration hooks.
+**Quick summary:** Single ordered async migration array in `database.ts`, deps-injected, run by the `runMigrations` action before anything else touches the DB. Pre-migration `VACUUM INTO` snapshot. Tested by jest prefix-replay + device upgrade test (`test --upgrade`): scenarios seeded on each release users still run, verified after upgrading.
 
 **Key rules:**
 - **Never edit a shipped migration** — append-only; fix mistakes with a new migration
 - Migrations must be idempotent (failure = full rerun next launch) and memory-lean (ids first, bulky columns row-at-a-time)
-- Data-transforming migrations require a jest case and an upgrade-test hook; ADD COLUMN needs neither
+- Data-transforming migrations require a jest case and an upgrade scenario (`bin/upgrade_scenarios.ts`); ADD COLUMN needs neither
 - Decide sync semantics explicitly: converging repair (bump + queue) vs per-device normalization (touch nothing)
 
 
@@ -261,8 +261,8 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
 
 /bin
   ├── ivy.ts                      # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below
-  ├── upgrade_hooks.ts            # Per-migration seed/verify hooks for `test --upgrade` (kept forever, like migrations)
-  └── __tests__/                  # Toolkit tests: hygiene.test.ts (repo gates), ivy.test.ts, upgrade_hooks.test.ts
+  ├── upgrade_scenarios.ts        # Upgrade-test scenarios + the versions users still run (`test --upgrade`; re-read before releases)
+  └── __tests__/                  # Toolkit tests: hygiene.test.ts (repo gates), ivy.test.ts, upgrade_scenarios.test.ts
 
 /secrets                          # Keystores. HARD RULE: secrets are NEVER duplicated —
   │                               # no tooling copies this directory anywhere, ever
@@ -301,7 +301,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   ├── test-audio.m4a              # Bundled test file (chapters + standard extras tags: narrator, summary, date)
   ├── test-audio-2.m4a            # Second fixture: all extras filled (Libation-style freeform atoms)
   ├── test-audio-cover.m4a        # Oversized embedded cover (~900KB, 1400px) — artwork-cap.yaml import-path check
-  └── test-artwork.jpg            # >100KB-as-base64 JPEG — upgrade-test hook seed for the artwork repair migration
+  └── test-artwork.jpg            # 800px JPEG (>100KB as base64) — oversized-cover fixture (was the artwork-repair hook seed; kept for artwork scenarios)
 
 /cache                            # GENERATED (gitignored): persistent toolkit caches
                                   # upgrade/ivy-maestro-<version>.apk — upgrade-test bases, written by prepare
@@ -665,7 +665,7 @@ Commands:
       never builds native — install first with `build debug --install`.
       --clear resets the Metro cache. Ctrl-C to stop.
 
-  test [name] [--unit | --e2e | --upgrade [--from <tag>]] [--server-only [--port <n>]]
+  test [name] [--unit | --e2e | --upgrade [--from <tag> | --all]] [--server-only [--port <n>]]
       No flag = both suites. --unit = jest. --e2e = maestro suite; pushes and
       media-scans the fixtures first, verifies delete-original afterwards.
       [name] runs a single case (jest pattern or maestro flow name) and needs
@@ -682,13 +682,14 @@ Commands:
       artwork-files.md). --server-only
       starts just the bridge (foreground, Ctrl-C to stop) for hand-run
       maestro sessions.
-      --upgrade = migration upgrade smoke test (emulator-only, wipes app
-      state): installs the previous release's maestro APK (from cache/upgrade/,
-      cache-missed tags are rebuilt from git — Mac-only), seeds old-schema
-      data + per-migration hooks (bin/upgrade_hooks.ts), upgrade-installs the
-      current maestro build, verifies migrations + data + no crash. --from
-      tests against a specific cached base tag. Needs a built maestro APK,
-      sqlite3, and a rootable emulator image (DB access via adb root — the
+      --upgrade = app upgrade test (emulator-only, wipes app state):
+      installs an old release's maestro APK (from cache/upgrade/, cache-
+      missed tags are rebuilt from git — Mac-only), seeds the scenarios that
+      version lists (bin/upgrade_scenarios.ts), upgrade-installs the current
+      maestro build, verifies those scenarios + migration index + no crash.
+      Defaults to the previous release; --from <tag> picks another listed
+      version, --all runs every listed version (as prepare does). Needs a built maestro APK, sqlite3,
+      and a rootable emulator image (DB and app storage via adb root — the
       maestro variant is not debuggable). See docs/MIGRATIONS.md.
 
   drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>

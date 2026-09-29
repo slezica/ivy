@@ -17,7 +17,7 @@ import * as readline from 'node:readline'
 
 // The one deliberate second file: per-migration upgrade-test hooks grow
 // forever (kept as historical record, like migrations)
-import { LATEST_MIGRATION, UPGRADE_HOOKS, baselineSeedSql, baselineChecks, UpgradeCheck } from './upgrade_hooks'
+import { LATEST_MIGRATION, VERSIONS, Version, Scenario, SeedContext, VerifyContext } from './upgrade_scenarios'
 
 const APP = 'com.salezica.ivy'
 const DB_DEVICE_PATH = 'files/SQLite/audioplayer.db' // expo-sqlite default dir, relative to app data
@@ -54,7 +54,7 @@ Commands:
       never builds native — install first with \`build debug --install\`.
       --clear resets the Metro cache. Ctrl-C to stop.
 
-  test [name] [--unit | --e2e | --upgrade [--from <tag>]] [--server-only [--port <n>]]
+  test [name] [--unit | --e2e | --upgrade [--from <tag> | --all]] [--server-only [--port <n>]]
       No flag = both suites. --unit = jest. --e2e = maestro suite; pushes and
       media-scans the fixtures first, verifies delete-original afterwards.
       [name] runs a single case (jest pattern or maestro flow name) and needs
@@ -71,13 +71,14 @@ Commands:
       artwork-files.md). --server-only
       starts just the bridge (foreground, Ctrl-C to stop) for hand-run
       maestro sessions.
-      --upgrade = migration upgrade smoke test (emulator-only, wipes app
-      state): installs the previous release's maestro APK (from cache/upgrade/,
-      cache-missed tags are rebuilt from git — Mac-only), seeds old-schema
-      data + per-migration hooks (bin/upgrade_hooks.ts), upgrade-installs the
-      current maestro build, verifies migrations + data + no crash. --from
-      tests against a specific cached base tag. Needs a built maestro APK,
-      sqlite3, and a rootable emulator image (DB access via adb root — the
+      --upgrade = app upgrade test (emulator-only, wipes app state):
+      installs an old release's maestro APK (from cache/upgrade/, cache-
+      missed tags are rebuilt from git — Mac-only), seeds the scenarios that
+      version lists (bin/upgrade_scenarios.ts), upgrade-installs the current
+      maestro build, verifies those scenarios + migration index + no crash.
+      Defaults to the previous release; --from <tag> picks another listed
+      version, --all runs every listed version (as prepare does). Needs a built maestro APK, sqlite3,
+      and a rootable emulator image (DB and app storage via adb root — the
       maestro variant is not debuggable). See docs/MIGRATIONS.md.
 
   drive --file <flow.yaml> | --inline '<steps yaml>' | --tap <id|text> | --nav <route>
@@ -1018,7 +1019,8 @@ function cmdTest(args: Args) {
   }
 
   if (args.flags.upgrade) {
-    runUpgradeTest(typeof args.flags.from === 'string' ? args.flags.from : undefined)
+    if (args.flags.all) runUpgradeTests(VERSIONS)
+    else runUpgradeTests([upgradeVersion(typeof args.flags.from === 'string' ? args.flags.from : latestReleaseTag())])
     return
   }
 
@@ -1047,9 +1049,10 @@ function cmdTest(args: Args) {
 }
 
 // ---------------------------------------------------------------------------
-// upgrade smoke test — previous release → working tree, on the emulator.
-// Design + rationale: docs/2026-09-02-migration-testing.md; hook contract in
-// bin/upgrade_hooks.ts. Emulator-only and destructive (wipes app state).
+// upgrade test — live releases → working tree, on the emulator.
+// Design + rationale: docs/2026-09-28-upgrade-scenarios.md; scenarios and
+// versions in bin/upgrade_scenarios.ts. Emulator-only and destructive (wipes
+// app state).
 
 function latestReleaseTag(): string {
   try {
@@ -1156,77 +1159,163 @@ function pushDatabase(local: string) {
   adbShell('restorecon', DB_ABS_PATH) // root push leaves a shell SELinux context
 }
 
-function runUpgradeTest(fromTag?: string) {
-  requireEmulator('upgrade test')
-  if (!has('sqlite3')) fail('sqlite3 not found on the host')
-  const tag = fromTag || latestReleaseTag()
-  const currentApk = apkPath('maestro')
-  if (!fs.existsSync(currentApk)) fail(`current maestro APK not found at ${currentApk} — run: bin/ivy.ts build maestro`)
-  const baseApk = upgradeBaseApk(tag)
+const APP_DIR = `/data/data/${APP}`
 
-  log(`upgrade test: ${tag} → working tree (migration target ${LATEST_MIGRATION})`)
+function upgradeVersion(name: string): Version {
+  const version = VERSIONS.find(v => v.name === name)
+  if (!version) {
+    fail(`${name} has no entry in VERSIONS (bin/upgrade_scenarios.ts; listed: ${VERSIONS.map(v => v.name).join(', ')}) — ` +
+      'add one if users still run it (docs/2026-09-28-upgrade-scenarios.md)')
+  }
+  return version
+}
+
+// Copy a host file into the app's private storage (app stopped, adb root):
+// staged through /data/local/tmp, then owned by the app with its SELinux
+// context, like files the app wrote itself.
+function pushAppFile(local: string, devicePath: string) {
+  if (!devicePath.startsWith(`${APP_DIR}/`)) fail(`pushFile target must be under ${APP_DIR}: ${devicePath}`)
+  const owner = adbShell('stat', '-c', '%u:%g', APP_DIR).trim()
+  const staged = `/data/local/tmp/ivy-upgrade-${path.basename(devicePath)}`
+  const dir = path.posix.dirname(devicePath)
+  adb('push', local, staged)
+  adbShell('mkdir', '-p', dir)
+  adbShell('cp', staged, devicePath)
+  adbShell('rm', '-f', staged)
+  // chown every dir mkdir may have created below the app dir, then the file
+  for (let d = dir; d.startsWith(`${APP_DIR}/`); d = path.posix.dirname(d)) adbShell('chown', owner, d)
+  adbShell('chown', owner, devicePath)
+  adbShell('chmod', '660', devicePath)
+  adbShell('restorecon', '-R', dir)
+}
+
+function seedContext(version: Version, db: string): SeedContext {
+  return {
+    base: version.name,
+    root: ROOT,
+    appDir: APP_DIR,
+    sql: statements => { sqliteExec(db, statements, `a ${version.name} seed`) },
+    hasColumn: (table, column) =>
+      sqliteExec(db, `SELECT count(*) FROM pragma_table_info('${table}') WHERE name = '${column}';`).trim() === '1',
+    shell: (...args) => adbShell(...args),
+    pushFile: pushAppFile,
+  }
+}
+
+function verifyContext(db: string, failures: string[], scope: () => string): VerifyContext {
+  return {
+    appDir: APP_DIR,
+    query: sql => sqliteExec(db, sql, `a ${scope()} query`).trim(),
+    shell: (...args) => adbShell(...args),
+    fileSize: devicePath => {
+      const out = capture(findAdb(), ['-s', serial(), 'shell', 'stat', '-c', '%s', devicePath], { allowFail: true }).trim()
+      return /^\d+$/.test(out) ? Number(out) : null
+    },
+    expect: (desc, got, want) => {
+      const ok = String(got) === String(want)
+      if (!ok) failures.push(`${scope()}: ${desc} — got '${got}', expected '${want}'`)
+      log(`${ok ? '✓' : '✗'} ${scope()}: ${desc}`)
+    },
+  }
+}
+
+// One version: install its base build, seed the scenarios it lists, upgrade to
+// the current build, verify exactly those scenarios. Returns failure messages
+// (empty = passed); infrastructure failures (crash, timeout) throw.
+function runUpgradeFrom(version: Version, currentApk: string): string[] {
+  const baseApk = upgradeBaseApk(version.name)
+  log(`── upgrade test: ${version.name} → working tree (migration target ${LATEST_MIGRATION})`)
   capture(findAdb(), ['-s', serial(), 'uninstall', APP], { allowFail: true })
   adb('install', baseApk)
   adb('logcat', '-c')
+
+  log('launching old build to create its database')
+  launchApp()
+  waitForMigrationIndex(() => true, 'the old build database', 90_000)
+  spawnSync('sleep', ['5']) // let any old-build migrations settle
+  const oldIndex = waitForMigrationIndex(() => true, 'the old build database', 10_000)
+  if (oldIndex !== version.migration) {
+    fail(`VERSIONS says ${version.name} is at migration ${version.migration}, but its build settled at ${oldIndex} — fix the entry`)
+  }
+  log(`old build settled at migration ${oldIndex}`)
+
+  adbShell('am', 'force-stop', APP)
+  adbRoot() // seeds may touch app storage
+  const seeded: Scenario[] = []
+  const local = path.join(os.tmpdir(), `ivy-upgrade-${process.pid}.db`)
+  fs.writeFileSync(local, pullDatabase())
+  try {
+    const ctx = seedContext(version, local)
+    version.seed(scenario => {
+      log(`seeding: ${scenario.description}`)
+      scenario.seed(ctx)
+      seeded.push(scenario)
+    })
+    pushDatabase(local)
+  } finally {
+    fs.rmSync(local, { force: true })
+  }
+
+  log('upgrade-installing the current build')
+  adb('install', '-r', currentApk)
+  launchApp()
+  waitForMigrationIndex(i => i >= LATEST_MIGRATION, `migration ${LATEST_MIGRATION}`, 180_000)
+  adbShell('am', 'force-stop', APP)
+
+  const failures: string[] = []
+  withPulledDatabase(db => {
+    let current = 'runner'
+    const ctx = verifyContext(db, failures, () => `${version.name} ${current}`)
+    ctx.expect('migration index is latest', ctx.query('SELECT migration FROM status'), LATEST_MIGRATION)
+    for (const scenario of seeded) {
+      current = scenario.description
+      scenario.verify(ctx)
+    }
+  })
+
+  const crash = appCrashExcerpt()
+  if (crash) failures.push(`${version.name}: app crashed during the upgrade test:\n${crash}`)
+  return failures
+}
+
+// Every given version in turn; all run even when one fails, then one verdict.
+function runUpgradeTests(versions: Version[]) {
+  requireEmulator('upgrade test')
+  if (!has('sqlite3')) fail('sqlite3 not found on the host')
+  const currentApk = apkPath('maestro')
+  if (!fs.existsSync(currentApk)) fail(`current maestro APK not found at ${currentApk} — run: bin/ivy.ts build maestro`)
 
   // Radios off for the whole test: a fresh install immediately starts the
   // 465MB whisper-model download, which saturates the emulator (same reason
   // the maestro subflow goes offline first). Restored in finally.
   adbShell('svc', 'wifi', 'disable')
   adbShell('svc', 'data', 'disable')
+  const results: { name: string, failures: string[] }[] = []
   try {
-    log('launching old build to create its database')
-    launchApp()
-    waitForMigrationIndex(() => true, 'the old build database', 90_000)
-    spawnSync('sleep', ['5']) // let any old-build migrations settle
-    const oldIndex = waitForMigrationIndex(() => true, 'the old build database', 10_000)
-    log(`old build settled at migration ${oldIndex}`)
-    if (oldIndex >= LATEST_MIGRATION) {
-      // No pending migrations: still worth an upgrade-install smoke test —
-      // native/schema-independent regressions can break upgrades too.
-      log(`${tag} is already at migration ${oldIndex} — no migrations to replay, smoke-testing the upgrade install`)
-    }
-
-    const hooks = UPGRADE_HOOKS.filter(h => h.migration > oldIndex && h.migration <= LATEST_MIGRATION)
-    log(`seeding baseline + ${hooks.length} hook(s)${hooks.length ? ': ' + hooks.map(h => `${h.migration} (${h.description})`).join(', ') : ''}`)
-    adbShell('am', 'force-stop', APP)
-    const local = path.join(os.tmpdir(), `ivy-upgrade-${process.pid}.db`)
-    fs.writeFileSync(local, pullDatabase())
-    try {
-      sqliteExec(local, baselineSeedSql(), 'the baseline seed')
-      for (const hook of hooks) sqliteExec(local, hook.seedSql(ROOT), `the migration-${hook.migration} seed (${hook.description})`)
-      pushDatabase(local)
-    } finally {
-      fs.rmSync(local, { force: true })
-    }
-
-    log('upgrade-installing the current build')
-    adb('install', '-r', currentApk)
-    launchApp()
-    waitForMigrationIndex(i => i >= LATEST_MIGRATION, `migration ${LATEST_MIGRATION}`, 180_000)
-    adbShell('am', 'force-stop', APP)
-
-    const checks: UpgradeCheck[] = [...baselineChecks(), ...hooks.flatMap(h => h.checks)]
-    withPulledDatabase(db => {
-      for (const check of checks) {
-        const got = sqliteExec(db, check.sql, `check '${check.desc}'`).trim()
-        if (got !== check.expect) {
-          fail(`upgrade check failed: ${check.desc} — got '${got}', expected '${check.expect}'`)
-        }
-        log(`check passed: ${check.desc}`)
+    for (const version of versions) {
+      let failures: string[]
+      try {
+        failures = runUpgradeFrom(version, currentApk)
+      } catch (error) {
+        if (!(error instanceof Fail)) throw error
+        failures = [`${version.name}: ${error.message}`]
       }
-    })
-
-    const crash = appCrashExcerpt()
-    if (crash) fail(`app crashed during the upgrade test:\n${crash}`)
-
-    log(`upgrade test passed (${tag} → migration ${LATEST_MIGRATION}, ${checks.length} checks)`)
+      results.push({ name: version.name, failures })
+    }
   } finally {
     try {
       adbShell('svc', 'wifi', 'enable')
       adbShell('svc', 'data', 'enable')
     } catch { /* device gone — nothing to restore */ }
   }
+
+  for (const r of results) log(`${r.failures.length === 0 ? '✓' : '✗'} upgrade from ${r.name}`)
+  const failed = results.filter(r => r.failures.length > 0)
+  if (failed.length > 0) {
+    fail(`upgrade test failed from ${failed.map(r => r.name).join(', ')}:\n` +
+      failed.flatMap(r => r.failures).map(f => `  - ${f}`).join('\n'))
+  }
+  log(`upgrade test passed (${results.map(r => r.name).join(', ')} → migration ${LATEST_MIGRATION})`)
 }
 
 // ---------------------------------------------------------------------------
@@ -1635,13 +1724,20 @@ function preflight(version: string, screenshots: boolean) {
 
   // Informational: a cache miss doesn't fail preflight, but the upgrade test
   // will fall back to a slow rebuild-from-tag mid-pipeline
-  try {
-    const prev = latestReleaseTag()
-    const cached = upgradeCachePath(prev.replace(/^v/, ''))
-    report(true, 'upgrade base', fs.existsSync(cached)
-      ? `${prev} cached`
-      : `${prev} NOT cached — the upgrade test will rebuild it from the tag (slow)`)
-  } catch { /* no release tag yet — first release, upgrade test will be skipped */ }
+  let prev: string | null = null
+  try { prev = latestReleaseTag() } catch { /* no release tag yet — first release, upgrade test will be skipped */ }
+  if (prev) {
+    // The previous release is the most important upgrade path: it must be
+    // listed, so each release forces adding its own entry before the next
+    const listed = VERSIONS.some(v => v.name === prev)
+    report(listed, 'upgrade versions', listed
+      ? `testing from ${VERSIONS.map(v => v.name).join(', ')}`
+      : `${prev} has no entry in VERSIONS (bin/upgrade_scenarios.ts) — add one`)
+    for (const v of VERSIONS) {
+      const cached = fs.existsSync(upgradeCachePath(v.name.replace(/^v/, '')))
+      report(true, `upgrade base ${v.name}`, cached ? 'cached' : 'NOT cached — the upgrade test will rebuild it from the tag (slow)')
+    }
+  }
 
   if (doctorFailed) {
     fail(`preflight: ${failedChecks.length} check(s) failed (${failedChecks.join(', ')}) — nothing was changed`)
@@ -1697,10 +1793,10 @@ function cmdPrepare(args: Args) {
     runGradle(GRADLE_TASKS.maestro, { ...process.env })
     fs.copyFileSync(apkPath('maestro'), maestroStash)
 
-    step('upgrade test (previous release → this build)')
+    step('upgrade test (live versions → this build)')
     let prevTag: string | null = null
     try { prevTag = latestReleaseTag() } catch { /* first release */ }
-    if (prevTag) runUpgradeTest(prevTag)
+    if (prevTag) runUpgradeTests(VERSIONS) // preflight checked prevTag is listed
     else log('no previous release tag — skipping the upgrade test')
 
     step('unit tests (jest) + e2e tests (full maestro suite)')
