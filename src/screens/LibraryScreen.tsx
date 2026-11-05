@@ -35,6 +35,7 @@ export default function LibraryScreen() {
   const fetchBooks = useStore(s => s.fetchBooks)
   const play = useStore(s => s.play)
   const loadBook = useStore(s => s.loadBook)
+  const fetchPlaybackState = useStore(s => s.fetchPlaybackState)
   const archiveBook = useStore(s => s.archiveBook)
   const deleteBook = useStore(s => s.deleteBook)
   const autoSync = useStore(s => s.autoSync)
@@ -90,9 +91,19 @@ export default function LibraryScreen() {
       return
     }
 
-    const context = { fileUri: book.uri, position: book.position, ownerId: MAIN_PLAYER_OWNER_ID }
-
     try {
+      // The store's book.position is a snapshot from the last fetchBooks —
+      // playback writes positions to the DB only, and a paused scrub writes
+      // none. For the book already loaded, resume from the live hardware
+      // position instead, or loadBook would seek back to the stale one.
+      let position = book.position
+      if (useStore.getState().playback.uri === book.uri) {
+        await fetchPlaybackState()
+        position = useStore.getState().playback.position
+      }
+
+      const context = { fileUri: book.uri, position, ownerId: MAIN_PLAYER_OWNER_ID }
+
       // Load before navigating (player shows the book on arrival), start
       // playback after (the library never renders a "Playing" item)
       await loadBook(context)
