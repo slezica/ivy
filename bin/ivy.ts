@@ -24,7 +24,15 @@ const DB_DEVICE_PATH = 'files/SQLite/audioplayer.db' // expo-sqlite default dir,
 const ROOT = path.resolve(__dirname, '..')
 const MIRROR = process.env.IVY_BUILD_DIR || '/home/claude/ivy-build'
 const CAPTURES_DIR = path.join(ROOT, 'captures')
-const CACHE_UPGRADE = path.join(ROOT, 'cache', 'upgrade') // upgrade-base APKs, written by prepare
+// Persistent caches live in the MAIN checkout, shared by its worktrees
+// (worktrees/<name>/): upgrade-base APKs and the whisper model are large and
+// release-scoped, not branch-scoped. git's common dir is <main>/.git.
+function mainCheckoutRoot(): string {
+  const res = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: ROOT, encoding: 'utf8' })
+  return res.status === 0 ? path.dirname(res.stdout.trim()) : ROOT
+}
+const CACHE_ROOT = path.join(mainCheckoutRoot(), 'cache')
+const CACHE_UPGRADE = path.join(CACHE_ROOT, 'upgrade') // upgrade-base APKs, written by prepare
 const upgradeCachePath = (version: string) => path.join(CACHE_UPGRADE, `ivy-maestro-${version}.apk`)
 
 const HELP = `Ivy toolkit — project CLI (build, test, prepare, drive, inspect)
@@ -680,7 +688,7 @@ const BRIDGE_DEFAULT_PORT = 7799
 // Mode is per bridge process — a flow that changes it restores `ok` before it
 // ends (the suite shares one bridge). Design: docs/2026-09-05-r8-obfuscation.md.
 
-const WHISPER_CACHE = path.join(ROOT, 'cache', 'whisper')
+const WHISPER_CACHE = path.join(CACHE_ROOT, 'whisper')
 const WHISPER_TINY = path.join(WHISPER_CACHE, 'ggml-tiny.bin')
 const WHISPER_TINY_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin'
 const SLOW_CHUNK_BYTES = 64 * 1024
