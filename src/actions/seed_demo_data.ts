@@ -29,7 +29,7 @@ interface DemoBook {
   duration: number
   position: number
   audio?: string          // Bundle file copied to app storage (absent => archived)
-  artwork?: string        // Bundle PNG stored as a base64 data URI
+  artwork?: string        // Bundle PNG written to the ArtworkStore
   archived?: boolean
 }
 
@@ -95,9 +95,13 @@ export const createSeedDemoData = (deps: SeedDemoDataDeps): SeedDemoData => (
         book.id, book.name, book.duration, book.position,
         now - index * 60_000, null,
         book.title, book.artist,
-        book.artwork ? await readArtwork(`${DEMO_DIR}/${book.artwork}`) : null,
+        null, // cover goes through the ArtworkStore below, never the base64 column
         0, new Uint8Array(0),
       )
+      if (book.artwork) {
+        const filename = await artworkStore.write(book.id, await readArtwork(`${DEMO_DIR}/${book.artwork}`))
+        await db.setBookArtworkFile(book.id, filename)
+      }
       if (book.audio && !book.archived) {
         const path = `${files.audioDirectoryPath}/${book.id}.mp3`
         await RNFS.copyFile(`${DEMO_DIR}/${book.audio}`, path)

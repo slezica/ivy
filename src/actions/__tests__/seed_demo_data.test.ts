@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs'
 import { createSeedDemoData, DEMO_DIR } from '../seed_demo_data'
-import { createMockState, createImmerSet, createMockDb, createMockFiles } from './helpers'
+import { createMockState, createImmerSet, createMockDb, createMockFiles, createMockArtworkStore } from './helpers'
 
 
 // -- Helpers ------------------------------------------------------------------
@@ -29,10 +29,11 @@ function createDeps() {
     restoreClipFromBackup: jest.fn(async () => {}),
     restoreSessionFromBackup: jest.fn(async () => {}),
     setBookUri: jest.fn(async () => {}),
+    setBookArtworkFile: jest.fn(async () => {}),
     setSettings: jest.fn(async () => {}),
   })
   const files = createMockFiles()
-  const artworkStore = { clear: jest.fn(async () => {}) } as any
+  const artworkStore = createMockArtworkStore()
   const set = createImmerSet(state)
 
   return { state, deps: { db, files, artworkStore, set } }
@@ -97,14 +98,19 @@ describe('createSeedDemoData', () => {
     expect(deps.db.setBookUri).not.toHaveBeenCalledWith('b-gone', expect.anything())
   })
 
-  it('embeds artwork as a base64 data URI', async () => {
+  it('writes covers as files, never into the base64 column', async () => {
     const { deps } = createDeps()
     mockBundle(SEED)
 
     await createSeedDemoData(deps)()
 
-    const heroCall = (deps.db.restoreBookFromBackup as jest.Mock).mock.calls[0]
-    expect(heroCall[8]).toBe('data:image/png;base64,UE5HYnl0ZXM=')
+    for (const call of (deps.db.restoreBookFromBackup as jest.Mock).mock.calls) {
+      expect(call[8]).toBeNull()
+    }
+    expect(deps.artworkStore.write).toHaveBeenCalledTimes(1) // only b-hero has a cover
+    expect(deps.artworkStore.write).toHaveBeenCalledWith('b-hero', 'data:image/png;base64,UE5HYnl0ZXM=')
+    expect(deps.db.setBookArtworkFile).toHaveBeenCalledTimes(1)
+    expect(deps.db.setBookArtworkFile).toHaveBeenCalledWith('b-hero', 'b-hero.abcd.jpg')
   })
 
   it('seeds clips with source snapshots and transcription', async () => {
