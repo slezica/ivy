@@ -20,6 +20,7 @@ export function createMockBook(overrides: Partial<Book> = {}): Book {
     title: 'Test Title',
     artist: 'Test Artist',
     artwork: 'data:image/png;base64,abc',
+    artwork_file: null,
     file_size: 1024,
     fingerprint: new Uint8Array([1, 2, 3]),
     hidden: false,
@@ -49,6 +50,7 @@ export function createMockSession(overrides: Partial<SessionWithBook> = {}): Ses
     book_title: 'Test Title',
     book_artist: 'Test Artist',
     book_artwork: 'data:image/png;base64,abc',
+    book_artwork_file: null,
     ...overrides,
   }
 }

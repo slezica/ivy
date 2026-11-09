@@ -32,6 +32,7 @@ function createBook(overrides: Partial<Book> = {}): Book {
     title: 'Test Title',
     artist: 'Test Artist',
     artwork: null,
+    artwork_file: null,
     file_size: 100000,
     fingerprint: FINGERPRINT,
     hidden: false,

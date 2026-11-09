@@ -340,7 +340,7 @@ updated_at INTEGER             -- timestamp (last modification)
 updated_by TEXT                -- device ID that last modified this entity
 title TEXT
 artist TEXT
-artwork TEXT                   -- base64 data URI, capped at 512px on extraction (see docs/2026-09-02-artwork-oom-repair.md)
+artwork TEXT                   -- Legacy base64 data URI (capped at 512px); migration 14 moved covers to artwork_file, column being phased out
 file_size INTEGER              -- File size in bytes (indexed for fast lookup)
 fingerprint BLOB               -- First 4KB of file (for exact matching)
 hidden INTEGER NOT NULL DEFAULT 0  -- Soft-deleted (1 = removed from library)
@@ -355,6 +355,7 @@ subtitle TEXT
 date TEXT
 language TEXT
 metadata_version INTEGER       -- Extractor version that produced the extras (NULL = never extracted)
+artwork_file TEXT              -- Cover filename in <documents>/artwork/ (<id>.<hash4>.<ext>; filename only, never a path) — see docs/2026-09-28-artwork-as-files.md
 ```
 
 **clips table:**

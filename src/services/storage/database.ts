@@ -38,6 +38,7 @@ export interface Book {
   title: string | null
   artist: string | null
   artwork: string | null   // base64 data URI
+  artwork_file: string | null // Cover filename in ArtworkStore (<id>.<hash4>.<ext>; never a path)
   file_size: number        // File size in bytes (for fingerprint matching)
   fingerprint: Uint8Array  // First 4KB of file (BLOB)
   hidden: boolean          // Soft-deleted (removed from library)
@@ -118,6 +119,7 @@ export interface SessionWithBook extends Session {
   book_title: string | null
   book_artist: string | null
   book_artwork: string | null
+  book_artwork_file: string | null
 }
 
 export interface Settings {
@@ -838,6 +840,15 @@ export class DatabaseService {
   }
 
   /**
+   * Point a book at its cover file (ArtworkStore filename, or null for none).
+   * No updated_at/updated_by bump: callers own sync semantics (local edits
+   * bump through their own writes; pull mirrors the remote row).
+   */
+  async setBookArtworkFile(id: string, filename: string | null): Promise<void> {
+    await this.db.runAsync('UPDATE files SET artwork_file = ? WHERE id = ?', [filename, id])
+  }
+
+  /**
    * Point one book's clips and sessions at another id (merge pull side).
    * Direct updates with no timestamp bump — order-independent with respect
    * to the surviving book row's arrival. Returns the affected ids.
@@ -1150,7 +1161,8 @@ export class DatabaseService {
         files.name as book_name,
         files.title as book_title,
         files.artist as book_artist,
-        files.artwork as book_artwork
+        files.artwork as book_artwork,
+        files.artwork_file as book_artwork_file
       FROM sessions
       LEFT JOIN files ON sessions.book_id = files.id
       ORDER BY sessions.started_at DESC`

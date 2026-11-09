@@ -46,6 +46,22 @@ describe('DatabaseService (real SQLite)', () => {
       expect(new Uint8Array(book!.fingerprint)).toEqual(FINGERPRINT)
     })
 
+    it('sets the cover filename without bumping updated_at', async () => {
+      const db = await createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
+      const before = await db.getBookById('book-1')
+      expect(before!.artwork_file).toBeNull()
+
+      await db.setBookArtworkFile('book-1', 'book-1.abcd.jpg')
+      const book = await db.getBookById('book-1')
+      expect(book!.artwork_file).toBe('book-1.abcd.jpg')
+      expect(book!.updated_at).toBe(before!.updated_at)
+      expect((await db.getAllBooks())[0].artwork_file).toBe('book-1.abcd.jpg')
+
+      await db.setBookArtworkFile('book-1', null)
+      expect((await db.getBookById('book-1'))!.artwork_file).toBeNull()
+    })
+
     it('excludes hidden books from getAllBooks but keeps the row', async () => {
       const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
@@ -239,6 +255,17 @@ describe('DatabaseService (real SQLite)', () => {
       expect(sessions).toHaveLength(1)
       expect(sessions[0].book_name).toBeNull()
       expect(sessions[0].book_artwork).toBeNull()
+      expect(sessions[0].book_artwork_file).toBeNull()
+    })
+
+    it('joins the cover filename onto sessions', async () => {
+      const db = await createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)
+      await db.setBookArtworkFile('book-1', 'book-1.abcd.jpg')
+      await db.createSession('book-1')
+
+      const [session] = await db.getAllSessions()
+      expect(session.book_artwork_file).toBe('book-1.abcd.jpg')
     })
   })
 
