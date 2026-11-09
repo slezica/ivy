@@ -48,6 +48,7 @@ File import (local files), metadata editing, archiving, deletion, and restoratio
 - Archive/delete are optimistic with rollback — update store first, then DB
 - Every book mutation must queue for sync (`db.queueChange`) — except archive/delete, which are per-device and must NOT queue or bump `updated_at` (see docs/SYNC.md)
 - On restore, existing metadata (title/artist/artwork) wins over ID3 tags — protects user edits
+- Covers are files: `book.artwork_file` is a filename in `<documents>/artwork/`; render via `artworkUri()`, write via `ArtworkStore` — never store data URIs (see docs/BOOKS.md "Artwork")
 - Metadata extras (summary, narrator, series, ...) come only from ffmetadata (best-effort; ffmpeg failure → null); lazy re-extraction is gated by `metadata_version` vs `EXTRACTED_METADATA_VERSION`
 - Extras are editable and edits win: extraction fills only null fields (`fillMissingExtras`); `''` means "edited and cleared" (never refilled, hidden in display)
 

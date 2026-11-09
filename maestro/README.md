@@ -92,8 +92,9 @@ Endpoints are a curated semantic vocabulary — see `BRIDGE_ENDPOINTS` in
   the media session); the only parametrized endpoint
 - `media/play-pause` — a media-button press through the system media session
   (what Bluetooth/headset controls send)
-- `check/artwork-cap`, `check/transcribed`, `check/session-advancing` — DB
-  assertions (pull the app database via adb root; poll where the app needs time)
+- `check/artwork-cap`, `check/transcribed`, `check/session-advancing` — DB and
+  app-storage assertions (pull the app database / stat files via adb root; poll
+  where the app needs time)
 - `model/mode/ok|slow|error|stall` — behaviour of the bridge's **Whisper model
   server**: the maestro build downloads its model from `GET /model` on the
   bridge (a 75MB `ggml-tiny.bin`, cached once in `cache/whisper/`) instead of
@@ -149,7 +150,7 @@ $ANDROID_HOME/emulator/emulator -avd <name> -no-audio -no-boot-anim &
 | `book-details.yaml` | Extras extracted on import → details viewer → edit narrator → verify persistence |
 | `delete-original.yaml` | Import with "delete original after import" enabled (own import steps, disposable fixture); the toolkit asserts the file is gone post-run |
 | `timeline-gestures.yaml` | Tap-seek / scrub / flick on the Skia timeline; app stays responsive |
-| `artwork-cap.yaml` | Oversized-cover import → native extraction cap → bridge DB check (`check/artwork-cap`) |
+| `artwork-cap.yaml` | Oversized-cover import → native extraction cap → cover file on disk under the cap, legacy base64 column empty (`check/artwork-cap`) |
 | `sleep-timer.yaml` | Arm 5s preset → countdown on button → expiry pauses playback, clears timer (maestro/debug builds only) |
 | `transcription-states.yaml` | Model-download lifecycle against the bridge model server: metered gate (waiting-wifi) → auto-download on Wi-Fi (throttled) → server failure mid-download → backoff countdown → give-up (tap-to-retry, Settings match) → auto-retry on reconnect → download completes, model loads (maestro builds only) |
 | `transcription-inference.yaml` | Whisper end to end: tiny model from the bridge → clip → on-device inference → transcription persisted (bridge `check/transcribed`; content not asserted) — guards the audio-api/whisper.rn JNI path under R8 (maestro builds only) |
