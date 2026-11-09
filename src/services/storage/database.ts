@@ -8,6 +8,7 @@
 import * as SQLite from 'expo-sqlite'
 
 import type { AudioMetadataService } from '../audio/metadata'
+import type { ArtworkStore } from './artwork'
 import { generateId, createLogger, stripEnclosingQuotes } from '../../utils'
 
 const log = createLogger('Database')
@@ -174,6 +175,7 @@ export interface SyncCheckpoint {
 // real work (image re-encoding, etc). Wired by the runMigrations action.
 export interface MigrationDeps {
   metadata: Pick<AudioMetadataService, 'downscaleArtwork'>
+  artwork: Pick<ArtworkStore, 'write'>
 }
 
 // Migrations are async and awaited in order by migrate(). Rules for writing one
@@ -466,6 +468,42 @@ export const migrations: Migration[] = [
            next_attempt_at = 0`,
         [generateId(), id, now, now]
       )
+    }
+  },
+
+  // Migration 14: Move artwork out of the DB into files. Rows keep only the
+  // cover's filename (artwork_file); the base64 column is cleared — see
+  // docs/2026-09-28-artwork-as-files.md. Per-device normalization: no
+  // updated_at bump, no sync queue (the wire format still embeds base64,
+  // which push reads back from the file).
+  // Idempotent: the column is added once, rows are gated on artwork IS NOT
+  // NULL and cleared as they're done, and a crash between file write and row
+  // update reruns into the same deterministic filename (the file is reused).
+  // Filesystem errors throw: the migration reruns next launch rather than
+  // stranding covers in a column nothing will read.
+  async (db, deps) => {
+    const columns = db.getAllSync<{ name: string }>('PRAGMA table_info(files)')
+    if (!columns.some((column) => column.name === 'artwork_file')) {
+      db.execSync('ALTER TABLE files ADD COLUMN artwork_file TEXT')
+    }
+
+    // Ids only — one cover in memory at a time
+    const rows = db.getAllSync<{ id: string }>('SELECT id FROM files WHERE artwork IS NOT NULL')
+
+    for (const [index, { id }] of rows.entries()) {
+      log(`Artwork extraction ${index + 1}/${rows.length}`)
+
+      const row = db.getFirstSync<{ artwork: string | null }>(
+        'SELECT artwork FROM files WHERE id = ?', [id]
+      )
+      if (!row) continue
+
+      // null = not a base64 image data URI: nothing a file could hold or
+      // <Image> could render — drop it (as migration 13 drops undecodable covers)
+      const filename = row.artwork ? await deps.artwork.write(id, row.artwork) : null
+      if (filename === null) log(`Dropping malformed artwork for book ${id}`)
+
+      db.runSync('UPDATE files SET artwork_file = ?, artwork = NULL WHERE id = ?', [filename, id])
     }
   },
 ]

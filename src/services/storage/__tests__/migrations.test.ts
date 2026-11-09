@@ -15,12 +15,14 @@
  * The high-value targets are the DATA-TRANSFORMING migrations. Pure ADD COLUMN
  * migrations are safe by construction; the data-transforming ones today are
  * migration 8 (clip source snapshot backfill), 12 (transcription quote strip),
- * and 13 (artwork downscale repair). Add a case here whenever a future
+ * 13 (artwork downscale repair) and 14 (artwork extraction to files). Add a case here whenever a future
  * migration moves or rewrites existing rows.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { DatabaseService, migrations } from '../database'
-import { createTestDatabase, testMigrationDeps } from './sqlite_adapter'
+import { createMemoryArtworkStore, createTestDatabase, testMigrationDeps } from './sqlite_adapter'
 import type * as SQLite from 'expo-sqlite'
 
 // Build a raw DB at exactly migration `version` (runs migrations[0..version],
@@ -141,7 +143,7 @@ describe('migration upgrade path', () => {
       const db = await seededV12()
       const downscaled = 'data:image/jpeg;base64,DOWNSCALED'
 
-      await migrations[13](db, { metadata: { downscaleArtwork: async () => downscaled } })
+      await migrations[13](db, { ...testMigrationDeps, metadata: { downscaleArtwork: async () => downscaled } })
 
       const by = artworkRows(db)
       expect(by['book-fat'].artwork).toBe(downscaled)
@@ -165,7 +167,7 @@ describe('migration upgrade path', () => {
       const downscaled = 'data:image/jpeg;base64,DOWNSCALED'
       let first = true
 
-      await migrations[13](db, { metadata: { downscaleArtwork: async () => {
+      await migrations[13](db, { ...testMigrationDeps, metadata: { downscaleArtwork: async () => {
         if (first) { first = false; throw new Error('decode failed') } // book-fat
         return downscaled // book-fat-2
       } } })
@@ -181,7 +183,7 @@ describe('migration upgrade path', () => {
     it('drops undecodable artwork (null from the downscaler) and queues the drop', async () => {
       const db = await seededV12()
 
-      await migrations[13](db, { metadata: { downscaleArtwork: async () => null } })
+      await migrations[13](db, { ...testMigrationDeps, metadata: { downscaleArtwork: async () => null } })
 
       const by = artworkRows(db)
       expect(by['book-fat'].artwork).toBeNull()          // unrenderable heap bomb: dropped
@@ -195,11 +197,118 @@ describe('migration upgrade path', () => {
     it('leaves artwork alone when re-encoding does not shrink it', async () => {
       const db = await seededV12()
 
-      await migrations[13](db, { metadata: { downscaleArtwork: async (uri: string) => uri } })
+      await migrations[13](db, { ...testMigrationDeps, metadata: { downscaleArtwork: async (uri: string) => uri } })
 
       const by = artworkRows(db)
       expect(by['book-fat']).toMatchObject({ artwork: FAT, updated_at: 42 })
       expect(getAll(db, 'SELECT * FROM sync_queue')).toEqual([])
+    })
+  })
+
+  describe('migration 14: extract artwork to files', () => {
+    const JPEG_BYTES = readFileSync(join(__dirname, '../../../../assets/test/test-artwork.jpg'))
+    const JPEG = `data:image/jpeg;base64,${JPEG_BYTES.toString('base64')}`
+    // 4x4 RGB PNG, like the demo seeds' covers
+    const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGPQqzWCIwbiOABnIw3R2yR41wAAAABJRU5ErkJggg=='
+    const PNG = `data:image/png;base64,${PNG_BASE64}`
+    const MALFORMED = 'data:image/jpeg,not-base64'
+
+    async function seededV13() {
+      const db = await dbAtVersion(13)
+      const book = (id: string, artwork: string | null) =>
+        db.runSync(
+          "INSERT INTO files (id, uri, name, artwork, updated_at, updated_by) VALUES (?, ?, ?, ?, 42, 'other-device')",
+          [id, `file:///a/${id}.mp3`, `${id}.mp3`, artwork]
+        )
+      book('book-jpeg', JPEG)
+      book('book-png', PNG)
+      book('book-none', null)
+      book('book-malformed', MALFORMED)
+      return db
+    }
+
+    type Row = { id: string; artwork: string | null; artwork_file: string | null; updated_at: number; updated_by: string | null }
+    function rows(db: SQLite.SQLiteDatabase): Record<string, Row> {
+      const all = getAll<Row>(db, 'SELECT id, artwork, artwork_file, updated_at, updated_by FROM files ORDER BY id')
+      return Object.fromEntries(all.map(r => [r.id, r]))
+    }
+
+    const bytes = (store: ReturnType<typeof createMemoryArtworkStore>, filename: string | null) =>
+      Buffer.from(store.files.get(filename!)!, 'base64')
+
+    it('writes covers to files, keeps only the filename, and clears the base64', async () => {
+      const db = await seededV13()
+      const store = createMemoryArtworkStore()
+
+      await migrations[14](db, { ...testMigrationDeps, artwork: store })
+
+      const by = rows(db)
+      expect(by['book-jpeg'].artwork_file).toMatch(/^book-jpeg\.[0-9a-f]{4}\.jpg$/)
+      expect(by['book-png'].artwork_file).toMatch(/^book-png\.[0-9a-f]{4}\.png$/)
+      expect(bytes(store, by['book-jpeg'].artwork_file).equals(JPEG_BYTES)).toBe(true)
+      expect(bytes(store, by['book-png'].artwork_file).equals(Buffer.from(PNG_BASE64, 'base64'))).toBe(true)
+      expect(store.files.size).toBe(2)
+
+      for (const row of Object.values(by)) expect(row.artwork).toBeNull()
+      expect(by['book-none'].artwork_file).toBeNull()
+    })
+
+    it('drops malformed covers', async () => {
+      const db = await seededV13()
+
+      await migrations[14](db, { ...testMigrationDeps, artwork: createMemoryArtworkStore() })
+
+      expect(rows(db)['book-malformed']).toMatchObject({ artwork: null, artwork_file: null })
+    })
+
+    it('is a per-device normalization: no updated_at bump, nothing queued', async () => {
+      const db = await seededV13()
+
+      await migrations[14](db, { ...testMigrationDeps, artwork: createMemoryArtworkStore() })
+
+      for (const row of Object.values(rows(db))) {
+        expect(row).toMatchObject({ updated_at: 42, updated_by: 'other-device' })
+      }
+      expect(getAll(db, 'SELECT * FROM sync_queue')).toEqual([])
+    })
+
+    it('converges on rerun after a crash between file write and row update', async () => {
+      const db = await seededV13()
+      const store = createMemoryArtworkStore()
+      // Dies right after writing the second cover's file, before its row update
+      let calls = 0
+      const crashing = {
+        write: async (bookId: string, dataUri: string) => {
+          const filename = await store.write(bookId, dataUri)
+          if (++calls === 2) throw new Error('killed')
+          return filename
+        },
+      }
+
+      await expect(migrations[14](db, { ...testMigrationDeps, artwork: crashing })).rejects.toThrow('killed')
+      const midway = rows(db)
+      const done = Object.values(midway).filter(r => r.artwork_file !== null)
+      expect(done).toHaveLength(1)                 // first cover finished
+      expect(store.files.size).toBe(2)             // second file written, row not updated
+
+      await migrations[14](db, { ...testMigrationDeps, artwork: store })
+
+      const by = rows(db)
+      expect(store.files.size).toBe(2)             // the orphan-to-be was reused, no duplicate
+      expect([...store.files.keys()].sort()).toEqual([by['book-jpeg'].artwork_file, by['book-png'].artwork_file].sort())
+      for (const row of Object.values(by)) expect(row.artwork).toBeNull()
+    })
+
+    it('is a no-op when run again after completing', async () => {
+      const db = await seededV13()
+      const store = createMemoryArtworkStore()
+      await migrations[14](db, { ...testMigrationDeps, artwork: store })
+      const before = rows(db)
+
+      await migrations[14](db, { ...testMigrationDeps, artwork: store })
+
+      expect(rows(db)).toEqual(before)
+      expect(store.files.size).toBe(2)
     })
   })
 

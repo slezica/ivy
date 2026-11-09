@@ -10,6 +10,7 @@ import type * as SQLite from 'expo-sqlite'
 import { DatabaseSync, SQLInputValue } from 'node:sqlite'
 
 import type { MigrationDeps } from '../database'
+import { artworkFilename, parseArtwork } from '../artwork'
 
 type SQLiteParams = SQLInputValue[]
 
@@ -70,9 +71,29 @@ export function createTestDatabase(): SQLite.SQLiteDatabase {
 }
 
 /**
- * Migration deps for tests: an identity downscaler (returns input unchanged).
- * Tests exercising the downscale behavior pass their own fake instead.
+ * In-memory stand-in for ArtworkStore.write: same parsing and naming as the
+ * real store, files kept in `files` (filename -> base64 payload).
+ */
+export function createMemoryArtworkStore() {
+  const files = new Map<string, string>()
+  return {
+    files,
+    write: async (bookId: string, dataUri: string): Promise<string | null> => {
+      const artwork = parseArtwork(dataUri)
+      if (!artwork) return null
+      const filename = artworkFilename(bookId, artwork)
+      if (!files.has(filename)) files.set(filename, artwork.base64)
+      return filename
+    },
+  }
+}
+
+/**
+ * Migration deps for tests: an identity downscaler (returns input unchanged)
+ * and an in-memory artwork store. Tests exercising either behavior pass their
+ * own fakes instead.
  */
 export const testMigrationDeps: MigrationDeps = {
   metadata: { downscaleArtwork: async (dataUri: string) => dataUri },
+  artwork: createMemoryArtworkStore(),
 }

@@ -22,7 +22,7 @@
 
 /** Bump when appending a migration (mirrors migrations.length - 1 in
  * src/services/storage/database.ts — the toolkit can't import that module). */
-export const LATEST_MIGRATION = 13
+export const LATEST_MIGRATION = 14
 
 /** Seeding runs while the old build is stopped: sql() edits a pulled copy of
  * its DB (pushed back after all seeds), device-side calls act immediately. */
