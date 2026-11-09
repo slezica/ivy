@@ -787,15 +787,21 @@ const BRIDGE_ENDPOINTS: Record<string, () => void> = {
     if (!(after > before)) throw new Error(`session ended_at did not advance (${before} → ${after})`)
   },
   // Import-path check for the artwork extraction cap (artwork-cap.yaml):
-  // extraction must have produced artwork, and none may exceed the repair
-  // threshold — a 512px JPEG lands far below it (see docs/MIGRATIONS.md)
+  // extraction must have produced a cover FILE (artwork-as-files, migration
+  // 14), the base64 column must stay empty, and no file may exceed the cap — a
+  // 512px JPEG lands far below 75KB (the old 100KB-as-base64 threshold)
   'check/artwork-cap': () => {
-    withPulledDatabase(local => {
-      const extracted = sqliteExec(local, 'SELECT count(*) FROM files WHERE artwork IS NOT NULL;').trim()
-      if (extracted === '0') throw new Error('no artwork extracted from the cover fixture')
-      const oversized = sqliteExec(local, 'SELECT count(*) FROM files WHERE length(artwork) > 100000;').trim()
-      if (oversized !== '0') throw new Error(`${oversized} book(s) above the 100KB artwork cap`)
+    const files = withPulledDatabase(local => {
+      const legacy = sqliteExec(local, 'SELECT count(*) FROM files WHERE artwork IS NOT NULL;').trim()
+      if (legacy !== '0') throw new Error(`${legacy} book(s) still carry base64 artwork in the legacy column`)
+      return sqliteExec(local, 'SELECT artwork_file FROM files WHERE artwork_file IS NOT NULL;').trim().split('\n').filter(Boolean)
     })
+    if (files.length === 0) throw new Error('no cover file recorded for the cover fixture')
+    for (const file of files) {
+      const size = adbShell('stat', '-c', '%s', `/data/data/${APP}/files/artwork/${file}`).trim()
+      if (!/^\d+$/.test(size)) throw new Error(`cover file ${file} missing on device`)
+      if (Number(size) > 75_000) throw new Error(`cover file ${file} is ${size} bytes, above the 75KB cap`)
+    }
   },
 }
 
