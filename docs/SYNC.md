@@ -7,7 +7,7 @@ A guide for Ivy's Google Drive sync.
 Ivy is an audiobook app that runs on multiple devices. The sync system keeps book metadata (positions, titles, archive state), clips (bookmarks with audio snippets), and sessions (listening history) consistent across devices, using Google Drive as the shared backend. Design record (rationale, rejected alternatives): [2026-07-11-sync-redesign.md](2026-07-11-sync-redesign.md).
 
 **What gets synced:**
-- Book metadata — positions, titles, artists, artwork, playback speed, extras
+- Book metadata — positions, titles, artists, artwork (base64 in the book JSON; files locally — see [Book Covers](#book-covers)), playback speed, extras
 - Clips — metadata as JSON, audio as M4A (always `clip_<id>.m4a` — an invariant, see CLIPS.md)
 - Sessions — listening history (time ranges per book)
 
@@ -187,11 +187,11 @@ A book tombstone with `merged_into` retires that id everywhere — no LWW. The r
 |-------------|--------|
 | No local row for the retired id | Children reattached only (own echo, or the id was never bootstrapped) |
 | Retired row exists, survivor row absent | **Adopt**: re-key the whole row onto the surviving id, keeping local audio and fields; the survivor's JSON reconciles onto it whenever it arrives (order-independent) |
-| Both rows exist | Delete the retired row, transferring its audio `uri` to the survivor when the survivor has none. Audio files are never deleted here — a redundant file is merely orphaned and left for cleanup |
+| Both rows exist | Delete the retired row, transferring its audio `uri` to the survivor when the survivor has none. Audio files are never deleted here — a redundant file is merely orphaned and left for cleanup. The retired row's cover file is removed (the survivor has its own) |
 
 ### Plain book tombstones (twin cleanup)
 
-A book tombstone **without** `merged_into` comes from duplicate-twin cleanup (below), not from any user action — book deletion never propagates. Applying one deletes the local row **only if it has no audio** (`uri IS NULL`): a row with audio is a real per-device book and stays untouched. A twin-loser guard skips the tombstone entirely when the manifest tracks a different (live) file for the entity. If the row is kept, the manifest is pointed at the tombstone file so a future upload updates it in place rather than creating another twin.
+A book tombstone **without** `merged_into` comes from duplicate-twin cleanup (below), not from any user action — book deletion never propagates. Applying one deletes the local row (and its cover file) **only if it has no audio** (`uri IS NULL`): a row with audio is a real per-device book and stays untouched. A twin-loser guard skips the tombstone entirely when the manifest tracks a different (live) file for the entity. If the row is kept, the manifest is pointed at the tombstone file so a future upload updates it in place rather than creating another twin.
 
 ---
 
@@ -320,6 +320,16 @@ All JSON payloads include `updated_at` and `updated_by` for version comparison. 
 
 Book payloads also carry the metadata extras (`summary`, `narrator`, `series`, `part`, `subtitle`, `date`, `language`, `metadata_version` — see docs/BOOKS.md). These are additive optional fields: absent in old payloads (read as null), and nulled locally when an old-app device rewrites the book under whole-entity LWW (accepted; self-heals via lazy re-extraction wherever the file exists).
 
+### Book Covers
+
+Covers are files locally (`ArtworkStore`, see [BOOKS.md](BOOKS.md#artwork)) but **base64 data URIs on the wire** (`BookBackup.artwork`), unchanged from before covers became files.
+
+- **Push:** `uploadBook` reads `artwork_file` back as a data URI (`readDataUri`). No cover or missing file → `artwork: null` (local truth is "no cover").
+- **Pull** (`restoreBook`): write the remote cover to a file → apply the row (DB-side LWW guard) → remove whichever file the row no longer references: the previous cover when it changed or was cleared, or the new file when LWW kept the local row. Malformed remote artwork reads as no cover. A failed file write throws before the row changes; the pull retries like any failed reconcile.
+- **Identity merge:** the cover follows the surviving id whichever side LWW picks. A remote cover is written under the survivor id; a kept local cover is re-homed (`rehomeCover`: rewrite under the new id, repoint the row, remove the old name; no bump, no queue). The `merged_into` adopt path re-homes too.
+- **Tombstones:** book tombstones that delete a local row remove its cover file immediately.
+- **Mixed versions:** the wire format is unchanged, so older apps read and write covers as before; no `BACKUP_VERSION` bump.
+
 ### Payload Format Versioning
 
 Every uploaded payload is stamped with two fields (constants in `types.ts`, both ≡ 1 when absent, so legacy files never need rewriting):
@@ -405,7 +415,7 @@ src/services/backup/
   types.ts        → BookBackup, ClipBackup, SessionBackup (incl. deleted/merged_into), BACKUP_VERSION*, SyncResult, SyncStatus, SyncNotification
   auth.ts         → GoogleAuthService (OAuth sign-in, token management)
   drive.ts        → GoogleDriveService (REST wrapper + changes API + update-in-place + folder resolution)
-  sync.ts         → BackupSyncService (pull, push, LWW reconcile, tombstones, merge, full reconcile)
+  sync.ts         → BackupSyncService (pull, push, LWW reconcile, tombstones, merge, full reconcile; cover files ↔ base64 via ArtworkStore)
   index.ts        → Barrel
 
 src/actions/
@@ -417,7 +427,7 @@ src/screens/LibraryScreen.tsx → Auto-sync trigger (AppState listener + throttl
 src/store/index.ts            → Wires sync events to store state
 ```
 
-**Testing:** `src/services/backup/__tests__/` — `sync.test.ts` (concurrency, reconciliation, push phase), `sync_scenarios.test.ts` + `harness.ts` (FakeDrive scenario harness on real SQLite), `drive.test.ts` (folder creation/resolution), `base64.test.ts`.
+**Testing:** `src/services/backup/__tests__/` — `sync.test.ts` (concurrency, reconciliation, push phase), `sync_scenarios.test.ts` + `harness.ts` (FakeDrive scenario harness on real SQLite; includes cover push/pull/merge cases), `drive.test.ts` (folder creation/resolution), `base64.test.ts`.
 
 ---
 
