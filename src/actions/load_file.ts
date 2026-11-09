@@ -1,4 +1,4 @@
-import type { DatabaseService, FileStorageService, FileCopierService, AudioMetadataService, FFmetadataService, SyncQueueService, Book } from '../services'
+import type { DatabaseService, FileStorageService, ArtworkStore, FileCopierService, AudioMetadataService, FFmetadataService, SyncQueueService, Book } from '../services'
 // Direct module import: the services barrel instantiates every service on
 // load, which actions (and their tests) must not trigger
 import { extrasFromTags, fillMissingExtras, EXTRACTED_METADATA_VERSION } from '../services/audio/ffmetadata'
@@ -11,6 +11,7 @@ import { generateId, createLogger, sanitizeFilename } from '../utils'
 export interface LoadFileDeps {
   db: DatabaseService
   files: FileStorageService
+  artworkStore: ArtworkStore
   copier: FileCopierService
   metadata: AudioMetadataService
   ffmetadata: FFmetadataService
@@ -145,17 +146,21 @@ async function handleNewBook(
       return
     }
 
+    // On restore the existing cover wins (like title/artist): the file's cover
+    // is only written when the book has none
+    const artworkFile = existingBook?.artwork_file ?? await writeArtwork(ctx, bookId, artwork)
+
     if (existingBook) {
       await db.restoreBook(
         existingBook.id, fileUri, file.name, duration,
         existingBook.title ?? title,
         existingBook.artist ?? artist,
-        existingBook.artwork ?? artwork,
+        artworkFile,
         actualFileSize, fingerprint,
         chapters,
       )
     } else {
-      await db.upsertBook(bookId, fileUri, file.name, duration, 0, title, artist, artwork, actualFileSize, fingerprint, chapters)
+      await db.upsertBook(bookId, fileUri, file.name, duration, 0, title, artist, artworkFile, actualFileSize, fingerprint, chapters)
     }
 
     // Extras are best-effort: a null tags result (ffmpeg failure) leaves
@@ -250,6 +255,22 @@ async function copyFile(
   })
 
   return { destPath, bytesWritten }
+}
+
+/**
+ * Write an extracted cover to the ArtworkStore, returning its filename.
+ * Best-effort: a failed write imports the book without a cover. A file left
+ * behind by a failure after this point (DB write) is an orphan for the
+ * startup sweep.
+ */
+async function writeArtwork(ctx: Context, bookId: string, artwork: string | null): Promise<string | null> {
+  if (!artwork) return null
+  try {
+    return await ctx.artworkStore.write(bookId, artwork)
+  } catch (error) {
+    ctx.log('Cover write failed, importing without cover:', error)
+    return null
+  }
 }
 
 function getExtension(filename: string): string {

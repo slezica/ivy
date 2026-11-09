@@ -62,6 +62,28 @@ describe('DatabaseService (real SQLite)', () => {
       expect((await db.getBookById('book-1'))!.artwork_file).toBeNull()
     })
 
+    it('upsert and restore store the cover filename, never base64', async () => {
+      const db = await createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, null, null, 'book-1.abcd.jpg', 1024, FINGERPRINT)
+      expect((await db.getBookById('book-1'))!.artwork_file).toBe('book-1.abcd.jpg')
+      expect((await db.getBookById('book-1'))!.artwork).toBeNull()
+
+      await db.hideBook('book-1')
+      await db.restoreBook('book-1', 'file:///audio/new.mp3', 'Book', 60000, null, null, 'book-1.ef01.jpg', 1024, FINGERPRINT)
+      expect((await db.getBookById('book-1'))!.artwork_file).toBe('book-1.ef01.jpg')
+      expect((await db.getBookById('book-1'))!.artwork).toBeNull()
+    })
+
+    it('lists every referenced cover file, hidden books included', async () => {
+      const db = await createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, null, null, 'book-1.abcd.jpg')
+      await db.upsertBook('book-2', 'file:///audio/book-2.mp3', 'Book', 60000, 0, null, null, 'book-2.abcd.png')
+      await db.upsertBook('book-3', 'file:///audio/book-3.mp3', 'Book', 60000, 0)
+      await db.hideBook('book-2')
+
+      expect((await db.getArtworkFiles()).sort()).toEqual(['book-1.abcd.jpg', 'book-2.abcd.png'])
+    })
+
     it('excludes hidden books from getAllBooks but keeps the row', async () => {
       const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)

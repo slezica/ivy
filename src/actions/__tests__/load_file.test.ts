@@ -1,7 +1,7 @@
 import { createLoadFile, LoadFileDeps } from '../load_file'
 import {
   createMockBook, createMockState, createImmerSet, createMockGet,
-  createMockDb, createMockFiles, createMockMetadata, createMockFFmetadata, createMockSyncQueue, createMockCopier,
+  createMockDb, createMockFiles, createMockArtworkStore, createMockMetadata, createMockFFmetadata, createMockSyncQueue, createMockCopier,
 } from './helpers'
 
 // Mock generateId to return predictable values
@@ -28,6 +28,7 @@ function createMockDeps(overrides: Partial<LoadFileDeps> = {}): LoadFileDeps {
       upsertBook: jest.fn(() => createMockBook({ id: 'generated-id-1', uri: 'file:///audio/generated-id-1.mp3' })),
     }),
     files: createMockFiles(),
+    artworkStore: createMockArtworkStore(),
     copier: createMockCopier(),
     metadata: createMockMetadata(),
     ffmetadata: createMockFFmetadata(),
@@ -139,11 +140,47 @@ describe('createLoadFile', () => {
         0,
         'Test Title',
         'Test Artist',
-        'data:image/png;base64,abc',
+        'generated-id-1.abcd.jpg',
         1024,
         new Uint8Array([1, 2, 3]),
         [],
       )
+    })
+
+    it('writes the extracted cover to the artwork store', async () => {
+      const deps = createMockDeps()
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.artworkStore.write).toHaveBeenCalledWith('generated-id-1', 'data:image/png;base64,abc')
+    })
+
+    it('imports without a cover when the file has none', async () => {
+      const deps = createMockDeps({
+        metadata: createMockMetadata({
+          readMetadata: jest.fn(async () => ({ title: 'T', artist: 'A', artwork: null, duration: 60000 })),
+        }),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.artworkStore.write).not.toHaveBeenCalled()
+      expect((deps.db.upsertBook as jest.Mock).mock.calls[0][7]).toBeNull()
+    })
+
+    it('imports without a cover when the cover write fails', async () => {
+      const deps = createMockDeps({
+        artworkStore: createMockArtworkStore({ write: jest.fn(async () => { throw new Error('ENOSPC') }) }),
+      })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect((deps.db.upsertBook as jest.Mock).mock.calls[0][7]).toBeNull()
+      expect(deps.syncQueue.queueChange).toHaveBeenCalledWith('book', 'generated-id-1', 'upsert')
+      expect(deps.get().library.status).toBe('idle')
     })
 
     it('queues sync upsert for the new book', async () => {
@@ -213,7 +250,7 @@ describe('createLoadFile', () => {
         0,
         'Test Title',
         'Test Artist',
-        'data:image/png;base64,abc',
+        'generated-id-1.abcd.jpg',
         1024,
         new Uint8Array([1, 2, 3]),
         CHAPTERS,
@@ -264,7 +301,7 @@ describe('createLoadFile', () => {
         60000,
         'Test Title',
         'Test Artist',
-        'data:image/png;base64,abc',
+        'archived-1.abcd.jpg',
         1024,
         new Uint8Array([1, 2, 3]),
         [],
@@ -275,12 +312,13 @@ describe('createLoadFile', () => {
       const deps = depsWithArchivedBook({
         title: 'User-Edited Title',
         artist: 'User-Edited Artist',
-        artwork: 'data:image/png;base64,user-edited',
+        artwork_file: 'archived-1.0123.jpg',
       })
       const loadFile = createLoadFile(deps)
 
       await loadFile(INPUT)
 
+      expect(deps.artworkStore.write).not.toHaveBeenCalled() // existing cover wins
       expect(deps.db.restoreBook).toHaveBeenCalledWith(
         'archived-1',
         expect.stringContaining('archived-1'),
@@ -288,11 +326,21 @@ describe('createLoadFile', () => {
         60000,
         'User-Edited Title',
         'User-Edited Artist',
-        'data:image/png;base64,user-edited',
+        'archived-1.0123.jpg',
         1024,
         new Uint8Array([1, 2, 3]),
         [],
       )
+    })
+
+    it('fills a missing cover from the file on restore', async () => {
+      const deps = depsWithArchivedBook({ artwork_file: null })
+      const loadFile = createLoadFile(deps)
+
+      await loadFile(INPUT)
+
+      expect(deps.artworkStore.write).toHaveBeenCalledWith('archived-1', 'data:image/png;base64,abc')
+      expect((deps.db.restoreBook as jest.Mock).mock.calls[0][6]).toBe('archived-1.abcd.jpg')
     })
 
     it('preserves existing extras over the file tags on restore', async () => {
@@ -374,7 +422,7 @@ describe('createLoadFile', () => {
         60000,
         'Test Title',
         'Test Artist',
-        'data:image/png;base64,abc',
+        'archived-1.abcd.jpg',
         1024,
         new Uint8Array([1, 2, 3]),
         CHAPTERS,
@@ -734,7 +782,7 @@ describe('createLoadFile', () => {
         metadata: createMockMetadata({
           readMetadata: jest.fn(async () => {
             simulateCancel(state)
-            return { title: 'T', artist: 'A', artwork: null, duration: 60000 }
+            return { title: 'T', artist: 'A', artwork: 'data:image/png;base64,abc', duration: 60000 }
           }),
         }),
         set: createImmerSet(state),
@@ -744,6 +792,7 @@ describe('createLoadFile', () => {
 
       await loadFile(INPUT)
 
+      expect(deps.artworkStore.write).not.toHaveBeenCalled() // no orphan cover
       expect(deps.db.upsertBook).not.toHaveBeenCalled()
       expect(deps.syncQueue.queueChange).not.toHaveBeenCalled()
       expect(deps.files.deleteFile).toHaveBeenCalledWith(
@@ -853,7 +902,7 @@ describe('createLoadFile', () => {
         0,
         'Test Title',
         'Test Artist',
-        'data:image/png;base64,abc',
+        'generated-id-1.abcd.jpg',
         2048, // bytes actually written by the copy, not the provider's -1
         new Uint8Array([1, 2, 3]),
         [],

@@ -626,6 +626,17 @@ export class DatabaseService {
     return rows.map(toBook)
   }
 
+  /**
+   * Every cover filename any row references — hidden and archived books
+   * included (their covers come back on restore). Feeds ArtworkStore.sweep().
+   */
+  async getArtworkFiles(): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ artwork_file: string }>(
+      'SELECT artwork_file FROM files WHERE artwork_file IS NOT NULL'
+    )
+    return rows.map((row) => row.artwork_file)
+  }
+
   async upsertBook(
     id: string,
     uri: string,
@@ -634,7 +645,7 @@ export class DatabaseService {
     position: number,
     title?: string | null,
     artist?: string | null,
-    artwork?: string | null,
+    artworkFile?: string | null,  // ArtworkStore filename (the base64 column is never written)
     fileSize?: number,
     fingerprint?: Uint8Array,
     chapters?: Chapter[] | null,
@@ -642,15 +653,15 @@ export class DatabaseService {
     const now = Date.now()
     const chaptersJson = chapters?.length ? JSON.stringify(chapters) : null
     await this.db.runAsync(
-      `INSERT INTO files (id, uri, name, duration, position, updated_at, updated_by, title, artist, artwork, file_size, fingerprint, chapters)
+      `INSERT INTO files (id, uri, name, duration, position, updated_at, updated_by, title, artist, artwork_file, file_size, fingerprint, chapters)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          uri = excluded.uri, name = excluded.name, duration = excluded.duration,
          position = excluded.position, updated_at = excluded.updated_at, updated_by = excluded.updated_by,
-         title = excluded.title, artist = excluded.artist, artwork = excluded.artwork,
+         title = excluded.title, artist = excluded.artist, artwork = NULL, artwork_file = excluded.artwork_file,
          file_size = excluded.file_size, fingerprint = excluded.fingerprint,
          chapters = excluded.chapters`,
-      [id, uri, name, duration, position, now, this.deviceId, title ?? null, artist ?? null, artwork ?? null, fileSize ?? null, fingerprint ?? null, chaptersJson]
+      [id, uri, name, duration, position, now, this.deviceId, title ?? null, artist ?? null, artworkFile ?? null, fileSize ?? null, fingerprint ?? null, chaptersJson]
     )
   }
 
@@ -665,7 +676,7 @@ export class DatabaseService {
     duration: number,
     title: string | null,
     artist: string | null,
-    artwork: string | null,
+    artworkFile: string | null,  // ArtworkStore filename (the base64 column is never written)
     fileSize: number,
     fingerprint: Uint8Array,
     chapters?: Chapter[] | null,
@@ -673,8 +684,8 @@ export class DatabaseService {
     const now = Date.now()
     const chaptersJson = chapters?.length ? JSON.stringify(chapters) : null
     await this.db.runAsync(
-      'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, updated_by = ?, title = ?, artist = ?, artwork = ?, file_size = ?, fingerprint = ?, hidden = 0, chapters = ? WHERE id = ?',
-      [uri, name, duration, now, this.deviceId, title, artist, artwork, fileSize, fingerprint, chaptersJson, id]
+      'UPDATE files SET uri = ?, name = ?, duration = ?, updated_at = ?, updated_by = ?, title = ?, artist = ?, artwork = NULL, artwork_file = ?, file_size = ?, fingerprint = ?, hidden = 0, chapters = ? WHERE id = ?',
+      [uri, name, duration, now, this.deviceId, title, artist, artworkFile, fileSize, fingerprint, chaptersJson, id]
     )
   }
 

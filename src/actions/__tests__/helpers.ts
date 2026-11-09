@@ -200,6 +200,21 @@ export function createMockFiles(overrides: Record<string, jest.Mock> = {}) {
   } as any
 }
 
+/**
+ * ArtworkStore mock: write() names files `<bookId>.abcd.jpg` (a stand-in for
+ * the real `<bookId>.<hash4>.<ext>`), uri() mirrors the real file:// shape.
+ */
+export function createMockArtworkStore(overrides: Record<string, jest.Mock> = {}) {
+  return {
+    write: jest.fn(async (bookId: string, dataUri: string) => (dataUri ? `${bookId}.abcd.jpg` : null)),
+    remove: jest.fn(async () => {}),
+    sweep: jest.fn(async () => 0),
+    clear: jest.fn(async () => {}),
+    uri: jest.fn((filename: string) => `file:///artwork/${filename}`),
+    ...overrides,
+  } as any
+}
+
 export function createMockMetadata(overrides: Record<string, jest.Mock> = {}) {
   return {
     readMetadata: jest.fn(async () => ({
