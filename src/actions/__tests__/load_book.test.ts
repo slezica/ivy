@@ -1,4 +1,5 @@
 import { createLoadBook, LoadBookDeps } from '../load_book'
+import { ARTWORK_DIR } from '../../services/storage/artwork'
 import {
   createMockBook, createMockPlayback, createMockState, createImmerSet, createMockGet,
   createMockAudio, createMockDb,
@@ -79,7 +80,7 @@ describe('createLoadBook', () => {
     })
 
     it('loads audio with book metadata', async () => {
-      const book = createMockBook({ title: 'My Book', artist: 'Author', artwork: 'art-data' })
+      const book = createMockBook({ title: 'My Book', artist: 'Author', artwork_file: 'book-1.abcd.jpg' })
       const { deps } = createStatefulDeps({ uri: null }, {
         db: createMockDb({ getBookByAnyUri: jest.fn(() => book) }),
       })
@@ -90,8 +91,20 @@ describe('createLoadBook', () => {
       expect(deps.audio.load).toHaveBeenCalledWith(CONTEXT.fileUri, {
         title: 'My Book',
         artist: 'Author',
-        artwork: 'art-data',
+        artwork: `file://${ARTWORK_DIR}/book-1.abcd.jpg`,
       })
+    })
+
+    it('loads audio without a cover when the book has none', async () => {
+      const book = createMockBook({ artwork_file: null })
+      const { deps } = createStatefulDeps({ uri: null }, {
+        db: createMockDb({ getBookByAnyUri: jest.fn(() => book) }),
+      })
+      const loadBook = createLoadBook(deps)
+
+      await loadBook(CONTEXT)
+
+      expect(deps.audio.load).toHaveBeenCalledWith(CONTEXT.fileUri, expect.objectContaining({ artwork: null }))
     })
 
     it('updates playback state with uri, duration, position, and paused status', async () => {

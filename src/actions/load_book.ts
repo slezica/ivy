@@ -1,5 +1,7 @@
 import type { AudioPlayerService, DatabaseService } from '../services'
 import type { SetState, GetState, Action, ActionFactory } from '../store/types'
+// Direct module import: the services barrel instantiates every service on load
+import { artworkUri } from '../services/storage/artwork'
 import { createLogger, MAIN_PLAYER_OWNER_ID } from '../utils'
 
 
@@ -70,7 +72,7 @@ export const createLoadBook: ActionFactory<LoadBookDeps, LoadBook> = (deps) => (
         duration = await audio.load(context.fileUri, {
           title: bookRecord.title,
           artist: bookRecord.artist,
-          artwork: bookRecord.artwork,
+          artwork: artworkUri(bookRecord.artwork_file),
         })
       } catch (error) {
         // Nothing is loaded — reset so the loading guard doesn't block forever

@@ -150,12 +150,11 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   │   │   ├── integration.ts      # Playback service for remote control events
   │   │   ├── metadata.ts         # ID3/metadata extraction
   │   │   ├── ffmetadata.ts       # Tags + chapter extraction (parses raw text from FFmetadataReaderModule.kt)
-  │   │   ├── slicer.ts           # Audio segment extraction (native module)
-  │   │   └── artwork.ts          # Media-session artwork as cache files (file:// URIs, never data URIs)
+  │   │   └── slicer.ts           # Audio segment extraction (native module)
   │   ├── storage/
   │   │   ├── database.ts         # SQLite operations
   │   │   ├── files.ts            # App-storage file utilities (stat, delete, list — copying is the native copier's job)
-  │   │   ├── artwork.ts          # ArtworkStore: book covers as files in <documents>/artwork/ (<bookId>.<hash4>.<ext>)
+  │   │   ├── artwork.ts          # ArtworkStore: book covers as files in <documents>/artwork/ (<bookId>.<hash4>.<ext>) + artworkUri(filename) for readers
   │   │   ├── copier.ts           # Native file copier (progress, fingerprint, cancel)
   │   │   ├── picker.ts           # Document picker
   │   │   └── __tests__/          # database.test.ts + migrations.test.ts + sqlite_adapter (real SQLite in Jest)

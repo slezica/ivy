@@ -5,7 +5,6 @@
  */
 
 import TrackPlayer from 'react-native-track-player'
-import { artworkFileUri } from '../artwork'
 import { AudioPlayerService } from '../player'
 
 // jest.mock calls are hoisted above the imports
@@ -26,13 +25,8 @@ jest.mock('react-native-track-player', () => ({
   AppKilledPlaybackBehavior: {},
 }))
 
-jest.mock('../artwork', () => ({
-  artworkFileUri: jest.fn(),
-}))
-
 const setVolume = TrackPlayer.setVolume as jest.Mock
 const add = TrackPlayer.add as jest.Mock
-const artworkFile = artworkFileUri as jest.Mock
 
 
 describe('AudioPlayerService fade', () => {
@@ -103,34 +97,31 @@ describe('AudioPlayerService fade', () => {
 
 
 describe('AudioPlayerService load artwork', () => {
-  const METADATA = { title: 'Book', artist: 'Author', artwork: 'data:image/jpeg;base64,AAAA' }
+  const COVER = 'file:///docs/artwork/book-1.abcd.jpg'
 
   beforeEach(() => {
     add.mockClear()
-    artworkFile.mockReset()
   })
 
-  it('hands the media session a file URI, never the data URI', async () => {
-    artworkFile.mockResolvedValue('file:///cache/artwork/abc-4.jpg')
+  it('hands the media session the cover file URI as is', async () => {
+    await new AudioPlayerService().load('file:///book.m4a', { title: 'Book', artist: 'Author', artwork: COVER })
 
-    await new AudioPlayerService().load('file:///book.m4a', METADATA)
-
-    expect(artworkFile).toHaveBeenCalledWith(METADATA.artwork)
-    expect(add).toHaveBeenCalledWith(expect.objectContaining({ artwork: 'file:///cache/artwork/abc-4.jpg' }))
+    expect(add).toHaveBeenCalledWith(expect.objectContaining({ artwork: COVER }))
   })
 
-  it('loads without a cover when the artwork file cannot be written', async () => {
-    artworkFile.mockRejectedValue(new Error('ENOSPC'))
+  it('never hands the media session a data URI', async () => {
+    const dataUri = 'data:image/jpeg;base64,AAAA'
 
-    await expect(new AudioPlayerService().load('file:///book.m4a', METADATA)).resolves.toBe(60_000)
+    await expect(new AudioPlayerService().load('file:///book.m4a', { title: 'Book', artwork: dataUri }))
+      .resolves.toBe(60_000)
 
-    expect(add).toHaveBeenCalledWith(expect.objectContaining({ artwork: undefined }))
+    const track = add.mock.calls[0][0]
+    expect(track.artwork).toBeUndefined()
+    expect(JSON.stringify(track)).not.toContain('data:')
   })
 
   it('loads without a cover when the book has none', async () => {
-    artworkFile.mockResolvedValue(null)
-
-    await new AudioPlayerService().load('file:///book.m4a', { title: 'Book' })
+    await new AudioPlayerService().load('file:///book.m4a', { title: 'Book', artwork: null })
 
     expect(add).toHaveBeenCalledWith(expect.objectContaining({ artwork: undefined }))
   })

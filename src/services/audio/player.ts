@@ -14,7 +14,6 @@ import TrackPlayer, {
 import type { EmitterSubscription } from 'react-native'
 
 import { BaseService } from '../base'
-import { artworkFileUri } from './artwork'
 import { createLogger } from '../../utils'
 
 const log = createLogger('AudioPlayer')
@@ -34,11 +33,22 @@ export interface PlaybackStatus {
 export interface TrackMetadata {
   title?: string | null
   artist?: string | null
-  artwork?: string | null  // base64 data URI
+  artwork?: string | null  // Cover as a file:// URI (artworkUri), never a data URI
 }
 
 export type AudioPlayerEvents = {
   status: PlaybackStatus
+}
+
+// The media session only ever gets a file:// URI. A data URI there crashed
+// SystemUI (media3 copies artworkUri into metadata as UTF-16 and blows the
+// binder limit — docs/2026-09-28-systemui-artwork-crash.md); covers are files
+// now, so anything else is dropped rather than converted.
+function sessionArtwork(artwork?: string | null): string | undefined {
+  if (!artwork) return undefined
+  if (artwork.startsWith('file://')) return artwork
+  log('Dropping non-file artwork URI')
+  return undefined
 }
 
 // =============================================================================
@@ -54,17 +64,6 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
   private fadeTimer: ReturnType<typeof setInterval> | null = null
   private fadeResolve: ((completed: boolean) => void) | null = null
 
-  // Artwork goes to the media session as a file:// URI, never a data URI (see
-  // artwork.ts). A failed write loses the cover, never playback.
-  private async sessionArtwork(artwork?: string | null): Promise<string | undefined> {
-    try {
-      return (await artworkFileUri(artwork)) ?? undefined
-    } catch (error) {
-      log(`Artwork file failed, playing without cover: ${error}`)
-      return undefined
-    }
-  }
-
   async load(uri: string, metadata?: TrackMetadata): Promise<number> {
     log(`Loading: ${metadata?.title || 'unknown'}`)
 
@@ -76,7 +75,7 @@ export class AudioPlayerService extends BaseService<AudioPlayerEvents> {
       url: uri,
       title: metadata?.title || 'Unknown',
       artist: metadata?.artist || 'Unknown Artist',
-      artwork: await this.sessionArtwork(metadata?.artwork),
+      artwork: sessionArtwork(metadata?.artwork),
     }
 
     await TrackPlayer.add(track)
