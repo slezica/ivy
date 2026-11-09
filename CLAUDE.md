@@ -339,7 +339,7 @@ updated_at INTEGER             -- timestamp (last modification)
 updated_by TEXT                -- device ID that last modified this entity
 title TEXT
 artist TEXT
-artwork TEXT                   -- Legacy base64 data URI (capped at 512px); migration 14 moved covers to artwork_file, column being phased out
+artwork TEXT                   -- Legacy base64 cover: always NULL since migration 14 (covers are files, see artwork_file); kept for old versions' DB shape, absent from the Book type
 file_size INTEGER              -- File size in bytes (indexed for fast lookup)
 fingerprint BLOB               -- First 4KB of file (for exact matching)
 hidden INTEGER NOT NULL DEFAULT 0  -- Soft-deleted (1 = removed from library)

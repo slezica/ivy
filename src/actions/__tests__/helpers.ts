@@ -19,7 +19,6 @@ export function createMockBook(overrides: Partial<Book> = {}): Book {
     updated_by: null,
     title: 'Test Title',
     artist: 'Test Artist',
-    artwork: 'data:image/png;base64,abc',
     artwork_file: null,
     file_size: 1024,
     fingerprint: new Uint8Array([1, 2, 3]),

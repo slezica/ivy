@@ -37,7 +37,6 @@ export interface Book {
   updated_by: string | null // device ID that last modified this entity
   title: string | null
   artist: string | null
-  artwork: string | null   // base64 data URI
   artwork_file: string | null // Cover filename in ArtworkStore (<id>.<hash4>.<ext>; never a path)
   file_size: number        // File size in bytes (for fingerprint matching)
   fingerprint: Uint8Array  // First 4KB of file (BLOB)
@@ -513,15 +512,19 @@ export const migrations: Migration[] = [
 // Service
 // =============================================================================
 
-// Raw book row from database (hidden is integer, chapters is JSON string)
-type BookRow = Omit<Book, 'hidden' | 'chapters'> & { hidden: number; chapters: string | null }
+// Raw book row from database (hidden is integer, chapters is JSON string).
+// `artwork` is the legacy base64 column: always NULL since migration 14 (covers
+// are files, see artwork_file), kept for old versions' DB shape, never exposed.
+type BookRow = Omit<Book, 'hidden' | 'chapters'> & { hidden: number; chapters: string | null; artwork?: unknown }
 
 function toBook(row: BookRow): Book {
+  const fields = { ...row }
+  delete fields.artwork
   let chapters: Chapter[] | null = null
-  if (row.chapters) {
-    try { chapters = JSON.parse(row.chapters) } catch {}
+  if (fields.chapters) {
+    try { chapters = JSON.parse(fields.chapters) } catch {}
   }
-  return { ...row, hidden: row.hidden === 1, chapters, speed: row.speed ?? 100 }
+  return { ...fields, hidden: fields.hidden === 1, chapters, speed: fields.speed ?? 100 }
 }
 
 export class DatabaseService {

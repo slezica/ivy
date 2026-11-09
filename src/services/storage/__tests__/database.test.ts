@@ -9,6 +9,21 @@ async function createDb(): Promise<DatabaseService> {
 
 const FINGERPRINT = new Uint8Array([1, 2, 3, 4])
 
+// The legacy base64 column (always NULL since migration 14), read past the Book type
+async function legacyArtwork(db: DatabaseService, id: string): Promise<unknown> {
+  const row = await (db as any).db.getFirstAsync('SELECT artwork FROM files WHERE id = ?', [id])
+  return row?.artwork
+}
+
+// Every string anywhere in a value (objects, arrays), for the data: URI guard
+function strings(value: unknown): string[] {
+  if (typeof value === 'string') return [value]
+  if (value && typeof value === 'object' && !(value instanceof Uint8Array)) {
+    return Object.values(value).flatMap(strings)
+  }
+  return []
+}
+
 describe('DatabaseService (real SQLite)', () => {
 
   describe('migrations', () => {
@@ -66,12 +81,43 @@ describe('DatabaseService (real SQLite)', () => {
       const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, null, null, 'book-1.abcd.jpg', 1024, FINGERPRINT)
       expect((await db.getBookById('book-1'))!.artwork_file).toBe('book-1.abcd.jpg')
-      expect((await db.getBookById('book-1'))!.artwork).toBeNull()
+      expect(await legacyArtwork(db, 'book-1')).toBeNull()
 
       await db.hideBook('book-1')
       await db.restoreBook('book-1', 'file:///audio/new.mp3', 'Book', 60000, null, null, 'book-1.ef01.jpg', 1024, FINGERPRINT)
       expect((await db.getBookById('book-1'))!.artwork_file).toBe('book-1.ef01.jpg')
-      expect((await db.getBookById('book-1'))!.artwork).toBeNull()
+      expect(await legacyArtwork(db, 'book-1')).toBeNull()
+
+      await db.restoreBookFromBackup('book-1', 'Book', 60000, 0, Date.now() + 1000, 'other', null, null, 'book-1.2345.png', 1024, FINGERPRINT)
+      expect((await db.getBookById('book-1'))!.artwork_file).toBe('book-1.2345.png')
+      expect(await legacyArtwork(db, 'book-1')).toBeNull()
+    })
+
+    it('never surfaces base64 artwork from any book getter (regression guard)', async () => {
+      const db = await createDb()
+      const DATA_URI = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, 'T', 'A', 'book-1.abcd.jpg', 1024, FINGERPRINT)
+      await db.restoreBookFromBackup('book-2', 'Book 2', 60000, 0, 1, 'other', null, null, 'book-2.abcd.png', 2048, FINGERPRINT)
+      await db.createClip('clip-1', 'book-1', 'file:///clips/clip-1.m4a', 0, 1000, 'note')
+      await db.createSession('book-1')
+      // A stray legacy value (e.g. a downgrade-then-upgrade) must stay invisible
+      await (db as any).db.runAsync('UPDATE files SET artwork = ? WHERE id = ?', [DATA_URI, 'book-1'])
+
+      const loaded: unknown[] = [
+        await db.getBookById('book-1'),
+        await db.getBookByUri('file:///audio/book-1.mp3'),
+        await db.getBookByFingerprint(1024, FINGERPRINT),
+        await db.getBookByFingerprintOnly(FINGERPRINT),
+        await db.getBookByAnyUri('file:///clips/clip-1.m4a'),
+        db.getLastPlayedBook(),
+        await db.getAllBooks(),
+        await db.getAllClips(),
+        await db.getAllSessions(),
+      ]
+
+      expect(loaded.every((value) => value !== null)).toBe(true)
+      expect(strings(loaded).filter((value) => value.startsWith('data:'))).toEqual([])
+      for (const book of await db.getAllBooks()) expect(book).not.toHaveProperty('artwork')
     })
 
     it('lists every referenced cover file, hidden books included', async () => {
