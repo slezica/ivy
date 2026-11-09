@@ -20,6 +20,9 @@
 // - Drop a version when nobody runs it, then drop scenarios no version seeds.
 //   Git keeps them.
 
+import fs from 'node:fs'
+import path from 'node:path'
+
 /** Bump when appending a migration (mirrors migrations.length - 1 in
  * src/services/storage/database.ts — the toolkit can't import that module). */
 export const LATEST_MIGRATION = 14
@@ -90,6 +93,47 @@ export const baselineLibrary: Scenario = {
   },
 }
 
+// Books with covers stored as base64 data URIs (every version before 14):
+// migration 14 moves them to files in <documents>/artwork/, leaving only the
+// filename on the row (docs/2026-09-28-artwork-as-files.md). A JPEG (what
+// extraction produces), a PNG (what demo seeds produce) and a coverless book.
+const COVER_JPEG_BOOK = 'upgrade-cover-jpeg'
+const COVER_PNG_BOOK = 'upgrade-cover-png'
+const COVER_NONE_BOOK = 'upgrade-cover-none'
+const COVER_JPEG_FIXTURE = 'assets/test/test-artwork.jpg'
+// 4x4 RGB PNG
+const COVER_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGPQqzWCIwbiOABnIw3R2yR41wAAAABJRU5ErkJggg=='
+
+export const libraryWithCovers: Scenario = {
+  description: 'covers move from the DB to files',
+  migrations: [14],
+  seed(ctx) {
+    const jpeg = fs.readFileSync(path.join(ctx.root, COVER_JPEG_FIXTURE)).toString('base64')
+    const book = (id: string, artwork: string | null) => `
+      INSERT INTO files (id, uri, name, duration, position, updated_at, artwork)
+      VALUES ('${id}', 'file:///audio/${id}.m4a', '${id}.m4a', 60000, 0, 1, ${artwork ? `'${artwork}'` : 'NULL'});`
+    ctx.sql([
+      book(COVER_JPEG_BOOK, `data:image/jpeg;base64,${jpeg}`),
+      book(COVER_PNG_BOOK, `data:image/png;base64,${COVER_PNG_BASE64}`),
+      book(COVER_NONE_BOOK, null),
+    ].join('\n'))
+  },
+  verify(ctx) {
+    const covers: [string, string, number][] = [
+      [COVER_JPEG_BOOK, 'jpg', fs.statSync(path.join(__dirname, '..', COVER_JPEG_FIXTURE)).size],
+      [COVER_PNG_BOOK, 'png', Buffer.from(COVER_PNG_BASE64, 'base64').length],
+    ]
+    for (const [id, ext, size] of covers) {
+      const file = ctx.query(`SELECT artwork_file FROM files WHERE id = '${id}'`)
+      ctx.expect(`${ext} cover filename`, new RegExp(`^${id}\\.[0-9a-f]{4}\\.${ext}$`).test(file), true)
+      ctx.expect(`${ext} cover file has the exact bytes`, ctx.fileSize(`${ctx.appDir}/files/artwork/${file}`), size)
+      ctx.expect(`${ext} cover base64 cleared`, ctx.query(`SELECT artwork IS NULL FROM files WHERE id = '${id}'`), '1')
+      ctx.expect(`${ext} cover row not bumped`, ctx.query(`SELECT updated_at FROM files WHERE id = '${id}'`), '1')
+    }
+    ctx.expect('coverless book has no file', ctx.query(`SELECT artwork_file IS NULL FROM files WHERE id = '${COVER_NONE_BOOK}'`), '1')
+  },
+}
+
 // ---------------------------------------------------------------------------
 // Versions users still run — Play Console, 2026-09-28: v1.6.4, v1.6.5, plus
 // v1.6.6 (alpha, heading to production). All at migration 13.
@@ -100,6 +144,7 @@ export const VERSIONS: Version[] = [
     migration: 13,
     seed(run) {
       run(baselineLibrary)
+      run(libraryWithCovers)
     },
   },
   {
@@ -107,6 +152,7 @@ export const VERSIONS: Version[] = [
     migration: 13,
     seed(run) {
       run(baselineLibrary)
+      run(libraryWithCovers)
     },
   },
   {
@@ -114,6 +160,7 @@ export const VERSIONS: Version[] = [
     migration: 13,
     seed(run) {
       run(baselineLibrary)
+      run(libraryWithCovers)
     },
   },
 ]

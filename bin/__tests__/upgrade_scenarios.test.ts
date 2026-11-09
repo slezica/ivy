@@ -11,7 +11,7 @@ describe('upgrade scenarios', () => {
   // upgrade scenario. Maintained by hand — append the index when writing such
   // a migration. Only migrations above the oldest live version need one:
   // below it, no user can still cross them.
-  const DATA_TRANSFORMING = [8, 12, 13]
+  const DATA_TRANSFORMING = [8, 12, 13, 14]
 
   const floor = Math.min(...VERSIONS.map(v => v.migration))
   const uncrossed = DATA_TRANSFORMING.filter(m => m > floor)
