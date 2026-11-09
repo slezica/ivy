@@ -63,6 +63,7 @@ No dedicated "library service" — the actions coordinate services directly:
   - `AudioMetadataService` (native) — title, artist, artwork, duration
   - `FFmetadataService` — extras + chapters (exec'd FFmpeg, best-effort)
   - `DatabaseService` — upsert / touch / restore
+  - `ArtworkStore` — writes the extracted cover as a file (see [Artwork](#artwork))
   - `SyncQueueService` — queue changes for sync
   - `FileStorageService` — delete, list, modification times (cleanup)
 
@@ -151,7 +152,7 @@ Beyond title/artist/artwork/duration, a book carries seven optional **extras** c
 
 **Two extraction sources, split by failure mode:**
 
-- **Basics** (title, artist, artwork, duration): `AudioMetadataService` / `MediaMetadataRetriever` — in-process platform API, survives ffmpeg breakage. Unchanged by extras. Artwork is stored as a base64 JPEG data URI, downscaled to at most 512px on the long side (`MAX_ARTWORK_DIMENSION` in `AudioMetadataModule.kt`) — uncapped covers OOM'd the Java heap once base64 copies piled up in DB + store + bridge (see [2026-09-02-artwork-oom-repair.md](2026-09-02-artwork-oom-repair.md)). A repair migration downscales oversized artwork stored by older versions.
+- **Basics** (title, artist, artwork, duration): `AudioMetadataService` / `MediaMetadataRetriever` — in-process platform API, survives ffmpeg breakage. Unchanged by extras. Artwork is extracted as a base64 JPEG data URI, downscaled to at most 512px on the long side (`MAX_ARTWORK_DIMENSION` in `AudioMetadataModule.kt`) — uncapped covers OOM'd the Java heap once base64 copies piled up in DB + store + bridge (see [2026-09-02-artwork-oom-repair.md](2026-09-02-artwork-oom-repair.md)) — then stored as a file (see [Artwork](#artwork)).
 - **Extras + chapters**: `FFmetadataService`, which parses the raw ffmetadata text returned by the native `FFmetadataReaderModule` (exec'd `libffmpeg.so`). The retriever *cannot* read `comment` or custom MP4 tags, so ffmetadata is the only source for extras — and it's best-effort: on ffmpeg failure extras stay null.
 
 **Lazy extraction (backfill):** `extractBookExtras(bookId)` re-extracts on demand — called when the Book Details dialog opens. It no-ops unless `book.uri !== null` and `(metadata_version ?? 0) < EXTRACTED_METADATA_VERSION` (in `services/audio/ffmetadata.ts`). `metadata_version` distinguishes "never extracted" (null) from "extracted, file is sparse", and bumping the constant lazily re-extracts every book as it's next viewed. On import, extras are extracted inline and the version stamped; on ffmpeg failure the version stays null so a later view retries.
@@ -165,6 +166,31 @@ Note that a successful lazy extraction is a real write: `setBookExtras` bumps `u
 **Sync:** extras + `metadata_version` ride the book payload (additive fields; old payloads read as null — see [SYNC.md](SYNC.md)). Whole-entity LWW applies as usual — the merge semantics above are local, per-device behavior at extraction time.
 
 **UI:** a viewer/editor pair sharing one dialog slot (`BookDetailsDialog.tsx`), mirroring the clips screen — opened via "Show details" from a book's library menu or the player's menu (current book). `BookDetails.tsx` is the read-only view: hides null/cleared fields, triggers lazy extraction ("Analyzing file…" while pending), and offers Close/Edit. Long-pressing the title or any field value copies it to the clipboard (`copyText` helper: clipboard + "Copied" toast) — same affordance as the player's title/author. Edit swaps in `MetadataEditor.tsx`, which shows *all* editable fields (title, artist, and every extra; empty ones blank); Cancel or backdrop dismiss returns to the viewer, Save persists via `updateBook` and closes.
+
+---
+
+## Artwork
+
+Covers are files, not DB data. Design record: [2026-09-28-artwork-as-files.md](2026-09-28-artwork-as-files.md).
+
+- **Storage:** `ArtworkStore` (`services/storage/artwork.ts`), files at `{DocumentDirectory}/artwork/<bookId>.<hash4>.<ext>`.
+  - `hash4`: first 4 hex chars of `fnv1a` over the base64 content. A changed cover gets a new name, busting `<Image>`'s URI cache.
+  - `ext`: from the image type (`jpg` from extraction, `png` from demo seeds).
+  - Writes go to a temp file, then rename. Same book + same image = same name, so an existing file is reused.
+  - Input that isn't a base64 image data URI writes nothing (no cover).
+- **Row:** `artwork_file` holds the **filename only**, never a path (app storage paths differ across installs). The legacy `artwork` column is always NULL and absent from `Book`.
+- **Readers:** `artworkUri(book.artwork_file)` → `file://` URI or null. Used by `BookItem`, `BookDetails`, `MetadataEditor`, `SessionItem`, and `loadBook` (media session).
+- **Replace order:** new file → update row → remove old file. A crash in between leaves an orphan file or a row pointing at a missing file; startup fixes both.
+- **Import:** the extracted cover is written before the DB row. A failed write imports the book without a cover.
+- **Restore:** an existing cover wins; the file's cover is written only when the book has none.
+- **Startup tidy** (`initializeApplication`, before hydration):
+  - Repair: rows pointing at a missing file get `artwork_file = NULL` (per-device: no bump, no queue).
+  - Sweep: files no row references are deleted. Hidden and archived rows count as referenced.
+  - Safe without locking: import and sync pull are UI-triggered, and the UI doesn't render before `initialized`.
+- **Missing file at runtime:** `<Image>` renders nothing until the next startup clears the row; then the placeholder shows.
+- **Archive/delete** keep the cover file (it returns on restore).
+- **Sync:** covers travel as base64 inside the book JSON; see [SYNC.md](SYNC.md#book-covers).
+- **Migration 14** moved pre-existing base64 covers to files (see [MIGRATIONS.md](MIGRATIONS.md)).
 
 ---
 
@@ -224,7 +250,7 @@ Restoration is automatic — it happens when adding a file that matches a known 
 
 Key preservation rules (precedence resolved in `loadFile` before calling `db.restoreBook()`, which persists the already-resolved values):
 
-- **Metadata** — existing title, artist, artwork win over ID3 tags (protects user edits); falls back to ID3 values only when existing fields are null (`existingBook.title ?? title` in `load_file.ts`)
+- **Metadata** — existing title, artist, artwork win over ID3 tags (protects user edits); falls back to ID3 values only when existing fields are null (`existingBook.title ?? title` in `load_file.ts`). For artwork: an existing `artwork_file` is kept, and the file's cover is written only when there is none
 - **Position** — the user's saved playback position is preserved
 
 ---
@@ -253,6 +279,7 @@ src/components/
 src/services/storage/
   database.ts            → Book CRUD, fingerprint lookup, archive/hide/restore
   files.ts               → FileStorageService (delete, list, audio dir helpers)
+  artwork.ts             → ArtworkStore (cover files: write, readDataUri, remove, missing, sweep, clear) + artworkUri()
   copier.ts              → FileCopierService (native file copy with progress + cancel)
   picker.ts              → FilePickerService (expo-document-picker wrapper)
 
@@ -278,5 +305,5 @@ modules/ivy/android/src/main/java/com/salezica/ivy/
 
 ## Testing
 
-- Jest: `src/actions/__tests__/load_file.test.ts` (all three cases, cancellation, cleanup), `cancel_load_file.test.ts`, `archive_book.test.ts`, `delete_book.test.ts`, `update_book.test.ts`, `extract_book_extras.test.ts`, `cleanup_orphaned_files.test.ts`
+- Jest: `src/actions/__tests__/load_file.test.ts` (all three cases, cancellation, cleanup, cover write/restore), `src/services/storage/__tests__/artwork.test.ts`, `initialize_application.test.ts` (cover repair + sweep), `cancel_load_file.test.ts`, `archive_book.test.ts`, `delete_book.test.ts`, `update_book.test.ts`, `extract_book_extras.test.ts`, `cleanup_orphaned_files.test.ts`
 - Maestro: `book-details.yaml`, `delete-original.yaml`, `chapter-extraction.yaml`, `artwork-cap.yaml`, `subflows/import-book.yaml`
