@@ -1437,7 +1437,26 @@ describe('sync scenarios', () => {
   })
 
   describe('book covers (files locally, base64 on the wire)', () => {
-    const JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
+    const JPEG_BASE64 = '/9j/4AAQSkZJRg=='
+    const JPEG = `data:image/jpeg;base64,${JPEG_BASE64}`
+    const OTHER_JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgAB'
+    const SMALL_ID = BOOK_ID // 'aaa…' — wins identity merges
+    const LARGE_ID = 'bbb00001-0000-0000-0000-000000000001'
+
+    const coverFiles = (device: SyncHarness) => [...device.artwork.files.keys()].sort()
+    const coverFileOf = async (device: SyncHarness, id: string = BOOK_ID) =>
+      (await device.db.getBookById(id))?.artwork_file ?? null
+    // The legacy base64 column, read past the Book type
+    const legacyArtworkColumn = async (device: SyncHarness, id: string = BOOK_ID) =>
+      (await (device.db as any).db.getFirstAsync('SELECT artwork FROM files WHERE id = ?', [id]))?.artwork
+
+    // Edit the remote book JSON as another device would (newer version)
+    async function editRemoteBook(drive: FakeDrive, changes: Record<string, any>, id: string = BOOK_ID): Promise<void> {
+      const name = `book_${id}.json`
+      await drive.updateFile(drive.getFileByName(name)!.id, JSON.stringify({
+        ...drive.readJson(name), updated_at: Date.now(), updated_by: 'device-other', ...changes,
+      }))
+    }
 
     // A local book whose cover is a file in the device's artwork store
     async function addBookWithCover(device: SyncHarness, cover: string, id: string = BOOK_ID): Promise<string> {
@@ -1480,6 +1499,234 @@ describe('sync scenarios', () => {
 
         const remote = drive.readJson(`book_${BOOK_ID}.json`)
         expect(remote).toHaveProperty('artwork', null)
+      })
+    })
+
+    describe('pull', () => {
+      it('writes the cover file before the row points at it', async () => {
+        const drive = new FakeDrive()
+        const device = await createSyncHarness(drive)
+        await device.sync.syncNow() // bootstrap: later changes come through the feed
+
+        // Spy: what the row references at the moment the file is written
+        const write = device.artwork.write
+        const rowAtWrite: (string | null)[] = []
+        device.artwork.write = async (id, dataUri) => {
+          rowAtWrite.push(await coverFileOf(device, id))
+          return write(id, dataUri)
+        }
+
+        drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ artwork: JPEG }))
+        await device.sync.syncNow()
+
+        const filename = await coverFileOf(device)
+        expect(filename).toMatch(new RegExp(`^${BOOK_ID}\\.[0-9a-f]{4}\\.jpg$`))
+        expect(device.artwork.files.get(filename!)).toBe(JPEG_BASE64)
+        expect(rowAtWrite).toEqual([null])
+        expect(await legacyArtworkColumn(device)).toBeNull() // base64 never lands in the DB
+      })
+
+      it('leaves the row untouched when the cover write fails, then retries', async () => {
+        const drive = new FakeDrive()
+        const device = await createSyncHarness(drive)
+        const errors = trackSyncErrors(device)
+        await device.sync.syncNow()
+
+        const write = device.artwork.write
+        device.artwork.write = async () => { throw new Error('ENOSPC') }
+        drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ artwork: JPEG }))
+        await device.sync.syncNow()
+
+        expect(errors[errors.length - 1]).not.toBeNull()
+        expect(await device.db.getBookById(BOOK_ID)).toBeNull()
+
+        device.artwork.write = write
+        await device.sync.syncNow() // page token was held: the change re-delivers
+
+        expect(errors[errors.length - 1]).toBeNull()
+        expect(device.artwork.files.get((await coverFileOf(device))!)).toBe(JPEG_BASE64)
+      })
+
+      it('clears the row and removes the file when the remote cover is removed', async () => {
+        const drive = new FakeDrive()
+        const deviceA = await createSyncHarness(drive)
+        const deviceB = await createSyncHarness(drive)
+        await addBookWithCover(deviceA, JPEG)
+        await deviceA.sync.syncNow()
+        await deviceB.sync.syncNow()
+        expect(coverFiles(deviceB)).toHaveLength(1)
+
+        await editRemoteBook(drive, { artwork: null })
+        await deviceB.sync.syncNow()
+
+        expect(await coverFileOf(deviceB)).toBeNull()
+        expect(coverFiles(deviceB)).toEqual([])
+      })
+
+      it('replaces a changed cover and removes the old file', async () => {
+        const drive = new FakeDrive()
+        const deviceA = await createSyncHarness(drive)
+        const deviceB = await createSyncHarness(drive)
+        await addBookWithCover(deviceA, JPEG)
+        await deviceA.sync.syncNow()
+        await deviceB.sync.syncNow()
+        const before = await coverFileOf(deviceB)
+
+        await editRemoteBook(drive, { artwork: OTHER_JPEG })
+        await deviceB.sync.syncNow()
+
+        const after = await coverFileOf(deviceB)
+        expect(after).not.toBe(before) // new name busts <Image>'s URI cache
+        expect(coverFiles(deviceB)).toEqual([after])
+        expect(await deviceB.artwork.readDataUri(after!)).toBe(OTHER_JPEG)
+      })
+
+      it('treats malformed remote artwork as no cover', async () => {
+        const drive = new FakeDrive()
+        const device = await createSyncHarness(drive)
+        const errors = trackSyncErrors(device)
+
+        drive.putFile('books', `book_${BOOK_ID}.json`, remoteBookJson({ artwork: 'data:image/jpeg;base64,not base64!' }))
+        await device.sync.syncNow()
+
+        expect(errors).toEqual([null])
+        expect(await device.db.getBookById(BOOK_ID)).not.toBeNull()
+        expect(await coverFileOf(device)).toBeNull()
+        expect(coverFiles(device)).toEqual([])
+      })
+
+      it('applies a cover from a v1.6.6 payload (exact upload shape)', async () => {
+        const drive = new FakeDrive()
+        const device = await createSyncHarness(drive)
+
+        // v1.6.6 uploadBook: BACKUP_VERSION 2, cover from the DB column as a
+        // NO_WRAP JPEG data URI, JSON.stringify(backup, null, 2)
+        const v166 = {
+          version: 2,
+          version_compat: 1,
+          id: BOOK_ID,
+          name: 'Test Book',
+          duration: 60000,
+          position: 5000,
+          updated_at: 5000,
+          updated_by: 'device-v166',
+          title: 'Old Title',
+          artist: 'Old Artist',
+          artwork: JPEG,
+          file_size: 1024,
+          fingerprint: FINGERPRINT_B64,
+          speed: 100,
+          summary: null,
+          narrator: null,
+          series: null,
+          part: null,
+          subtitle: null,
+          date: null,
+          language: null,
+          metadata_version: null,
+        }
+        drive.putFile('books', `book_${BOOK_ID}.json`, JSON.stringify(v166, null, 2))
+        await device.sync.syncNow()
+
+        const book = await device.db.getBookById(BOOK_ID)
+        expect(book).toMatchObject({ title: 'Old Title', updated_by: 'device-v166' })
+        expect(await device.artwork.readDataUri(book!.artwork_file!)).toBe(JPEG)
+        expect(await legacyArtworkColumn(device)).toBeNull()
+      })
+
+      it('round-trips the cover bytes between two devices', async () => {
+        const drive = new FakeDrive()
+        const deviceA = await createSyncHarness(drive)
+        const deviceB = await createSyncHarness(drive)
+
+        const bytes = Uint8Array.from({ length: 256 }, (_, i) => i)
+        const cover = `data:image/png;base64,${btoa(String.fromCharCode(...bytes))}`
+        const filenameA = await addBookWithCover(deviceA, cover)
+        await deviceA.sync.syncNow()
+        await deviceB.sync.syncNow()
+
+        const filenameB = (await coverFileOf(deviceB))!
+        expect(filenameB).toBe(filenameA) // deterministic naming
+        expect(deviceB.artwork.files.get(filenameB)).toBe(deviceA.artwork.files.get(filenameA))
+        expect(await deviceB.artwork.readDataUri(filenameB)).toBe(cover)
+
+        // B's own push (local edit) sends the same cover back
+        await deviceB.db.updateBookFields(BOOK_ID, { title: 'Edited on B' })
+        await deviceB.db.queueChange('book', BOOK_ID, 'upsert', (await deviceB.db.getBookById(BOOK_ID))!.updated_at)
+        await deviceB.sync.syncNow()
+        expect(drive.readJson(`book_${BOOK_ID}.json`)).toMatchObject({ title: 'Edited on B', artwork: cover })
+      })
+
+      it('removes the cover of a row deleted by a book tombstone', async () => {
+        const drive = new FakeDrive()
+        const deviceA = await createSyncHarness(drive)
+        const deviceB = await createSyncHarness(drive)
+        await addBookWithCover(deviceA, JPEG)
+        await deviceA.sync.syncNow()
+        await deviceB.sync.syncNow() // audio-less row with a cover file
+
+        await editRemoteBook(drive, { deleted: true }) // twin cleanup elsewhere
+        await deviceB.sync.syncNow()
+
+        expect(await deviceB.db.getBookById(BOOK_ID)).toBeNull()
+        expect(coverFiles(deviceB)).toEqual([])
+      })
+    })
+
+    describe('identity merge', () => {
+      it('writes the winning remote cover under the surviving id, removing the loser\'s file', async () => {
+        const drive = new FakeDrive()
+        const deviceA = await createSyncHarness(drive)
+        const deviceB = await createSyncHarness(drive)
+
+        await addBookWithCover(deviceB, OTHER_JPEG, LARGE_ID) // older local import
+        await addBookWithCover(deviceA, JPEG, SMALL_ID)       // newer: wins LWW
+        await deviceA.sync.syncNow()
+        await deviceB.sync.syncNow() // pulls the twin → merges onto SMALL_ID
+
+        const filename = (await coverFileOf(deviceB, SMALL_ID))!
+        expect(filename.startsWith(`${SMALL_ID}.`)).toBe(true)
+        expect(coverFiles(deviceB)).toEqual([filename])
+        expect(await deviceB.artwork.readDataUri(filename)).toBe(JPEG)
+      })
+
+      it('re-homes a local cover kept by LWW under the surviving id', async () => {
+        const drive = new FakeDrive()
+        const deviceA = await createSyncHarness(drive)
+        const deviceB = await createSyncHarness(drive)
+
+        await addBookWithCover(deviceA, JPEG, SMALL_ID)       // older
+        await deviceA.sync.syncNow()
+        await addBookWithCover(deviceB, OTHER_JPEG, LARGE_ID) // newer: local row wins LWW
+        await deviceB.sync.syncNow() // merges, pushes the merged book
+
+        const filename = (await coverFileOf(deviceB, SMALL_ID))!
+        expect(filename.startsWith(`${SMALL_ID}.`)).toBe(true)
+        expect(coverFiles(deviceB)).toEqual([filename])
+        expect(await deviceB.artwork.readDataUri(filename)).toBe(OTHER_JPEG)
+        expect(drive.readJson(`book_${SMALL_ID}.json`).artwork).toBe(OTHER_JPEG)
+
+        await deviceA.sync.syncNow() // A takes the merged cover, drops its old file
+        const onA = (await coverFileOf(deviceA, SMALL_ID))!
+        expect(coverFiles(deviceA)).toEqual([onA])
+        expect(await deviceA.artwork.readDataUri(onA)).toBe(OTHER_JPEG)
+      })
+
+      it('re-homes the cover when adopting the surviving id from a tombstone', async () => {
+        const drive = new FakeDrive()
+        const device = await createSyncHarness(drive)
+
+        await addBookWithCover(device, JPEG, LARGE_ID)
+        await device.sync.syncNow()
+        await device.sync.syncNow() // consume the upload echo
+
+        await editRemoteBook(drive, { deleted: true, merged_into: SMALL_ID }, LARGE_ID)
+        await device.sync.syncNow()
+
+        const filename = (await coverFileOf(device, SMALL_ID))!
+        expect(filename.startsWith(`${SMALL_ID}.`)).toBe(true)
+        expect(coverFiles(device)).toEqual([filename])
+        expect(await device.artwork.readDataUri(filename)).toBe(JPEG)
       })
     })
   })

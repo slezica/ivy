@@ -1008,7 +1008,7 @@ export class DatabaseService {
     updated_by: string | null,
     title: string | null,
     artist: string | null,
-    artwork: string | null,
+    artworkFile: string | null,  // ArtworkStore filename (sync writes the remote cover's file first)
     fileSize: number,
     fingerprint: Uint8Array,
     speed: number = 100,
@@ -1020,20 +1020,20 @@ export class DatabaseService {
       subtitle: null, date: null, language: null, metadata_version: null,
     }
     await this.db.runAsync(
-      `INSERT INTO files (id, uri, name, duration, position, updated_at, updated_by, title, artist, artwork, file_size, fingerprint, hidden, speed,
+      `INSERT INTO files (id, uri, name, duration, position, updated_at, updated_by, title, artist, artwork_file, file_size, fingerprint, hidden, speed,
                           summary, narrator, series, part, subtitle, date, language, metadata_version)
        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name, duration = excluded.duration,
          position = excluded.position, updated_at = excluded.updated_at, updated_by = excluded.updated_by,
-         title = excluded.title, artist = excluded.artist, artwork = excluded.artwork,
+         title = excluded.title, artist = excluded.artist, artwork = NULL, artwork_file = excluded.artwork_file,
          file_size = excluded.file_size, fingerprint = excluded.fingerprint,
          speed = excluded.speed,
          summary = excluded.summary, narrator = excluded.narrator, series = excluded.series,
          part = excluded.part, subtitle = excluded.subtitle, date = excluded.date,
          language = excluded.language, metadata_version = excluded.metadata_version
        WHERE excluded.updated_at >= files.updated_at`,
-      [id, name, duration, position, updated_at, updated_by, title, artist, artwork, fileSize, fingerprint, speed,
+      [id, name, duration, position, updated_at, updated_by, title, artist, artworkFile, fileSize, fingerprint, speed,
        e.summary, e.narrator, e.series, e.part, e.subtitle, e.date, e.language, e.metadata_version]
     )
   }

@@ -668,14 +668,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       return
     }
 
-    await this.db.restoreBookFromBackup(
-      remote.id, remote.name, remote.duration, remote.position,
-      remote.updated_at, remote.updated_by ?? null,
-      remote.title, remote.artist, remote.artwork,
-      remote.file_size, fingerprint,
-      remote.speed ?? 100,
-      backupExtras(remote),
-    )
+    await this.restoreBook(remote, fingerprint)
 
     await this.db.upsertManifestEntry({
       entity_type: 'book', entity_id: remote.id,
@@ -688,6 +681,49 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     notification.booksChanged.push(remote.id)
     result.downloaded.books++
     log(`Downloaded book: ${remote.id}`)
+  }
+
+  /**
+   * Apply a remote book row (DB-side LWW guard included) with its cover.
+   * The wire cover is a data URI; locally it becomes a file under the book's
+   * id. Order: write the new file → update the row → remove whichever file
+   * the row no longer references — the previous cover when it changed or was
+   * cleared, or the new one when the LWW guard kept the local row. Malformed
+   * remote artwork (write returns null) reads as no cover.
+   */
+  private async restoreBook(remote: BookBackup, fingerprint: Uint8Array): Promise<void> {
+    const previousFile = (await this.db.getBookById(remote.id))?.artwork_file ?? null
+    const artworkFile = remote.artwork ? await this.artworkStore.write(remote.id, remote.artwork) : null
+
+    await this.db.restoreBookFromBackup(
+      remote.id, remote.name, remote.duration, remote.position,
+      remote.updated_at, remote.updated_by ?? null,
+      remote.title, remote.artist, artworkFile,
+      remote.file_size, fingerprint,
+      remote.speed ?? 100,
+      backupExtras(remote),
+    )
+
+    const currentFile = (await this.db.getBookById(remote.id))?.artwork_file ?? null
+    for (const file of new Set([previousFile, artworkFile])) {
+      if (file && file !== currentFile) await this.artworkStore.remove(file)
+    }
+  }
+
+  /**
+   * Keep a re-keyed book's cover named for its id (`<bookId>.<hash4>.<ext>`):
+   * rewrite the file under the new id, point the row at it, remove the old
+   * name. Same image, local naming only — no updated_at bump, nothing queued.
+   * A missing file clears the row (no cover).
+   */
+  private async rehomeCover(bookId: string): Promise<void> {
+    const file = (await this.db.getBookById(bookId))?.artwork_file
+    if (!file || file.startsWith(`${bookId}.`)) return
+
+    const dataUri = await this.artworkStore.readDataUri(file)
+    const rehomed = dataUri ? await this.artworkStore.write(bookId, dataUri) : null
+    await this.db.setBookArtworkFile(bookId, rehomed)
+    await this.artworkStore.remove(file)
   }
 
   /**
@@ -711,14 +747,10 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
     const { clipIds, sessionIds } = await this.db.rekeyBook(local.id, remote.id)
 
-    await this.db.restoreBookFromBackup(
-      remote.id, remote.name, remote.duration, remote.position,
-      remote.updated_at, remote.updated_by ?? null,
-      remote.title, remote.artist, remote.artwork,
-      remote.file_size, base64ToUint8Array(remote.fingerprint),
-      remote.speed ?? 100,
-      backupExtras(remote),
-    )
+    // The cover follows the surviving id, whichever side LWW picks: a remote
+    // cover is written under remote.id; a local one kept by LWW is re-homed
+    await this.restoreBook(remote, base64ToUint8Array(remote.fingerprint))
+    await this.rehomeCover(remote.id)
 
     await this.db.upsertManifestEntry({
       entity_type: 'book', entity_id: remote.id,
@@ -919,7 +951,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
    * - survivor row present → delete the retired row, transferring its audio
    *   uri when the survivor has none. Audio files are never deleted here:
    *   when both rows have audio the retired file is merely orphaned (the
-   *   survivor's copy makes it redundant) and left for cleanup.
+   *   survivor's copy makes it redundant) and left for cleanup. The retired
+   *   row's cover file goes with it (the survivor has its own).
    *
    * Without `merged_into` (twin cleanup) the tombstone deletes the local row
    * only if it has no audio — a row with audio is a real per-device book and
@@ -945,6 +978,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
 
       if (local && local.uri === null) {
         await this.db.deleteBook(retiredId)
+        if (local.artwork_file) await this.artworkStore.remove(local.artwork_file)
         await this.db.deleteManifestEntry('book', retiredId)
         notification.booksChanged.push(retiredId)
         log(`Applied book tombstone: ${retiredId}`)
@@ -967,6 +1001,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       // re-uploads the re-keyed children: this device may be the only one
       // whose remote copies still name the retired id.
       const { clipIds, sessionIds } = await this.db.rekeyBook(retiredId, survivorId)
+      await this.rehomeCover(survivorId)
       await this.requeueMergedChildren(clipIds, sessionIds)
       notification.booksChanged.push(survivorId)
       notification.clipsChanged.push(...clipIds)
@@ -984,6 +1019,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
         await this.db.setBookUri(survivorId, local.uri)
       }
       await this.db.deleteBook(retiredId)
+      if (local.artwork_file) await this.artworkStore.remove(local.artwork_file)
       notification.booksChanged.push(retiredId)
       log(`Applied merged_into tombstone: ${retiredId} → ${survivorId}`)
     }
