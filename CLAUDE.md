@@ -285,7 +285,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   ├── chapter-extraction.yaml     # Chaptered import
   ├── delete-original.yaml        # Delete original after import
   ├── timeline-gestures.yaml      # Timeline drag/fling/tap
-  ├── artwork-cap.yaml            # Oversized-cover import → artwork extraction cap (bridge DB check)
+  ├── artwork-cap.yaml            # Oversized-cover import → artwork extraction cap (bridge check: cover file on disk, legacy column empty)
   ├── sleep-timer.yaml            # Sleep timer arm/expiry (needs maestro build variant)
   ├── transcription-states.yaml   # Model-download lifecycle against the bridge model server + network gates (needs maestro build variant)
   ├── transcription-inference.yaml # Whisper end to end: tiny model from the bridge → clip → persisted transcription (needs maestro build variant)
@@ -303,7 +303,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   ├── test-audio-cover.m4a        # Oversized embedded cover (~900KB, 1400px) — artwork-cap.yaml import-path check
   └── test-artwork.jpg            # 800px JPEG (>100KB as base64) — oversized-cover fixture (was the artwork-repair hook seed; kept for artwork scenarios)
 
-/cache                            # GENERATED (gitignored): persistent toolkit caches
+/cache                            # GENERATED (gitignored): persistent toolkit caches, always the main checkout's (worktrees share it)
                                   # upgrade/ivy-maestro-<version>.apk — upgrade-test bases, written by prepare
                                   # whisper/ggml-tiny.bin — model served to maestro builds by the e2e bridge (fetched once)
 
