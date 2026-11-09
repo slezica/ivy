@@ -1,8 +1,8 @@
 # Artwork as files
 
-**Status:** decided, planned (roadmap below), not implemented. Implementation follows the
-upgrade-scenarios rework ([2026-09-28-upgrade-scenarios.md](2026-09-28-upgrade-scenarios.md)),
-whose first real scenario it will be.
+**Status:** implemented (branch artwork-files). Follows the
+upgrade-scenarios rework ([2026-09-28-upgrade-scenarios.md](2026-09-28-upgrade-scenarios.md));
+`libraryWithCovers` is its first real scenario.
 
 ## Problem
 
@@ -183,6 +183,24 @@ clears the base64.
    3. Full e2e + `test --upgrade --all` + screenshots review
 5. **Docs:** BOOKS.md, SYNC.md, PLAYBACK.md, CLAUDE.md schema/tree,
    MIGRATIONS.md worked examples.
+
+## Implementation notes
+
+Decisions made during implementation that the plan above didn't settle:
+
+- `ArtworkStore.readDataUri` instead of `readBase64`: push needs the full wire data URI.
+- Malformed = not `data:image/<w>;base64,<b64>` (line breaks allowed in the payload) → dropped as no cover (migration, pull, import).
+- Migration 14 throws on filesystem errors (reruns next launch) and guards its ADD COLUMN via `PRAGMA table_info`.
+- `db.setBookArtworkFile` never bumps `updated_at`/`updated_by`; callers own sync semantics.
+- Cover write failure on import = book imported without a cover.
+- Player drops any non-`file://` artwork rather than converting it.
+- UI/player helper is `artworkUri(filename)` (takes `artwork_file`, not the book).
+- Startup repair (rows pointing at missing files → NULL) + sweep (unreferenced files) run before hydration. No race with sync: pull is UI-triggered only, and the UI renders after `initialized`.
+- Duplicate merge: the cover follows the surviving id whichever side LWW picks; a kept local cover is re-homed (`rehomeCover`), also on the `merged_into` adopt path.
+- Book tombstones that delete a row remove its cover file immediately (not left for the sweep).
+- `Book.artwork` removed from the type; the legacy `artwork` column stays, always NULL (writers set it NULL).
+- `clearAllData()` doesn't touch files; its only caller (`seedDemoData`) calls `artworkStore.clear()` alongside it.
+- Old `Caches/artwork/` files from the removed media-session cache module are left for the OS to clear.
 
 ## Still open
 
