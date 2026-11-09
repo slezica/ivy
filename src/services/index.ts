@@ -1,6 +1,6 @@
 import { BaseService } from './base'
 import { AudioSlicerService, AudioPlayerService, AudioMetadataService, FFmetadataService, playbackService } from './audio'
-import { DatabaseService, FileStorageService, FileCopierService, FilePickerService } from './storage'
+import { DatabaseService, FileStorageService, ArtworkStore, FileCopierService, FilePickerService } from './storage'
 import { WhisperService, TranscriptionQueueService } from './transcription'
 import { SharingService, NetworkService, isTestBuild } from './system'
 export { toast, copyText, getBuildVariant, isTestBuild } from './system'
@@ -16,6 +16,7 @@ export type {
   FFmetadataService,
   WhisperService,
   FileStorageService,
+  ArtworkStore,
   FileCopierService,
   FilePickerService,
   TranscriptionQueueService,
@@ -98,6 +99,7 @@ export type {
 
 export const db = new DatabaseService()
 export const files = new FileStorageService()
+export const artworkStore = new ArtworkStore()
 export const copier = new FileCopierService()
 export const picker = new FilePickerService()
 export const metadata = new AudioMetadataService()

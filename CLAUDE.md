@@ -155,6 +155,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   │   ├── storage/
   │   │   ├── database.ts         # SQLite operations
   │   │   ├── files.ts            # App-storage file utilities (stat, delete, list — copying is the native copier's job)
+  │   │   ├── artwork.ts          # ArtworkStore: book covers as files in <documents>/artwork/ (<bookId>.<hash4>.<ext>)
   │   │   ├── copier.ts           # Native file copier (progress, fingerprint, cancel)
   │   │   ├── picker.ts           # Document picker
   │   │   └── __tests__/          # database.test.ts + migrations.test.ts + sqlite_adapter (real SQLite in Jest)

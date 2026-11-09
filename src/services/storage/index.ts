@@ -3,6 +3,8 @@ export type { Book, BookExtras, BookEditableFields, Chapter, Clip, ClipWithFile,
 
 export { FileStorageService } from './files'
 
+export { ArtworkStore } from './artwork'
+
 export { FileCopierService } from './copier'
 export type { CopyBeginResult, CopyCommitResult, ProgressCallback } from './copier'
 
