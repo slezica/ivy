@@ -63,7 +63,7 @@ The service configures TrackPlayer lazily on first use (`ensureSetup`):
 `load(uri, metadata?)` is the most complex method:
 
 1. Reset the player (unload previous track)
-2. Add the new track with metadata (title, artist, artwork — used for system notification). Artwork goes to the session as a `file://` URI written by `artworkFileUri()` (`services/audio/artwork.ts`), never as the stored data URI — see docs/2026-09-28-media-session-artwork-files.md
+2. Add the new track with metadata (title, artist, artwork — used for system notification). Artwork goes to the session as the cover file's `file://` URI, straight from the book (`loadBook` passes `artworkUri(book.artwork_file)`; covers are files, see docs/BOOKS.md). Anything that isn't `file://` is dropped, never converted: a data URI in the session crashed SystemUI — see docs/2026-09-28-systemui-artwork-crash.md and docs/2026-09-28-media-session-artwork-files.md
 3. **Poll for duration** — TrackPlayer doesn't return duration immediately after adding a track (it needs time to probe the file's headers). The service polls `getProgress()` every 25ms until `duration > 0`, with a 10-second timeout. On timeout (corrupt file, unsupported format) `load()` throws; `loadBook()` catches, resets playback to `'idle'` with `uri = null`, and rethrows.
 4. Convert the duration from seconds to milliseconds and return it
 
