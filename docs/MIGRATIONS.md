@@ -7,7 +7,9 @@ story. Design records:
 [2026-09-02-artwork-oom-repair.md](2026-09-02-artwork-oom-repair.md) (async
 unification), [2026-09-02-migration-testing.md](2026-09-02-migration-testing.md)
 (testing system), [2026-09-28-upgrade-scenarios.md](2026-09-28-upgrade-scenarios.md)
-(upgrade test rework: scenarios per live version).
+(upgrade test rework: scenarios per live version),
+[2026-09-28-artwork-as-files.md](2026-09-28-artwork-as-files.md) (migration
+14, the first one crossed by a scenario).
 
 ## The system
 
@@ -15,7 +17,8 @@ unification), [2026-09-02-migration-testing.md](2026-09-02-migration-testing.md)
   `src/services/storage/database.ts`. The array **is** the schema history.
 - Signature: `(db, deps) => Promise<void>`. `deps` (`MigrationDeps`) injects
   native services so data-repair migrations can do real work (e.g. image
-  re-encoding via `AudioMetadataService.downscaleArtwork`).
+  re-encoding via `AudioMetadataService.downscaleArtwork`, cover files via
+  `ArtworkStore.write`).
 - The last applied index is tracked in the single-row `status` table.
   `DatabaseService.migrate(deps)` awaits pending migrations in order, bumping
   the index after each. Bootstrap guard: migration 0 records itself in
@@ -66,6 +69,12 @@ The shipped data-transforming migrations, as worked examples:
 | 8 | Snapshot book title/artist onto clips (backfill new columns) | Per-device backfill — no bump, no queue |
 | 12 | Strip enclosing quotes from transcriptions | Per-device normalization — no bump, no queue |
 | 13 | Downscale oversized stored artwork | Converging repair — bump + queue |
+| 14 | Move base64 covers to files (`artwork_file`), clear `artwork` | Per-device normalization — no bump, no queue (wire format unchanged) |
+
+Migration 14 also shows idempotence with filesystem work: ADD COLUMN guarded
+by `PRAGMA table_info`, rows gated on `artwork IS NOT NULL`, deterministic
+filenames (a rerun reuses the file), and filesystem errors throw so the
+migration reruns rather than stranding covers.
 
 ## Adding a migration — checklist
 
@@ -132,7 +141,15 @@ Three layers (see the testing design record for full rationale):
      migration above the oldest live version is crossed by a scenario;
      versions unique, tagged, not ahead; every version seeds
      `baselineLibrary`.
+   - **Dry run (jest):** each version's scenarios are seeded into a jest DB
+     at its migration index, migrated to latest, and verified — catches SQL
+     typos and seed/verify drift in seconds. The device run stays the real
+     check (real base builds, native file writes).
+   - First scenario crossing a migration: `libraryWithCovers`
+     (`migrations: [14]`, seeded by every live version) — JPEG, PNG and
+     coverless books; verifies filename shape, exact file size on disk
+     (`ctx.fileSize`), base64 cleared, no `updated_at` bump.
 
 **Testing:** `src/services/storage/__tests__/migrations.test.ts`,
 `src/services/storage/__tests__/sqlite_adapter.ts`,
-`bin/__tests__/upgrade_scenarios.test.ts`, `bin/ivy.ts test --upgrade`.
+`bin/__tests__/upgrade_scenarios.test.ts` (guards + dry run), `bin/ivy.ts test --upgrade`.
