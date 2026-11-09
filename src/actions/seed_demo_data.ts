@@ -12,7 +12,7 @@
  */
 
 import RNFS from 'react-native-fs'
-import type { DatabaseService, FileStorageService } from '../services'
+import type { DatabaseService, FileStorageService, ArtworkStore } from '../services'
 import type { SetState } from '../store/types'
 import { createLogger } from '../utils'
 import { CLIPS_DIR } from './constants'
@@ -60,6 +60,7 @@ interface DemoSeed {
 export interface SeedDemoDataDeps {
   db: DatabaseService
   files: FileStorageService
+  artworkStore: ArtworkStore
   set: SetState
 }
 
@@ -70,7 +71,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 export const createSeedDemoData = (deps: SeedDemoDataDeps): SeedDemoData => (
   async () => {
-    const { db, files, set } = deps
+    const { db, files, artworkStore, set } = deps
 
     const seedPath = `${DEMO_DIR}/seed.json`
     if (!(await RNFS.exists(seedPath))) return false
@@ -79,6 +80,7 @@ export const createSeedDemoData = (deps: SeedDemoDataDeps): SeedDemoData => (
     const seed: DemoSeed = JSON.parse(await RNFS.readFile(seedPath, 'utf8'))
 
     db.clearAllData()
+    await artworkStore.clear()
     await files.ensureAudioDirectory()
     await RNFS.mkdir(CLIPS_DIR)
 

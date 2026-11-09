@@ -32,9 +32,10 @@ function createDeps() {
     setSettings: jest.fn(async () => {}),
   })
   const files = createMockFiles()
+  const artworkStore = { clear: jest.fn(async () => {}) } as any
   const set = createImmerSet(state)
 
-  return { state, deps: { db, files, set } }
+  return { state, deps: { db, files, artworkStore, set } }
 }
 
 function mockBundle(seed: object | null) {
@@ -63,6 +64,7 @@ describe('createSeedDemoData', () => {
 
     expect(seeded).toBe(false)
     expect(deps.db.clearAllData).not.toHaveBeenCalled()
+    expect(deps.artworkStore.clear).not.toHaveBeenCalled()
   })
 
   it('wipes the database and seeds books with descending updated_at', async () => {
@@ -73,6 +75,7 @@ describe('createSeedDemoData', () => {
 
     expect(seeded).toBe(true)
     expect(deps.db.clearAllData).toHaveBeenCalled()
+    expect(deps.artworkStore.clear).toHaveBeenCalled() // cover files go with their rows
     expect(deps.db.restoreBookFromBackup).toHaveBeenCalledTimes(3)
 
     const calls = (deps.db.restoreBookFromBackup as jest.Mock).mock.calls
