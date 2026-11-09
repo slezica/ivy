@@ -1,5 +1,5 @@
 import { createInitializeApplication, InitializeApplicationDeps } from '../initialize_application'
-import { createMockState, createImmerSet, createMockDb } from './helpers'
+import { createMockState, createImmerSet, createMockDb, createMockArtworkStore } from './helpers'
 
 
 // -- Helpers ------------------------------------------------------------------
@@ -11,7 +11,9 @@ function createDeps(overrides: Partial<InitializeApplicationDeps> = {}) {
     db: createMockDb({
       getLastPlayedBook: jest.fn(() => null),
       getSettings: jest.fn(() => ({ sync_enabled: false, transcription_enabled: false })),
+      getArtworkFiles: jest.fn(async () => []),
     }),
+    artworkStore: createMockArtworkStore(),
     slicer: { warmUp: jest.fn(async () => {}) } as any,
     network: { start: jest.fn() } as any,
     toast: jest.fn(),
@@ -150,6 +152,43 @@ describe('createInitializeApplication', () => {
     await initializeApplication()
 
     expect(deps.fetchBooks).toHaveBeenCalled()
+    expect(state.initialized).toBe(true)
+  })
+
+  it('sweeps orphaned covers against every referenced file, after all startup writers', async () => {
+    const calls: string[] = []
+    const referenced = ['book-1.abcd.jpg', 'hidden-book.ef01.png']
+    const { deps } = createDeps({
+      db: createMockDb({
+        getLastPlayedBook: jest.fn(() => ({ uri: 'file:///audio/book-1.mp3', position: 0 })),
+        getSettings: jest.fn(() => ({ sync_enabled: false, transcription_enabled: false })),
+        getArtworkFiles: jest.fn(async () => referenced),
+      }),
+      artworkStore: createMockArtworkStore({
+        sweep: jest.fn(async () => { calls.push('sweep'); return 2 }),
+      }),
+      runMigrations: jest.fn(async () => { calls.push('migrate') }),
+      seedDemoData: jest.fn(async () => { calls.push('seed'); return false }),
+      fetchBooks: jest.fn(async () => { calls.push('fetchBooks') }),
+      loadBook: jest.fn(async () => { calls.push('loadBook') }),
+    })
+    const initializeApplication = createInitializeApplication(deps)
+
+    await initializeApplication()
+
+    expect(deps.artworkStore.sweep).toHaveBeenCalledWith(referenced)
+    expect(calls).toEqual(['migrate', 'seed', 'fetchBooks', 'sweep', 'loadBook'])
+  })
+
+  it('initializes normally when the sweep fails', async () => {
+    const { state, deps } = createDeps({
+      artworkStore: createMockArtworkStore({ sweep: jest.fn(async () => { throw new Error('EIO') }) }),
+    })
+    const initializeApplication = createInitializeApplication(deps)
+
+    await initializeApplication()
+
+    expect(deps.toast).not.toHaveBeenCalled()
     expect(state.initialized).toBe(true)
   })
 })
