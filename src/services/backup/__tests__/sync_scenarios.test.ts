@@ -1436,6 +1436,54 @@ describe('sync scenarios', () => {
     })
   })
 
+  describe('book covers (files locally, base64 on the wire)', () => {
+    const JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
+
+    // A local book whose cover is a file in the device's artwork store
+    async function addBookWithCover(device: SyncHarness, cover: string, id: string = BOOK_ID): Promise<string> {
+      const filename = (await device.artwork.write(id, cover))!
+      await device.db.upsertBook(
+        id, `file:///audio/${id}.mp3`, 'Test Book', 60000, 5000,
+        'Test Title', 'Test Artist', filename, 1024, FINGERPRINT,
+      )
+      return filename
+    }
+
+    describe('push', () => {
+      it('embeds the cover file as a data URI', async () => {
+        const drive = new FakeDrive()
+        const device = await createSyncHarness(drive)
+
+        await addBookWithCover(device, JPEG)
+        await device.sync.syncNow()
+
+        expect(drive.readJson(`book_${BOOK_ID}.json`).artwork).toBe(JPEG)
+      })
+
+      it('sends null when the cover file is missing', async () => {
+        const drive = new FakeDrive()
+        const device = await createSyncHarness(drive)
+
+        const filename = await addBookWithCover(device, JPEG)
+        await device.artwork.remove(filename) // local corruption
+        await device.sync.syncNow()
+
+        expect(drive.readJson(`book_${BOOK_ID}.json`).artwork).toBeNull()
+      })
+
+      it('sends null for a book without a cover', async () => {
+        const drive = new FakeDrive()
+        const device = await createSyncHarness(drive)
+
+        await addBook(device)
+        await device.sync.syncNow()
+
+        const remote = drive.readJson(`book_${BOOK_ID}.json`)
+        expect(remote).toHaveProperty('artwork', null)
+      })
+    })
+  })
+
   describe('payload format versioning', () => {
     it('stamps uploaded payloads with the writer and compat versions', async () => {
       const drive = new FakeDrive()

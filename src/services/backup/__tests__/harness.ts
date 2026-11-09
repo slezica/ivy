@@ -7,7 +7,7 @@
  */
 
 import { DatabaseService } from '../../storage'
-import { createTestDatabase, testMigrationDeps } from '../../storage/__tests__/sqlite_adapter'
+import { createMemoryArtworkStore, createTestDatabase, testMigrationDeps } from '../../storage/__tests__/sqlite_adapter'
 import { BackupSyncService } from '../sync'
 import type { GoogleDriveService, DriveFile, BackupFolder } from '../drive'
 import { DriveApiError } from '../drive'
@@ -216,16 +216,19 @@ export interface SyncHarness {
   db: DatabaseService
   drive: FakeDrive
   sync: BackupSyncService
+  artwork: ReturnType<typeof createMemoryArtworkStore>  // this device's cover files
 }
 
 /**
  * A simulated device: real DatabaseService (real SQLite) + real
- * BackupSyncService against the given fake Drive. Pass the same FakeDrive to
+ * BackupSyncService against the given fake Drive, with its own in-memory
+ * cover files. Pass the same FakeDrive to
  * multiple harnesses to simulate multi-device sync.
  */
 export async function createSyncHarness(drive: FakeDrive = new FakeDrive()): Promise<SyncHarness> {
   const db = new DatabaseService(createTestDatabase())
   await db.migrate(testMigrationDeps)
-  const sync = new BackupSyncService(db, drive.asDriveService(), createFakeAuth())
-  return { db, drive, sync }
+  const artwork = createMemoryArtworkStore()
+  const sync = new BackupSyncService(db, drive.asDriveService(), createFakeAuth(), artwork)
+  return { db, drive, sync, artwork }
 }

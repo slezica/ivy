@@ -111,7 +111,7 @@ export const network = new NetworkService()
 export const audio = new AudioPlayerService()
 export const auth = new GoogleAuthService()
 export const drive = new GoogleDriveService(auth)
-export const sync = new BackupSyncService(db, drive, auth)
+export const sync = new BackupSyncService(db, drive, auth, artworkStore)
 export const transcription = new TranscriptionQueueService({
   database: db,
   whisper,

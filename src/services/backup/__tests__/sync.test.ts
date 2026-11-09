@@ -69,6 +69,13 @@ function createRemoteBookJson(overrides: Record<string, any> = {}): string {
   })
 }
 
+// Cover files: none on disk (sync's artwork handling is covered by sync_scenarios)
+const artworkStore = {
+  write: jest.fn(async () => null),
+  readDataUri: jest.fn(async () => null),
+  remove: jest.fn(async () => {}),
+}
+
 describe('BackupSyncService', () => {
   function createMockDeps() {
     const db: jest.Mocked<DatabaseService> = {
@@ -138,7 +145,7 @@ describe('BackupSyncService', () => {
         return []
       })
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       const p1 = service.syncNow()
       const p2 = service.syncNow()
       const p3 = service.syncNow()
@@ -153,7 +160,7 @@ describe('BackupSyncService', () => {
       let count = 0
       db.setLastSyncTime.mockImplementation(async () => { count++ })
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
       await service.syncNow()
 
@@ -169,7 +176,7 @@ describe('BackupSyncService', () => {
         if (authInitCount === 1) throw new Error('Network error')
       })
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
       await service.syncNow()
 
@@ -185,7 +192,7 @@ describe('BackupSyncService', () => {
       let count = 0
       db.setLastSyncTime.mockImplementation(async () => { count++ })
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.autoSync()
 
       expect(count).toBe(0)
@@ -219,7 +226,7 @@ describe('BackupSyncService', () => {
       db.getBookById.mockResolvedValue(createBook({ updated_at: 1000, updated_by: 'device-a' }))
       db.getBookByFingerprint.mockResolvedValue(null)
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(db.restoreBookFromBackup).toHaveBeenCalled()
@@ -246,7 +253,7 @@ describe('BackupSyncService', () => {
       // Local book is newer
       db.getBookById.mockResolvedValue(createBook({ updated_at: 3000, updated_by: 'device-a' }))
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(db.restoreBookFromBackup).not.toHaveBeenCalled()
@@ -281,7 +288,7 @@ describe('BackupSyncService', () => {
       }))
       db.getBookByFingerprint.mockResolvedValue(null)
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       // 'device-b' > 'device-a' → remote is ahead → download, not merge
@@ -312,7 +319,7 @@ describe('BackupSyncService', () => {
         updated_by: 'device-a',
       }))
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       // Should not download, merge, or queue
@@ -341,7 +348,7 @@ describe('BackupSyncService', () => {
       db.getBookById.mockResolvedValue(null)
       db.getBookByFingerprint.mockResolvedValue(null)
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(db.restoreBookFromBackup).toHaveBeenCalled()
@@ -361,7 +368,7 @@ describe('BackupSyncService', () => {
         newStartPageToken: '101',
       })
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(drive.downloadFile).not.toHaveBeenCalled()
@@ -384,7 +391,7 @@ describe('BackupSyncService', () => {
       // Reconcile fails: remote JSON can't be downloaded
       drive.downloadFile.mockRejectedValue(new Error('Network error'))
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       // Token must not advance — the failed change is re-delivered next sync
@@ -403,7 +410,7 @@ describe('BackupSyncService', () => {
         db.getCheckpoint.mockReturnValue({ last_page_token: null, last_full_reconcile_at: null })
       })
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(db.clearCheckpoint).toHaveBeenCalled()
@@ -437,7 +444,7 @@ describe('BackupSyncService', () => {
       }])
       db.getBookById.mockResolvedValue(book)
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(drive.uploadFile).toHaveBeenCalled()
@@ -474,7 +481,7 @@ describe('BackupSyncService', () => {
         synced_at: 500,
       })
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(drive.updateFile).toHaveBeenCalledWith('existing-drive-id', expect.any(String))
@@ -502,7 +509,7 @@ describe('BackupSyncService', () => {
       db.getBookById.mockResolvedValue(book)
       db.getManifestEntry.mockResolvedValue(null)
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(drive.uploadFile).toHaveBeenCalled()
@@ -534,7 +541,7 @@ describe('BackupSyncService', () => {
         .mockResolvedValueOnce(book)
         .mockResolvedValueOnce(createBook({ updated_at: 2000 }))
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       // The upload re-queues with the fresh entity's updated_at, and the
@@ -582,7 +589,7 @@ describe('BackupSyncService', () => {
         .mockResolvedValueOnce(createBook({ updated_at: 1000 }))
         .mockResolvedValueOnce(createBook({ updated_at: 2000 }))
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       // The re-queued row (updated_at_when_queued = 2000) must survive removal
@@ -611,7 +618,7 @@ describe('BackupSyncService', () => {
       // Both calls return same updated_at
       db.getBookById.mockResolvedValue(book)
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       // queueChange should NOT have been called (no stale re-queue)
@@ -639,7 +646,7 @@ describe('BackupSyncService', () => {
       db.getBookById.mockResolvedValue(createBook())
       drive.uploadFile.mockRejectedValue(new Error('Network error'))
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       // Backoff stamped conditionally on the queued version
@@ -683,7 +690,7 @@ describe('BackupSyncService', () => {
         updated_at: 500, updated_by: 'device-a',
       }))
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       // JSON is rewritten in place as a full-payload tombstone
@@ -739,7 +746,7 @@ describe('BackupSyncService', () => {
         updated_at: 2000, updated_by: 'device-b',
       }))
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(drive.updateFile).not.toHaveBeenCalled()
@@ -780,7 +787,7 @@ describe('BackupSyncService', () => {
       // User purged Drive — nothing to tombstone
       drive.downloadFile.mockRejectedValue(new DriveApiError('Failed to download file: 404', 404))
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(drive.updateFile).not.toHaveBeenCalled()
@@ -817,7 +824,7 @@ describe('BackupSyncService', () => {
 
       setupFullReconcileWithRemoteBook(deps, 'b0b00000-0000-0000-0000-00000000b0b0')
 
-      const service = new BackupSyncService(db, deps.drive, deps.auth)
+      const service = new BackupSyncService(db, deps.drive, deps.auth, artworkStore)
       await service.syncNow()
 
       expect(db.restoreBookFromBackup).not.toHaveBeenCalled()
@@ -831,7 +838,7 @@ describe('BackupSyncService', () => {
 
       setupFullReconcileWithRemoteBook(deps, 'b0b00000-0000-0000-0000-00000000b0b0')
 
-      const service = new BackupSyncService(db, deps.drive, deps.auth)
+      const service = new BackupSyncService(db, deps.drive, deps.auth, artworkStore)
       await service.syncNow()
 
       expect(db.restoreBookFromBackup).toHaveBeenCalled()
@@ -848,7 +855,7 @@ describe('BackupSyncService', () => {
 
       setupFullReconcileWithRemoteBook(deps, 'aabbccdd-0000-0000-0000-0000aabbccdd')
 
-      const service = new BackupSyncService(db, deps.drive, deps.auth)
+      const service = new BackupSyncService(db, deps.drive, deps.auth, artworkStore)
       await service.syncNow()
 
       expect(db.restoreBookFromBackup).toHaveBeenCalled()
@@ -869,7 +876,7 @@ describe('BackupSyncService', () => {
       // No remote books
       drive.listFiles.mockResolvedValue([])
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(db.queueChange).toHaveBeenCalledWith('book', 'eee00001-0000-0000-0000-000000000001', 'upsert', 1000)
@@ -880,7 +887,7 @@ describe('BackupSyncService', () => {
 
       drive.getStartPageToken.mockResolvedValue('fresh-token')
 
-      const service = new BackupSyncService(db, drive, auth)
+      const service = new BackupSyncService(db, drive, auth, artworkStore)
       await service.syncNow()
 
       expect(db.setCheckpointPageToken).toHaveBeenCalledWith('fresh-token')

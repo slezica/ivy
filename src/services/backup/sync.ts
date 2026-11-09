@@ -12,7 +12,7 @@
  */
 
 import RNFS from 'react-native-fs'
-import { DatabaseService, Book, Clip, Session, SyncOutboxItem } from '../storage'
+import { DatabaseService, ArtworkStore, Book, Clip, Session, SyncOutboxItem } from '../storage'
 import { GoogleDriveService, DriveFile, DriveApiError, BackupFolder } from './drive'
 import { GoogleAuthService } from './auth'
 import { BaseService } from '../base'
@@ -45,6 +45,9 @@ interface ParsedFilename {
 // A single entry from Drive's change feed
 type RemoteChange = { fileId: string; removed: boolean; file?: DriveFile }
 
+// Book covers are files locally, base64 data URIs on the wire (BookBackup.artwork)
+export type SyncArtworkStore = Pick<ArtworkStore, 'write' | 'readDataUri' | 'remove'>
+
 export type BackupSyncEvents = {
   status: SyncStatus
   data: SyncNotification
@@ -74,6 +77,7 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
   private db: DatabaseService
   private drive: GoogleDriveService
   private auth: GoogleAuthService
+  private artworkStore: SyncArtworkStore
   private isSyncing = false
 
   // Pull-side poison-pill tracking. In-memory by design: an app restart resets
@@ -88,11 +92,13 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
     db: DatabaseService,
     drive: GoogleDriveService,
     auth: GoogleAuthService,
+    artworkStore: SyncArtworkStore,
   ) {
     super()
     this.db = db
     this.drive = drive
     this.auth = auth
+    this.artworkStore = artworkStore
   }
 
   async getPendingCount(): Promise<number> {
@@ -1148,7 +1154,8 @@ export class BackupSyncService extends BaseService<BackupSyncEvents> {
       updated_by: book.updated_by,
       title: book.title,
       artist: book.artist,
-      artwork: book.artwork,
+      // Missing file or no cover → null: local truth is "no cover"
+      artwork: book.artwork_file ? await this.artworkStore.readDataUri(book.artwork_file) : null,
       file_size: book.file_size,
       fingerprint: uint8ArrayToBase64(book.fingerprint),
       speed: book.speed,

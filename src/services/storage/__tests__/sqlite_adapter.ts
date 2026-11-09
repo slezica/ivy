@@ -71,8 +71,8 @@ export function createTestDatabase(): SQLite.SQLiteDatabase {
 }
 
 /**
- * In-memory stand-in for ArtworkStore.write: same parsing and naming as the
- * real store, files kept in `files` (filename -> base64 payload).
+ * In-memory stand-in for ArtworkStore: same parsing and naming as the real
+ * store, files kept in `files` (filename -> base64 payload).
  */
 export function createMemoryArtworkStore() {
   const files = new Map<string, string>()
@@ -84,6 +84,15 @@ export function createMemoryArtworkStore() {
       const filename = artworkFilename(bookId, artwork)
       if (!files.has(filename)) files.set(filename, artwork.base64)
       return filename
+    },
+    readDataUri: async (filename: string): Promise<string | null> => {
+      const base64 = files.get(filename)
+      if (base64 === undefined) return null
+      const ext = filename.slice(filename.lastIndexOf('.') + 1)
+      return `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${base64}`
+    },
+    remove: async (filename: string): Promise<void> => {
+      files.delete(filename)
     },
   }
 }
