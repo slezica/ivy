@@ -214,6 +214,12 @@ RECIPES
     logs --tag ReactNativeJS | grep TLTRACE   # gestures, seeks, mode changes
   Playback ownership / actions:
     logs --tag ReactNativeJS | grep -F -e '[Play]' -e '[Pause]' -e '[Seek]'
+  Retry an upgrade by hand (migration work; emulator only):
+    install the old base, seed it (or run test --upgrade --from <tag> once),
+    stop the app, then snapshot the whole emulator:
+      adb emu avd snapshot save pre-upgrade
+    after each attempt (adb install -r <new apk>, launch, inspect):
+      adb emu avd snapshot load pre-upgrade   # seconds; app + DB + files reset
 
 GOTCHAS
   - Playback state drifts while you work (tracks end, flows leave things
