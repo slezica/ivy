@@ -13,6 +13,7 @@ import { View, Text, Image, StyleSheet } from 'react-native'
 import { Color, Space } from '../theme'
 import { EXTRACTED_METADATA_VERSION } from '../services/audio/ffmetadata'
 import TextButton from './shared/TextButton'
+import { artworkUri } from '../services/storage/artwork'
 import { copyText } from '../services'
 import type { Book } from '../services'
 
@@ -44,11 +45,12 @@ export default function BookDetails({ book, onClose, onEdit }: BookDetailsProps)
   const knownFacts = facts.filter((fact): fact is [string, string] => !!fact[1])
 
   const empty = !extracting && knownFacts.length === 0
+  const cover = artworkUri(book.artwork_file)
 
   return (
     <View style={styles.container}>
-      {book.artwork && (
-        <Image source={{ uri: book.artwork }} style={styles.artwork} resizeMode="cover" />
+      {cover && (
+        <Image source={{ uri: cover }} style={styles.artwork} resizeMode="cover" />
       )}
 
       <Text

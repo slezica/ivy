@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, Image } from 'react-native'
 import { Color, Space } from '../theme'
 import { formatTime } from '../utils'
+// Direct module import: the services barrel instantiates every service on load
+import { artworkUri } from '../services/storage/artwork'
 import type { SessionWithBook } from '../services'
 
 interface SessionItemProps {
@@ -9,15 +11,16 @@ interface SessionItemProps {
 
 export default function SessionItem({ session }: SessionItemProps) {
   const duration = session.ended_at - session.started_at
+  const cover = artworkUri(session.book_artwork_file)
   const date = new Date(session.started_at)
   const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   const timeStr = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 
   return (
     <View style={styles.sessionItem}>
-      {session.book_artwork ? (
+      {cover ? (
         <Image
-          source={{ uri: session.book_artwork }}
+          source={{ uri: cover }}
           style={styles.artwork}
           resizeMode="cover"
         />

@@ -1,5 +1,5 @@
 import RNFS from 'react-native-fs'
-import { ARTWORK_DIR, ArtworkStore, artworkFilename, parseArtwork } from '../artwork'
+import { ARTWORK_DIR, ArtworkStore, artworkFilename, artworkUri, parseArtwork } from '../artwork'
 import { fnv1a } from '../../../utils'
 
 /**
@@ -84,6 +84,18 @@ describe('artworkFilename', () => {
     const a = artworkFilename('book-1', parseArtwork(JPEG)!)
     const b = artworkFilename('book-1', parseArtwork(OTHER_JPEG)!)
     expect(a).not.toBe(b)
+  })
+})
+
+describe('artworkUri', () => {
+  it('builds the file:// URI of a stored cover', () => {
+    expect(artworkUri('book-1.abcd.jpg')).toBe(`file://${ARTWORK_DIR}/book-1.abcd.jpg`)
+    expect(artworkUri('book-1.abcd.jpg')).toBe(new ArtworkStore().uri('book-1.abcd.jpg'))
+  })
+
+  it('is null for no cover', () => {
+    expect(artworkUri(null)).toBeNull()
+    expect(artworkUri(undefined)).toBeNull()
   })
 })
 

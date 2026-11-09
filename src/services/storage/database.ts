@@ -118,8 +118,7 @@ export interface SessionWithBook extends Session {
   book_name: string | null
   book_title: string | null
   book_artist: string | null
-  book_artwork: string | null
-  book_artwork_file: string | null
+  book_artwork_file: string | null  // Cover filename (render via artworkUri)
 }
 
 export interface Settings {
@@ -1172,7 +1171,6 @@ export class DatabaseService {
         files.name as book_name,
         files.title as book_title,
         files.artist as book_artist,
-        files.artwork as book_artwork,
         files.artwork_file as book_artwork_file
       FROM sessions
       LEFT JOIN files ON sessions.book_id = files.id

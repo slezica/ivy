@@ -55,6 +55,15 @@ export function artworkFilename(bookId: string, artwork: ParsedArtwork): string 
   return `${bookId}.${hash4}.${artwork.ext}`
 }
 
+/**
+ * file:// URI of a stored cover (a book's artwork_file), for <Image> and the
+ * media session. Null for no cover. A missing file is not checked here:
+ * readers render it as no image.
+ */
+export function artworkUri(filename: string | null | undefined): string | null {
+  return filename ? `file://${ARTWORK_DIR}/${filename}` : null
+}
+
 const MIME_BY_EXT: Record<string, string> = { jpg: 'jpeg' }
 
 export class ArtworkStore {

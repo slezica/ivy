@@ -95,7 +95,7 @@ describe('createTrackSession', () => {
 
     it('adds session with book metadata to store', async () => {
       const { state, deps } = createDeps({
-        book: { name: 'My Book.mp3', title: 'My Book', artist: 'Author', artwork: 'data:img' },
+        book: { name: 'My Book.mp3', title: 'My Book', artist: 'Author', artwork_file: 'book-1.abcd.jpg' },
       })
       const trackSession = createTrackSession(deps)
 
@@ -106,7 +106,7 @@ describe('createTrackSession', () => {
       expect(session.book_name).toBe('My Book.mp3')
       expect(session.book_title).toBe('My Book')
       expect(session.book_artist).toBe('Author')
-      expect(session.book_artwork).toBe('data:img')
+      expect(session.book_artwork_file).toBe('book-1.abcd.jpg')
     })
 
     it('does nothing if book does not exist', async () => {

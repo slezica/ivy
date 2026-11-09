@@ -2,6 +2,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Pressable } from 'reac
 import { Ionicons } from '@expo/vector-icons'
 import { Color, Space } from '../theme'
 import { formatDuration } from '../utils'
+// Direct module import: the services barrel instantiates every service on load
+import { artworkUri } from '../services/storage/artwork'
 import type { Book } from '../services'
 
 interface BookItemProps {
@@ -13,6 +15,7 @@ interface BookItemProps {
 
 export default function BookItem({ book, isPlaying, onPress, onOpenMenu }: BookItemProps) {
   const isArchived = book.uri === null
+  const cover = artworkUri(book.artwork_file)
 
   return (
     <TouchableOpacity
@@ -20,9 +23,9 @@ export default function BookItem({ book, isPlaying, onPress, onOpenMenu }: BookI
       onPress={() => onPress(book)}
       activeOpacity={0.7}
     >
-      {book.artwork ? (
+      {cover ? (
         <Image
-          source={{ uri: book.artwork }}
+          source={{ uri: cover }}
           style={[styles.artwork, isArchived && styles.artworkArchived]}
           resizeMode="cover"
         />

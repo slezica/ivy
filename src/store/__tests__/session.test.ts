@@ -156,7 +156,7 @@ describe('createTrackSession', () => {
           book_name: book.name,
           book_title: book.title,
           book_artist: book.artist,
-          book_artwork: book.artwork,
+          book_artwork_file: book.artwork_file,
         },
       },
       currentSessionBookId: null,

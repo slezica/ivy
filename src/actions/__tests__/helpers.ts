@@ -49,7 +49,6 @@ export function createMockSession(overrides: Partial<SessionWithBook> = {}): Ses
     book_name: 'Test Book.mp3',
     book_title: 'Test Title',
     book_artist: 'Test Artist',
-    book_artwork: 'data:image/png;base64,abc',
     book_artwork_file: null,
     ...overrides,
   }

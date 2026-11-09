@@ -11,6 +11,8 @@ import { useState } from 'react'
 import { View, Text, TextInput, Image, StyleSheet } from 'react-native'
 import { Color, Space } from '../theme'
 import TextButton from './shared/TextButton'
+// Direct module import: the services barrel instantiates every service on load
+import { artworkUri } from '../services/storage/artwork'
 import type { Book, BookEditableFields } from '../services'
 
 
@@ -63,11 +65,13 @@ export default function MetadataEditor({ book, onSave, onCancel }: MetadataEdito
     onSave(updates)
   }
 
+  const cover = artworkUri(book.artwork_file)
+
   return (
     <View style={styles.container}>
       {/* Artwork (read-only) */}
-      {book.artwork ? (
-        <Image source={{ uri: book.artwork }} style={styles.artwork} resizeMode="cover" />
+      {cover ? (
+        <Image source={{ uri: cover }} style={styles.artwork} resizeMode="cover" />
       ) : (
         <View style={styles.artworkPlaceholder}>
           <Text style={styles.artworkPlaceholderIcon}>🎵</Text>

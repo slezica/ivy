@@ -276,7 +276,6 @@ describe('DatabaseService (real SQLite)', () => {
       const sessions = await db.getAllSessions()
       expect(sessions).toHaveLength(1)
       expect(sessions[0].book_name).toBeNull()
-      expect(sessions[0].book_artwork).toBeNull()
       expect(sessions[0].book_artwork_file).toBeNull()
     })
 
