@@ -1,6 +1,6 @@
 # Artwork as files
 
-**Status:** decided, not implemented. Implementation follows the
+**Status:** decided, planned (roadmap below), not implemented. Implementation follows the
 upgrade-scenarios rework ([2026-09-28-upgrade-scenarios.md](2026-09-28-upgrade-scenarios.md)),
 whose first real scenario it will be.
 
@@ -104,10 +104,87 @@ clears the base64.
   the column in the same migration is safe. Only a manual sideload downgrade
   would lose covers.
 
-## Open questions
+## Settled (2026-11-09)
 
-- A push when the local cover file is missing: send the JSON without a cover,
-  and does that null the remote cover or leave it? Needs a rule.
-- Column: reuse `artwork` for the path, or add `artwork_path` and drop
-  `artwork` later?
-- Testing plan: to be discussed after the upgrade-scenarios rework lands.
+- **Column:** new `artwork_file` holds the **filename only**
+  (`<id>.<hash4>.<ext>`). The full path is built at runtime from the artwork
+  dir, because app storage paths can differ across installs and users. The
+  migration clears the old `artwork` column. `Book.artwork` leaves the type,
+  so tsc flags every consumer.
+- **Push with a missing file:** send `artwork: null`. Local truth is "no
+  cover". It's rare (local corruption), and old versions read a missing field
+  as null anyway.
+
+## Testing plan
+
+- **Feature (jest):**
+  - `ArtworkStore` (in-memory RNFS):
+    - naming
+    - temp file + rename
+    - replace = new → row → remove old
+    - `sweep(referenced)`
+    - read back as base64
+  - Writers:
+    - `load_file` import/restore (existing cover wins)
+    - re-extraction
+    - `seed_demo_data`
+  - Sync (FakeDrive harness):
+    - push embeds base64; missing file → null
+    - pull writes file then row
+    - changed cover replaces the file, removes the old one
+    - duplicate merge: cover follows the winner
+    - old-format JSON works
+  - Player uses the book's file. `services/audio/artwork.ts` and its tests
+    are deleted.
+  - `clearAllData()` wipes the artwork dir.
+- **Migration:**
+  - Jest prefix-replay: `dbAtVersion(13)` with JPEG, PNG, null and malformed
+    covers. Checks: files with exact bytes, `artwork_file` set, old column
+    cleared, no `updated_at` bump, nothing queued.
+  - Idempotence: crash after the file write, before the row update; rerun
+    converges.
+  - Upgrade scenario `libraryWithCovers` (`migrations: [14]`), seeded by
+    v1.6.4/5/6. Verifies: file exists with exact size, column set, base64
+    cleared, nothing queued. `DATA_TRANSFORMING` gets 14.
+- **Regression catchers:**
+  - types: `Book.artwork` removed
+  - jest: books loaded from the DB carry no `data:` strings
+  - `artwork-cap.yaml` + bridge `check/artwork-cap` check the file on disk
+  - the media-session large-reply check stays
+  - screenshots for visual review
+- **Iteration:**
+  - jest prefix-replay (seconds)
+  - `test --upgrade --from v1.6.6` (~2–3 min, fresh state every run)
+  - emulator snapshots for manual retries (toolkit RECIPE)
+  - demo library rehearsal (`device put --samples` on v1.6.6, then upgrade)
+  - final check: the S25 through alpha
+
+## Roadmap
+
+1. **Storage**
+   1. `ArtworkStore` service + tests (`services/storage/artwork.ts`)
+   2. Migration 14: add `artwork_file`, extract, clear `artwork` + jest
+      prefix-replay + idempotence case
+   3. DB layer: `Book.artwork_file`, `Book.artwork` removed,
+      `clearAllData()` wipes the dir, a `data:`-free guard test
+2. **Writers and readers**
+   1. Import/restore + extraction write through `ArtworkStore`
+   2. UI readers (`BookItem`, `BookDetails`, `MetadataEditor`,
+      `SessionItem`) use a `artworkUri(book)` helper
+   3. Player uses the file; the cache module is removed
+   4. `seed_demo_data` + the screenshots pipeline
+3. **Sync**
+   1. Push: file → base64 (missing → null)
+   2. Pull: base64 → file → row → remove old; duplicate merge
+   3. FakeDrive scenarios
+4. **Device verification**
+   1. Upgrade scenario `libraryWithCovers` + `DATA_TRANSFORMING`
+   2. `artwork-cap` bridge check on files
+   3. Full e2e + `test --upgrade --all` + screenshots review
+5. **Docs:** BOOKS.md, SYNC.md, PLAYBACK.md, CLAUDE.md schema/tree,
+   MIGRATIONS.md worked examples.
+
+## Still open
+
+- Hidden books' cover files accumulate (IDEAS.md, quality of life). Not in
+  scope.
