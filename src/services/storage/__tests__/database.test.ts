@@ -84,6 +84,24 @@ describe('DatabaseService (real SQLite)', () => {
       expect((await db.getArtworkFiles()).sort()).toEqual(['book-1.abcd.jpg', 'book-2.abcd.png'])
     })
 
+    it('clears rows pointing at missing covers without bumping or queueing', async () => {
+      const db = await createDb()
+      await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0, null, null, 'book-1.abcd.jpg')
+      await db.upsertBook('book-2', 'file:///audio/book-2.mp3', 'Book', 60000, 0, null, null, 'book-2.abcd.png')
+      await db.upsertBook('book-3', 'file:///audio/book-3.mp3', 'Book', 60000, 0, null, null, 'book-3.abcd.jpg')
+      await db.hideBook('book-3')
+      const before = await db.getBookById('book-1')
+
+      await db.clearArtworkFiles(['book-1.abcd.jpg', 'book-3.abcd.jpg'])
+
+      const book1 = await db.getBookById('book-1')
+      expect(book1!.artwork_file).toBeNull()
+      expect(book1!.updated_at).toBe(before!.updated_at)
+      expect((await db.getBookById('book-2'))!.artwork_file).toBe('book-2.abcd.png') // good row untouched
+      expect((await db.getBookById('book-3'))!.artwork_file).toBeNull()              // hidden rows too
+      expect(await db.getOutboxItems()).toEqual([])
+    })
+
     it('excludes hidden books from getAllBooks but keeps the row', async () => {
       const db = await createDb()
       await db.upsertBook('book-1', 'file:///audio/book-1.mp3', 'Book', 60000, 0)

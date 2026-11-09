@@ -155,16 +155,18 @@ describe('createInitializeApplication', () => {
     expect(state.initialized).toBe(true)
   })
 
-  it('sweeps orphaned covers against every referenced file, after all startup writers', async () => {
+  it('repairs then sweeps covers after all startup writers, before hydrating', async () => {
     const calls: string[] = []
-    const referenced = ['book-1.abcd.jpg', 'hidden-book.ef01.png']
+    const referenced = ['book-1.abcd.jpg', 'hidden-book.ef01.png', 'gone.0123.jpg']
     const { deps } = createDeps({
       db: createMockDb({
         getLastPlayedBook: jest.fn(() => ({ uri: 'file:///audio/book-1.mp3', position: 0 })),
         getSettings: jest.fn(() => ({ sync_enabled: false, transcription_enabled: false })),
         getArtworkFiles: jest.fn(async () => referenced),
+        clearArtworkFiles: jest.fn(async () => { calls.push('repair') }),
       }),
       artworkStore: createMockArtworkStore({
+        missing: jest.fn(async () => ['gone.0123.jpg']),
         sweep: jest.fn(async () => { calls.push('sweep'); return 2 }),
       }),
       runMigrations: jest.fn(async () => { calls.push('migrate') }),
@@ -176,8 +178,39 @@ describe('createInitializeApplication', () => {
 
     await initializeApplication()
 
-    expect(deps.artworkStore.sweep).toHaveBeenCalledWith(referenced)
-    expect(calls).toEqual(['migrate', 'seed', 'fetchBooks', 'sweep', 'loadBook'])
+    expect(deps.artworkStore.missing).toHaveBeenCalledWith(referenced)
+    expect(deps.db.clearArtworkFiles).toHaveBeenCalledWith(['gone.0123.jpg'])
+    expect(deps.artworkStore.sweep).toHaveBeenCalledWith(referenced) // every row counts, hidden included
+    expect(calls).toEqual(['migrate', 'seed', 'repair', 'sweep', 'fetchBooks', 'loadBook'])
+  })
+
+  it('leaves rows alone when every referenced cover is on disk', async () => {
+    const { deps } = createDeps({
+      db: createMockDb({
+        getLastPlayedBook: jest.fn(() => null),
+        getSettings: jest.fn(() => ({ sync_enabled: false, transcription_enabled: false })),
+        getArtworkFiles: jest.fn(async () => ['book-1.abcd.jpg']),
+        clearArtworkFiles: jest.fn(async () => {}),
+      }),
+    })
+    const initializeApplication = createInitializeApplication(deps)
+
+    await initializeApplication()
+
+    expect(deps.db.clearArtworkFiles).not.toHaveBeenCalled()
+    expect(deps.artworkStore.sweep).toHaveBeenCalledWith(['book-1.abcd.jpg'])
+  })
+
+  it('still sweeps when the repair fails', async () => {
+    const { state, deps } = createDeps({
+      artworkStore: createMockArtworkStore({ missing: jest.fn(async () => { throw new Error('EIO') }) }),
+    })
+    const initializeApplication = createInitializeApplication(deps)
+
+    await initializeApplication()
+
+    expect(deps.artworkStore.sweep).toHaveBeenCalled()
+    expect(state.initialized).toBe(true)
   })
 
   it('initializes normally when the sweep fails', async () => {

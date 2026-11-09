@@ -636,6 +636,17 @@ export class DatabaseService {
     return rows.map((row) => row.artwork_file)
   }
 
+  /**
+   * Clear rows pointing at the given cover files (startup repair: the files
+   * are missing, so the rows read as "no cover" and a later restore or pull
+   * can refill them). Per-device: no updated_at bump, nothing queued.
+   */
+  async clearArtworkFiles(filenames: string[]): Promise<void> {
+    for (const filename of filenames) {
+      await this.db.runAsync('UPDATE files SET artwork_file = NULL WHERE artwork_file = ?', [filename])
+    }
+  }
+
   async upsertBook(
     id: string,
     uri: string,

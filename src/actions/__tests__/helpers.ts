@@ -208,6 +208,7 @@ export function createMockArtworkStore(overrides: Record<string, jest.Mock> = {}
     write: jest.fn(async (bookId: string, dataUri: string) => (dataUri ? `${bookId}.abcd.jpg` : null)),
     remove: jest.fn(async () => {}),
     sweep: jest.fn(async () => 0),
+    missing: jest.fn(async () => []),
     clear: jest.fn(async () => {}),
     uri: jest.fn((filename: string) => `file:///artwork/${filename}`),
     ...overrides,

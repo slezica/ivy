@@ -124,6 +124,17 @@ export class ArtworkStore {
   }
 
   /**
+   * The given filenames that have no file on disk (one directory listing).
+   * Feeds the startup repair: rows pointing at a missing cover read as none.
+   */
+  async missing(filenames: Iterable<string>): Promise<string[]> {
+    const present = (await RNFS.exists(this.dir))
+      ? new Set((await RNFS.readDir(this.dir)).map((entry) => entry.name))
+      : new Set<string>()
+    return [...filenames].filter((filename) => !present.has(filename))
+  }
+
+  /**
    * Delete every file not in `referenced` (orphans and stale temp files).
    * Returns the number removed. Must not run concurrently with writes: a
    * file written but not yet on its row would count as an orphan.

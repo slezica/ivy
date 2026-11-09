@@ -172,6 +172,17 @@ describe('ArtworkStore', () => {
     await expect(store.remove('book-1.abcd.jpg')).resolves.toBeUndefined()
   })
 
+  it('lists which referenced files are missing from disk', async () => {
+    const present = await store.write('book-1', JPEG)
+
+    expect(await store.missing([present!, 'book-2.abcd.jpg'])).toEqual(['book-2.abcd.jpg'])
+    expect(await store.missing([])).toEqual([])
+  })
+
+  it('reports every file missing when the directory does not exist', async () => {
+    expect(await store.missing(['book-1.abcd.jpg'])).toEqual(['book-1.abcd.jpg'])
+  })
+
   it('sweeps unreferenced files and stale temp files', async () => {
     const kept = await store.write('book-1', JPEG)
     const orphan = await store.write('book-2', PNG)

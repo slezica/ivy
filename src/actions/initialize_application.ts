@@ -55,16 +55,18 @@ export const createInitializeApplication: ActionFactory<InitializeApplicationDep
         console.error('[Store] Demo seeding failed:', error)
       })
 
+      // Reconcile cover files with rows before hydrating, so the store never
+      // sees a cover that isn't there. Safe here: this must not overlap a
+      // cover write, and every startup writer (migrations, demo seed) has
+      // finished, while the runtime writers — import and sync pull — are only
+      // reachable from the UI: app/_layout.tsx renders nothing until
+      // `initialized` flips below, and sync's only triggers are LibraryScreen
+      // (autoSync on foreground) and SettingsScreen (syncNow). Awaited for the
+      // same reason.
+      await tidyArtwork(db, artworkStore, log)
+
       // Hydrate store with data
       await Promise.all([fetchBooks(), fetchClips(), fetchSessions()])
-
-      // Sweep orphaned cover files (a crash between file write and row
-      // update, a failed import). Every row counts, hidden/archived included —
-      // their covers come back on restore. Safe here: sweep must not overlap a
-      // cover write, and every writer (migrations, demo seed) has finished,
-      // while import and sync are only reachable from the UI, which renders
-      // once `initialized` flips below. Awaited for the same reason.
-      await sweepArtwork(db, artworkStore, log)
 
       // Auto-load last played book
       const lastPlayed = db.getLastPlayedBook()
@@ -95,10 +97,35 @@ export const createInitializeApplication: ActionFactory<InitializeApplicationDep
   }
 )
 
-// Non-critical: a failed sweep leaves orphans for the next launch
-async function sweepArtwork(db: DatabaseService, artworkStore: ArtworkStore, log: (...args: any[]) => void) {
+// Non-critical: a failed step is retried next launch
+async function tidyArtwork(db: DatabaseService, artworkStore: ArtworkStore, log: (...args: any[]) => void) {
+  let referenced: string[]
   try {
-    const removed = await artworkStore.sweep(await db.getArtworkFiles())
+    referenced = await db.getArtworkFiles()
+  } catch (error) {
+    log('Artwork check failed:', error)
+    return
+  }
+
+  // Repair: rows pointing at a missing file (local corruption, files lost
+  // outside the app) read as no cover, so the UI
+  // shows its placeholder and a later restore or pull can refill it.
+  // Per-device: no updated_at bump, nothing queued.
+  try {
+    const missing = await artworkStore.missing(referenced)
+    if (missing.length > 0) {
+      await db.clearArtworkFiles(missing)
+      log(`Artwork repair cleared ${missing.length} row(s) pointing at missing files`)
+    }
+  } catch (error) {
+    log('Artwork repair failed:', error)
+  }
+
+  // Sweep: delete files no row references (a crash between file write and
+  // row update, a failed import). Every row counts, hidden/archived included
+  // — their covers come back on restore.
+  try {
+    const removed = await artworkStore.sweep(referenced)
     log(`Artwork sweep removed ${removed} orphaned file(s)`)
   } catch (error) {
     log('Artwork sweep failed:', error)
