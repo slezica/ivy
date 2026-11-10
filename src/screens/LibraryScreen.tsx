@@ -20,6 +20,7 @@ import BookItem from '../components/BookItem'
 import { Color, Space } from '../theme'
 import type { Book } from '../services'
 import { MAIN_PLAYER_OWNER_ID } from '../utils'
+import { libraryPress } from './library_press'
 
 const AUTO_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -90,12 +91,13 @@ export default function LibraryScreen() {
       return
     }
 
-    const context = { fileUri: book.uri, position: book.position, ownerId: MAIN_PLAYER_OWNER_ID }
+    // Read at tap time: subscribing to position would re-render every second
+    const { context, needsLoad } = libraryPress({ ...book, uri: book.uri }, useStore.getState().playback)
 
     try {
       // Load before navigating (player shows the book on arrival), start
       // playback after (the library never renders a "Playing" item)
-      await loadBook(context)
+      if (needsLoad) await loadBook(context)
       router.push('/player')
       play(context).catch((error) => console.error('Error starting playback:', error))
     } catch (error) {
