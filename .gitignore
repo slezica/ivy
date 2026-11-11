@@ -52,10 +52,10 @@ app-example
 # Maestro test artifacts
 maestro/screenshots/
 
-# Device screenshots taken by `bin/ivy.ts capture`
+# Device screenshots taken by `bin/ivy-dev.ts capture --screenshot`
 captures/
 
-# Generated store assets + release artifacts (`bin/ivy.ts generate` / `prepare`)
+# Generated store assets + release artifacts (`bin/ivy-dev.ts generate` / `release`)
 dist/
 
 # Git worktrees (standard location; also excluded from jest/tsc/eslint/metro/builds)
@@ -65,5 +65,5 @@ dist/
 /log/
 .claude/
 
-# upgrade-test base APK cache (written by prepare; see docs/MIGRATIONS.md)
+# upgrade-test base APK cache (written by release; see docs/MIGRATIONS.md)
 /cache/

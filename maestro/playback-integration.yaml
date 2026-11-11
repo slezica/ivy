@@ -6,7 +6,7 @@ appId: com.salezica.ivy
 # never exercise and that R8 or a library bump can break without a JS error.
 #
 # Uses the toolkit bridge (media key dispatch, DB checks) — run via
-# `bin/ivy.ts test --e2e [playback-integration]`, not bare `maestro test`.
+# `bin/ivy-dev.ts test --e2e [playback-integration]`, not bare `maestro test`.
 
 - runFlow: subflows/import-book.yaml
 

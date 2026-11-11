@@ -8,8 +8,8 @@ appId: com.salezica.ivy
 # (docs/2026-09-05-r8-obfuscation.md), not transcription quality.
 #
 # maestro builds only: the model URL override points at the bridge, which
-# serves the tiny model (bin/ivy.ts "whisper model server"). Run via
-# `bin/ivy.ts test --e2e [transcription-inference]`, not bare `maestro test`.
+# serves the tiny model (bin/ivy-dev.ts "whisper model server"). Run via
+# `bin/ivy-dev.ts test --e2e [transcription-inference]`, not bare `maestro test`.
 
 - runScript: { file: scripts/bridge.js, env: { CMD: "model/mode/ok" } }
 

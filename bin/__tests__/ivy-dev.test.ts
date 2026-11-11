@@ -5,7 +5,7 @@ import {
   parseArgs, parseHierarchy, hierarchyFromMaestro, parseMediaSession, collectFlowScreenshots, nodeCenter, protoAttr,
   parseSemver, versionCode, validateNextVersion,
   hasVersionSection, insertVersionSection, renderChecklist,
-} from '../ivy'
+} from '../ivy-dev'
 
 describe('parseArgs', () => {
   it('separates positionals from boolean flags', () => {
@@ -205,7 +205,7 @@ describe('renderChecklist', () => {
 })
 
 describe('R8 artifact helpers', () => {
-  const { parseDexMarker, mappingId, mappingRenameRatio, mappingKeptByName, usageRemovals } = require('../ivy')
+  const { parseDexMarker, mappingId, mappingRenameRatio, mappingKeptByName, usageRemovals } = require('../ivy-dev')
 
   it('parses R8 and D8 compiler markers out of DEX bytes', () => {
     const r8 = Buffer.concat([Buffer.from('junk\0'),
@@ -258,7 +258,7 @@ describe('R8 artifact helpers', () => {
 })
 
 describe('r8LogHits', () => {
-  const { r8LogHits } = require('../ivy')
+  const { r8LogHits } = require('../ivy-dev')
   const app = 'com.salezica.ivy'
   const log = [
     '09-05 07:00:00.000  1000  1000 I ActivityManager: Start proc 4242:com.salezica.ivy/u0a240 for activity',
@@ -280,7 +280,7 @@ describe('r8LogHits', () => {
 })
 
 describe('largeSessionReplies', () => {
-  const { largeSessionReplies } = require('../ivy')
+  const { largeSessionReplies } = require('../ivy-dev')
 
   it('collects oversized media-session replies from any process', () => {
     const log = [

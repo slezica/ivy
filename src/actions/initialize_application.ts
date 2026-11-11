@@ -50,7 +50,7 @@ export const createInitializeApplication: ActionFactory<InitializeApplicationDep
       slicer.warmUp().catch(() => {})
 
       // Replace all data with the demo fixture when a seed bundle is present
-      // (Play Store screenshots — see `bin/ivy.ts prepare --screenshots`)
+      // (Play Store screenshots — see `bin/ivy-dev.ts release --screenshots`)
       await seedDemoData().catch((error) => {
         console.error('[Store] Demo seeding failed:', error)
       })

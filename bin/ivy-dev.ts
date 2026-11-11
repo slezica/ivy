@@ -2,7 +2,7 @@
 // Ivy project toolkit — the single CLI for building, testing, preparing and
 // driving/inspecting the app. Replaces the loose scripts that used to live in
 // script/ and the non-standard npm scripts. Design + rationale:
-// docs/2026-07-30-toolkit-cli.md. Full usage: `bin/ivy.ts help`
+// docs/2026-07-30-toolkit-cli.md. Full usage: `bin/ivy-dev.ts --help`
 // (also embedded in CLAUDE.md so agents see it from session init).
 //
 // Single file on purpose: whole tool in one read, no import graph. Split only
@@ -32,12 +32,12 @@ function mainCheckoutRoot(): string {
   return res.status === 0 ? path.dirname(res.stdout.trim()) : ROOT
 }
 const CACHE_ROOT = path.join(mainCheckoutRoot(), 'cache')
-const CACHE_UPGRADE = path.join(CACHE_ROOT, 'upgrade') // upgrade-base APKs, written by prepare
+const CACHE_UPGRADE = path.join(CACHE_ROOT, 'upgrade') // upgrade-base APKs, written by release
 const upgradeCachePath = (version: string) => path.join(CACHE_UPGRADE, `ivy-maestro-${version}.apk`)
 
-const HELP = `Ivy toolkit — project CLI (build, test, prepare, drive, inspect)
+const HELP = `Ivy toolkit — project CLI (build, test, release, drive, inspect)
 
-Usage: bin/ivy.ts <command> [args] [--device <serial>]
+Usage: bin/ivy-dev.ts <command> [args]
 
 Commands:
 
@@ -56,17 +56,17 @@ Commands:
       Recover a Gradle-polluted /workspace: sweep native build outputs and
       regenerate android/ via expo prebuild --clean.
 
-  dev [--clear]
+  start [--clear]
       Start the Metro dev server (Fast Refresh) for the installed debug
       build. Mac-only (the emulator cannot reach a container-local Metro);
       never builds native — install first with \`build debug --install\`.
       --clear resets the Metro cache. Ctrl-C to stop.
 
-  test [name] [--unit | --e2e | --upgrade [--from <tag> | --all]] [--server-only [--port <n>]]
+  test [--unit | --e2e | --upgrade [--from <tag> | --all]] [cases] [--server-only [--port <n>]]
       No flag = both suites. --unit = jest. --e2e = maestro suite; pushes and
       media-scans the fixtures first, verifies delete-original afterwards.
-      [name] runs a single case (jest pattern or maestro flow name) and needs
-      exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
+      [cases] runs specific cases (jest patterns or maestro flow names) and
+      needs exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
       a localhost HTTP interface flows use for device control (network
       toggles, media keys, player seek, DB checks) via maestro/scripts/bridge.js, and
       which serves the Whisper model to maestro builds (cache/whisper/
@@ -85,7 +85,7 @@ Commands:
       version lists (bin/upgrade_scenarios.ts), upgrade-installs the current
       maestro build, verifies those scenarios + migration index + no crash.
       Defaults to the previous release; --from <tag> picks another listed
-      version, --all runs every listed version (as prepare does). Needs a built maestro APK, sqlite3,
+      version, --all runs every listed version (as release does). Needs a built maestro APK, sqlite3,
       and a rootable emulator image (DB and app storage via adb root — the
       maestro variant is not debuggable). See docs/MIGRATIONS.md.
 
@@ -117,7 +117,7 @@ Commands:
                        web/assets/ and the README composite. Emulator-only.
         --icon         dist/icon-512.png from the app icon (ImageMagick)
 
-  prepare --version <X.Y.Z> --changes <markdown> [--screenshots]
+  release --version <X.Y.Z> --changes <markdown> [--screenshots]
       The release pipeline, start to finish. Interactive (keystore password
       prompted up front, held in memory only) — run it on the Mac from a
       terminal. Steps: preflight -> password -> version bump (files only;
@@ -148,21 +148,22 @@ Commands:
       --samples   push the demo seed bundle; the app wipes its DB and
                   self-seeds on next launch. Emulator-only.
 
-  capture [name]
-      Screenshot the device into captures/<name>.png (default: shot-<timestamp>).
+  capture --screenshot [name] | --layout [--raw] | --state
+      Extract information from the running app (one mode per call).
+        --screenshot  screenshot the device into captures/<name>.png
+                      (default name: shot-<timestamp>)
+        --layout      dump the view hierarchy. uiautomator while the app is
+                      idle; maestro's hierarchy (slower JVM start, no idle
+                      wait) while it is playing or when uiautomator gives up
+                      on a never-idle UI. Condensed to elements with
+                      text/resource-id/content-desc; --raw prints the full
+                      XML (or maestro's JSON). React Native testIDs surface
+                      as resource-ids.
+        --state       one-line playback state from the system media session
+                      (playing/paused, position, speed, title) — the hardware
+                      truth, any build, sub-second.
 
-  state
-      One-line playback state from the system media session (playing/paused,
-      position, speed, title) — the hardware truth, any build, sub-second.
-
-  tree [--raw]
-      Dump the view hierarchy. uiautomator while the app is idle; maestro's
-      hierarchy (slower JVM start, no idle wait) while it is playing or when
-      uiautomator gives up on a never-idle UI. Default output is condensed to
-      elements with text/resource-id/content-desc; --raw prints the full XML
-      (or maestro's JSON). Note: React Native testIDs surface as resource-ids.
-
-  logs [--tag <tag>] [--follow]
+  tail [--tag <tag>] [--follow]
       Logcat scoped to the app's pid (app must be running). Default dumps and
       exits; --follow streams. --tag filters (e.g. ReactNativeJS).
 
@@ -173,37 +174,20 @@ Commands:
       (adb root fallback).
 
   help
-      This text.
+      Show usage and documentation (this text).
 
 Global:
   --device <serial>   target device; defaults to the sole attached device,
                       honors ${'$'}ANDROID_SERIAL (same as adb)
-  --no-log            skip the run log. build/test/generate/prepare/doctor
+  --no-log            skip the run log. build/test/generate/release/doctor
                       tee their full output (stdout+stderr, ANSI stripped)
                       to log/<command>.txt, overwritten each run.
+  --help, -h          show usage and documentation
 
-Destructive commands (wipe, put --samples, generate --screenshots) refuse to
-run on anything that is not verifiably an emulator. There is no override flag.
-
-WORKFLOW
-  Seeing a change in the real app, from a cold start:
-    device connect                       # container -> Mac-hosted emulator
-    build maestro --install --arch arm64-v8a   # ~3 min; JS-only changes too
-    drive --file maestro/subflows/import-book.yaml   # known state: fresh app,
-                                         #   one book, transcription off
-    drive --tap "Ivy Test Book"          # library row -> player, playing
-    state                                # playing at 0.0s @1x — Ivy Test Book
-    capture before                       # captures/before.png
-  Then act (drive), observe (state, tree, capture, logs, query), repeat.
-  Variant: maestro (e2e twin of the release build, with test affordances:
-  --seek, TLTRACE, 5s sleep preset). debug needs Metro on the Mac.
-
-  Observe                              Act
-    state    playback, sub-second        drive --play/--pause  confirmed toggle
-    tree     screen elements + bounds    drive --seek <ms>     main player
-    capture  screenshot -> captures/     drive --tap <id|text> one element
-    logs     app logcat (--tag)          drive --nav <route>   deep link
-    query    the app DB, read-only       drive --inline/--file maestro steps
+Destructive commands (device wipe, device put --samples, test --upgrade,
+generate --screenshots) refuse to run on anything that is not verifiably an
+emulator. There is deliberately no --force: the emulator is disposable, the
+developer's phone is not.
 
 RECIPES
   Book at a known position, playing:
@@ -219,9 +203,9 @@ RECIPES
   Screen state from a flow's own eyes:
     takeScreenshot: screenshots/<name>   ->  maestro/screenshots/<name>.png
   Timeline internals (maestro/debug builds):
-    logs --tag ReactNativeJS | grep TLTRACE   # gestures, seeks, mode changes
+    tail --tag ReactNativeJS | grep TLTRACE   # gestures, seeks, mode changes
   Playback ownership / actions:
-    logs --tag ReactNativeJS | grep -F -e '[Play]' -e '[Pause]' -e '[Seek]'
+    tail --tag ReactNativeJS | grep -F -e '[Play]' -e '[Pause]' -e '[Seek]'
   Retry an upgrade by hand (migration work; emulator only):
     install the old base, seed it (or run test --upgrade --from <tag> once),
     stop the app, then snapshot the whole emulator:
@@ -229,12 +213,32 @@ RECIPES
     after each attempt (adb install -r <new apk>, launch, inspect):
       adb emu avd snapshot load pre-upgrade   # seconds; app + DB + files reset
 
+WORKFLOWS
+  Seeing a change in the real app, from a cold start:
+    device connect                       # container -> Mac-hosted emulator
+    build maestro --install --arch arm64-v8a   # ~3 min; JS-only changes too
+    drive --file maestro/subflows/import-book.yaml   # known state: fresh app,
+                                         #   one book, transcription off
+    drive --tap "Ivy Test Book"          # library row -> player, playing
+    capture --state                      # playing at 0.0s @1x — Ivy Test Book
+    capture --screenshot before          # captures/before.png
+  Then act (drive), observe (capture, tail, query), repeat.
+  Variant: maestro (e2e twin of the release build, with test affordances:
+  --seek, TLTRACE, 5s sleep preset). debug needs Metro on the Mac.
+
+  Observe                              Act
+    capture --state       playback       drive --play/--pause  confirmed toggle
+    capture --layout      elements       drive --seek <ms>     main player
+    capture --screenshot  -> captures/   drive --tap <id|text> one element
+    tail     app logcat (--tag)          drive --nav <route>   deep link
+    query    the app DB, read-only       drive --inline/--file maestro steps
+
 GOTCHAS
   - Playback state drifts while you work (tracks end, flows leave things
-    playing). Check state before acting on it, or use drive --play/--pause,
+    playing). capture --state before acting on it, or use drive --play/--pause,
     which check for you.
-  - tree: ~3s while idle, ~4s while playing (maestro hierarchy), ~15s only
-    when uiautomator gives up on an animating, non-playing screen.
+  - capture --layout: ~3s while idle, ~4s while playing (maestro hierarchy),
+    ~15s only when uiautomator gives up on an animating, non-playing screen.
   - Toolkit startup is cheap (~0.2s); maestro sessions are not (~10s JVM).
     Batch steps in one --inline rather than many --tap/--inline calls.`
 
@@ -305,7 +309,7 @@ function serial(): string {
   if (deviceFlag) return (resolvedSerial = deviceFlag)
   if (process.env.ANDROID_SERIAL) return (resolvedSerial = process.env.ANDROID_SERIAL)
   const devices = listDevices()
-  if (devices.length === 0) fail('no device attached (container: `bin/ivy.ts device connect`)')
+  if (devices.length === 0) fail('no device attached (container: `bin/ivy-dev.ts device connect`)')
   if (devices.length > 1) fail(`multiple devices attached (${devices.join(', ')}) — pass --device <serial>`)
   return (resolvedSerial = devices[0])
 }
@@ -369,7 +373,7 @@ function cmdBuild(args: Args) {
 
   // Shippable variants get their artifacts checked on the spot; release is
   // additionally delivered to dist/. Tagging is NOT done here — that's
-  // `prepare`, which gates it on tests.
+  // `release`, which gates it on tests.
   if (variant === 'preview' || variant === 'release') checkBuiltArtifact(apkPath(variant))
   if (variant === 'release') {
     checkBuiltArtifact(aabPath())
@@ -721,7 +725,7 @@ function ensureWhisperModelCache() {
 
 function serveModel(req: http.IncomingMessage, res: http.ServerResponse) {
   if (!fs.existsSync(WHISPER_TINY)) {
-    res.writeHead(500).end('bridge: cache/whisper/ggml-tiny.bin missing (run via bin/ivy.ts test --e2e)')
+    res.writeHead(500).end('bridge: cache/whisper/ggml-tiny.bin missing (run via bin/ivy-dev.ts test --e2e)')
     return
   }
   if (modelMode === 'error') {
@@ -936,7 +940,7 @@ function withBridge(fn: (url: string) => void) {
 
   // Own process group: `npx tsx` wraps the real node process, and killing the
   // wrapper alone leaves the server listening (stale bridge on the port next run)
-  const child = spawn('npx', ['tsx', path.join(ROOT, 'bin/ivy.ts'),
+  const child = spawn('npx', ['tsx', path.join(ROOT, 'bin/ivy-dev.ts'),
     'test', '--server-only', '--port', String(port), '--device', serial()],
     { cwd: ROOT, stdio: ['ignore', logFd, logFd], detached: true })
 
@@ -1024,7 +1028,7 @@ function resolveFlow(name: string): string {
 function cmdTest(args: Args) {
   const unit = !!args.flags.unit
   const e2e = !!args.flags.e2e
-  const name = args.positionals[0]
+  const cases = args.positionals
 
   // Foreground bridge for hand-run maestro sessions
   if (args.flags['server-only']) {
@@ -1044,22 +1048,22 @@ function cmdTest(args: Args) {
     return
   }
 
-  if (name && unit === e2e) fail('test <name> needs exactly one of --unit or --e2e')
+  if (cases.length && unit === e2e) fail('test [cases] needs exactly one of --unit or --e2e')
 
   const both = !unit && !e2e
   if (e2e || both) requireMaestro() // fail fast, before jest runs
   if (unit || both) {
     log('jest')
-    run('npx', ['jest', '--silent', ...(name ? [name] : [])])
+    run('npx', ['jest', '--silent', ...cases])
   }
   if (e2e || both) {
     stabilizeAdbForMaestro()
     pushFixtures()
-    if (name) {
-      const flow = resolveFlow(name)
-      log(`maestro flow: ${flow}`)
-      withBridge(url => maestroRun([flow], url))
-      if (flow.includes('delete-original')) checkDeleteMe()
+    if (cases.length) {
+      const flows = cases.map(resolveFlow) // all resolved before any runs
+      log(`maestro flows: ${flows.join(', ')}`)
+      withBridge(url => maestroRun(flows, url))
+      if (flows.some(f => f.includes('delete-original'))) checkDeleteMe()
     } else {
       log('maestro suite')
       withBridge(url => maestroRun(['maestro/'], url))
@@ -1082,7 +1086,7 @@ function latestReleaseTag(): string {
   }
 }
 
-// Cached by prepare at release time; rebuilding from the tag is the fallback.
+// Cached by release at release time; rebuilding from the tag is the fallback.
 // NEVER copies secrets — a tag that predates the committed debug keystore
 // must have its base APK seeded into the cache by hand.
 function upgradeBaseApk(tag: string): string {
@@ -1157,7 +1161,7 @@ function waitForMigrationIndex(ready: (index: number) => boolean, what: string, 
     if (Date.now() > deadline) {
       fail(`timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${what} ` +
         `(last seen migration: ${lastIndex ?? 'none — db not created/readable yet'}; ` +
-        `no crash recorded — check \`bin/ivy.ts logs\` for a stuck migration)`)
+        `no crash recorded — check \`bin/ivy-dev.ts tail\` for a stuck migration)`)
     }
     spawnSync('sleep', ['2'])
   }
@@ -1303,7 +1307,7 @@ function runUpgradeTests(versions: Version[]) {
   requireEmulator('upgrade test')
   if (!has('sqlite3')) fail('sqlite3 not found on the host')
   const currentApk = apkPath('maestro')
-  if (!fs.existsSync(currentApk)) fail(`current maestro APK not found at ${currentApk} — run: bin/ivy.ts build maestro`)
+  if (!fs.existsSync(currentApk)) fail(`current maestro APK not found at ${currentApk} — run: bin/ivy-dev.ts build maestro`)
 
   // Radios off for the whole test: a fresh install immediately starts the
   // 465MB whisper-model download, which saturates the emulator (same reason
@@ -1339,14 +1343,14 @@ function runUpgradeTests(versions: Version[]) {
 }
 
 // ---------------------------------------------------------------------------
-// dev
+// start
 
-function cmdDev(args: Args) {
+function cmdStart(args: Args) {
   // Metro dev server with Fast Refresh, serving the installed debug build
   // (expo-dev-client). Foreground; Ctrl-C to stop. Needs a debug build on the
-  // device (`bin/ivy.ts build debug --install`) — this never builds native.
+  // device (`bin/ivy-dev.ts build debug --install`) — this never builds native.
   if (isContainer) {
-    fail('dev server must run on the Mac — the emulator cannot reach a container-local Metro')
+    fail('start: the dev server must run on the Mac — the emulator cannot reach a container-local Metro')
   }
   run('npx', ['expo', 'start', ...(args.flags.clear ? ['--clear'] : [])])
 }
@@ -1634,11 +1638,11 @@ function pushSamples() {
 }
 
 // ---------------------------------------------------------------------------
-// prepare — the release pipeline, start to finish. Interactive (keystore
+// release — the release pipeline, start to finish. Interactive (keystore
 // password) and long: run it on the Mac from a terminal and walk away after
 // the password prompt. Design: docs/2026-08-11-release-command.md.
 
-const PREPARE_USAGE = 'usage: prepare --version <X.Y.Z> --changes <markdown> [--screenshots]'
+const RELEASE_USAGE = 'usage: release --version <X.Y.Z> --changes <markdown> [--screenshots]'
 
 // --- pure helpers (unit-tested) ---
 
@@ -1688,7 +1692,7 @@ const git = (...args: string[]) => capture('git', args).trim()
 // Everything that could interrupt the pipeline midway, checked before any
 // side effect. Failing here leaves the repo untouched.
 function preflight(version: string, screenshots: boolean) {
-  if (!process.stdin.isTTY) fail('prepare is interactive (keystore password prompt) — run it from a terminal')
+  if (!process.stdin.isTTY) fail('release is interactive (keystore password prompt) — run it from a terminal')
 
   console.log('Tools:')
   const tool = (name: string, hint = '', bin = name) =>
@@ -1716,7 +1720,7 @@ function preflight(version: string, screenshots: boolean) {
   report(fs.existsSync(path.join(SAMPLES, 'data.json')), 'samples/data.json',
     fs.existsSync(path.join(SAMPLES, 'data.json')) ? 'present' : 'missing')
   try {
-    requireEmulator('prepare')
+    requireEmulator('release')
     report(true, 'emulator', serial())
   } catch (e) {
     report(false, 'emulator', e instanceof Fail ? e.message : String(e))
@@ -1725,7 +1729,7 @@ function preflight(version: string, screenshots: boolean) {
   if (fs.existsSync(lpFile)) {
     const sdkDir = fs.readFileSync(lpFile, 'utf8').match(/^sdk\.dir=(.*)$/m)?.[1]
     const polluted = sdkDir !== undefined && !fs.existsSync(sdkDir)
-    report(!polluted, 'local.properties', polluted ? `sdk.dir=${sdkDir} does not exist — run \`bin/ivy.ts clean\`` : 'sdk.dir ok')
+    report(!polluted, 'local.properties', polluted ? `sdk.dir=${sdkDir} does not exist — run \`bin/ivy-dev.ts clean\`` : 'sdk.dir ok')
   }
 
   console.log('Git and version:')
@@ -1764,15 +1768,15 @@ function preflight(version: string, screenshots: boolean) {
   }
 }
 
-function cmdPrepare(args: Args) {
+function cmdRelease(args: Args) {
   const version = args.flags.version
   const changes = args.flags.changes
-  if (typeof version !== 'string' || typeof changes !== 'string' || changes.trim() === '') fail(PREPARE_USAGE)
+  if (typeof version !== 'string' || typeof changes !== 'string' || changes.trim() === '') fail(RELEASE_USAGE)
   const screenshots = !!args.flags.screenshots
 
   let stepNo = 0
   const totalSteps = screenshots ? 10 : 9
-  const step = (title: string) => console.log(`\n━━━ prepare v${version} · step ${++stepNo}/${totalSteps} — ${title}\n`)
+  const step = (title: string) => console.log(`\n━━━ release v${version} · step ${++stepNo}/${totalSteps} — ${title}\n`)
 
   step('preflight: tools, environment, git state')
   preflight(version, screenshots)
@@ -1806,7 +1810,7 @@ function cmdPrepare(args: Args) {
 
   // The release build's `prebuild --clean` wipes android/ — including the
   // maestro APK built below — so stash a copy now and cache it at delivery
-  const maestroStash = path.join(os.tmpdir(), `ivy-prepare-${version}-maestro.apk`)
+  const maestroStash = path.join(os.tmpdir(), `ivy-release-${version}-maestro.apk`)
 
   try {
     step('build maestro variant (test affordances)')
@@ -1919,7 +1923,7 @@ function cmdDoctor() {
   const devices = listDevices()
   if (devices.length === 0) {
     report(false, 'attached', isContainer
-      ? 'none — try `bin/ivy.ts device connect`' : 'none')
+      ? 'none — try `bin/ivy-dev.ts device connect`' : 'none')
   } else {
     for (const d of devices) {
       const model = capture(findAdb(), ['-s', d, 'shell', 'getprop', 'ro.product.model'], { allowFail: true }).trim()
@@ -1942,7 +1946,7 @@ function cmdDoctor() {
     const sdkDir = fs.readFileSync(lpFile, 'utf8').match(/^sdk\.dir=(.*)$/m)?.[1]
     const polluted = sdkDir !== undefined && !fs.existsSync(sdkDir)
     report(!polluted, 'local.properties',
-      polluted ? `sdk.dir=${sdkDir} does not exist — /workspace is polluted, run \`bin/ivy.ts clean\`` : `sdk.dir ok`)
+      polluted ? `sdk.dir=${sdkDir} does not exist — /workspace is polluted, run \`bin/ivy-dev.ts clean\`` : `sdk.dir ok`)
   } else {
     report(null, 'local.properties', 'absent')
   }
@@ -2367,10 +2371,21 @@ function cmdDevice(args: Args) {
 }
 
 // ---------------------------------------------------------------------------
-// capture / tree / logs / query
+// capture (screenshot / layout / state) / tail / query
+
+const CAPTURE_USAGE = 'usage: capture --screenshot [name] | --layout [--raw] | --state (exactly one)'
 
 function cmdCapture(args: Args) {
-  const name = args.positionals[0] ?? `shot-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
+  const modes = ['screenshot', 'layout', 'state'].filter(m => args.flags[m])
+  if (modes.length !== 1) fail(CAPTURE_USAGE)
+  switch (modes[0]) {
+    case 'screenshot': return captureScreenshot(args.positionals[0])
+    case 'layout': return captureLayout(!!args.flags.raw)
+    case 'state': return captureState()
+  }
+}
+
+function captureScreenshot(name = `shot-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`) {
   fs.mkdirSync(CAPTURES_DIR, { recursive: true })
   const file = path.join(CAPTURES_DIR, `${name}.png`)
   const res = spawnSync(findAdb(), ['-s', serial(), 'exec-out', 'screencap', '-p'], { maxBuffer: 64 * 1024 * 1024 })
@@ -2413,7 +2428,7 @@ function waitForPlayback(ok: (s: PlaybackSnapshot) => boolean, timeoutMs: number
   return snap
 }
 
-function cmdState() {
+function captureState() {
   console.log(`playback: ${describePlayback(playbackSnapshot())}`)
 }
 
@@ -2490,9 +2505,9 @@ function parseHierarchy(xml: string): UiNode[] {
   return nodes
 }
 
-function cmdTree(args: Args) {
+function captureLayout(rawOutput: boolean) {
   const { raw, nodes } = dumpHierarchy()
-  if (args.flags.raw) return console.log(raw)
+  if (rawOutput) return console.log(raw)
   for (const node of nodes) {
     const { text, 'resource-id': id, 'content-desc': desc, bounds, class: cls } = node.attrs
     if (!text && !id && !desc) continue
@@ -2529,7 +2544,7 @@ function nodeCenter(node: UiNode): [number, number] {
   return [Math.round((x1 + x2) / 2), Math.round((y1 + y2) / 2)]
 }
 
-function cmdLogs(args: Args) {
+function cmdTail(args: Args) {
   const pid = adbShell('pidof', '-s', APP).trim()
   if (!pid) fail(`${APP} is not running`)
   const logcatArgs = ['-s', serial(), 'logcat', '--pid', pid]
@@ -2620,7 +2635,7 @@ interface Args { positionals: string[], flags: Record<string, string | boolean> 
 // stdin stays inherited: interactive prompts (keystore password) still work,
 // and the password is read with echo off, so it never reaches the log.
 
-const LOGGED_COMMANDS = new Set(['build', 'test', 'generate', 'prepare', 'doctor'])
+const LOGGED_COMMANDS = new Set(['build', 'test', 'generate', 'release', 'doctor'])
 
 function stripAnsi(s: string): string {
   // eslint-disable-next-line no-control-regex
@@ -2680,28 +2695,26 @@ function parseArgs(argv: string[]): Args {
 const COMMANDS: Record<string, (args: Args) => void> = {
   build: cmdBuild,
   clean: cmdClean,
-  dev: cmdDev,
+  start: cmdStart,
   test: cmdTest,
   drive: cmdDrive,
   generate: cmdGenerate,
-  prepare: cmdPrepare,
+  release: cmdRelease,
   doctor: cmdDoctor,
   device: cmdDevice,
   capture: cmdCapture,
-  tree: cmdTree,
-  state: cmdState,
-  logs: cmdLogs,
+  tail: cmdTail,
   query: cmdQuery,
 }
 
 function main() {
   const [cmd, ...rest] = process.argv.slice(2)
-  if (!cmd || cmd === 'help' || cmd === '--help') {
+  if (!cmd || cmd === 'help' || rest.concat(cmd).some(a => a === '--help' || a === '-h')) {
     console.log(HELP)
     return
   }
   const handler = COMMANDS[cmd]
-  if (!handler) fail(`unknown command: ${cmd} (see \`bin/ivy.ts help\`)`)
+  if (!handler) fail(`unknown command: ${cmd} (see \`bin/ivy-dev.ts --help\`)`)
   const args = parseArgs(rest)
   if (LOGGED_COMMANDS.has(cmd) && !args.flags['no-log'] && !process.env.IVY_LOG_ACTIVE) {
     relaunchWithLog(cmd)

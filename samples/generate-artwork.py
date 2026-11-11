@@ -3,7 +3,7 @@
 
 Reads samples/data.json and writes one PNG per book to dist/artwork/ (gitignored),
 using each book's `cover` palette (bg1 -> bg2 vertical gradient, fg text).
-Run after editing data.json (or via `bin/ivy.ts generate --artwork`).
+Run after editing data.json (or via `bin/ivy-dev.ts generate --artwork`).
 
 Requires Pillow (pip install pillow / apt install python3-pil).
 """

@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "postinstall": "patch-package",
-    "start": "bin/ivy.ts dev",
+    "start": "bin/ivy-dev.ts start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "lint": "expo lint",

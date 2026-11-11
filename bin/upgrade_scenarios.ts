@@ -1,4 +1,4 @@
-// Upgrade scenarios for the upgrade test (`bin/ivy.ts test --upgrade`).
+// Upgrade scenarios for the upgrade test (`bin/ivy-dev.ts test --upgrade`).
 // Design: docs/2026-09-28-upgrade-scenarios.md. Re-read before each release.
 //
 // We test APP upgrades from the versions users still run, not migrations.

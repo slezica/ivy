@@ -11,7 +11,7 @@
  * are throttled at the call site so tracing doesn't perturb the timing it
  * observes.
  *
- * Reading the stream: `bin/ivy.ts logs --follow --tag ReactNativeJS`, then
+ * Reading the stream: `bin/ivy-dev.ts tail --follow --tag ReactNativeJS`, then
  * grep TLTRACE. Timestamps are performance.now() ms, the same clock the
  * engine runs on. Each line carries the emitting instance's id — the player
  * and the clip editor mount separate timelines.

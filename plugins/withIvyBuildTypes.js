@@ -22,7 +22,7 @@
 //     other variant resolves to "false", the platform default since targetSdk 28.
 const { withAppBuildGradle, withAndroidManifest, withStringsXml, AndroidConfig } = require('expo/config-plugins')
 
-// Device-side address of the toolkit bridge's model endpoint (bin/ivy.ts maps
+// Device-side address of the toolkit bridge's model endpoint (bin/ivy-dev.ts maps
 // it to the bridge's actual port with `adb reverse`). Exported for the toolkit.
 const BRIDGE_DEVICE_PORT = 7799
 const WHISPER_MODEL_URL = `http://127.0.0.1:${BRIDGE_DEVICE_PORT}/model`

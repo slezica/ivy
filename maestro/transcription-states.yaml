@@ -5,11 +5,11 @@ appId: com.salezica.ivy
 # download completing into a loaded model.
 #
 # The model comes from the toolkit bridge (maestro builds only: the model URL
-# override, see bin/ivy.ts "whisper model server"), so the failure is
+# override, see bin/ivy-dev.ts "whisper model server"), so the failure is
 # simulated by the server (`model/mode/*`) instead of by cutting the network,
 # and the download is a 75MB tiny model rather than 465MB from HuggingFace.
 # Network toggles remain the trigger for the gate and the auto-retry. Uses the
-# short test-build retry backoff (1/3/5s) — run via `bin/ivy.ts test --e2e
+# short test-build retry backoff (1/3/5s) — run via `bin/ivy-dev.ts test --e2e
 # [transcription-states]`, not bare `maestro test`.
 
 # Throttled serving keeps "Downloading…" observable (at loopback speed the tiny
