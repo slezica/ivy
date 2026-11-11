@@ -11,7 +11,7 @@ This project is developed with assistance from Claude.
 
 ## Development
 
-Ivy is built, tested and driven by its own command-line tool (for humans and agents) at `bin/ivy.ts`.
+Ivy is built, tested and driven by its own command-line tool (for humans and agents) at `bin/ivy-dev.ts`.
 
 ### Prerequisites
 
@@ -24,22 +24,22 @@ Ivy is built, tested and driven by its own command-line tool (for humans and age
 
 ```bash
 # First run: build + install the dev client, then start Metro
-bin/ivy.ts build debug --install
+bin/ivy-dev.ts build debug --install
 npm start                         # Metro only (never builds native)
 
 # Full toolkit reference (recommended reading, it's a powerful tool)
-bin/ivy.ts help
+bin/ivy-dev.ts --help
 
 # Frequent commands:
-bin/ivy.ts test                   # unit (jest) + e2e (maestro); --unit / --e2e to pick
-bin/ivy.ts test --upgrade         # migration upgrade smoke test (emulator-only, destructive)
-bin/ivy.ts build release          # release APK + AAB (prompts for password, or $KEYSTORE_PASSWORD)
-bin/ivy.ts doctor                 # environment + built-APK report
+bin/ivy-dev.ts test                   # unit (jest) + e2e (maestro); --unit / --e2e to pick
+bin/ivy-dev.ts test --upgrade         # migration upgrade smoke test (emulator-only, destructive)
+bin/ivy-dev.ts build release          # release APK + AAB (prompts for password, or $KEYSTORE_PASSWORD)
+bin/ivy-dev.ts doctor                 # environment + built-APK report
 ```
 
-Releases go through `bin/ivy.ts prepare --version X.Y.Z --changes '<markdown>'` — the full pipeline (tests, build, artifact checks, tag) in one interactive command. `build release` alone rebuilds artifacts but never tags.
+Releases go through `bin/ivy-dev.ts release --version X.Y.Z --changes '<markdown>'` — the full pipeline (tests, build, artifact checks, tag) in one interactive command. `build release` alone rebuilds artifacts but never tags.
 
-Working from the dev container? The repo is a bind mount of the Mac checkout — never run Gradle in it directly; `bin/ivy.ts build` handles the isolation, and `bin/ivy.ts device connect` reaches the Mac-hosted emulator. See [CLAUDE.md](CLAUDE.md) for the full rules.
+Working from the dev container? The repo is a bind mount of the Mac checkout — never run Gradle in it directly; `bin/ivy-dev.ts build` handles the isolation, and `bin/ivy-dev.ts device connect` reaches the Mac-hosted emulator. See [CLAUDE.md](CLAUDE.md) for the full rules.
 
 ### Documentation
 

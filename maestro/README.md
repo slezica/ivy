@@ -17,13 +17,13 @@ Preview and release deliberately carry zero test surface, so
 and dev-mode overhead. Maestro >= 2.8 (the toolkit is tested against it).
 
 ```bash
-bin/ivy.ts build maestro --install    # env-aware; add --arch arm64-v8a for the emulator
+bin/ivy-dev.ts build maestro --install    # env-aware; add --arch arm64-v8a for the emulator
 ```
 
 The maestro variant is **not debuggable**, so flows that check the DB through
 the bridge (`artwork-cap.yaml`) need a **rootable emulator image** (adb root)
 plus `sqlite3` on the host — a Play-image AVD fails that flow. The same build
-feeds `bin/ivy.ts test --upgrade` (migration smoke test, emulator-only,
+feeds `bin/ivy-dev.ts test --upgrade` (migration smoke test, emulator-only,
 destructive — see docs/MIGRATIONS.md).
 
 ## Running
@@ -31,9 +31,9 @@ destructive — see docs/MIGRATIONS.md).
 With one device/emulator attached:
 
 ```bash
-bin/ivy.ts test --e2e                        # full suite
-bin/ivy.ts drive --file maestro/add-clip.yaml # a single flow
-bin/ivy.ts test --e2e --device <serial>      # target a specific device
+bin/ivy-dev.ts test --e2e                        # full suite
+bin/ivy-dev.ts drive --file maestro/add-clip.yaml # a single flow
+bin/ivy-dev.ts test --e2e --device <serial>      # target a specific device
 ```
 
 The toolkit pushes and **media-scans** the test fixtures first (the picker's
@@ -48,12 +48,12 @@ the run, the toolkit asserts the disposable copy is actually gone — the deleti
 is filesystem state the flow itself can't see. With multiple devices attached,
 pass `--device <serial>` (the toolkit forwards it to adb and maestro).
 
-A single flow also runs by name through the wrapper: `bin/ivy.ts test --e2e
+A single flow also runs by name through the wrapper: `bin/ivy-dev.ts test --e2e
 transcription-states`.
 
 To bypass the wrapper (e.g. debugging one flow), the raw command is
 `maestro --device <serial> test maestro/<flow>.yaml`, after pushing the fixture.
-Flows that call the bridge (below) additionally need `bin/ivy.ts test
+Flows that call the bridge (below) additionally need `bin/ivy-dev.ts test
 --server-only` running and `-e BRIDGE_URL=http://127.0.0.1:7799` passed to
 maestro.
 
@@ -85,7 +85,7 @@ run (`test --e2e`, `drive --file/--inline`), injecting its address as the
 ```
 
 Endpoints are a curated semantic vocabulary — see `BRIDGE_ENDPOINTS` in
-`bin/ivy.ts`; adb knowledge stays in the toolkit, never in yaml:
+`bin/ivy-dev.ts`; adb knowledge stays in the toolkit, never in yaml:
 
 - `net/wifi/on|off`, `net/data/on|off` — radios (emulator only)
 - `player/seek/<ms>` — move the main player (test-build deep link, confirmed via
@@ -122,13 +122,13 @@ devices/emulators**, never a device with real library data.
 The container reaches a host-run emulator over TCP adb:
 
 ```bash
-bin/ivy.ts device connect          # adb connect host.docker.internal:5555
+bin/ivy-dev.ts device connect          # adb connect host.docker.internal:5555
 adb devices                        # now lists the host's emulator
 ```
 
 Note the container image does not ship `maestro` itself — driving flows from
 here needs it installed first; toolkit commands that only use adb (`capture`,
-`tree`, `logs`, `query`, `drive --tap/--nav`) work as-is.
+`tail`, `query`, `drive --tap/--nav`) work as-is.
 
 Run the emulator on the host (accelerated via Hypervisor.framework — no nested
 virtualization needed):
@@ -165,7 +165,7 @@ import at all. Flows that need the maestro build (test affordances, the model
 URL override) say so in their header; on preview/release they fail at the
 first affordance. `config.yaml` scopes the suite to top-level `*.yaml`, excluding
 `subflows/`. Outside the suite, `playstore/screenshots.yaml` drives the Play
-Store screenshot set (run via `bin/ivy.ts generate --screenshots`).
+Store screenshot set (run via `bin/ivy-dev.ts generate --screenshots`).
 
 ### Conventions learned the hard way
 

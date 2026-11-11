@@ -90,13 +90,13 @@ migration reruns rather than stranding covers.
 5. If data-transforming: append the index to `DATA_TRANSFORMING` in
    `bin/__tests__/upgrade_scenarios.test.ts` — also hand-maintained;
    forgetting leaves the coverage guard blind to the new migration.
-6. `bin/ivy.ts build maestro` then `bin/ivy.ts test --upgrade`.
+6. `bin/ivy-dev.ts build maestro` then `bin/ivy-dev.ts test --upgrade`.
 
 **Seed-schema trap:** seeds run against the *base version's* schema — a
 scenario cannot use columns that version doesn't have (branch on
 `ctx.hasColumn`, never on version numbers).
 
-**Release coupling:** `prepare` runs the upgrade test from every listed
+**Release coupling:** `release` runs the upgrade test from every listed
 version (when a previous release tag exists), and its preflight fails when the
 previous release has no `VERSIONS` entry — so each release forces adding its
 own entry before the next one. A base already at `LATEST_MIGRATION` still
@@ -113,9 +113,9 @@ Three layers (see the testing design record for full rationale):
    `testMigrationDeps` with an identity downscaler), seed period-correct rows
    via raw SQL, run the pending migration, assert. **Required for every
    data-transforming migration.**
-2. **Upgrade test** (`bin/ivy.ts test --upgrade`): for each release users
+2. **Upgrade test** (`bin/ivy-dev.ts test --upgrade`): for each release users
    still run (`VERSIONS`), installs its maestro APK (cached in
-   `cache/upgrade/` by `prepare`; rebuilt from tag as fallback — Mac-only),
+   `cache/upgrade/` by `release`; rebuilt from tag as fallback — Mac-only),
    seeds the scenarios that version lists, upgrade-installs the current
    build, then verifies exactly those scenarios + migration index + no crash.
    All versions run even when one fails; one verdict at the end.
@@ -124,7 +124,7 @@ Three layers (see the testing design record for full rationale):
    maestro variant is not debuggable); it **uninstalls the app** and disables
    wifi/data for the run (restored afterwards; suppresses the whisper-model
    download). Defaults to the previous release; `--from <tag>` picks another
-   listed version; `prepare` runs them all.
+   listed version; `release` runs them all.
 3. **Scenarios and versions** (`bin/upgrade_scenarios.ts`): we test app
    upgrades, not just migrations — seeds and verifies are code (SQL on the
    pulled DB, files pushed into app storage, root shell).
@@ -152,4 +152,4 @@ Three layers (see the testing design record for full rationale):
 
 **Testing:** `src/services/storage/__tests__/migrations.test.ts`,
 `src/services/storage/__tests__/sqlite_adapter.ts`,
-`bin/__tests__/upgrade_scenarios.test.ts` (guards + dry run), `bin/ivy.ts test --upgrade`.
+`bin/__tests__/upgrade_scenarios.test.ts` (guards + dry run), `bin/ivy-dev.ts test --upgrade`.

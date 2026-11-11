@@ -261,9 +261,9 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   └── withIvyArchitectures.js     # default reactNativeArchitectures=arm64-v8a (vendored ffmpeg is arm64-only)
 
 /bin
-  ├── ivy.ts                      # THE project CLI (build/test/drive/inspect) — see Toolkit CLI Reference below
+  ├── ivy-dev.ts                  # THE project CLI (build/test/release/drive/inspect) — see Toolkit CLI Reference below
   ├── upgrade_scenarios.ts        # Upgrade-test scenarios + the versions users still run (`test --upgrade`; re-read before releases)
-  └── __tests__/                  # Toolkit tests: hygiene.test.ts (repo gates), ivy.test.ts, upgrade_scenarios.test.ts
+  └── __tests__/                  # Toolkit tests: hygiene.test.ts (repo gates), ivy-dev.test.ts, upgrade_scenarios.test.ts
 
 /secrets                          # Keystores. HARD RULE: secrets are NEVER duplicated —
   │                               # no tooling copies this directory anywhere, ever
@@ -305,7 +305,7 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   └── test-artwork.jpg            # 800px JPEG (>100KB as base64) — oversized-cover fixture (was the artwork-repair hook seed; kept for artwork scenarios)
 
 /cache                            # GENERATED (gitignored): persistent toolkit caches, always the main checkout's (worktrees share it)
-                                  # upgrade/ivy-maestro-<version>.apk — upgrade-test bases, written by prepare
+                                  # upgrade/ivy-maestro-<version>.apk — upgrade-test bases, written by release
                                   # whisper/ggml-tiny.bin — model served to maestro builds by the e2e bridge (fetched once)
 
 /samples                          # Committed sources for generated store/web assets
@@ -314,14 +314,14 @@ Database migration system and its testing layers. See **[docs/MIGRATIONS.md](doc
   └── generate-artwork.py         # Demo cover generator (Pillow; run via `generate --artwork`)
 
 /dist                             # GENERATED (gitignored): store assets + release artifacts
-                                  # audio/, artwork/, screenshots/, feature.png, icon-512.png (bin/ivy.ts generate)
+                                  # audio/, artwork/, screenshots/, feature.png, icon-512.png (bin/ivy-dev.ts generate)
                                   # ivy-release-X.Y.Z.aab/.apk/-mapping.txt (delivered by release builds)
 
 /docs                             # Guides (BOOKS, PLAYBACK, CLIPS, ...), dated records (YYYY-MM-DD-<topic>.md),
                                   # VERSIONS.md (changelog), IDEAS.md (backlog of ideas)
 /web                              # Project site (index.html, privacy.html, assets/ — refreshed by generate --screenshots)
 /patches                          # patch-package patches (react-native-fs), applied on postinstall
-/captures                         # GENERATED (gitignored): device screenshots from `bin/ivy.ts capture`
+/captures                         # GENERATED (gitignored): device screenshots from `bin/ivy-dev.ts capture --screenshot`
 /worktrees                        # Git worktrees (gitignored; the only sanctioned worktree location)
 ```
 
@@ -570,22 +570,22 @@ Tests are colocated in `__tests__/` directories next to the code they test — i
 
 ## Quick Reference
 
-Everything project-specific goes through the toolkit CLI — `bin/ivy.ts` (full reference at the end of this file).
+Everything project-specific goes through the toolkit CLI — `bin/ivy-dev.ts` (full reference at the end of this file).
 
-**Start dev server (Metro/Fast Refresh, Mac-only):** `bin/ivy.ts dev` (`npm start` redirects here)
+**Start dev server (Metro/Fast Refresh, Mac-only):** `bin/ivy-dev.ts start` (`npm start` redirects here)
 **Run unit tests:** `npm test` (with console logs: `npm run test:verbose`)
-**Typecheck / lint:** `npx tsc --noEmit` / `npm run lint` (not run by the toolkit or `prepare` — run them yourself)
-**Run e2e tests:** `bin/ivy.ts test --e2e`
-**Build (env-aware, Mac or container):** `bin/ivy.ts build <variant> [--install]`
-**Recreate Play Store screenshots (+ web/README refresh):** `bin/ivy.ts generate --screenshots` (see docs/2026-07-21-playstore-screenshots.md)
-**Prepare a release (user-run, interactive):** `bin/ivy.ts prepare --version X.Y.Z --changes <markdown>`
-**Environment + built-APK report (incl. ffmpeg linking):** `bin/ivy.ts doctor`
+**Typecheck / lint:** `npx tsc --noEmit` / `npm run lint` (not run by the toolkit or `release` — run them yourself)
+**Run e2e tests:** `bin/ivy-dev.ts test --e2e`
+**Build (env-aware, Mac or container):** `bin/ivy-dev.ts build <variant> [--install]`
+**Recreate Play Store screenshots (+ web/README refresh):** `bin/ivy-dev.ts generate --screenshots` (see docs/2026-07-21-playstore-screenshots.md)
+**Prepare a release (user-run, interactive):** `bin/ivy-dev.ts release --version X.Y.Z --changes <markdown>`
+**Environment + built-APK report (incl. ffmpeg linking):** `bin/ivy-dev.ts doctor`
 
 ### Driving the running app from the CLI
 
-`bin/ivy.ts help` — read WORKFLOW, RECIPES and GOTCHAS before touching the device (reproduced at the end of this file). App and emulator facts the toolkit can't fix for you:
+`bin/ivy-dev.ts --help` — read RECIPES, WORKFLOWS and GOTCHAS before touching the device (reproduced at the end of this file). App and emulator facts the toolkit can't fix for you:
 
-- A fresh app has no media session until a book is opened (`state` says so).
+- A fresh app has no media session until a book is opened (`capture --state` says so).
 - A dialog on top (Error, Archive Book) blocks every tap under it; dismiss it first. Books archived by a flow (add-clip.yaml) open as "Book Unavailable"; re-run `maestro/subflows/import-book.yaml` for a clean library.
 - The document picker's search finds nothing if MediaStore is wedged (`device fix-media`) or Gboard's stylus promo steals the field (the toolkit disables it before flows; `settings put secure stylus_handwriting_enabled 0` by hand).
 - `adb shell am start` URLs containing `&` must be quoted (`drive --seek` does).
@@ -595,26 +595,26 @@ Everything project-specific goes through the toolkit CLI — `bin/ivy.ts` (full 
 The whole release is one toolkit command, **run by the user on the Mac** (it prompts for the keystore password — interactive-only, never stored, never in agent logs). Design: docs/2026-08-11-release-command.md.
 
 ```bash
-bin/ivy.ts prepare --version X.Y.Z --changes '<markdown>' [--screenshots]
+bin/ivy-dev.ts release --version X.Y.Z --changes '<markdown>' [--screenshots]
 ```
 
 Pipeline: preflight (tools, node_modules, release keystore, samples/data.json, emulator, local.properties pollution, clean tree on master, version valid, no VERSIONS.md section yet, tag free) → password prompt + verify → version bump (package.json + lockfile via `npm version` + VERSIONS.md section — files only, committed after tests; a failure reverts them) → maestro build → upgrade test (previous release → this build) → jest + full e2e suite → [screenshots + web/README refresh, committed as `web: refresh screenshots`] → commit `release: vX.Y.Z` → release build → artifact checks (version stamp, ffmpeg closure, R8) → deliver `dist/ivy-release-X.Y.Z.{aab,apk,-mapping.txt}` + cache the maestro APK as the next release's upgrade-test base → tag `vX.Y.Z` → checklist of the remaining manual steps (push, Play Console upload, GitHub release — never automated).
 
-**Agent's role:** write the `--changes` markdown (changeset since last tag, VERSIONS.md style: Features/Fixes/Infra), print the exact `prepare` command for the user to paste, and stop — the command itself needs a TTY the agent doesn't have. Pass `--screenshots` only if UI changed since the last release.
+**Agent's role:** write the `--changes` markdown (changeset since last tag, VERSIONS.md style: Features/Fixes/Infra), print the exact `release` command for the user to paste, and stop — the command itself needs a TTY the agent doesn't have. Pass `--screenshots` only if UI changed since the last release.
 
-Versioning: package.json is the single version of record; `withIvyVersionName` derives versionName and versionCode (major\*10000 + minor\*100 + patch; Play requires strictly increasing, so minor/patch stay < 100 — `prepare` preflight enforces this). app.json's `version` field exists but is unmaintained — ignore it.
+Versioning: package.json is the single version of record; `withIvyVersionName` derives versionName and versionCode (major\*10000 + minor\*100 + patch; Play requires strictly increasing, so minor/patch stay < 100 — `release` preflight enforces this). app.json's `version` field exists but is unmaintained — ignore it.
 
-`bin/ivy.ts build release` alone still builds, checks, and delivers to `dist/` (for rebuilds), but never tags — tagging is `prepare`'s job, gated on the test suite.
+`bin/ivy-dev.ts build release` alone still builds, checks, and delivers to `dist/` (for rebuilds), but never tags — tagging is `release`'s job, gated on the test suite.
 
 
 ## Native Packaging Changes
 
 Any change touching native packaging — `modules/ivy` jniLibs (including the vendored ffmpeg runtime), `FFmpegEnvironment.kt`, `expo.useLegacyPackaging` — needs two checks JS tests can't provide:
 
-1. **Closure check:** `bin/ivy.ts doctor` walks the `NEEDED` graph from `libffmpeg.so` in every built APK it finds, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it after any packaging change. (This used to be a build-time gate — `withIvyFfmpegClosureCheck`, dropped 2026-07-30 once the packaging refactor had settled; revive from git history if packaging churn returns.)
+1. **Closure check:** `bin/ivy-dev.ts doctor` walks the `NEEDED` graph from `libffmpeg.so` in every built APK it finds, cross-checks `FFmpegEnvironment.SYMLINKED_LIBS`, and fails on any soname that won't resolve on device (see docs/CLIPS.md "Vendored shared libs"). Run it after any packaging change. (This used to be a build-time gate — `withIvyFfmpegClosureCheck`, dropped 2026-07-30 once the packaging refactor had settled; revive from git history if packaging churn returns.)
 2. **Fresh-install smoke test (manual):** create a clip / import a chaptered file on a **freshly installed** app, not an upgrade — `no_backup/` survives updates, and stale extracted libs there can mask linking failures that break fresh installs (this happened: see git history of `FFmpegEnvironment.kt`). **Uninstalling requires explicit user approval** — the user knows the device's installation state and whether the upgrade path (e.g. pending DB migrations) must be tested before wiping it.
 
-**Build-variant note:** four buildTypes — `debug` (Metro dev loop), `maestro` (e2e: preview clone + test affordances; NOT debuggable — that flips CMake to Debug and breaks linking against the release prefab; DB tooling uses adb root on it), `preview` (release twin for on-device testing, zero test surface), `release`. Test affordances gate on the `ivy_build_variant` resource (`debug`/`maestro`/`production`, see `plugins/withIvyBuildTypes.js` + `BuildInfoModule.kt`) — never on `__DEV__`. `release`, `preview` and `maestro` are all minified + obfuscated by R8 (full mode; `enableMinifyInReleaseBuilds` in app.json, and the `preview` block sets `minifyEnabled`/`proguardFiles` explicitly because the template wires them into `release {}` only) — so the e2e suite runs the shipped bytecode; `debug` stays unminified. R8 can't affect the exec'd-binary link path (native/filesystem, not JVM); the `*Module` classes are kept by name via RN's `NativeModule` rule, and whisper.rn + react-native-audio-api are kept whole (they resolve Java members from JNI by name; keep rules in app.json). `doctor` and the post-build artifact checks verify all of this statically (R8 marker per DEX, mapping id, kept modules, keep-whole packages) and `build release`/`prepare` deliver the mapping to `dist/`. Design + testing plan: docs/2026-09-05-r8-obfuscation.md.
+**Build-variant note:** four buildTypes — `debug` (Metro dev loop), `maestro` (e2e: preview clone + test affordances; NOT debuggable — that flips CMake to Debug and breaks linking against the release prefab; DB tooling uses adb root on it), `preview` (release twin for on-device testing, zero test surface), `release`. Test affordances gate on the `ivy_build_variant` resource (`debug`/`maestro`/`production`, see `plugins/withIvyBuildTypes.js` + `BuildInfoModule.kt`) — never on `__DEV__`. `release`, `preview` and `maestro` are all minified + obfuscated by R8 (full mode; `enableMinifyInReleaseBuilds` in app.json, and the `preview` block sets `minifyEnabled`/`proguardFiles` explicitly because the template wires them into `release {}` only) — so the e2e suite runs the shipped bytecode; `debug` stays unminified. R8 can't affect the exec'd-binary link path (native/filesystem, not JVM); the `*Module` classes are kept by name via RN's `NativeModule` rule, and whisper.rn + react-native-audio-api are kept whole (they resolve Java members from JNI by name; keep rules in app.json). `doctor` and the post-build artifact checks verify all of this statically (R8 marker per DEX, mapping id, kept modules, keep-whole packages) and `build release`/`release` deliver the mapping to `dist/`. Design + testing plan: docs/2026-09-05-r8-obfuscation.md.
 
 
 ## Environment
@@ -628,21 +628,21 @@ Rules for Android builds in the container:
 - **NEVER run Gradle in `/workspace` directly.** Use the toolkit, which in the container mirrors the repo to a container-local clone (`/home/claude/ivy-build`) and builds there — incremental across sessions, zero pollution of the mount:
 
   ```bash
-  bin/ivy.ts build debug --arch arm64-v8a
+  bin/ivy-dev.ts build debug --arch arm64-v8a
   ```
 
   It rsyncs the full working tree (including uncommitted and untracked files, excluding node_modules and build outputs).
 - The whole `android/` tree is untracked (generated by `expo prebuild --clean`), so nothing under it can be committed. Never edit it by hand either — change `modules/ivy` or the `plugins/` config plugins instead, then regenerate.
-- **Recovery only** — if `/workspace` was polluted anyway (a Gradle run in the mount, from either side; symptom above), fix it with `bin/ivy.ts clean` (sweeps `modules/ivy/android/build` and `node_modules/*/android/{build,.cxx}`, then regenerates `android/` from scratch via `expo prebuild --clean`). The next build on the affected machine is a slow full rebuild — that's why the isolated build is the rule, not cleaning.
+- **Recovery only** — if `/workspace` was polluted anyway (a Gradle run in the mount, from either side; symptom above), fix it with `bin/ivy-dev.ts clean` (sweeps `modules/ivy/android/build` and `node_modules/*/android/{build,.cxx}`, then regenerates `android/` from scratch via `expo prebuild --clean`). The next build on the affected machine is a slow full rebuild — that's why the isolated build is the rule, not cleaning.
 
 ## Toolkit CLI Reference
 
-Full `bin/ivy.ts help` output (keep in sync when the toolkit changes):
+Full `bin/ivy-dev.ts --help` output (keep in sync when the toolkit changes):
 
 ```
-Ivy toolkit — project CLI (build, test, prepare, drive, inspect)
+Ivy toolkit — project CLI (build, test, release, drive, inspect)
 
-Usage: bin/ivy.ts <command> [args] [--device <serial>]
+Usage: bin/ivy-dev.ts <command> [args]
 
 Commands:
 
@@ -661,17 +661,17 @@ Commands:
       Recover a Gradle-polluted /workspace: sweep native build outputs and
       regenerate android/ via expo prebuild --clean.
 
-  dev [--clear]
+  start [--clear]
       Start the Metro dev server (Fast Refresh) for the installed debug
       build. Mac-only (the emulator cannot reach a container-local Metro);
       never builds native — install first with `build debug --install`.
       --clear resets the Metro cache. Ctrl-C to stop.
 
-  test [name] [--unit | --e2e | --upgrade [--from <tag> | --all]] [--server-only [--port <n>]]
+  test [--unit | --e2e | --upgrade [--from <tag> | --all]] [cases] [--server-only [--port <n>]]
       No flag = both suites. --unit = jest. --e2e = maestro suite; pushes and
       media-scans the fixtures first, verifies delete-original afterwards.
-      [name] runs a single case (jest pattern or maestro flow name) and needs
-      exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
+      [cases] runs specific cases (jest patterns or maestro flow names) and
+      needs exactly one of --unit/--e2e. E2e runs auto-start the bridge server —
       a localhost HTTP interface flows use for device control (network
       toggles, media keys, player seek, DB checks) via maestro/scripts/bridge.js, and
       which serves the Whisper model to maestro builds (cache/whisper/
@@ -690,7 +690,7 @@ Commands:
       version lists (bin/upgrade_scenarios.ts), upgrade-installs the current
       maestro build, verifies those scenarios + migration index + no crash.
       Defaults to the previous release; --from <tag> picks another listed
-      version, --all runs every listed version (as prepare does). Needs a built maestro APK, sqlite3,
+      version, --all runs every listed version (as release does). Needs a built maestro APK, sqlite3,
       and a rootable emulator image (DB and app storage via adb root — the
       maestro variant is not debuggable). See docs/MIGRATIONS.md.
 
@@ -722,7 +722,7 @@ Commands:
                        web/assets/ and the README composite. Emulator-only.
         --icon         dist/icon-512.png from the app icon (ImageMagick)
 
-  prepare --version <X.Y.Z> --changes <markdown> [--screenshots]
+  release --version <X.Y.Z> --changes <markdown> [--screenshots]
       The release pipeline, start to finish. Interactive (keystore password
       prompted up front, held in memory only) — run it on the Mac from a
       terminal. Steps: preflight -> password -> version bump (files only;
@@ -753,21 +753,22 @@ Commands:
       --samples   push the demo seed bundle; the app wipes its DB and
                   self-seeds on next launch. Emulator-only.
 
-  capture [name]
-      Screenshot the device into captures/<name>.png (default: shot-<timestamp>).
+  capture --screenshot [name] | --layout [--raw] | --state
+      Extract information from the running app (one mode per call).
+        --screenshot  screenshot the device into captures/<name>.png
+                      (default name: shot-<timestamp>)
+        --layout      dump the view hierarchy. uiautomator while the app is
+                      idle; maestro's hierarchy (slower JVM start, no idle
+                      wait) while it is playing or when uiautomator gives up
+                      on a never-idle UI. Condensed to elements with
+                      text/resource-id/content-desc; --raw prints the full
+                      XML (or maestro's JSON). React Native testIDs surface
+                      as resource-ids.
+        --state       one-line playback state from the system media session
+                      (playing/paused, position, speed, title) — the hardware
+                      truth, any build, sub-second.
 
-  state
-      One-line playback state from the system media session (playing/paused,
-      position, speed, title) — the hardware truth, any build, sub-second.
-
-  tree [--raw]
-      Dump the view hierarchy. uiautomator while the app is idle; maestro's
-      hierarchy (slower JVM start, no idle wait) while it is playing or when
-      uiautomator gives up on a never-idle UI. Default output is condensed to
-      elements with text/resource-id/content-desc; --raw prints the full XML
-      (or maestro's JSON). Note: React Native testIDs surface as resource-ids.
-
-  logs [--tag <tag>] [--follow]
+  tail [--tag <tag>] [--follow]
       Logcat scoped to the app's pid (app must be running). Default dumps and
       exits; --follow streams. --tag filters (e.g. ReactNativeJS).
 
@@ -778,37 +779,20 @@ Commands:
       (adb root fallback).
 
   help
-      This text.
+      Show usage and documentation (this text).
 
 Global:
   --device <serial>   target device; defaults to the sole attached device,
                       honors $ANDROID_SERIAL (same as adb)
-  --no-log            skip the run log. build/test/generate/prepare/doctor
+  --no-log            skip the run log. build/test/generate/release/doctor
                       tee their full output (stdout+stderr, ANSI stripped)
                       to log/<command>.txt, overwritten each run.
+  --help, -h          show usage and documentation
 
-Destructive commands (wipe, put --samples, generate --screenshots) refuse to
-run on anything that is not verifiably an emulator. There is no override flag.
-
-WORKFLOW
-  Seeing a change in the real app, from a cold start:
-    device connect                       # container -> Mac-hosted emulator
-    build maestro --install --arch arm64-v8a   # ~3 min; JS-only changes too
-    drive --file maestro/subflows/import-book.yaml   # known state: fresh app,
-                                         #   one book, transcription off
-    drive --tap "Ivy Test Book"          # library row -> player, playing
-    state                                # playing at 0.0s @1x — Ivy Test Book
-    capture before                       # captures/before.png
-  Then act (drive), observe (state, tree, capture, logs, query), repeat.
-  Variant: maestro (e2e twin of the release build, with test affordances:
-  --seek, TLTRACE, 5s sleep preset). debug needs Metro on the Mac.
-
-  Observe                              Act
-    state    playback, sub-second        drive --play/--pause  confirmed toggle
-    tree     screen elements + bounds    drive --seek <ms>     main player
-    capture  screenshot -> captures/     drive --tap <id|text> one element
-    logs     app logcat (--tag)          drive --nav <route>   deep link
-    query    the app DB, read-only       drive --inline/--file maestro steps
+Destructive commands (device wipe, device put --samples, test --upgrade,
+generate --screenshots) refuse to run on anything that is not verifiably an
+emulator. There is deliberately no --force: the emulator is disposable, the
+developer's phone is not.
 
 RECIPES
   Book at a known position, playing:
@@ -824,9 +808,9 @@ RECIPES
   Screen state from a flow's own eyes:
     takeScreenshot: screenshots/<name>   ->  maestro/screenshots/<name>.png
   Timeline internals (maestro/debug builds):
-    logs --tag ReactNativeJS | grep TLTRACE   # gestures, seeks, mode changes
+    tail --tag ReactNativeJS | grep TLTRACE   # gestures, seeks, mode changes
   Playback ownership / actions:
-    logs --tag ReactNativeJS | grep -F -e '[Play]' -e '[Pause]' -e '[Seek]'
+    tail --tag ReactNativeJS | grep -F -e '[Play]' -e '[Pause]' -e '[Seek]'
   Retry an upgrade by hand (migration work; emulator only):
     install the old base, seed it (or run test --upgrade --from <tag> once),
     stop the app, then snapshot the whole emulator:
@@ -834,12 +818,32 @@ RECIPES
     after each attempt (adb install -r <new apk>, launch, inspect):
       adb emu avd snapshot load pre-upgrade   # seconds; app + DB + files reset
 
+WORKFLOWS
+  Seeing a change in the real app, from a cold start:
+    device connect                       # container -> Mac-hosted emulator
+    build maestro --install --arch arm64-v8a   # ~3 min; JS-only changes too
+    drive --file maestro/subflows/import-book.yaml   # known state: fresh app,
+                                         #   one book, transcription off
+    drive --tap "Ivy Test Book"          # library row -> player, playing
+    capture --state                      # playing at 0.0s @1x — Ivy Test Book
+    capture --screenshot before          # captures/before.png
+  Then act (drive), observe (capture, tail, query), repeat.
+  Variant: maestro (e2e twin of the release build, with test affordances:
+  --seek, TLTRACE, 5s sleep preset). debug needs Metro on the Mac.
+
+  Observe                              Act
+    capture --state       playback       drive --play/--pause  confirmed toggle
+    capture --layout      elements       drive --seek <ms>     main player
+    capture --screenshot  -> captures/   drive --tap <id|text> one element
+    tail     app logcat (--tag)          drive --nav <route>   deep link
+    query    the app DB, read-only       drive --inline/--file maestro steps
+
 GOTCHAS
   - Playback state drifts while you work (tracks end, flows leave things
-    playing). Check state before acting on it, or use drive --play/--pause,
+    playing). capture --state before acting on it, or use drive --play/--pause,
     which check for you.
-  - tree: ~3s while idle, ~4s while playing (maestro hierarchy), ~15s only
-    when uiautomator gives up on an animating, non-playing screen.
+  - capture --layout: ~3s while idle, ~4s while playing (maestro hierarchy),
+    ~15s only when uiautomator gives up on an animating, non-playing screen.
   - Toolkit startup is cheap (~0.2s); maestro sessions are not (~10s JVM).
     Batch steps in one --inline rather than many --tap/--inline calls.
 ```
